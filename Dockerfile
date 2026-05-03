@@ -9,7 +9,7 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 
 # libc6-compat dibutuhkan untuk beberapa native module (mis. sharp, prisma).
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat openssl
 
 # Install dependency dulu (layer ini cache di sebagian besar build).
 COPY package.json package-lock.json ./
@@ -27,7 +27,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma client (perlu sebelum next build karena di-import di kode).
-RUN npx prisma generate
+RUN npx prisma generate --generator client
 
 # Telemetry off + production build.
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -45,7 +45,7 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # Non-root user — best practice security.
-RUN addgroup --system --gid 1001 nodejs \
+RUN apk add --no-cache openssl && addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs
 
 # Standalone output sudah include node_modules minimal yang ditrace.

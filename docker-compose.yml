@@ -20,6 +20,8 @@ services:
       # Persist gambar bukti transfer & gambar LP supaya tidak hilang saat
       # container di-recreate. Mount langsung ke /app/public/uploads di image.
       - ./public/uploads:/app/public/uploads
+    ports:
+      - "3000:3000"
     networks:
       - traefik-public
       - internal
@@ -32,7 +34,7 @@ services:
       - "traefik.http.routers.hulao.entrypoints=websecure"
       - "traefik.http.routers.hulao.tls=true"
       - "traefik.http.routers.hulao.tls.certresolver=letsencrypt"
-      - "traefik.http.services.hulao.loadbalancer.server.port=3000"
+      - "traefik.http.services.hulao.loadbalancer.server.url=http://172.16.3.2:3000"
       # Redirect www → apex (preferensi SEO).
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.regex=^https://www\\.hulao\\.id/(.*)"
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.replacement=https://hulao.id/$$1"
