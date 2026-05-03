@@ -1,0 +1,64 @@
+# Hulao — production stack: Next.js (di-routing oleh Traefik) + WA service internal.
+# Asumsi:
+#   - Traefik sudah jalan di host & punya network external "traefik-public"
+#   - Resolver Let's Encrypt bernama "letsencrypt" di Traefik
+#   - DNS hulao.id + www.hulao.id sudah point ke IP VPS (76.13.192.225)
+
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hulao-nextjs
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      # Override URL service WA — pakai container name di network internal.
+      - WA_SERVICE_URL=http://wa-service:3001
+    volumes:
+      # Persist gambar bukti transfer & gambar LP supaya tidak hilang saat
+      # container di-recreate. Mount langsung ke /app/public/uploads di image.
+      - ./public/uploads:/app/public/uploads
+    networks:
+      - traefik-public
+      - internal
+    depends_on:
+      - wa-service
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS untuk hulao.id + www
+      - "traefik.http.routers.hulao.rule=Host(`hulao.id`) || Host(`www.hulao.id`)"
+      - "traefik.http.routers.hulao.entrypoints=websecure"
+      - "traefik.http.routers.hulao.tls=true"
+      - "traefik.http.routers.hulao.tls.certresolver=letsencrypt"
+      - "traefik.http.services.hulao.loadbalancer.server.port=3000"
+      # Redirect www → apex (preferensi SEO).
+      - "traefik.http.middlewares.hulao-www-redirect.redirectregex.regex=^https://www\\.hulao\\.id/(.*)"
+      - "traefik.http.middlewares.hulao-www-redirect.redirectregex.replacement=https://hulao.id/$$1"
+      - "traefik.http.middlewares.hulao-www-redirect.redirectregex.permanent=true"
+      - "traefik.http.routers.hulao.middlewares=hulao-www-redirect@docker"
+      # Pakai network traefik-public eksplisit (multi-network safety).
+      - "traefik.docker.network=traefik-public"
+
+  wa-service:
+    build:
+      context: ./wa-service
+      dockerfile: Dockerfile
+    container_name: hulao-wa-service
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      # Persist Baileys credentials — kalau hilang user harus scan QR ulang.
+      - ./wa-service/sessions:/app/sessions
+    networks:
+      - internal
+    # TIDAK ada labels Traefik — service internal, hanya diakses oleh Next.js
+    # via name resolution di network "internal". Tidak expose port ke host.
+
+networks:
+  traefik-public:
+    external: true
+  internal:
+    driver: bridge

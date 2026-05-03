@@ -12,6 +12,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -143,15 +144,53 @@ export function LpManager() {
             )}
           </p>
         </div>
-        <Button
-          onClick={() => setCreateOpen(true)}
-          disabled={lpFull}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" />
-          Buat LP Baru
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/landing-pages/upgrade">
+              <Sparkles className="mr-2 size-4 text-primary-500" />
+              Upgrade Paket
+            </Link>
+          </Button>
+          <Button
+            onClick={() => setCreateOpen(true)}
+            disabled={lpFull}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" />
+            Buat LP Baru
+          </Button>
+        </div>
       </div>
+
+      {/* Banner upgrade — muncul saat user FREE atau quota sudah penuh */}
+      {quota && (quota.tier === 'FREE' || lpFull) && (
+        <Card className="rounded-xl border-amber-200 bg-amber-50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <Sparkles className="size-4" />
+              </div>
+              <div>
+                <p className="font-display text-sm font-bold text-amber-900">
+                  {lpFull
+                    ? `Kamu sudah menggunakan ${quota.currentLp} dari ${quota.maxLp === 999 ? '∞' : quota.maxLp} LP`
+                    : 'Kamu di paket FREE'}
+                </p>
+                <p className="mt-0.5 text-xs text-amber-800">
+                  Upgrade untuk lebih banyak LP dan storage gambar.
+                </p>
+              </div>
+            </div>
+            <Button
+              asChild
+              size="sm"
+              className="bg-amber-600 text-white hover:bg-amber-700"
+            >
+              <Link href="/landing-pages/upgrade">Upgrade Sekarang</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Total views card — quick analytics glance, hanya tampil kalau ada LP */}
       {pages.length > 0 && (

@@ -126,3 +126,27 @@ export async function updateStorageUsed(
     data: { storageUsedMB: next },
   })
 }
+
+// Apply tier dari paket LP yang dibeli user (Payment LP_UPGRADE konfirm /
+// ManualPayment LP_UPGRADE konfirm). Hanya naik — kalau user sudah di tier
+// lebih tinggi, biarkan (tetap return quota current).
+export async function applyLpUpgradeFromPackage(
+  userId: string,
+  pkg: { tier: LpTier; maxLp: number; maxStorageMB: number },
+): Promise<UserQuota> {
+  const current = await getUserQuota(userId)
+  if (RANK[pkg.tier] <= RANK[current.tier]) {
+    // User sudah di tier yang sama atau lebih tinggi — no-op (idempotent).
+    return current
+  }
+  return prisma.userQuota.update({
+    where: { userId },
+    data: {
+      tier: pkg.tier,
+      // Quota baru harus minimal sama besar dengan current (defensive: tidak
+      // pernah turunkan kuota walaupun paket baru kebetulan lebih kecil).
+      maxLp: Math.max(current.maxLp, pkg.maxLp),
+      maxStorageMB: Math.max(current.maxStorageMB, pkg.maxStorageMB),
+    },
+  })
+}

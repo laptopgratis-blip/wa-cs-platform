@@ -106,7 +106,7 @@ export class WaManager {
       auth: authState,
       version,
       printQRInTerminal: false,
-      browser: ['WA CS Platform', 'Chrome', '1.0.0'],
+      browser: ['Hulao', 'Chrome', '1.0.0'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
     })
@@ -424,9 +424,10 @@ export class WaManager {
         return
       }
 
-      // 4. Generate balasan.
+      // 4. Generate balasan — provider routing di ai-handler.
       const ai = await generateReply({
         systemPrompt: soul.systemPrompt,
+        provider: model.provider,
         modelId: model.modelId,
         history: saved.data.history,
         latestUserMessage: content,
@@ -477,6 +478,138 @@ export class WaManager {
     }
   }
 
+  // ── DEV/TEST: simulate incoming message tanpa Baileys ────────────────────
+  // Trigger flow lengkap (saveMessage USER → cek soul/model → cek token →
+  // generate AI → potong token → saveMessage AI) tanpa benar-benar menerima
+  // dari WhatsApp. Kalau session ada di memory, status PAUSED akan ter-emit
+  // saat saldo habis. Kalau tidak ada, flow tetap jalan tapi status update
+  // di-skip.
+  //
+  // Return shape jelas untuk testing — caller dapat tau persis apa yang terjadi.
+  async simulateIncomingMessage(input: {
+    sessionId: string
+    from: string // nomor WA customer (mis. "628111222333")
+    message: string
+  }): Promise<{
+    outcome:
+      | 'replied'
+      | 'paused_no_token'
+      | 'no_soul_or_model'
+      | 'ai_paused_for_contact'
+      | 'save_message_failed'
+      | 'ai_error'
+    reply?: string
+    tokensCharged?: number
+    error?: string
+  }> {
+    const { sessionId, from, message } = input
+    const entry = this.sessions.get(sessionId) ?? null
+
+    // 1. Save message customer + minta history.
+    const saved = await internalApi.saveMessage({
+      sessionId,
+      phoneNumber: from,
+      content: message,
+      role: 'USER',
+      withHistory: true,
+    })
+    if (!saved.success || !saved.data) {
+      return { outcome: 'save_message_failed', error: saved.error }
+    }
+    if (saved.data.contact?.aiPaused) {
+      return { outcome: 'ai_paused_for_contact' }
+    }
+
+    // 2. Soul + model.
+    const cfg = await internalApi.getSoul(sessionId)
+    if (!cfg.success || !cfg.data) {
+      return { outcome: 'no_soul_or_model', error: cfg.error }
+    }
+    const { soul, model, userId } = cfg.data
+    if (!soul || !model) {
+      return { outcome: 'no_soul_or_model', error: 'Soul/model belum di-set' }
+    }
+
+    // 3. Cek saldo token.
+    const enough = await tokenChecker.hasEnough(userId, model.costPerMessage)
+    if (!enough) {
+      if (entry) {
+        // Session ada di memory → updateState juga persist ke DB (lihat updateState).
+        this.updateState(entry, {
+          status: 'PAUSED',
+          lastError: 'Saldo token habis',
+        })
+      } else {
+        // Test scenario: session belum ter-restore di memory. Persist langsung
+        // ke DB supaya UI tetap reflect status PAUSED.
+        await internalApi
+          .updateSessionStatus(sessionId, { status: 'PAUSED' })
+          .catch((err) =>
+            console.error(
+              `[wa-manager:${sessionId}] persist PAUSED gagal:`,
+              err,
+            ),
+          )
+      }
+      return { outcome: 'paused_no_token' }
+    }
+
+    // 4. Generate AI reply.
+    const ai = await generateReply({
+      systemPrompt: soul.systemPrompt,
+      provider: model.provider,
+      modelId: model.modelId,
+      history: saved.data.history,
+      latestUserMessage: message,
+    })
+    if (!ai.ok || !ai.reply) {
+      return { outcome: 'ai_error', error: ai.error }
+    }
+
+    // 5. Potong token (atomic).
+    const charge = await tokenChecker.charge({
+      userId,
+      amount: model.costPerMessage,
+      description: `Reply via ${model.modelId} (test)`,
+      reference: sessionId,
+    })
+    if (!charge.ok) {
+      if (charge.insufficient && entry) {
+        this.updateState(entry, {
+          status: 'PAUSED',
+          lastError: 'Saldo token habis',
+        })
+      }
+      return { outcome: 'paused_no_token', error: charge.error }
+    }
+
+    // 6. Skip Baileys send (test mode) — log saja kalau entry ada.
+    if (entry?.socket) {
+      console.log(
+        `[wa-manager:${sessionId}] (TEST) skip sendMessage to ${from}: "${ai.reply.slice(0, 60)}..."`,
+      )
+    }
+
+    // 7. Save reply AI ke DB.
+    await internalApi
+      .saveMessage({
+        sessionId,
+        phoneNumber: from,
+        content: ai.reply,
+        role: 'AI',
+        tokensUsed: model.costPerMessage,
+      })
+      .catch((err) =>
+        console.error(`[wa-manager:${sessionId}] (TEST) save AI msg:`, err),
+      )
+
+    return {
+      outcome: 'replied',
+      reply: ai.reply,
+      tokensCharged: model.costPerMessage,
+    }
+  }
+
   // ── helpers ──────────────────────────────────────────────────────────────
 
   private makeInitialState(sessionId: string): SessionState {
@@ -493,6 +626,9 @@ export class WaManager {
   }
 
   private updateState(entry: SessionEntry, patch: Partial<SessionState>): void {
+    const prevStatus = entry.state.status
+    const prevPhone = entry.state.phoneNumber
+    const prevName = entry.state.displayName
     entry.state = {
       ...entry.state,
       ...patch,
@@ -507,6 +643,29 @@ export class WaManager {
       reason: entry.state.lastError,
     }
     this.emit<StatusEvent>('status', event)
+
+    // Persist ke DB (fire-and-forget) supaya status di UI dashboard / API
+    // public selalu sync. Skip kalau tidak ada perubahan status / identitas
+    // (hindari spam request untuk patch yang cuma update lastError).
+    const statusChanged = entry.state.status !== prevStatus
+    const phoneChanged =
+      Boolean(entry.state.phoneNumber) && entry.state.phoneNumber !== prevPhone
+    const nameChanged =
+      Boolean(entry.state.displayName) && entry.state.displayName !== prevName
+    if (statusChanged || phoneChanged || nameChanged) {
+      internalApi
+        .updateSessionStatus(entry.state.sessionId, {
+          status: entry.state.status,
+          phoneNumber: entry.state.phoneNumber,
+          displayName: entry.state.displayName,
+        })
+        .catch((err) =>
+          console.error(
+            `[wa-manager:${entry.state.sessionId}] persist status gagal:`,
+            err,
+          ),
+        )
+    }
   }
 
   private emit<T>(event: 'qr' | 'status' | 'connected' | 'disconnected', payload: T) {

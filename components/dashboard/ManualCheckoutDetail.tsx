@@ -17,6 +17,10 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  buildTokenConfirmMessage,
+  WaConfirmButton,
+} from '@/components/shared/WaConfirmButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -51,6 +55,8 @@ interface PaymentData {
 interface Props {
   payment: PaymentData
   banks: BankAccount[]
+  // Dipakai untuk pre-fill pesan WA konfirmasi ke admin.
+  user: { name: string | null; email: string }
 }
 
 const STATUS_LABEL: Record<ManualPaymentStatus, string> = {
@@ -87,7 +93,7 @@ function useCountdown(expiresAt: string) {
   }
 }
 
-export function ManualCheckoutDetail({ payment, banks }: Props) {
+export function ManualCheckoutDetail({ payment, banks, user }: Props) {
   const router = useRouter()
   const { expired, text: countdownText } = useCountdown(payment.expiresAt)
 
@@ -348,19 +354,33 @@ export function ManualCheckoutDetail({ payment, banks }: Props) {
               onChange={(e) => setNote(e.target.value)}
             />
           </div>
-          <Button
-            type="submit"
-            disabled={isUploading || !file}
-            className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
-            size="lg"
-          >
-            {isUploading ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Upload className="mr-2 size-4" />
-            )}
-            Upload Bukti Transfer
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="submit"
+              disabled={isUploading || !file}
+              className="bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+              size="lg"
+            >
+              {isUploading ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 size-4" />
+              )}
+              Upload Bukti Transfer
+            </Button>
+            <WaConfirmButton
+              message={buildTokenConfirmMessage({
+                packageName: payment.packageName,
+                tokenAmount: payment.tokenAmount,
+                userName: user.name,
+                userEmail: user.email,
+                totalAmount: payment.totalAmount,
+                uniqueCode: payment.uniqueCode,
+                hasProof: Boolean(payment.proofUrl),
+              })}
+              helperText="Kamu juga bisa kirim bukti transfer langsung via WA"
+            />
+          </div>
         </form>
       )}
 

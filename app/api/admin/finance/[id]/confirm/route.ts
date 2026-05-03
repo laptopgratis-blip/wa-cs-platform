@@ -30,6 +30,13 @@ export async function POST(_req: Request, { params }: Params) {
       },
     })
     if (!payment) return jsonError('Order tidak ditemukan', 404)
+    // Endpoint ini khusus token. LP upgrade pakai /api/admin/lp-upgrades/:id/confirm.
+    if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) {
+      return jsonError(
+        'Order ini bukan pembelian token. Gunakan menu Upgrade LP.',
+        409,
+      )
+    }
 
     if (payment.status === 'CONFIRMED') {
       return jsonOk({ idempotent: true })
@@ -37,10 +44,9 @@ export async function POST(_req: Request, { params }: Params) {
     if (payment.status === 'REJECTED') {
       return jsonError('Order sudah ditolak, tidak bisa dikonfirmasi.', 409)
     }
-    if (!payment.proofUrl) {
-      return jsonError('User belum mengupload bukti transfer.', 409)
-    }
 
+    // Pull ke local supaya narrowing tetap valid di dalam async transaction.
+    const pkg = payment.package
     await prisma.$transaction(async (tx) => {
       await tx.manualPayment.update({
         where: { id: payment.id },
@@ -69,7 +75,7 @@ export async function POST(_req: Request, { params }: Params) {
           userId: payment.userId,
           amount: payment.tokenAmount,
           type: 'PURCHASE',
-          description: `Transfer manual — ${payment.package.name}`,
+          description: `Transfer manual — ${pkg.name}`,
           reference: payment.id,
         },
       })
@@ -91,7 +97,7 @@ export async function POST(_req: Request, { params }: Params) {
       await sendManualPaymentConfirmedEmail({
         userEmail: payment.user.email,
         userName: payment.user.name,
-        packageName: payment.package.name,
+        packageName: pkg.name,
         tokenAmount: payment.tokenAmount,
         totalAmount: payment.totalAmount,
       })

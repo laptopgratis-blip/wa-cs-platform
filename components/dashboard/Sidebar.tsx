@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Send,
   Sparkles,
+  TrendingUp,
   Users,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -27,6 +28,7 @@ const menu = [
   { href: '/contacts', label: 'Contacts', icon: Users },
   { href: '/broadcast', label: 'Broadcast', icon: Send },
   { href: '/landing-pages', label: 'Landing Page', icon: Globe },
+  { href: '/landing-pages/upgrade', label: 'Upgrade LP', icon: TrendingUp },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/billing', label: 'Billing', icon: CreditCard },
 ]
@@ -54,8 +56,8 @@ export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
           <MessageCircle className="size-4" />
         </div>
         <div className="leading-tight">
-          <p className="font-display text-base font-bold text-warm-900">WA CS</p>
-          <p className="text-[11px] font-medium text-primary-500">Platform</p>
+          <p className="font-display text-base font-bold text-warm-900">Hulao</p>
+          <p className="text-[11px] font-medium text-primary-500">Dashboard</p>
         </div>
       </div>
 
@@ -100,24 +102,68 @@ export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
         </ul>
       </nav>
 
-      {/* Saldo Token */}
+      {/* Saldo Token — warna & label adaptif sesuai level saldo */}
       {typeof tokenBalance === 'number' && (
         <div className="px-3 pb-3">
-          <Link
-            href="/billing"
-            onClick={onNavigate}
-            className="block rounded-lg border border-primary-200 bg-primary-50 p-3 transition-colors hover:bg-primary-100"
-          >
-            <p className="text-[11px] font-medium uppercase tracking-wider text-primary-700">
-              Saldo Token
-            </p>
-            <p className="mt-1 font-display text-xl font-bold text-primary-600 tabular-nums">
-              {formatNumber(tokenBalance)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-primary-700/70">
-              Tap untuk top-up
-            </p>
-          </Link>
+          {(() => {
+            const isEmpty = tokenBalance === 0
+            const isLow = tokenBalance > 0 && tokenBalance < 1000
+            const wrapClass = isEmpty
+              ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
+              : isLow
+                ? 'border-amber-300 bg-amber-50 hover:bg-amber-100'
+                : 'border-primary-200 bg-primary-50 hover:bg-primary-100'
+            const labelClass = isEmpty
+              ? 'text-destructive'
+              : isLow
+                ? 'text-amber-800'
+                : 'text-primary-700'
+            const valueClass = isEmpty
+              ? 'text-destructive'
+              : isLow
+                ? 'text-amber-700'
+                : 'text-primary-600'
+            const helperClass = isEmpty
+              ? 'text-destructive/80'
+              : isLow
+                ? 'text-amber-700/80'
+                : 'text-primary-700/70'
+            const helperText = isEmpty
+              ? 'Habis — top up sekarang!'
+              : isLow
+                ? 'Hampir habis, top up dulu'
+                : 'Tap untuk top-up'
+            return (
+              <Link
+                href="/billing"
+                onClick={onNavigate}
+                className={cn(
+                  'block rounded-lg border p-3 transition-colors',
+                  wrapClass,
+                )}
+              >
+                <p
+                  className={cn(
+                    'text-[11px] font-medium uppercase tracking-wider',
+                    labelClass,
+                  )}
+                >
+                  Saldo Token
+                </p>
+                <p
+                  className={cn(
+                    'mt-1 font-display text-xl font-bold tabular-nums',
+                    valueClass,
+                  )}
+                >
+                  {formatNumber(tokenBalance)}
+                </p>
+                <p className={cn('mt-0.5 text-[11px]', helperClass)}>
+                  {helperText}
+                </p>
+              </Link>
+            )
+          })()}
         </div>
       )}
 

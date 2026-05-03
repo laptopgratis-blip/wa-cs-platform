@@ -1,7 +1,7 @@
 {
   "name": "wa-service",
   "version": "0.1.0",
-  "description": "WhatsApp engine (Baileys) untuk WA CS Platform — terpisah dari Next.js, port 3001.",
+  "description": "WhatsApp engine (Baileys) untuk Hulao — terpisah dari Next.js, port 3001.",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
@@ -13,10 +13,12 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
+    "@google/generative-ai": "^0.24.1",
     "baileys": "^7.0.0-rc.9",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "openai": "^6.35.0",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
     "tsx": "^4.21.0"

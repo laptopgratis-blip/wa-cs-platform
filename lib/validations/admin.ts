@@ -49,3 +49,17 @@ export const manualPaymentRejectSchema = z.object({
     .max(500, 'Alasan maksimal 500 karakter'),
 })
 export type ManualPaymentRejectInput = z.infer<typeof manualPaymentRejectSchema>
+
+export const lpUpgradePackageCreateSchema = z.object({
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(80),
+  description: z.string().trim().max(300).nullable().optional(),
+  tier: z.enum(['STARTER', 'POPULAR', 'POWER']),
+  maxLp: z.number().int().positive().max(9999),
+  maxStorageMB: z.number().int().positive().max(100_000),
+  price: z.number().int().positive().max(100_000_000),
+  isPopular: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(1000).optional(),
+})
+export const lpUpgradePackageUpdateSchema = lpUpgradePackageCreateSchema.partial()
+export type LpUpgradePackageCreateInput = z.infer<typeof lpUpgradePackageCreateSchema>

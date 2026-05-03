@@ -38,6 +38,8 @@ export default async function ManualCheckoutPage({
 
   if (!payment) notFound()
   if (payment.userId !== session.user.id) notFound()
+  // Halaman ini khusus pembelian token. LP upgrade pakai /checkout/manual-lp/[id].
+  if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) notFound()
 
   const expiresAt = new Date(payment.createdAt.getTime() + TRANSFER_TTL_MS)
 
@@ -80,6 +82,7 @@ export default async function ManualCheckoutPage({
           accountNumber: b.accountNumber,
           accountName: b.accountName,
         }))}
+        user={{ name: session.user.name ?? null, email: session.user.email ?? '' }}
       />
     </div>
   )

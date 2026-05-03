@@ -3,6 +3,7 @@ import { CreditCard, MessageCircle, MessageSquare, Users } from 'lucide-react'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
+import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
 import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
 import {
   Card,
@@ -103,6 +104,8 @@ export default async function DashboardPage() {
           Berikut ringkasan akunmu hari ini — saldo, koneksi WA, dan aktivitas pesan.
         </p>
       </div>
+
+      <BalanceBanner balance={stats.balance} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

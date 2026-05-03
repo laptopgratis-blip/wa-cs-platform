@@ -207,14 +207,28 @@ enum AiProvider {
 }
 
 model AiModel {
-  id               String      @id @default(cuid())
-  name             String      // "Claude Haiku", "GPT-4o Mini"
-  provider         AiProvider
-  modelId          String      // "claude-haiku-4-5-20251001"
-  costPerMessage   Int         @default(1) // berapa token platform per pesan
-  isActive         Boolean     @default(true)
-  description      String?
-  createdAt        DateTime    @default(now())
+  id                  String      @id @default(cuid())
+  name                String      // "Claude Haiku", "GPT-5 Mini"
+  provider            AiProvider
+  modelId             String      // "claude-haiku-4-5-20251001"
+
+  // Berapa token platform yang dipotong per balasan AI yang sukses.
+  // Admin set manual berdasarkan posisi tier model.
+  costPerMessage      Int         @default(1)
+
+  // Harga aktual provider (IDR per 1 juta token). Dipakai untuk transparansi
+  // di dashboard admin & untuk hitung margin platform vs cost provider.
+  // Default 0 = belum di-set oleh admin (back-compat untuk existing rows).
+  inputPricePer1M     Int         @default(0)
+  outputPricePer1M    Int         @default(0)
+  // Estimasi rata-rata token per balasan WA (input prompt + history + output).
+  // Dipakai untuk hitung biaya per pesan: avgTokensPerMessage / 1_000_000 *
+  // (input + output) / 2  → IDR per pesan.
+  avgTokensPerMessage Int         @default(500)
+
+  isActive            Boolean     @default(true)
+  description         String?
+  createdAt           DateTime    @default(now())
 
   waSessions  WhatsappSession[]
   userAccess  UserModelAccess[]
@@ -356,12 +370,19 @@ enum PaymentStatus {
   CANCELLED
 }
 
+// Diskriminator: pembelian token (default lama) vs upgrade paket LP.
+// Existing rows otomatis di-default TOKEN_PURCHASE supaya backward compatible.
+enum PaymentPurpose {
+  TOKEN_PURCHASE
+  LP_UPGRADE
+}
+
 model Payment {
   id            String        @id @default(cuid())
   userId        String
   orderId       String        @unique // merchant_ref yang dikirim ke Tripay
   amount        Int           // dalam Rupiah
-  tokenAmount   Int           // berapa token yang dibeli
+  tokenAmount   Int           // jumlah token (TOKEN_PURCHASE) — 0 untuk LP_UPGRADE
   status        PaymentStatus @default(PENDING)
   paymentMethod String?
   reference     String?       @unique // reference dari Tripay (T0001xxxxx)
@@ -370,8 +391,16 @@ model Payment {
   expiredAt     DateTime?
   createdAt     DateTime      @default(now())
 
+  // Polymorphic: TOKEN_PURCHASE pakai tokenAmount; LP_UPGRADE pakai lpPackageId.
+  // Konsistensi (purpose vs FK) divalidasi di API layer karena Prisma
+  // tidak support CHECK constraint native.
+  purpose     PaymentPurpose    @default(TOKEN_PURCHASE)
+  lpPackageId String?
+  lpPackage   LpUpgradePackage? @relation(fields: [lpPackageId], references: [id])
+
   @@index([userId, status])
   @@index([orderId])
+  @@index([purpose, status])
 }
 
 // ─────────────────────────────────────────
@@ -404,9 +433,11 @@ enum ManualPaymentStatus {
 model ManualPayment {
   id              String              @id @default(cuid())
   userId          String
-  packageId       String
+  // packageId nullable supaya bisa polymorphic — TOKEN_PURCHASE pakai packageId
+  // (TokenPackage), LP_UPGRADE pakai lpPackageId (LpUpgradePackage).
+  packageId       String?
   amount          Int                 // harga paket (Rupiah)
-  tokenAmount     Int                 // jumlah token paket
+  tokenAmount     Int                 // jumlah token paket (0 untuk LP_UPGRADE)
   uniqueCode      Int                 // 100-999 untuk identifikasi transfer
   totalAmount     Int                 // amount + uniqueCode
   proofUrl        String?             // URL bukti transfer (upload setelah create)
@@ -418,12 +449,18 @@ model ManualPayment {
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
-  user      User         @relation("UserManualPayments", fields: [userId], references: [id], onDelete: Cascade)
-  package   TokenPackage @relation(fields: [packageId], references: [id])
-  confirmer User?        @relation("ConfirmedByUser", fields: [confirmedBy], references: [id])
+  // Polymorphic — sama logika dengan Payment.
+  purpose     PaymentPurpose    @default(TOKEN_PURCHASE)
+  lpPackageId String?
+
+  user      User              @relation("UserManualPayments", fields: [userId], references: [id], onDelete: Cascade)
+  package   TokenPackage?     @relation(fields: [packageId], references: [id])
+  lpPackage LpUpgradePackage? @relation(fields: [lpPackageId], references: [id])
+  confirmer User?             @relation("ConfirmedByUser", fields: [confirmedBy], references: [id])
 
   @@index([userId, status])
   @@index([status, createdAt])
+  @@index([purpose, status])
 }
 
 // ─────────────────────────────────────────
@@ -503,4 +540,44 @@ model UserQuota {
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────
+// LANDING PAGE UPGRADE PACKAGES (diset admin)
+// ─────────────────────────────────────────
+
+// Paket upgrade tier kuota LP yang bisa user beli langsung. Beda dengan
+// upgrade otomatis dari token purchase (lihat lib/lp-quota.ts) — paket ini
+// di-purchase sebagai LP_UPGRADE Payment/ManualPayment dan langsung set
+// UserQuota.tier+maxLp+maxStorageMB sesuai paket.
+model LpUpgradePackage {
+  id           String   @id @default(cuid())
+  name         String   // "Starter", "Popular", "Power"
+  description  String?
+  tier         LpTier
+  maxLp        Int
+  maxStorageMB Int
+  price        Int      // dalam Rupiah
+  isPopular    Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  payments       Payment[]
+  manualPayments ManualPayment[]
+
+  @@index([isActive, sortOrder])
+}
+
+// ─────────────────────────────────────────
+// SITE SETTINGS (key-value, diset admin)
+// ─────────────────────────────────────────
+
+// Setting platform yang fleksibel — key-value supaya gampang nambah field baru
+// tanpa migrate. Contoh key: WA_ADMIN, PLATFORM_NAME, SUPPORT_EMAIL.
+model SiteSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
 }

@@ -141,4 +141,26 @@ export const internalApi = {
       { method: 'POST', body: JSON.stringify(input) },
     )
   },
+
+  // Persist status WA session ke DB. Dipanggil setiap kali updateState
+  // di wa-manager — supaya UI dashboard / API public selalu lihat status terbaru.
+  updateSessionStatus(
+    sessionId: string,
+    input: {
+      status:
+        | 'DISCONNECTED'
+        | 'CONNECTING'
+        | 'WAITING_QR'
+        | 'CONNECTED'
+        | 'PAUSED'
+        | 'ERROR'
+      phoneNumber?: string | null
+      displayName?: string | null
+    },
+  ) {
+    return request<{ id: string; status: string }>(
+      `/api/internal/whatsapp/${encodeURIComponent(sessionId)}/status`,
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  },
 }

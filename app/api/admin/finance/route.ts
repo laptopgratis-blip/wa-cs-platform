@@ -21,10 +21,17 @@ export async function GET(req: Request) {
   }
 
   try {
+    // Halaman /admin/finance khusus pembelian token. LP upgrade ada
+    // panel terpisah di /admin/lp-upgrades. Filter eksplisit supaya tidak
+    // campur (row LP_UPGRADE punya package=null yang akan crash UI).
+    const baseWhere = { purpose: 'TOKEN_PURCHASE' as const }
     const where =
       statusFilter === 'ALL'
-        ? {}
-        : { status: statusFilter as 'PENDING' | 'CONFIRMED' | 'REJECTED' }
+        ? baseWhere
+        : {
+            ...baseWhere,
+            status: statusFilter as 'PENDING' | 'CONFIRMED' | 'REJECTED',
+          }
 
     const rows = await prisma.manualPayment.findMany({
       where,

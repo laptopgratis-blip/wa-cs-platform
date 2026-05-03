@@ -12,10 +12,8 @@ export function Footer() {
             <MessageCircle className="size-3.5" />
           </div>
           <div className="leading-tight">
-            <p className="font-display text-sm font-bold text-warm-900">
-              WA CS Platform
-            </p>
-            <p className="text-[11px] text-primary-500">Citrus Energy</p>
+            <p className="font-display text-sm font-bold text-warm-900">Hulao</p>
+            <p className="text-[11px] text-primary-500">hulao.id</p>
           </div>
         </Link>
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
@@ -32,7 +30,7 @@ export function Footer() {
             Daftar
           </Link>
         </nav>
-        <p className="text-xs text-warm-400">© {year} WA CS Platform</p>
+        <p className="text-xs text-warm-400">© {year} Hulao. Semua hak dilindungi.</p>
       </div>
     </footer>
   )

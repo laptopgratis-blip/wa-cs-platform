@@ -27,9 +27,9 @@ const jetbrains = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'WA CS Platform — WhatsApp AI Customer Service & CRM',
+  title: 'Hulao — CS WhatsApp Otomatis + CRM + Landing Page Builder',
   description:
-    'Platform WhatsApp AI Customer Service & CRM — auto-reply pakai Claude. Hemat waktu, tutup lebih banyak penjualan.',
+    'Hulao menghubungkan WhatsApp bisnis kamu dengan AI — balas pelanggan 24/7, kelola CRM, dan buat landing page dalam satu platform.',
 }
 
 export default function RootLayout({

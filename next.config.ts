@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // Standalone output supaya Docker image kecil & self-contained.
+  // Output ada di .next/standalone/server.js (semua dependency tertraced).
+  output: 'standalone',
+}
 
-export default nextConfig;
+export default nextConfig

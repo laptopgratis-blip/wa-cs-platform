@@ -158,6 +158,36 @@ app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) =>
   res.json({ success: true, data: { sessionId, phoneNumber: body.phoneNumber } })
 })
 
+// Dev-only endpoint untuk test flow incoming message tanpa Baileys.
+// Trigger save → cek soul/model → cek token → AI → potong token → save AI.
+// HANYA aktif di non-production (dev/staging).
+app.post('/sessions/:sessionId/test-message', requireSecret, async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({ success: false, error: 'not found' })
+    return
+  }
+  const sessionId = String(req.params.sessionId ?? '')
+  const body = req.body as { from?: string; message?: string } | undefined
+  if (!body?.from || !body?.message) {
+    res
+      .status(400)
+      .json({ success: false, error: 'from dan message wajib diisi' })
+    return
+  }
+  if (!/^\d{8,15}$/.test(body.from)) {
+    res
+      .status(400)
+      .json({ success: false, error: 'from harus 8-15 digit (mis. 628111222333)' })
+    return
+  }
+  const result = await manager.simulateIncomingMessage({
+    sessionId,
+    from: body.from,
+    message: body.message,
+  })
+  res.json({ success: true, data: result })
+})
+
 app.post('/sessions/disconnect', requireSecret, async (req, res) => {
   const body = req.body as Partial<DisconnectRequest>
   if (!body?.sessionId || typeof body.sessionId !== 'string') {

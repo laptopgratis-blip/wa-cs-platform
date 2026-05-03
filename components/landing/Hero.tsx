@@ -28,7 +28,7 @@ export function Hero() {
 
           {/* Headline */}
           <h1 className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-warm-900 md:text-5xl lg:text-6xl">
-            WhatsApp Customer Service{' '}
+            CS WhatsApp{' '}
             <span className="inline-block rounded-2xl bg-primary-100 px-3 py-0.5 text-primary-600">
               Otomatis
             </span>{' '}
@@ -36,9 +36,9 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-base text-warm-600 md:text-lg">
-            Hubungkan WhatsApp bisnismu, atur kepribadian AI sendiri, dan biarkan
-            customer dilayani 24/7 dengan balasan natural. Hemat waktu, tutup lebih
-            banyak penjualan.
+            <span className="font-semibold text-warm-900">Hulao</span>{' '}
+            menghubungkan WhatsApp bisnis kamu dengan AI — balas pelanggan 24/7,
+            kelola CRM, dan buat landing page dalam satu platform.
           </p>
 
           {/* CTAs */}

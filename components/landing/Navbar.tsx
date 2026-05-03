@@ -13,8 +13,8 @@ export function Navbar() {
             <MessageCircle className="size-4" />
           </div>
           <div className="leading-tight">
-            <p className="font-display text-base font-bold text-warm-900">WA CS</p>
-            <p className="text-[11px] font-medium text-primary-500">Platform</p>
+            <p className="font-display text-base font-bold text-warm-900">Hulao</p>
+            <p className="text-[11px] font-medium text-primary-500">CS WhatsApp + CRM</p>
           </div>
         </Link>
         <nav className="flex items-center gap-2">

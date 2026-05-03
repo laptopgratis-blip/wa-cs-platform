@@ -1,0 +1,47 @@
+# Build context exclusions — kurangi ukuran image & hindari leak.
+# .git supaya history tidak ke image.
+.git
+.gitignore
+.github
+
+# Dependency cache (re-install di builder stage).
+node_modules
+wa-service/node_modules
+.npm
+
+# Next.js build cache lokal — builder stage akan generate fresh.
+.next
+out
+build
+
+# Env & rahasia — di-inject lewat env_file di compose, bukan di-bake ke image.
+.env
+.env.local
+.env.production
+.env.production.template
+env.local.template
+
+# Runtime data — di-mount sebagai volume oleh compose.
+public/uploads
+wa-service/sessions
+
+# Editor / OS noise.
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Test & log artifacts.
+coverage
+*.log
+npm-debug.log*
+
+# Dokumen lokal.
+*.md
+!README.md
+
+# Container artifacts.
+docker-compose.yml
+Dockerfile
+wa-service/Dockerfile
+.dockerignore

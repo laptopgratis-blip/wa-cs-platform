@@ -111,6 +111,9 @@ export default async function BillingPage() {
     prisma.manualPayment.findMany({
       where: {
         userId: session.user.id,
+        // Halaman /billing khusus pembelian token. LP upgrade ditampilkan
+        // di /landing-pages/upgrade — jangan campur supaya UI tidak rancu.
+        purpose: 'TOKEN_PURCHASE',
         OR: [
           { status: { in: ['PENDING', 'REJECTED'] } },
           { status: 'CONFIRMED', confirmedAt: { gte: manualSince } },
@@ -185,7 +188,7 @@ export default async function BillingPage() {
                           {MANUAL_STATUS_LABEL[mp.status]}
                         </Badge>
                         <span className="text-sm font-medium text-warm-700">
-                          Paket {mp.package.name}
+                          Paket {mp.package?.name ?? '—'}
                         </span>
                         <span className="text-xs text-warm-500">
                           ({formatNumber(mp.tokenAmount)} token)

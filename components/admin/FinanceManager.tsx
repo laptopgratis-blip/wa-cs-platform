@@ -51,7 +51,11 @@ interface ManualPaymentRow {
   createdAt: string
   confirmedAt: string | null
   user: { id: string; name: string | null; email: string }
-  package: { id: string; name: string }
+  // Nullable: schema polymorphic — token purchase punya package, LP upgrade
+  // punya lpPackage. Endpoint /api/admin/finance filter purpose=TOKEN_PURCHASE
+  // jadi seharusnya selalu non-null, tapi tetap null-guarded di render untuk
+  // ketahanan kalau data lama anomali.
+  package: { id: string; name: string } | null
   confirmer: { id: string; name: string | null; email: string } | null
 }
 
@@ -235,7 +239,7 @@ export function FinanceManager() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{r.package.name}</div>
+                      <div className="font-medium">{r.package?.name ?? '—'}</div>
                       <div className="text-xs text-muted-foreground">
                         {formatNumber(r.tokenAmount)} token
                       </div>
@@ -322,7 +326,7 @@ export function FinanceManager() {
           <DialogHeader>
             <DialogTitle>Bukti Transfer</DialogTitle>
             <DialogDescription>
-              {proofTarget?.user.email} — {proofTarget?.package.name} —{' '}
+              {proofTarget?.user.email} — {proofTarget?.package?.name ?? '—'} —{' '}
               {proofTarget && formatRupiah(proofTarget.totalAmount)}
             </DialogDescription>
           </DialogHeader>
@@ -374,7 +378,7 @@ export function FinanceManager() {
               </div>
               <div className="flex justify-between">
                 <span className="text-warm-500">Paket</span>
-                <span className="font-medium">{confirmTarget.package.name}</span>
+                <span className="font-medium">{confirmTarget.package?.name ?? '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-warm-500">Token akan ditambahkan</span>

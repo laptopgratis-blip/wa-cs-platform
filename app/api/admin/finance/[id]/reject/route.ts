@@ -34,6 +34,13 @@ export async function POST(req: Request, { params }: Params) {
       },
     })
     if (!payment) return jsonError('Order tidak ditemukan', 404)
+    // Endpoint ini khusus token. LP upgrade pakai /api/admin/lp-upgrades/:id/reject.
+    if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) {
+      return jsonError(
+        'Order ini bukan pembelian token. Gunakan menu Upgrade LP.',
+        409,
+      )
+    }
 
     if (payment.status === 'CONFIRMED') {
       return jsonError('Order sudah dikonfirmasi, tidak bisa ditolak.', 409)
@@ -41,6 +48,9 @@ export async function POST(req: Request, { params }: Params) {
     if (payment.status === 'REJECTED') {
       return jsonOk({ idempotent: true })
     }
+
+    // Pull ke local supaya narrowing tidak hilang setelah await berikutnya.
+    const pkg = payment.package
 
     await prisma.manualPayment.update({
       where: { id: payment.id },
@@ -56,7 +66,7 @@ export async function POST(req: Request, { params }: Params) {
       await sendManualPaymentRejectedEmail({
         userEmail: payment.user.email,
         userName: payment.user.name,
-        packageName: payment.package.name,
+        packageName: pkg.name,
         tokenAmount: payment.tokenAmount,
         totalAmount: payment.totalAmount,
         reason: parsed.data.reason,

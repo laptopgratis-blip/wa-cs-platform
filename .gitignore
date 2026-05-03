@@ -41,3 +41,9 @@ yarn-error.log*
 next-env.d.ts
 node_modules/
 wa-service/node_modules/
+
+# production / deployment artifacts
+.env.production
+wa-service/sessions/
+public/uploads/
+wa-service/dist/

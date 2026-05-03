@@ -31,14 +31,14 @@ function getTransporter(): Transporter {
 }
 
 export async function sendPasswordResetEmail(email: string, resetUrl: string) {
-  const from = process.env.EMAIL_FROM ?? 'WA CS Platform <no-reply@wa-cs.local>'
+  const from = process.env.EMAIL_FROM ?? 'Hulao <noreply@hulao.id>'
   const transporter = getTransporter()
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f1f1f;">
       <h2 style="color: #ea580c; margin-bottom: 16px;">Reset Password</h2>
       <p>Halo,</p>
-      <p>Kami menerima permintaan untuk mereset password akun WA CS Platform kamu. Klik tombol di bawah untuk membuat password baru:</p>
+      <p>Kami menerima permintaan untuk mereset password akun Hulao kamu. Klik tombol di bawah untuk membuat password baru:</p>
       <p style="margin: 24px 0;">
         <a href="${resetUrl}"
            style="display: inline-block; background: #ea580c; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
@@ -48,17 +48,17 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string) {
       <p style="font-size: 14px; color: #666;">Atau copy URL ini di browser:<br/><span style="word-break: break-all;">${resetUrl}</span></p>
       <p style="font-size: 14px; color: #666;">Link berlaku 15 menit. Jika kamu tidak meminta reset password, abaikan email ini.</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-      <p style="font-size: 12px; color: #999;">WA CS Platform — Email otomatis, jangan dibalas.</p>
+      <p style="font-size: 12px; color: #999;">Hulao — Email otomatis, jangan dibalas.</p>
     </div>
   `
 
   await transporter.sendMail({
     from,
     to: email,
-    subject: 'Reset Password — WA CS Platform',
+    subject: 'Reset Password — Hulao',
     html,
     text:
-      `Halo,\n\nKami menerima permintaan reset password akun WA CS Platform kamu.\n` +
+      `Halo,\n\nKami menerima permintaan reset password akun Hulao kamu.\n` +
       `Buka link ini untuk membuat password baru (berlaku 15 menit):\n\n${resetUrl}\n\n` +
       `Jika kamu tidak meminta reset, abaikan email ini.`,
   })
@@ -73,7 +73,7 @@ interface ManualPaymentEmailContext {
 }
 
 function defaultFrom(): string {
-  return process.env.EMAIL_FROM ?? 'WA CS Platform <no-reply@wa-cs.local>'
+  return process.env.EMAIL_FROM ?? 'Hulao <noreply@hulao.id>'
 }
 
 function formatNumberID(n: number): string {
@@ -105,13 +105,13 @@ export async function sendManualPaymentConfirmedEmail(ctx: ManualPaymentEmailCon
       </table>
       <p>Cek saldo kamu di halaman Billing.</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-      <p style="font-size: 12px; color: #999;">WA CS Platform — Email otomatis, jangan dibalas.</p>
+      <p style="font-size: 12px; color: #999;">Hulao — Email otomatis, jangan dibalas.</p>
     </div>
   `
   await transporter.sendMail({
     from: defaultFrom(),
     to: ctx.userEmail,
-    subject: 'Token kamu sudah ditambahkan — WA CS Platform',
+    subject: 'Token kamu sudah ditambahkan — Hulao',
     html,
     text:
       `${greet}\n\nPembayaran transfer manual kamu sudah diverifikasi. ${formatNumberID(ctx.tokenAmount)} token ` +
@@ -140,13 +140,13 @@ export async function sendManualPaymentRejectedEmail(ctx: ManualPaymentRejectedC
       </div>
       <p>Kamu bisa membuat order baru dari halaman Billing, atau hubungi admin untuk klarifikasi.</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
-      <p style="font-size: 12px; color: #999;">WA CS Platform — Email otomatis, jangan dibalas.</p>
+      <p style="font-size: 12px; color: #999;">Hulao — Email otomatis, jangan dibalas.</p>
     </div>
   `
   await transporter.sendMail({
     from: defaultFrom(),
     to: ctx.userEmail,
-    subject: 'Pembayaran ditolak — WA CS Platform',
+    subject: 'Pembayaran ditolak — Hulao',
     html,
     text:
       `${greet}\n\nMohon maaf, pembayaran kamu untuk paket ${ctx.packageName} (${formatRupiahID(ctx.totalAmount)}) ` +

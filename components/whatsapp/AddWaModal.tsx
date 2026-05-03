@@ -202,7 +202,7 @@ export function AddWaModal({
           <DialogDescription>
             {isRepair && (
               <>
-                Pastikan dulu device <strong>WA CS Platform</strong> lama sudah di-unlink
+                Pastikan dulu device <strong>Hulao</strong> lama sudah di-unlink
                 di HP (Pengaturan → Perangkat Tertaut), lalu scan QR baru di bawah.
                 <br />
               </>
