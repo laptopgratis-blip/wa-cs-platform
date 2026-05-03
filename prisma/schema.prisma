@@ -1,0 +1,506 @@
+// prisma/schema.prisma
+// Database schema untuk WA CS Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// USER & AUTH
+// ─────────────────────────────────────────
+
+enum Role {
+  USER
+  ADMIN
+  FINANCE   // Akses terbatas ke /admin/finance untuk verifikasi transfer manual.
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?   // null kalau login via Google
+  name          String?
+  image         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts          Account[]
+  sessions          Session[]
+  tokenBalance      TokenBalance?
+  tokenTx           TokenTransaction[]
+  waSessions        WhatsappSession[]
+  souls             Soul[]
+  contacts          Contact[]
+  broadcasts        Broadcast[]
+  aiModelAccess     UserModelAccess[]
+  manualPayments    ManualPayment[] @relation("UserManualPayments")
+  confirmedPayments ManualPayment[] @relation("ConfirmedByUser")
+  landingPages      LandingPage[]
+  lpImages          LpImage[]
+  lpQuota           UserQuota?
+}
+
+// NextAuth models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Token sekali pakai untuk reset password lewat email.
+// Selalu konsumsi via flag `used` (jangan dihapus) supaya audit trail tetap ada.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────
+// TOKEN SYSTEM
+// ─────────────────────────────────────────
+
+model TokenBalance {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  balance        Int      @default(0)
+  totalPurchased Int      @default(0)
+  totalUsed      Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TokenTxType {
+  PURCHASE    // Beli token
+  USAGE       // Pakai token (AI reply)
+  REFUND      // Refund
+  BONUS       // Bonus dari admin
+  ADJUSTMENT  // Penyesuaian manual admin
+}
+
+model TokenTransaction {
+  id          String      @id @default(cuid())
+  userId      String
+  amount      Int         // positif = tambah, negatif = kurang
+  type        TokenTxType
+  description String?
+  reference   String?     // payment ID dari Midtrans
+  createdAt   DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// WHATSAPP SESSION
+// ─────────────────────────────────────────
+
+enum WaStatus {
+  DISCONNECTED
+  CONNECTING
+  WAITING_QR
+  CONNECTED
+  PAUSED      // Token habis
+  ERROR
+}
+
+model WhatsappSession {
+  id          String   @id @default(cuid())
+  userId      String
+  phoneNumber String?  // diisi setelah connected
+  displayName String?
+  status      WaStatus @default(DISCONNECTED)
+  sessionData String?  @db.Text // Baileys credentials (encrypted JSON)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Soul & model yang dipakai sesi ini
+  soulId    String?
+  modelId   String?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  soul     Soul?     @relation(fields: [soulId], references: [id])
+  model    AiModel?  @relation(fields: [modelId], references: [id])
+  contacts Contact[]
+  messages Message[]
+  broadcasts Broadcast[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// SOUL (Kepribadian AI)
+// ─────────────────────────────────────────
+
+model Soul {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String   // nama soul, misal "Sari CS Toko Baju"
+  systemPrompt    String   @db.Text // prompt lengkap yang dikirim ke AI
+  personality     String?  // ramah, profesional, santai, dll
+  businessContext String?  @db.Text // info bisnis: produk, harga, dsb
+  language        String   @default("id") // id = Bahasa Indonesia
+  replyStyle      String?  // singkat, detail, emoji, dll
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSessions  WhatsappSession[]
+}
+
+// ─────────────────────────────────────────
+// AI MODEL
+// ─────────────────────────────────────────
+
+enum AiProvider {
+  ANTHROPIC
+  OPENAI
+  GOOGLE
+}
+
+model AiModel {
+  id               String      @id @default(cuid())
+  name             String      // "Claude Haiku", "GPT-4o Mini"
+  provider         AiProvider
+  modelId          String      // "claude-haiku-4-5-20251001"
+  costPerMessage   Int         @default(1) // berapa token platform per pesan
+  isActive         Boolean     @default(true)
+  description      String?
+  createdAt        DateTime    @default(now())
+
+  waSessions  WhatsappSession[]
+  userAccess  UserModelAccess[]
+}
+
+// Model access per user (admin bisa restrict)
+model UserModelAccess {
+  userId    String
+  modelId   String
+  grantedAt DateTime @default(now())
+
+  user  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model AiModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, modelId])
+}
+
+// ─────────────────────────────────────────
+// CRM — CONTACT
+// ─────────────────────────────────────────
+
+enum PipelineStage {
+  NEW         // Baru masuk
+  PROSPECT    // Tertarik
+  INTEREST    // Sudah diskusi
+  NEGOTIATION // Negosiasi harga
+  CLOSED_WON  // Beli
+  CLOSED_LOST // Tidak jadi
+}
+
+model Contact {
+  id            String        @id @default(cuid())
+  userId        String
+  waSessionId   String
+  phoneNumber   String
+  name          String?
+  avatar        String?
+  tags          String[]      @default([])
+  pipelineStage PipelineStage @default(NEW)
+  notes         String?       @db.Text
+  isBlacklisted Boolean       @default(false)
+  // Kalau true, AI tidak balas pesan dari kontak ini (CS manusia ambil alih).
+  aiPaused      Boolean       @default(false)
+  // Kalau true, percakapan ditandai selesai — tidak muncul di tab default inbox.
+  isResolved    Boolean       @default(false)
+  lastMessageAt DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Data tambahan (flexible)
+  customFields  Json?
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+  messages  Message[]
+
+  @@unique([waSessionId, phoneNumber])
+  @@index([userId, pipelineStage])
+  @@index([userId, lastMessageAt])
+}
+
+// ─────────────────────────────────────────
+// CRM — MESSAGE
+// ─────────────────────────────────────────
+
+enum MessageRole {
+  USER    // Pesan dari customer WA
+  AI      // Balasan dari AI
+  HUMAN   // Balasan manual dari CS manusia
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  contactId   String
+  waSessionId String
+  content     String        @db.Text
+  role        MessageRole
+  status      MessageStatus @default(SENT)
+  tokensUsed  Int?          // berapa token platform dipotong
+  createdAt   DateTime      @default(now())
+
+  contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+
+  @@index([contactId, createdAt])
+  @@index([waSessionId, createdAt])
+}
+
+// ─────────────────────────────────────────
+// BROADCAST
+// ─────────────────────────────────────────
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Broadcast {
+  id            String          @id @default(cuid())
+  userId        String
+  waSessionId   String
+  name          String
+  message       String          @db.Text
+  targetTags    String[]        @default([]) // tag kontak yang dituju
+  targetStages  String[]        @default([]) // pipeline stage yang dituju
+  status        BroadcastStatus @default(DRAFT)
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  totalTargets  Int             @default(0)
+  totalSent     Int             @default(0)
+  totalFailed   Int             @default(0)
+  createdAt     DateTime        @default(now())
+
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// PAYMENT
+// ─────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  orderId       String        @unique // merchant_ref yang dikirim ke Tripay
+  amount        Int           // dalam Rupiah
+  tokenAmount   Int           // berapa token yang dibeli
+  status        PaymentStatus @default(PENDING)
+  paymentMethod String?
+  reference     String?       @unique // reference dari Tripay (T0001xxxxx)
+  paymentUrl    String?       // checkout_url Tripay untuk redirect user
+  paidAt        DateTime?
+  expiredAt     DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([userId, status])
+  @@index([orderId])
+}
+
+// ─────────────────────────────────────────
+// TOKEN PACKAGE (diset admin)
+// ─────────────────────────────────────────
+
+model TokenPackage {
+  id          String   @id @default(cuid())
+  name        String   // "Starter", "Popular", "Power"
+  tokenAmount Int      // jumlah token
+  price       Int      // harga dalam Rupiah
+  isPopular   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  manualPayments ManualPayment[]
+}
+
+// ─────────────────────────────────────────
+// MANUAL PAYMENT (Transfer Bank)
+// ─────────────────────────────────────────
+
+enum ManualPaymentStatus {
+  PENDING     // Menunggu verifikasi admin/finance
+  CONFIRMED   // Sudah diverifikasi & token sudah ditambahkan
+  REJECTED    // Ditolak oleh admin/finance
+}
+
+model ManualPayment {
+  id              String              @id @default(cuid())
+  userId          String
+  packageId       String
+  amount          Int                 // harga paket (Rupiah)
+  tokenAmount     Int                 // jumlah token paket
+  uniqueCode      Int                 // 100-999 untuk identifikasi transfer
+  totalAmount     Int                 // amount + uniqueCode
+  proofUrl        String?             // URL bukti transfer (upload setelah create)
+  proofNote       String?             @db.Text
+  status          ManualPaymentStatus @default(PENDING)
+  rejectionReason String?             @db.Text
+  confirmedBy     String?             // userId admin/finance yang konfirmasi
+  confirmedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user      User         @relation("UserManualPayments", fields: [userId], references: [id], onDelete: Cascade)
+  package   TokenPackage @relation(fields: [packageId], references: [id])
+  confirmer User?        @relation("ConfirmedByUser", fields: [confirmedBy], references: [id])
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ─────────────────────────────────────────
+// BANK ACCOUNT (Rekening tujuan transfer manual — diset admin)
+// ─────────────────────────────────────────
+
+model BankAccount {
+  id            String   @id @default(cuid())
+  bankName      String   // mis. "BCA", "Mandiri"
+  accountNumber String
+  accountName   String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────
+// LANDING PAGE BUILDER
+// ─────────────────────────────────────────
+
+// Tier kuota LP — naik otomatis berdasarkan total token yang pernah dibeli.
+// FREE = default user baru. STARTER/POPULAR/POWER selaras dengan paket token.
+enum LpTier {
+  FREE
+  STARTER
+  POPULAR
+  POWER
+}
+
+model LandingPage {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  slug        String   @unique // URL public, mis. /lp/<slug>
+  htmlContent String   @db.Text
+  metaTitle   String?
+  metaDesc    String?  @db.Text
+  isPublished Boolean  @default(false)
+  viewCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images LpImage[]
+
+  @@index([userId, isPublished])
+}
+
+model LpImage {
+  id           String   @id @default(cuid())
+  userId       String
+  // Boleh null — user bisa upload ke library dulu, baru pasang di LP nanti.
+  lpId         String?
+  filename     String   // nama file di disk (mis. <random>.jpg)
+  originalName String
+  url          String   // /uploads/lp-images/<userId>/<filename>
+  size         Int      // bytes
+  mimeType     String
+  createdAt    DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lp   LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([lpId])
+}
+
+// Kuota LP & storage per user. Tier hanya naik (lihat lib/lp-quota.ts).
+model UserQuota {
+  userId        String  @id
+  tier          LpTier  @default(FREE)
+  maxLp         Int     @default(1)
+  maxStorageMB  Int     @default(5)
+  storageUsedMB Float   @default(0)
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

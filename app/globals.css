@@ -1,26 +1,265 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
+/* ─────────────────────────────────────────
+   THEME — Citrus Energy (orange + warm gray)
+   Token Tailwind v4 yang menghasilkan kelas
+   `bg-primary`, `bg-warm-50`, `font-display`,
+   `shadow-orange`, `animate-fade-slide-up`.
+───────────────────────────────────────── */
 @theme inline {
+  /* core shadcn tokens (mengarah ke CSS var di :root) */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-heading: var(--font-display);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* Citrus orange scale — kelas: bg-primary-50 ... bg-primary-900 */
+  --color-primary-50: #fff7ed;
+  --color-primary-100: #ffedd5;
+  --color-primary-200: #fed7aa;
+  --color-primary-300: #fdba74;
+  --color-primary-400: #fb923c;
+  --color-primary-500: #f97316;
+  --color-primary-600: #ea6c0a;
+  --color-primary-700: #c2570a;
+  --color-primary-800: #9a3e08;
+  --color-primary-900: #7c3205;
+
+  /* Warm gray scale — kelas: bg-warm-50 ... bg-warm-900 */
+  --color-warm-50: #fafaf9;
+  --color-warm-100: #f5f5f4;
+  --color-warm-200: #e7e5e4;
+  --color-warm-300: #d6d3d1;
+  --color-warm-400: #a8a29e;
+  --color-warm-500: #78716c;
+  --color-warm-600: #57534e;
+  --color-warm-700: #44403c;
+  --color-warm-800: #292524;
+  --color-warm-900: #1c1917;
+
+  /* Radius — sesuai DESIGN_SYSTEM.md */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+
+  /* Shadows — orange glow untuk CTA */
+  --shadow-orange: 0 4px 20px rgba(249, 115, 22, 0.25);
+  --shadow-orange-lg: 0 8px 40px rgba(249, 115, 22, 0.35);
+
+  /* Animations & keyframes */
+  --animate-fade-slide-up: fadeSlideUp 300ms ease forwards;
+  --animate-pulse-dot: pulseDot 2s ease-in-out infinite;
+
+  @keyframes fadeSlideUp {
+    0% { opacity: 0; transform: translateY(12px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─────────────────────────────────────────
+   Light theme (Citrus Energy)
+───────────────────────────────────────── */
+:root {
+  --background: #fafaf9;        /* warm-50 — bukan pure white */
+  --foreground: #292524;        /* warm-800 */
+
+  --card: #ffffff;
+  --card-foreground: #292524;
+  --popover: #ffffff;
+  --popover-foreground: #292524;
+
+  --primary: #f97316;           /* orange-500 */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f5f5f4;         /* warm-100 */
+  --secondary-foreground: #292524;
+
+  --muted: #f5f5f4;             /* warm-100 */
+  --muted-foreground: #78716c;  /* warm-500 */
+
+  --accent: #fff7ed;            /* primary-50 */
+  --accent-foreground: #c2570a; /* primary-700 */
+
+  --destructive: #ef4444;       /* red-500 */
+  --border: #e7e5e4;            /* warm-200 */
+  --input: #e7e5e4;
+  --ring: #fb923c;              /* primary-400 untuk focus ring */
+
+  --chart-1: #f97316;           /* orange-500 — AI / primary */
+  --chart-2: #fed7aa;           /* primary-200 — Customer / secondary */
+  --chart-3: #fb923c;           /* primary-400 */
+  --chart-4: #fdba74;           /* primary-300 */
+  --chart-5: #ffedd5;           /* primary-100 */
+
+  --radius: 0.625rem;
+
+  /* Sidebar light — putih bersih dengan accent orange */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #44403c;           /* warm-700 */
+  --sidebar-primary: #f97316;              /* orange-500 — accent active */
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f5f4;               /* warm-100 — hover bg */
+  --sidebar-accent-foreground: #1c1917;    /* warm-900 */
+  --sidebar-border: #e7e5e4;               /* warm-200 */
+  --sidebar-ring: #fb923c;
+}
+
+/* ─────────────────────────────────────────
+   Dark mode
+───────────────────────────────────────── */
+.dark {
+  --background: #1c1917;
+  --foreground: #fafaf9;
+
+  --card: #292524;
+  --card-foreground: #fafaf9;
+  --popover: #292524;
+  --popover-foreground: #fafaf9;
+
+  --primary: #fb923c;            /* orange-400 — sedikit lebih terang di dark */
+  --primary-foreground: #1c1917;
+
+  --secondary: #292524;
+  --secondary-foreground: #fafaf9;
+
+  --muted: #292524;
+  --muted-foreground: #a8a29e;   /* warm-400 */
+
+  --accent: #44403c;             /* warm-700 */
+  --accent-foreground: #fafaf9;
+
+  --destructive: #f87171;        /* red-400 */
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #fb923c;
+
+  --chart-1: #fb923c;
+  --chart-2: #c2570a;
+  --chart-3: #fed7aa;
+  --chart-4: #fdba74;
+  --chart-5: #9a3e08;
+
+  --sidebar: #0f0d0c;
+  --sidebar-foreground: #fafaf9;
+  --sidebar-primary: #fb923c;
+  --sidebar-primary-foreground: #1c1917;
+  --sidebar-accent: #292524;
+  --sidebar-accent-foreground: #fafaf9;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: #fb923c;
+}
+
+/* ─────────────────────────────────────────
+   Base styles & polish
+───────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body), 'Inter', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.01em;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Scrollbar custom — minimalis */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3d1;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a29e;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #44403c;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #57534e;
+}
+
+/* Selection orange */
+::selection {
+  background: #fed7aa;
+  color: #9a3e08;
+}
+
+/* ─────────────────────────────────────────
+   Utility helpers (dipakai komponen baru)
+───────────────────────────────────────── */
+@layer utilities {
+  .hover-lift {
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+  .stagger-1 { animation-delay: 50ms; }
+  .stagger-2 { animation-delay: 100ms; }
+  .stagger-3 { animation-delay: 150ms; }
+  .stagger-4 { animation-delay: 200ms; }
+}
+
+/* Dot grid pattern untuk hero section */
+.dot-grid {
+  background-image: radial-gradient(circle, #d6d3d1 1px, transparent 1px);
+  background-size: 24px 24px;
 }
