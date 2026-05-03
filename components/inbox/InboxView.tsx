@@ -96,7 +96,7 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
           onSelect={setSelectedId}
         />
       </aside>
-      <section className="flex-1">
+      <section className="flex-1 h-full overflow-hidden">
         {selected ? (
           <ChatView contactId={selected.id} onChanged={refresh} />
         ) : (

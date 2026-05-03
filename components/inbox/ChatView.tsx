@@ -218,8 +218,8 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 bg-muted/20">
-        <div ref={scrollRef} className="flex flex-col gap-2 p-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-muted/20">
+        <div className="flex flex-col gap-2 p-4">
           {grouped.map((group) => (
             <div key={group.date} className="flex flex-col gap-2">
               <div className="my-2 flex justify-center">
@@ -233,7 +233,7 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Composer */}
       <div className="border-t p-3">

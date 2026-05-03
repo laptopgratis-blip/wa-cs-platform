@@ -49,25 +49,31 @@ export async function POST(req: Request) {
 
     // Upsert Contact: kalau belum ada → buat; kalau sudah → update name
     // (bila baru ada pushName) dan lastMessageAt.
-    const contact = await prisma.contact.upsert({
-      where: {
-        waSessionId_phoneNumber: {
+    // Cari kontak existing berdasarkan userId + phoneNumber (bukan waSessionId)
+    // supaya tidak duplikat saat session berganti.
+    let contact = await prisma.contact.findFirst({
+      where: { userId: wa.userId, phoneNumber: body.phoneNumber },
+    })
+    if (!contact) {
+      contact = await prisma.contact.create({
+        data: {
+          userId: wa.userId,
           waSessionId: body.sessionId,
           phoneNumber: body.phoneNumber,
+          name: body.pushName ?? null,
+          lastMessageAt: new Date(),
         },
-      },
-      create: {
-        userId: wa.userId,
-        waSessionId: body.sessionId,
-        phoneNumber: body.phoneNumber,
-        name: body.pushName ?? null,
-        lastMessageAt: new Date(),
-      },
-      update: {
-        name: body.pushName ?? undefined,
-        lastMessageAt: new Date(),
-      },
-    })
+      })
+    } else {
+      contact = await prisma.contact.update({
+        where: { id: contact.id },
+        data: {
+          name: body.pushName ?? undefined,
+          lastMessageAt: new Date(),
+          waSessionId: body.sessionId,
+        },
+      })
+    }
 
     const message = await prisma.message.create({
       data: {

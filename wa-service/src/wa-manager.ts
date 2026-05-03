@@ -371,7 +371,7 @@ export class WaManager {
     const content = extractText(msg)
     if (!content) return // bukan pesan teks (media/sticker/dll.)
 
-    const phoneNumber = remoteJid.split('@')[0] ?? remoteJid
+    const phoneNumber = remoteJid.includes("@lid") ? remoteJid : remoteJid.split("@")[0] ?? remoteJid
     const inFlightKey = phoneNumber
     if (entry.inFlight.has(inFlightKey)) {
       // Pesan beruntun dari kontak yang sama — biarkan flow yang sedang
