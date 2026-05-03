@@ -56,11 +56,29 @@ services:
       - ./wa-service/sessions:/app/sessions
     networks:
       - internal
-    # TIDAK ada labels Traefik — service internal, hanya diakses oleh Next.js
-    # via name resolution di network "internal". Tidak expose port ke host.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.wa-socket.rule=Host(`hulao.id`) && PathPrefix(`/socket.io`)"
+      - "traefik.http.routers.wa-socket.entrypoints=websecure"
+      - "traefik.http.routers.wa-socket.tls=true"
+      - "traefik.http.routers.wa-socket.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wa-socket.loadbalancer.server.url=http://172.16.4.2:3001"
+      - "traefik.docker.network=traefik-public"
+
+  uploads-server:
+    image: nginx:alpine
+    container_name: hulao-uploads
+    volumes:
+      - ./public/uploads:/usr/share/nginx/html/uploads:ro
+    networks:
+      - traefik-public
+      - internal
+    restart: unless-stopped
 
 networks:
   traefik-public:
     external: true
   internal:
     driver: bridge
+
+

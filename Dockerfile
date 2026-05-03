@@ -31,6 +31,10 @@ RUN npx prisma generate --generator client
 
 # Telemetry off + production build.
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_SOCKET_URL=https://hulao.id
+ARG NEXT_PUBLIC_APP_URL=https://hulao.id
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 RUN npm run build
 
 # ─────────────────────────────────────────
