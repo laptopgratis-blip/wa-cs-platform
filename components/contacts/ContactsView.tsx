@@ -2,14 +2,26 @@
 
 // Halaman /contacts: tabel + filter + search + slide-over detail.
 import type { PipelineStage } from '@prisma/client'
-import { Loader2, Search } from 'lucide-react'
+import { Loader2, Search, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { ContactDetailSheet } from '@/components/contacts/ContactDetailSheet'
 import { PipelineBadge } from '@/components/contacts/PipelineBadge'
 import type { ContactRow } from '@/components/contacts/types'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -61,6 +73,8 @@ export function ContactsView({
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [isLoading, setLoading] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ContactRow | null>(null)
+  const [isDeleting, setDeleting] = useState(false)
 
   const isFirst = useRef(true)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -102,6 +116,26 @@ export function ContactsView({
     }
     void fetchList()
   }, [fetchList])
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/contacts/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      const json = (await res.json()) as { success: boolean; error?: string }
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal menghapus kontak')
+        return
+      }
+      toast.success(`Kontak ${deleteTarget.name || deleteTarget.phoneNumber} dihapus`)
+      setDeleteTarget(null)
+      void fetchList()
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -171,6 +205,7 @@ export function ContactsView({
                 <TableHead>Stage</TableHead>
                 <TableHead>Pesan terakhir</TableHead>
                 <TableHead className="text-right">Tanggal masuk</TableHead>
+                <TableHead className="w-[60px] text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -225,6 +260,20 @@ export function ContactsView({
                   <TableCell className="text-right text-sm text-muted-foreground">
                     {formatRelativeTime(c.createdAt)}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-8 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleteTarget(c)
+                      }}
+                      aria-label="Hapus kontak"
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -239,6 +288,38 @@ export function ContactsView({
         }}
         onSaved={fetchList}
       />
+
+      <AlertDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o && !isDeleting) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus kontak ini?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus kontak{' '}
+              <strong>{deleteTarget?.name || `+${deleteTarget?.phoneNumber}`}</strong>?
+              Semua percakapan akan ikut terhapus. Tindakan ini tidak bisa dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Ya, Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

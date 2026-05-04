@@ -19,6 +19,18 @@ const bodySchema = z.object({
   withHistory: z.boolean().optional(),
 })
 
+// Normalisasi phoneNumber sebelum lookup/create kontak supaya tidak duplikat.
+// @s.whatsapp.net → ambil digit sebelum @ (dan sebelum :deviceId kalau ada).
+// @lid → biarkan as-is karena LID adalah ID opaque, bukan nomor asli.
+function normalizePhoneNumber(input: string): string {
+  if (input.endsWith('@lid')) return input
+  if (input.includes('@')) {
+    const beforeAt = input.split('@')[0] ?? input
+    return beforeAt.split(':')[0] ?? beforeAt
+  }
+  return input
+}
+
 export async function POST(req: Request) {
   const blocked = requireServiceSecret(req)
   if (blocked) return blocked
@@ -51,15 +63,16 @@ export async function POST(req: Request) {
     // (bila baru ada pushName) dan lastMessageAt.
     // Cari kontak existing berdasarkan userId + phoneNumber (bukan waSessionId)
     // supaya tidak duplikat saat session berganti.
+    const phoneNumber = normalizePhoneNumber(body.phoneNumber)
     let contact = await prisma.contact.findFirst({
-      where: { userId: wa.userId, phoneNumber: body.phoneNumber },
+      where: { userId: wa.userId, phoneNumber },
     })
     if (!contact) {
       contact = await prisma.contact.create({
         data: {
           userId: wa.userId,
           waSessionId: body.sessionId,
-          phoneNumber: body.phoneNumber,
+          phoneNumber,
           name: body.pushName ?? null,
           lastMessageAt: new Date(),
         },

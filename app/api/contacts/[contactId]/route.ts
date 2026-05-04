@@ -1,5 +1,6 @@
 // GET    /api/contacts/[contactId] — detail + 20 pesan terakhir
 // PATCH  /api/contacts/[contactId] — update name/notes/stage/tags/blacklist
+// DELETE /api/contacts/[contactId] — hapus kontak (Message ikut cascade)
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
@@ -98,6 +99,29 @@ export async function PATCH(req: Request, { params }: Params) {
     return jsonOk(updated)
   } catch (err) {
     console.error('[PATCH /api/contacts/:id] gagal:', err)
+    return jsonError('Terjadi kesalahan server', 500)
+  }
+}
+
+export async function DELETE(_req: Request, { params }: Params) {
+  let session
+  try {
+    session = await requireSession()
+  } catch (res) {
+    return res as NextResponse
+  }
+  const { contactId } = await params
+  try {
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId, userId: session.user.id },
+      select: { id: true },
+    })
+    if (!contact) return jsonError('Kontak tidak ditemukan', 404)
+
+    await prisma.contact.delete({ where: { id: contactId } })
+    return jsonOk({ id: contactId })
+  } catch (err) {
+    console.error('[DELETE /api/contacts/:id] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)
   }
 }
