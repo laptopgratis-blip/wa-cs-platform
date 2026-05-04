@@ -116,7 +116,7 @@ export class WaManager {
 
     sock.ev.on('messages.upsert', (event) => {
       // Hanya pesan baru (bukan history sync). Process async, jangan block.
-      if (event.type !== 'notify') return
+      console.log("[DEBUG] messages.upsert type:", event.type, "count:", event.messages.length); if (event.type !== 'notify') return
       for (const msg of event.messages) {
         this.handleIncomingMessage(entry, msg).catch((err) => {
           console.error(`[wa-manager:${sessionId}] handleIncomingMessage:`, err)
