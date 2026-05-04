@@ -1,15 +1,25 @@
 // Zod schema untuk Soul (create + update) dan untuk konfigurasi WA session.
 import { z } from 'zod'
 
-export const personalityEnum = z.enum(['RAMAH', 'PROFESIONAL', 'SANTAI', 'TEGAS'])
 export const languageEnum = z.enum(['id', 'en', 'mix'])
-export const replyStyleEnum = z.enum(['SINGKAT', 'DETAIL', 'EMOJI'])
+
+// personality & replyStyle sekarang berisi id dari SoulPersonality / SoulStyle
+// yang dikurasi admin (cuid). Validasi keberadaan id-nya dilakukan di handler
+// (resolve lewat lib/soul.ts) — di sini cukup string bebas + nullable supaya
+// row Soul lama (yang menyimpan enum legacy) tetap bisa di-update.
+const optionalIdString = z
+  .string()
+  .trim()
+  .min(1)
+  .max(120)
+  .optional()
+  .nullable()
 
 export const soulCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama soul minimal 2 karakter').max(80),
-  personality: personalityEnum.optional().nullable(),
+  personality: optionalIdString,
   language: languageEnum,
-  replyStyle: replyStyleEnum.optional().nullable(),
+  replyStyle: optionalIdString,
   businessContext: z.string().max(8000, 'Konteks bisnis maksimal 8000 karakter').optional().nullable(),
   isDefault: z.boolean().optional(),
 })

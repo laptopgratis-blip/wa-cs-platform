@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { buildSystemPrompt, type Language, type Personality, type ReplyStyle } from '@/lib/soul'
+import { buildSystemPrompt, type Language } from '@/lib/soul'
 import { soulUpdateSchema } from '@/lib/validations/soul'
 
 interface Params {
@@ -53,13 +53,13 @@ export async function PATCH(req: Request, { params }: Params) {
     // Merge field lama + baru untuk hitung systemPrompt baru.
     const next = {
       name: data.name ?? existing.name,
-      personality: (data.personality !== undefined ? data.personality : existing.personality) as Personality | null,
+      personality: data.personality !== undefined ? data.personality : existing.personality,
       language: (data.language ?? existing.language) as Language,
-      replyStyle: (data.replyStyle !== undefined ? data.replyStyle : existing.replyStyle) as ReplyStyle | null,
+      replyStyle: data.replyStyle !== undefined ? data.replyStyle : existing.replyStyle,
       businessContext:
         data.businessContext !== undefined ? data.businessContext : existing.businessContext,
     }
-    const systemPrompt = buildSystemPrompt(next)
+    const systemPrompt = await buildSystemPrompt(next)
 
     const soul = await prisma.$transaction(async (tx) => {
       if (data.isDefault === true) {

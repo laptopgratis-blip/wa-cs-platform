@@ -197,6 +197,36 @@ model Soul {
 }
 
 // ─────────────────────────────────────────
+// SOUL SETTINGS — pilihan kepribadian & gaya balas yang di-curate admin.
+// User pilih dari sini lewat dropdown SoulBuilder. systemPromptSnippet
+// disuntikkan ke system prompt server-side — TIDAK PERNAH dikirim ke client.
+// ─────────────────────────────────────────
+
+model SoulPersonality {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String   // teks publik yang user lihat di dropdown
+  systemPromptSnippet String   @db.Text // RAHASIA — instruksi AI, hanya admin
+  isActive            Boolean  @default(true)
+  order               Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  @@index([isActive, order])
+}
+
+model SoulStyle {
+  id                  String   @id @default(cuid())
+  name                String
+  description         String   // teks publik yang user lihat di dropdown
+  systemPromptSnippet String   @db.Text // RAHASIA — instruksi AI, hanya admin
+  isActive            Boolean  @default(true)
+  order               Int      @default(0)
+  createdAt           DateTime @default(now())
+
+  @@index([isActive, order])
+}
+
+// ─────────────────────────────────────────
 // AI MODEL
 // ─────────────────────────────────────────
 

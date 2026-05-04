@@ -28,6 +28,17 @@ export const userTopupSchema = z.object({
   description: z.string().max(200).optional(),
 })
 
+// Edit user dari /admin/users. Semua field opsional — admin boleh ubah
+// hanya satu hal sekaligus. tokenBalance = saldo absolut (override), bukan
+// delta — beda dari topup yang increment. Pakai role enum yang sengaja
+// dibatasi USER/ADMIN (FINANCE diset lewat path lain supaya tidak nyasar).
+export const userUpdateSchema = z.object({
+  name: z.string().trim().min(1, 'Nama tidak boleh kosong').max(80).nullable().optional(),
+  role: z.enum(['USER', 'ADMIN']).optional(),
+  tokenBalance: z.number().int().min(0).max(100_000_000).optional(),
+})
+export type UserUpdateInput = z.infer<typeof userUpdateSchema>
+
 export const bankAccountCreateSchema = z.object({
   bankName: z.string().trim().min(2, 'Nama bank minimal 2 karakter').max(60),
   accountNumber: z
@@ -49,6 +60,23 @@ export const manualPaymentRejectSchema = z.object({
     .max(500, 'Alasan maksimal 500 karakter'),
 })
 export type ManualPaymentRejectInput = z.infer<typeof manualPaymentRejectSchema>
+
+// Soul settings — kepribadian & gaya balas yang dikurasi admin.
+// systemPromptSnippet besar karena bisa berisi instruksi panjang (mis. teknik
+// SPIN selling). Limit 8000 char selaras dengan businessContext Soul.
+export const soulOptionCreateSchema = z.object({
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(80),
+  description: z.string().trim().min(2, 'Deskripsi minimal 2 karakter').max(300),
+  systemPromptSnippet: z
+    .string()
+    .trim()
+    .min(10, 'Instruksi AI minimal 10 karakter')
+    .max(8000, 'Instruksi AI maksimal 8000 karakter'),
+  isActive: z.boolean().optional(),
+  order: z.number().int().min(0).max(1000).optional(),
+})
+export const soulOptionUpdateSchema = soulOptionCreateSchema.partial()
+export type SoulOptionCreateInput = z.infer<typeof soulOptionCreateSchema>
 
 export const lpUpgradePackageCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(80),

@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { SoulList, type SoulListItem } from '@/components/soul/SoulList'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import type { Language, Personality, ReplyStyle } from '@/lib/soul'
+import type { Language } from '@/lib/soul'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,9 +31,9 @@ export default async function SoulPage() {
   const souls: SoulListItem[] = rows.map((r) => ({
     id: r.id,
     name: r.name,
-    personality: r.personality as Personality | null,
+    personality: r.personality,
     language: (r.language || 'id') as Language,
-    replyStyle: r.replyStyle as ReplyStyle | null,
+    replyStyle: r.replyStyle,
     businessContext: r.businessContext,
     isDefault: r.isDefault,
     usageCount: r._count.waSessions,

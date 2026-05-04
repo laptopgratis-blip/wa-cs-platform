@@ -1,12 +1,11 @@
-// Helper soul: pilihan kepribadian/bahasa/gaya + builder system prompt.
-// Dipakai bersama oleh form (preview), API (saat save), dan ai-handler.
-
-export const PERSONALITIES = [
-  { value: 'RAMAH', label: 'Ramah' },
-  { value: 'PROFESIONAL', label: 'Profesional' },
-  { value: 'SANTAI', label: 'Santai' },
-  { value: 'TEGAS', label: 'Tegas' },
-] as const
+// Helper soul: pilihan bahasa + builder system prompt server-side.
+//
+// Catatan back-compat:
+// - Field `personality` & `replyStyle` di tabel Soul sekarang menyimpan id dari
+//   SoulPersonality / SoulStyle (yang dikurasi admin). Untuk row LAMA isinya
+//   masih enum string lama (RAMAH/PROFESIONAL/SANTAI/TEGAS dan
+//   SINGKAT/DETAIL/EMOJI) — tetap dihormati lewat fallback hint di bawah.
+import { prisma } from '@/lib/prisma'
 
 export const LANGUAGES = [
   { value: 'id', label: 'Bahasa Indonesia' },
@@ -14,17 +13,11 @@ export const LANGUAGES = [
   { value: 'mix', label: 'Indonesia + Inggris (mix)' },
 ] as const
 
-export const REPLY_STYLES = [
-  { value: 'SINGKAT', label: 'Singkat' },
-  { value: 'DETAIL', label: 'Detail' },
-  { value: 'EMOJI', label: 'Pakai Emoji' },
-] as const
-
-export type Personality = (typeof PERSONALITIES)[number]['value']
 export type Language = (typeof LANGUAGES)[number]['value']
-export type ReplyStyle = (typeof REPLY_STYLES)[number]['value']
 
-const personalityHint: Record<Personality, string> = {
+// Legacy enum value tetap di-export untuk Soul yang sudah ada sebelum migrasi.
+// Tidak lagi ditampilkan di dropdown user — pilihan baru ambil dari DB.
+const LEGACY_PERSONALITY_HINT: Record<string, string> = {
   RAMAH: 'Sapa customer dengan hangat, gunakan nada bersahabat, hindari kesan kaku.',
   PROFESIONAL:
     'Bersikap formal, sopan, fokus pada akurasi informasi, hindari bahasa gaul.',
@@ -33,13 +26,7 @@ const personalityHint: Record<Personality, string> = {
   TEGAS: 'Jawaban langsung ke poin, tegas dalam menyampaikan kebijakan dan harga.',
 }
 
-const languageHint: Record<Language, string> = {
-  id: 'Selalu balas dalam Bahasa Indonesia.',
-  en: 'Always reply in English.',
-  mix: 'Default Bahasa Indonesia, ikuti bahasa customer kalau dia pakai bahasa lain (terutama Inggris).',
-}
-
-const replyStyleHint: Record<ReplyStyle, string> = {
+const LEGACY_REPLY_STYLE_HINT: Record<string, string> = {
   SINGKAT: 'Jawaban singkat, padat, maksimal 2-3 kalimat per pesan.',
   DETAIL:
     'Jawaban lengkap dengan penjelasan, sertakan contoh atau langkah-langkah kalau relevan.',
@@ -47,32 +34,65 @@ const replyStyleHint: Record<ReplyStyle, string> = {
     'Sering pakai emoji yang relevan untuk membuat pesan terasa hangat (misalnya 😊 🙏 ✨ 🛍️).',
 }
 
+const LANGUAGE_HINT: Record<Language, string> = {
+  id: 'Selalu balas dalam Bahasa Indonesia.',
+  en: 'Always reply in English.',
+  mix: 'Default Bahasa Indonesia, ikuti bahasa customer kalau dia pakai bahasa lain (terutama Inggris).',
+}
+
 export interface BuildSystemPromptInput {
   name: string
-  personality: Personality | null
+  // Boleh berisi cuid SoulPersonality (baru) atau enum legacy. null = tidak diset.
+  personality: string | null
   language: Language
-  replyStyle: ReplyStyle | null
+  // Boleh berisi cuid SoulStyle (baru) atau enum legacy. null = tidak diset.
+  replyStyle: string | null
   businessContext: string | null
 }
 
-// Bangun system prompt yang dikirim ke Claude. Format ini juga dipakai untuk
-// preview di form supaya user tahu persis apa yang akan dikirim ke AI.
-export function buildSystemPrompt(input: BuildSystemPromptInput): string {
+// Resolve snippet kepribadian: cek DB dulu, fallback ke hint legacy, fallback null.
+async function resolvePersonalitySnippet(value: string | null): Promise<string | null> {
+  if (!value) return null
+  if (LEGACY_PERSONALITY_HINT[value]) return LEGACY_PERSONALITY_HINT[value]
+  const row = await prisma.soulPersonality.findUnique({
+    where: { id: value },
+    select: { systemPromptSnippet: true },
+  })
+  return row?.systemPromptSnippet ?? null
+}
+
+async function resolveStyleSnippet(value: string | null): Promise<string | null> {
+  if (!value) return null
+  if (LEGACY_REPLY_STYLE_HINT[value]) return LEGACY_REPLY_STYLE_HINT[value]
+  const row = await prisma.soulStyle.findUnique({
+    where: { id: value },
+    select: { systemPromptSnippet: true },
+  })
+  return row?.systemPromptSnippet ?? null
+}
+
+// Bangun system prompt yang dikirim ke Claude. WAJIB dipanggil server-side
+// karena snippet kepribadian/gaya adalah rahasia perusahaan.
+export async function buildSystemPrompt(input: BuildSystemPromptInput): Promise<string> {
   const { name, personality, language, replyStyle, businessContext } = input
+
+  const [personalitySnippet, styleSnippet] = await Promise.all([
+    resolvePersonalitySnippet(personality),
+    resolveStyleSnippet(replyStyle),
+  ])
+
   const lines: string[] = []
 
   lines.push(
     `Kamu adalah "${name || 'Customer Service AI'}" — customer service WhatsApp untuk sebuah bisnis.`,
   )
 
-  if (personality) {
-    lines.push('', '## Kepribadian', personalityHint[personality])
+  if (personalitySnippet) {
+    lines.push('', '## Kepribadian', personalitySnippet)
   }
 
-  lines.push('', '## Bahasa', languageHint[language])
-
-  if (replyStyle) {
-    lines.push('', '## Gaya Balasan', replyStyleHint[replyStyle])
+  if (styleSnippet) {
+    lines.push('', '## Gaya Balas', styleSnippet)
   }
 
   if (businessContext && businessContext.trim().length > 0) {
@@ -84,6 +104,8 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
       businessContext.trim(),
     )
   }
+
+  lines.push('', '## Bahasa', LANGUAGE_HINT[language])
 
   lines.push(
     '',

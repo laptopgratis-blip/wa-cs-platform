@@ -3,7 +3,7 @@
 // Wrapper client untuk halaman /soul. Tampilkan list + Sheet untuk
 // create/edit. Refresh setelah submit/delete via router.refresh().
 import { Pencil, Plus, Sparkles, Star } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { SoulForm, type SoulInitialValues } from '@/components/soul/SoulForm'
 import { Badge } from '@/components/ui/badge'
@@ -16,21 +16,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import {
-  LANGUAGES,
-  PERSONALITIES,
-  REPLY_STYLES,
-  type Language,
-  type Personality,
-  type ReplyStyle,
-} from '@/lib/soul'
+import { LANGUAGES, type Language } from '@/lib/soul'
 
 export interface SoulListItem {
   id: string
   name: string
-  personality: Personality | null
+  // id SoulPersonality / SoulStyle (atau enum legacy untuk Soul lama).
+  personality: string | null
   language: Language
-  replyStyle: ReplyStyle | null
+  replyStyle: string | null
   businessContext: string | null
   isDefault: boolean
   usageCount: number
@@ -40,9 +34,49 @@ interface SoulListProps {
   souls: SoulListItem[]
 }
 
+interface SoulOption {
+  id: string
+  name: string
+  description: string
+}
+
+// Label legacy enum untuk Soul yang dibuat sebelum migrasi soul-settings.
+const LEGACY_LABELS: Record<string, string> = {
+  RAMAH: 'Ramah',
+  PROFESIONAL: 'Profesional',
+  SANTAI: 'Santai',
+  TEGAS: 'Tegas',
+  SINGKAT: 'Singkat',
+  DETAIL: 'Detail',
+  EMOJI: 'Pakai Emoji',
+}
+
 export function SoulList({ souls }: SoulListProps) {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<SoulInitialValues | null>(null)
+  const [personalities, setPersonalities] = useState<SoulOption[]>([])
+  const [styles, setStyles] = useState<SoulOption[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/soul/options')
+        const json = (await res.json().catch(() => null)) as
+          | { success: boolean; data?: { personalities: SoulOption[]; styles: SoulOption[] } }
+          | null
+        if (!cancelled && json?.success && json.data) {
+          setPersonalities(json.data.personalities)
+          setStyles(json.data.styles)
+        }
+      } catch {
+        // Diam saja — badge akan fallback ke label legacy / id mentah.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   function openCreate() {
     setEditing(null)
@@ -60,6 +94,22 @@ export function SoulList({ souls }: SoulListProps) {
       isDefault: soul.isDefault,
     })
     setOpen(true)
+  }
+
+  function personalityLabel(value: string): string {
+    const dbMatch = personalities.find((p) => p.id === value)
+    if (dbMatch) return dbMatch.name
+    return LEGACY_LABELS[value] ?? '—'
+  }
+
+  function styleLabel(value: string): string {
+    const dbMatch = styles.find((s) => s.id === value)
+    if (dbMatch) return dbMatch.name
+    return LEGACY_LABELS[value] ?? '—'
+  }
+
+  function languageLabel(value: string): string {
+    return LANGUAGES.find((l) => l.value === value)?.label ?? value
   }
 
   return (
@@ -121,15 +171,15 @@ export function SoulList({ souls }: SoulListProps) {
                     <div className="mt-1 flex flex-wrap gap-1">
                       {s.personality && (
                         <Badge variant="secondary" className="font-normal">
-                          {labelFor(PERSONALITIES, s.personality)}
+                          {personalityLabel(s.personality)}
                         </Badge>
                       )}
                       <Badge variant="outline" className="font-normal">
-                        {labelFor(LANGUAGES, s.language)}
+                        {languageLabel(s.language)}
                       </Badge>
                       {s.replyStyle && (
                         <Badge variant="outline" className="font-normal">
-                          {labelFor(REPLY_STYLES, s.replyStyle)}
+                          {styleLabel(s.replyStyle)}
                         </Badge>
                       )}
                     </div>
@@ -157,12 +207,12 @@ export function SoulList({ souls }: SoulListProps) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-3xl px-6"
+          className="w-full overflow-y-auto sm:max-w-xl px-6"
         >
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Soul' : 'Buat Soul Baru'}</SheetTitle>
             <SheetDescription>
-              Atur kepribadian dan konteks bisnis. Preview akan update saat kamu mengetik.
+              Pilih kepribadian, gaya balas, dan isi konteks bisnis.
             </SheetDescription>
           </SheetHeader>
           <SoulForm initial={editing ?? undefined} onDone={() => setOpen(false)} />
@@ -170,11 +220,4 @@ export function SoulList({ souls }: SoulListProps) {
       </Sheet>
     </>
   )
-}
-
-function labelFor<T extends { value: string; label: string }>(
-  options: readonly T[],
-  value: string,
-): string {
-  return options.find((o) => o.value === value)?.label ?? value
 }

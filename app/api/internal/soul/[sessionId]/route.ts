@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
-import { buildSystemPrompt, type Language, type Personality, type ReplyStyle } from '@/lib/soul'
+import { buildSystemPrompt, type Language } from '@/lib/soul'
 
 interface Params {
   params: Promise<{ sessionId: string }>
@@ -36,11 +36,11 @@ export async function GET(req: Request, { params }: Params) {
 
     // Bangun system prompt dari config soul (kalau ada).
     const systemPrompt = wa.soul
-      ? buildSystemPrompt({
+      ? await buildSystemPrompt({
           name: wa.soul.name,
-          personality: wa.soul.personality as Personality | null,
+          personality: wa.soul.personality,
           language: (wa.soul.language || 'id') as Language,
-          replyStyle: wa.soul.replyStyle as ReplyStyle | null,
+          replyStyle: wa.soul.replyStyle,
           businessContext: wa.soul.businessContext,
         })
       : null

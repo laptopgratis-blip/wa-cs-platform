@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
   try {
     const data = parsed.data
-    const systemPrompt = buildSystemPrompt({
+    const systemPrompt = await buildSystemPrompt({
       name: data.name,
       personality: data.personality ?? null,
       language: data.language,

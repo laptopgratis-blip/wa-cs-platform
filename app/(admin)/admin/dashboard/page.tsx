@@ -1,6 +1,7 @@
 // Admin dashboard — stats agregat platform.
 import { Activity, CreditCard, MessageCircle, Users } from 'lucide-react'
 
+import { SoulTokenBudget } from '@/components/admin/SoulTokenBudget'
 import {
   Card,
   CardContent,
@@ -91,6 +92,10 @@ export default async function AdminDashboardPage() {
           value={`${formatNumber(activeSessions)} / ${formatNumber(totalSessions)}`}
           hint="Connected / total"
         />
+      </div>
+
+      <div className="mt-6">
+        <SoulTokenBudget />
       </div>
 
       <Card className="mt-6">

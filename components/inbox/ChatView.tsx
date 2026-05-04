@@ -5,6 +5,9 @@
 import {
   Bot,
   CheckCircle2,
+  Download,
+  FileArchive,
+  FileText,
   Hand,
   Loader2,
   RotateCcw,
@@ -16,7 +19,12 @@ import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import {
   formatChatDateLabel,
@@ -38,6 +46,7 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
   const [draft, setDraft] = useState('')
   const [isSending, setSending] = useState(false)
   const [isToggling, setToggling] = useState(false)
+  const [isDownloading, setDownloading] = useState(false)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch detail tiap kali contactId berubah.
@@ -130,6 +139,63 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
     }
   }
 
+  async function downloadChat(type: 'single' | 'all') {
+    if (isDownloading) return
+    setDownloading(true)
+    try {
+      const url =
+        type === 'single' ? `/api/inbox/${contactId}/export` : `/api/inbox/export-all`
+      const res = await fetch(url)
+      if (!res.ok) {
+        // Server pakai JSON envelope { success, error } untuk error path —
+        // fallback ke text() kalau bukan JSON (tidak fatal).
+        const body = await res
+          .clone()
+          .json()
+          .catch(() => null)
+        const msg =
+          (body as { error?: string } | null)?.error ||
+          (res.status === 429
+            ? 'Tunggu sebentar sebelum coba lagi'
+            : 'Gagal download percakapan')
+        toast.error(msg)
+        return
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('content-disposition') ?? ''
+      // Prefer filename* (RFC 5987, UTF-8) jika ada, kalau tidak fallback ke
+      // filename= biasa. Strip kutip + decode percent-encoding.
+      let filename = type === 'single' ? 'percakapan.md' : 'hulao-export.zip'
+      const star = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)?.[1]
+      if (star) {
+        try {
+          filename = decodeURIComponent(star.trim())
+        } catch {
+          /* biar default */
+        }
+      } else {
+        const plain = cd.match(/filename\s*=\s*"?([^";]+)"?/i)?.[1]
+        if (plain) filename = plain.trim()
+      }
+      const a = document.createElement('a')
+      const objectUrl = URL.createObjectURL(blob)
+      a.href = objectUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(objectUrl)
+      toast.success(
+        type === 'single' ? 'Percakapan didownload' : 'Semua percakapan didownload',
+      )
+    } catch (err) {
+      console.error('[downloadChat] gagal:', err)
+      toast.error('Gagal download percakapan')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   async function toggleResolved() {
     if (!contact) return
     const next = !contact.isResolved
@@ -214,6 +280,34 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
             )}
             {contact.isResolved ? 'Buka kembali' : 'Tandai selesai'}
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" disabled={isDownloading}>
+                {isDownloading ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 size-4" />
+                )}
+                Download
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => void downloadChat('single')}
+                disabled={isDownloading}
+              >
+                <FileText className="mr-2 size-4" />
+                Percakapan ini (.md)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => void downloadChat('all')}
+                disabled={isDownloading}
+              >
+                <FileArchive className="mr-2 size-4" />
+                Semua percakapan (.zip)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

@@ -16,6 +16,7 @@ import {
   Globe,
   Settings,
   Shield,
+  Sparkles,
   TrendingUp,
   Users,
   Wallet,
@@ -38,6 +39,7 @@ interface MenuItem {
 const menu: MenuItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['ADMIN'] },
   { href: '/admin/models', label: 'AI Models', icon: Cpu, roles: ['ADMIN'] },
+  { href: '/admin/soul-settings', label: 'Soul Settings', icon: Sparkles, roles: ['ADMIN'] },
   { href: '/admin/packages', label: 'Token Packages', icon: Box, roles: ['ADMIN'] },
   { href: '/admin/lp-packages', label: 'Paket LP', icon: Globe, roles: ['ADMIN'] },
   { href: '/admin/pricing-calculator', label: 'Pricing Calculator', icon: Calculator, roles: ['ADMIN'] },

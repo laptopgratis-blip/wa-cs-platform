@@ -1,11 +1,12 @@
 'use client'
 
-// Form buat/edit Soul dengan live preview system prompt.
-// Mode: create (soul=null) atau edit (soul ada).
+// Form buat/edit Soul. Pilihan kepribadian & gaya balas di-fetch dari
+// /api/soul/options — user hanya melihat name + description, snippet AI
+// disembunyikan (rahasia perusahaan, hanya admin yang bisa lihat).
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
@@ -21,23 +22,16 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  buildSystemPrompt,
-  LANGUAGES,
-  PERSONALITIES,
-  REPLY_STYLES,
-  type Language,
-  type Personality,
-  type ReplyStyle,
-} from '@/lib/soul'
+import { LANGUAGES, type Language } from '@/lib/soul'
 import { soulCreateSchema, type SoulCreateInput } from '@/lib/validations/soul'
 
+// id berisi cuid SoulPersonality / SoulStyle (atau enum legacy untuk Soul lama).
 export interface SoulInitialValues {
   id?: string
   name: string
-  personality: Personality | null
+  personality: string | null
   language: Language
-  replyStyle: ReplyStyle | null
+  replyStyle: string | null
   businessContext: string | null
   isDefault: boolean
 }
@@ -47,11 +41,17 @@ interface SoulFormProps {
   onDone: () => void
 }
 
+interface SoulOption {
+  id: string
+  name: string
+  description: string
+}
+
 const DEFAULTS: SoulInitialValues = {
   name: '',
-  personality: 'RAMAH',
+  personality: null,
   language: 'id',
-  replyStyle: 'SINGKAT',
+  replyStyle: null,
   businessContext: '',
   isDefault: false,
 }
@@ -63,6 +63,8 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
   const isEdit = Boolean(initial?.id)
   const [isSubmitting, setSubmitting] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [personalities, setPersonalities] = useState<SoulOption[]>([])
+  const [styles, setStyles] = useState<SoulOption[]>([])
 
   const form = useForm<SoulCreateInput>({
     resolver: zodResolver(soulCreateSchema),
@@ -77,18 +79,36 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
   })
 
   const watched = form.watch()
-  // Live preview yang di-update setiap kali field berubah.
-  const preview = useMemo(
-    () =>
-      buildSystemPrompt({
-        name: watched.name || 'Customer Service AI',
-        personality: watched.personality ?? null,
-        language: watched.language || 'id',
-        replyStyle: watched.replyStyle ?? null,
-        businessContext: watched.businessContext ?? null,
-      }),
-    [watched.name, watched.personality, watched.language, watched.replyStyle, watched.businessContext],
-  )
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/soul/options')
+        const json = (await res.json().catch(() => null)) as
+          | { success: boolean; data?: { personalities: SoulOption[]; styles: SoulOption[] } }
+          | null
+        if (!cancelled && json?.success && json.data) {
+          setPersonalities(json.data.personalities)
+          setStyles(json.data.styles)
+        }
+      } catch {
+        // Diam saja — dropdown akan kosong dan user bisa pilih "Tidak ditentukan".
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Kalau Soul lama menyimpan enum legacy yang tidak ada di daftar baru,
+  // tetap tampilkan id-nya sebagai placeholder agar value Select tidak kosong.
+  const personalityValue = watched.personality ?? NONE
+  const isLegacyPersonality =
+    !!watched.personality && !personalities.some((p) => p.id === watched.personality)
+  const replyStyleValue = watched.replyStyle ?? NONE
+  const isLegacyStyle =
+    !!watched.replyStyle && !styles.some((s) => s.id === watched.replyStyle)
 
   async function onSubmit(values: SoulCreateInput) {
     setSubmitting(true)
@@ -138,127 +158,134 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4 py-2" noValidate>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Nama Soul</Label>
-            <Input
-              id="name"
-              placeholder="Misalnya: Sari CS Toko Baju"
-              {...form.register('name')}
-            />
-            {form.formState.errors.name && (
-              <p className="text-sm text-destructive">
-                {form.formState.errors.name.message}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Kepribadian</Label>
-            <Select
-              value={watched.personality ?? NONE}
-              onValueChange={(v) =>
-                form.setValue('personality', v === NONE ? null : (v as Personality), {
-                  shouldDirty: true,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih kepribadian" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Tidak ditentukan</SelectItem>
-                {PERSONALITIES.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Bahasa</Label>
-            <Select
-              value={watched.language}
-              onValueChange={(v) =>
-                form.setValue('language', v as Language, { shouldDirty: true })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LANGUAGES.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>
-                    {l.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Gaya Balas</Label>
-            <Select
-              value={watched.replyStyle ?? NONE}
-              onValueChange={(v) =>
-                form.setValue('replyStyle', v === NONE ? null : (v as ReplyStyle), {
-                  shouldDirty: true,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih gaya" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Tidak ditentukan</SelectItem>
-                {REPLY_STYLES.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="businessContext">Konteks Bisnis</Label>
-            <Textarea
-              id="businessContext"
-              rows={6}
-              placeholder="Info produk, harga, FAQ, jam buka, alamat toko, kebijakan return, dst."
-              {...form.register('businessContext')}
-            />
-            <p className="text-xs text-muted-foreground">
-              Semua info ini akan dipakai AI untuk menjawab pertanyaan customer.
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Nama Soul</Label>
+          <Input
+            id="name"
+            placeholder="Misalnya: Sari CS Toko Baju"
+            {...form.register('name')}
+          />
+          {form.formState.errors.name && (
+            <p className="text-sm text-destructive">
+              {form.formState.errors.name.message}
             </p>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-3">
-            <div className="space-y-0.5">
-              <Label>Jadikan default</Label>
-              <p className="text-xs text-muted-foreground">
-                Soul default otomatis dipilih saat menambah WA baru.
-              </p>
-            </div>
-            <Switch
-              checked={watched.isDefault ?? false}
-              onCheckedChange={(v) => form.setValue('isDefault', v, { shouldDirty: true })}
-            />
-          </div>
+          )}
         </div>
 
-        <div className="flex flex-col">
-          <Label className="mb-2">Preview System Prompt</Label>
-          <pre className="flex-1 max-h-[480px] overflow-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-xs leading-relaxed">
-            {preview}
-          </pre>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Inilah teks yang dikirim ke Claude sebagai system prompt setiap kali ada
-            pesan masuk.
+        <div className="space-y-2">
+          <Label>Kepribadian</Label>
+          <Select
+            value={personalityValue}
+            onValueChange={(v) =>
+              form.setValue('personality', v === NONE ? null : v, {
+                shouldDirty: true,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih kepribadian" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Tidak ditentukan</SelectItem>
+              {personalities.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="flex flex-col">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {p.description}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+              {isLegacyPersonality && watched.personality && (
+                <SelectItem value={watched.personality}>
+                  {watched.personality} (lama — pilih ulang)
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Gaya Balas</Label>
+          <Select
+            value={replyStyleValue}
+            onValueChange={(v) =>
+              form.setValue('replyStyle', v === NONE ? null : v, {
+                shouldDirty: true,
+              })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Pilih gaya" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE}>Tidak ditentukan</SelectItem>
+              {styles.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  <span className="flex flex-col">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {s.description}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+              {isLegacyStyle && watched.replyStyle && (
+                <SelectItem value={watched.replyStyle}>
+                  {watched.replyStyle} (lama — pilih ulang)
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Bahasa</Label>
+          <Select
+            value={watched.language}
+            onValueChange={(v) =>
+              form.setValue('language', v as Language, { shouldDirty: true })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LANGUAGES.map((l) => (
+                <SelectItem key={l.value} value={l.value}>
+                  {l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="businessContext">Konteks Bisnis</Label>
+          <Textarea
+            id="businessContext"
+            rows={6}
+            placeholder="Info produk, harga, FAQ, jam buka, alamat toko, kebijakan return, dst."
+            {...form.register('businessContext')}
+          />
+          <p className="text-xs text-muted-foreground">
+            Semua info ini akan dipakai AI untuk menjawab pertanyaan customer.
           </p>
+        </div>
+
+        <div className="flex items-center justify-between rounded-lg border p-3">
+          <div className="space-y-0.5">
+            <Label>Jadikan default</Label>
+            <p className="text-xs text-muted-foreground">
+              Soul default otomatis dipilih saat menambah WA baru.
+            </p>
+          </div>
+          <Switch
+            checked={watched.isDefault ?? false}
+            onCheckedChange={(v) => form.setValue('isDefault', v, { shouldDirty: true })}
+          />
         </div>
       </div>
 
