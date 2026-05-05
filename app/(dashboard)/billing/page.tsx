@@ -4,6 +4,8 @@ import type { ManualPaymentStatus, TokenTxType } from '@prisma/client'
 import {
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   ExternalLink,
   Sparkles,
@@ -13,8 +15,6 @@ import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
-import { BuyPackageButton } from '@/components/dashboard/BuyPackageButton'
-import { ManualBuyButton } from '@/components/dashboard/ManualBuyButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -82,15 +82,23 @@ const TX_TYPE_VARIANT: Record<
 
 export const dynamic = 'force-dynamic'
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>
+}) {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
+
+  const resolvedParams = await searchParams
+  const PAGE_SIZE = 10
+  const currentPage = Math.max(1, parseInt(resolvedParams.page ?? '1', 10) || 1)
 
   // Tampilkan manual payment yang masih PENDING + REJECTED, plus CONFIRMED
   // dari 3 hari terakhir (biar user lihat konfirmasi terbaru sekilas).
   const manualSince = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
 
-  const [tokenBalance, packages, transactions, manualPayments] = await Promise.all([
+  const [tokenBalance, packages, transactions, txCount, manualPayments] = await Promise.all([
     prisma.tokenBalance.findUnique({ where: { userId: session.user.id } }),
     prisma.tokenPackage.findMany({
       where: { isActive: true },
@@ -99,7 +107,8 @@ export default async function BillingPage() {
     prisma.tokenTransaction.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      skip: (currentPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
       select: {
         id: true,
         amount: true,
@@ -108,11 +117,10 @@ export default async function BillingPage() {
         createdAt: true,
       },
     }),
+    prisma.tokenTransaction.count({ where: { userId: session.user.id } }),
     prisma.manualPayment.findMany({
       where: {
         userId: session.user.id,
-        // Halaman /billing khusus pembelian token. LP upgrade ditampilkan
-        // di /landing-pages/upgrade — jangan campur supaya UI tidak rancu.
         purpose: 'TOKEN_PURCHASE',
         OR: [
           { status: { in: ['PENDING', 'REJECTED'] } },
@@ -127,6 +135,7 @@ export default async function BillingPage() {
   const balance = tokenBalance?.balance ?? 0
   const totalPurchased = tokenBalance?.totalPurchased ?? 0
   const totalUsed = tokenBalance?.totalUsed ?? 0
+  const totalPages = Math.max(1, Math.ceil(txCount / PAGE_SIZE))
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -250,6 +259,7 @@ export default async function BillingPage() {
             </CardContent>
           </Card>
         ) : (
+          <>
           <div className="rounded-md border">
             <Table>
               <TableHeader>
@@ -294,6 +304,43 @@ export default async function BillingPage() {
               </TableBody>
             </Table>
           </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-1 py-3">
+              <p className="text-xs text-warm-500">
+                Halaman {currentPage} dari {totalPages} ({txCount} transaksi)
+              </p>
+              <div className="flex gap-2">
+                {currentPage > 1 ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/billing?page=${currentPage - 1}`}>
+                      <ChevronLeft className="mr-1 size-4" />
+                      Prev
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" disabled>
+                    <ChevronLeft className="mr-1 size-4" />
+                    Prev
+                  </Button>
+                )}
+                {currentPage < totalPages ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/billing?page=${currentPage + 1}`}>
+                      Next
+                      <ChevronRight className="ml-1 size-4" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" disabled>
+                    Next
+                    <ChevronRight className="ml-1 size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
 
@@ -315,7 +362,7 @@ export default async function BillingPage() {
                 <Card
                   key={pkg.id}
                   className={cn(
-                    'relative flex flex-col rounded-xl border-warm-200 transition-all',
+                    'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
                     pkg.isPopular &&
                       'scale-[1.02] border-2 border-primary-400 shadow-orange',
                   )}
@@ -365,16 +412,20 @@ export default async function BillingPage() {
                       </li>
                     </ul>
 
-                    <div className="mt-auto space-y-2 pt-2">
-                      <BuyPackageButton
-                        packageId={pkg.id}
-                        packageName={pkg.name}
-                        isPopular={pkg.isPopular}
-                      />
-                      <ManualBuyButton
-                        packageId={pkg.id}
-                        packageName={pkg.name}
-                      />
+                    <div className="mt-auto pt-2">
+                      <Button
+                        asChild
+                        className={
+                          pkg.isPopular
+                            ? 'w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600'
+                            : 'w-full rounded-full border border-warm-200 bg-card font-semibold text-warm-800 hover:bg-warm-50'
+                        }
+                        variant={pkg.isPopular ? 'default' : 'outline'}
+                      >
+                        <Link href={`/checkout/select/${pkg.id}`}>
+                          Beli
+                        </Link>
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

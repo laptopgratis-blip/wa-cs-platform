@@ -1,11 +1,14 @@
-// Halaman checkout — tampil detail order + tombol bayar (redirect ke Tripay).
+// Halaman checkout — tampil detail order + payment info (VA number / redirect button)
+// + instruksi pembayaran + countdown timer + auto-polling status.
 import type { PaymentStatus } from '@prisma/client'
 import { ArrowLeft, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
-import { CheckoutPayButton } from '@/components/dashboard/CheckoutPayButton'
+import { CheckoutStatusPoller } from '@/components/dashboard/CheckoutStatusPoller'
+import { PaymentInfoCard } from '@/components/dashboard/PaymentInfoCard'
+import { PaymentInstructions } from '@/components/dashboard/PaymentInstructions'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -41,6 +44,15 @@ const STATUS_VARIANT: Record<
   CANCELLED: 'outline',
 }
 
+// Channel REDIRECT — QRIS, E-Wallet (tidak perlu instruksi in-app).
+const REDIRECT_CHANNELS = new Set(['QRIS', 'QRISC', 'QRIS2', 'SHOPEEPAY', 'OVO', 'DANA'])
+
+// Normalize QRIS variants ke "QRIS" saja.
+function normalizePaymentName(name: string | null, code: string | null): string {
+  if (code?.startsWith('QRIS')) return 'QRIS'
+  return name ?? code ?? '—'
+}
+
 export default async function CheckoutPage({
   params,
 }: {
@@ -72,7 +84,10 @@ export default async function CheckoutPage({
         ? Clock
         : XCircle
 
-  const canPay = displayStatus === 'PENDING' && Boolean(payment.paymentUrl)
+  const canPay = displayStatus === 'PENDING'
+  const isDirectChannel = payment.paymentMethod
+    ? !REDIRECT_CHANNELS.has(payment.paymentMethod)
+    : false
 
   return (
     <div className="mx-auto flex h-full max-w-2xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -90,6 +105,14 @@ export default async function CheckoutPage({
           Selesaikan pembayaran untuk menambah saldo token.
         </p>
       </div>
+
+      {/* Auto-polling banner */}
+      {displayStatus === 'PENDING' && (
+        <CheckoutStatusPoller
+          orderId={orderId}
+          initialStatus={displayStatus}
+        />
+      )}
 
       <Card className="rounded-xl border-warm-200 shadow-sm">
         <CardHeader className="space-y-1.5">
@@ -135,7 +158,7 @@ export default async function CheckoutPage({
             </div>
             <div className="flex justify-between">
               <span className="text-warm-500">Metode Pembayaran</span>
-              <span className="font-medium">{payment.paymentMethod ?? '—'}</span>
+              <span className="font-medium">{normalizePaymentName(payment.paymentName, payment.paymentMethod)}</span>
             </div>
             {payment.expiredAt && displayStatus === 'PENDING' && (
               <div className="flex justify-between">
@@ -159,21 +182,45 @@ export default async function CheckoutPage({
             </div>
           </div>
 
-          {canPay && payment.paymentUrl ? (
-            <CheckoutPayButton paymentUrl={payment.paymentUrl} />
-          ) : displayStatus === 'SUCCESS' ? (
+          {/* Payment info — hybrid: DIRECT atau REDIRECT */}
+          {canPay && (
+            <PaymentInfoCard
+              paymentMethod={payment.paymentMethod}
+              paymentName={payment.paymentName}
+              payCode={payment.payCode}
+              paymentUrl={payment.paymentUrl}
+              amount={payment.amount}
+              expiredAt={payment.expiredAt?.toISOString() ?? null}
+            />
+          )}
+
+          {/* Payment instructions — hanya untuk DIRECT channels */}
+          {canPay && isDirectChannel && payment.paymentMethod && (
+            <PaymentInstructions
+              channelCode={payment.paymentMethod}
+              payCode={payment.payCode}
+            />
+          )}
+
+          {/* Status messages */}
+          {displayStatus === 'SUCCESS' && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
               Pembayaran sukses — saldo token sudah masuk ke akun kamu.
             </div>
-          ) : displayStatus === 'EXPIRED' ? (
+          )}
+          {displayStatus === 'EXPIRED' && (
             <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm text-warm-700">
               Order ini sudah expired. Silakan buat order baru dari halaman Billing.
             </div>
-          ) : (
+          )}
+          {displayStatus === 'FAILED' && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              Order tidak dapat dibayar.{' '}
-              {!payment.paymentUrl && 'Link pembayaran belum tersedia. '}
-              Silakan buat order baru dari halaman Billing.
+              Pembayaran gagal. Silakan buat order baru dari halaman Billing.
+            </div>
+          )}
+          {displayStatus === 'CANCELLED' && (
+            <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm text-warm-700">
+              Order ini dibatalkan. Silakan buat order baru dari halaman Billing.
             </div>
           )}
         </CardContent>
@@ -181,8 +228,8 @@ export default async function CheckoutPage({
 
       {displayStatus === 'PENDING' && (
         <p className="text-center text-xs text-warm-500">
-          Setelah pembayaran selesai, halaman ini akan otomatis update status (refresh
-          jika belum). Saldo token akan langsung masuk via webhook Tripay.
+          Setelah pembayaran selesai, halaman ini akan otomatis update status.
+          Saldo token akan langsung masuk ke akun kamu.
         </p>
       )}
     </div>

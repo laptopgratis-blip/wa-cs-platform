@@ -62,7 +62,7 @@ export function BuyPackageButton({
       aria-label={`Beli paket ${packageName}`}
     >
       {isLoading && <Loader2 className="mr-2 size-4 animate-spin" />}
-      Bayar via Tripay
+      Beli
     </Button>
   )
 }
