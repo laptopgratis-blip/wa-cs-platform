@@ -13,6 +13,7 @@ import {
   Building2,
   Calculator,
   Cpu,
+  DollarSign,
   Globe,
   Key,
   LineChart,
@@ -43,6 +44,7 @@ interface MenuItem {
 const menu: MenuItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['ADMIN'] },
   { href: '/admin/models', label: 'AI Models', icon: Cpu, roles: ['ADMIN'] },
+  { href: '/admin/ai-pricing', label: 'Pricing Database', icon: DollarSign, roles: ['ADMIN'] },
   { href: '/admin/api-keys', label: 'API Keys', icon: Key, roles: ['ADMIN'] },
   { href: '/admin/soul-settings', label: 'Soul Settings', icon: Sparkles, roles: ['ADMIN'] },
   { href: '/admin/packages', label: 'Token Packages', icon: Box, roles: ['ADMIN'] },

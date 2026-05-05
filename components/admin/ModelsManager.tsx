@@ -40,11 +40,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import {
-  AI_MODELS_BY_PROVIDER,
-  findPreset,
-  type AiProviderId,
-} from '@/lib/ai-models-list'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import {
   calcApiCostRp,
@@ -73,6 +68,19 @@ interface PricingSettingsLite {
   estimatedOutputTokens: number
   usdRate: number
   pricePerToken: number
+}
+
+// Preset dari /api/admin/ai-pricing/presets — source of truth harga.
+interface PresetRow {
+  id: string
+  provider: AiProvider
+  modelId: string
+  displayName: string
+  inputPricePer1M: number
+  outputPricePer1M: number
+  lastUpdatedSource: string | null
+  lastUpdatedAt: string
+  daysSinceUpdate: number
 }
 
 const DEFAULT_PS: PricingSettingsLite = {
@@ -109,16 +117,36 @@ export function ModelsManager() {
   // Pricing settings — di-load sekali saat mount, dipakai untuk auto-calc
   // dan preview profitabilitas.
   const [ps, setPs] = useState<PricingSettingsLite>(DEFAULT_PS)
+  // Preset dari AiModelPreset DB — source of truth dropdown ModelId.
+  const [presets, setPresets] = useState<PresetRow[]>([])
   useEffect(() => {
     void (async () => {
-      const res = await fetch('/api/admin/pricing-settings')
-      const json = (await res.json()) as {
+      const [psRes, prRes] = await Promise.all([
+        fetch('/api/admin/pricing-settings'),
+        fetch('/api/admin/ai-pricing/presets'),
+      ])
+      const psJson = (await psRes.json()) as {
         success: boolean
         data?: PricingSettingsLite
       }
-      if (json.success && json.data) setPs(json.data)
+      if (psJson.success && psJson.data) setPs(psJson.data)
+      const prJson = (await prRes.json()) as {
+        success: boolean
+        data?: PresetRow[]
+      }
+      if (prJson.success && prJson.data) setPresets(prJson.data)
     })()
   }, [])
+
+  // Filter preset berdasarkan provider yang dipilih di form.
+  const presetsForProvider = useMemo(
+    () => presets.filter((p) => p.provider === provider),
+    [presets, provider],
+  )
+
+  function findPresetByModelId(id: string): PresetRow | undefined {
+    return presets.find((p) => p.modelId === id)
+  }
 
   async function load() {
     setLoading(true)
@@ -193,13 +221,13 @@ export function ModelsManager() {
   // harga dari list. Admin tetap bisa override ke nilai apapun.
   function selectPresetModel(id: string) {
     setModelId(id)
-    const preset = findPreset(provider as AiProviderId, id)
+    const preset = findPresetByModelId(id)
     if (preset) {
       setInputPrice(String(preset.inputPricePer1M))
       setOutputPrice(String(preset.outputPricePer1M))
       // Auto-fill nama hanya kalau field nama masih kosong supaya tidak
       // overwrite nama custom yang sudah admin ketik.
-      if (!name.trim()) setName(preset.name)
+      if (!name.trim()) setName(preset.displayName)
     }
   }
 
@@ -457,23 +485,35 @@ export function ModelsManager() {
                     <SelectValue placeholder="Pilih model..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {AI_MODELS_BY_PROVIDER[provider as AiProviderId].map(
-                      (m) => (
+                    {presetsForProvider.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                        Belum ada preset. Tambah di /admin/ai-pricing.
+                      </div>
+                    ) : (
+                      presetsForProvider.map((m) => (
                         <Tooltip key={m.id}>
                           <TooltipTrigger asChild>
-                            <SelectItem value={m.id}>
-                              <span className="font-mono text-xs">{m.id}</span>
+                            <SelectItem value={m.modelId}>
+                              <span className="font-mono text-xs">
+                                {m.modelId}
+                              </span>
                               <span className="ml-2 text-muted-foreground">
-                                — {m.name}
+                                — {m.displayName}
                               </span>
                             </SelectItem>
                           </TooltipTrigger>
                           <TooltipContent side="left">
-                            ${m.inputPricePer1M} input / ${m.outputPricePer1M}{' '}
-                            output per 1M tok
+                            <div>
+                              ${m.inputPricePer1M.toFixed(2)} input / $
+                              {m.outputPricePer1M.toFixed(2)} output / 1M tok
+                            </div>
+                            <div className="text-[10px] opacity-75">
+                              Update {m.daysSinceUpdate}h lalu
+                              {m.lastUpdatedSource && ` (${m.lastUpdatedSource})`}
+                            </div>
                           </TooltipContent>
                         </Tooltip>
-                      ),
+                      ))
                     )}
                   </SelectContent>
                 </Select>
@@ -512,6 +552,19 @@ export function ModelsManager() {
                 />
               </div>
             </div>
+            {(() => {
+              const matched = findPresetByModelId(modelId)
+              if (!matched) return null
+              return (
+                <p className="text-[10px] text-muted-foreground">
+                  ℹ️ Harga diambil dari preset · Last update{' '}
+                  {matched.daysSinceUpdate} hari lalu
+                  {matched.lastUpdatedSource &&
+                    ` (${matched.lastUpdatedSource})`}
+                  . Field tetap bisa di-override.
+                </p>
+              )
+            })()}
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <Label className="text-sm">Mode Penghitungan</Label>

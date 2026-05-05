@@ -632,6 +632,52 @@ model SiteSettings {
 }
 
 // ─────────────────────────────────────────
+// AI PRICING DATABASE (preset harga API per model)
+// ─────────────────────────────────────────
+
+// Source-of-truth harga API. Bisa di-update manual atau via AI research
+// (lihat lib/services/ai-pricing-research.ts). Form /admin/models pakai
+// table ini untuk dropdown + auto-fill harga.
+model AiModelPreset {
+  id                String   @id @default(cuid())
+  provider          String   // ANTHROPIC | OPENAI | GOOGLE
+  modelId           String   @unique
+  displayName       String
+  inputPricePer1M   Float    // USD per 1M token
+  outputPricePer1M  Float
+  contextWindow     Int?
+  isAvailable       Boolean  @default(true)
+  notes             String?
+  // 'manual' = admin edit langsung; 'ai-research' = update via Claude
+  // web_search; 'seed' = data awal saat migration.
+  lastUpdatedSource String?
+  lastUpdatedAt     DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  @@index([provider, isAvailable])
+}
+
+// Audit trail untuk job research. Dipakai juga sebagai status holder saat
+// research async berjalan (status RUNNING → SUCCESS / FAILED).
+model PricingResearchLog {
+  id            String    @id @default(cuid())
+  triggeredBy   String    // userId admin (atau 'cron' kalau scheduled)
+  status        String    // RUNNING | SUCCESS | FAILED
+  modelsAdded   Int       @default(0)
+  modelsUpdated Int       @default(0)
+  // Hasil mentah dari Claude (JSON yang di-parse atau raw text kalau parse
+  // gagal). Untuk debugging.
+  rawResponse   String?   @db.Text
+  // Hasil terstruktur — array { id, action, before, after } untuk apply.
+  diff          Json?
+  error         String?   @db.Text
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  @@index([startedAt])
+}
+
+// ─────────────────────────────────────────
 // PRICING SETTINGS (singleton, dipakai admin tools + wa-service untuk
 // hitung biaya & rekomendasi token per pesan)
 // ─────────────────────────────────────────
