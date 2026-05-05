@@ -42,6 +42,7 @@ interface ChatViewProps {
 export function ChatView({ contactId, onChanged }: ChatViewProps) {
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
   const [isLoading, setLoading] = useState(true)
   const [draft, setDraft] = useState('')
   const [isSending, setSending] = useState(false)
@@ -60,7 +61,11 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
         const res = await fetch(`/api/inbox/${contactId}/messages`)
         const json = (await res.json()) as {
           success: boolean
-          data?: { contact: ChatContact; messages: ChatMessage[] }
+          data?: {
+            contact: ChatContact
+            messages: ChatMessage[]
+            isAdmin?: boolean
+          }
           error?: string
         }
         if (aborted) return
@@ -70,6 +75,7 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
         }
         setContact(json.data.contact)
         setMessages(json.data.messages)
+        setIsAdmin(Boolean(json.data.isAdmin))
       } finally {
         if (!aborted) setLoading(false)
       }
@@ -322,7 +328,7 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
                 </span>
               </div>
               {group.messages.map((m) => (
-                <Bubble key={m.id} message={m} />
+                <Bubble key={m.id} message={m} isAdmin={isAdmin} />
               ))}
             </div>
           ))}
@@ -373,8 +379,19 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
   )
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+function Bubble({
+  message,
+  isAdmin,
+}: {
+  message: ChatMessage
+  isAdmin: boolean
+}) {
   const isOutgoing = message.role !== 'USER'
+  // Hanya tampilkan cost detail kalau: admin, role AI, dan ada datanya.
+  const showCost =
+    isAdmin &&
+    message.role === 'AI' &&
+    (message.apiCostRp !== null && message.apiCostRp !== undefined)
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
       <div
@@ -404,6 +421,45 @@ function Bubble({ message }: { message: ChatMessage }) {
         >
           {formatChatTime(message.createdAt)}
         </p>
+        {showCost && (
+          <details
+            className={cn(
+              'mt-1 cursor-pointer text-[10px]',
+              isOutgoing ? 'opacity-80' : 'text-muted-foreground',
+            )}
+          >
+            <summary className="select-none">📊 Cost detail</summary>
+            <div className="mt-1 space-y-0.5 font-mono">
+              {message.modelName && (
+                <div>Model: {message.modelName}</div>
+              )}
+              <div>
+                Token: {message.apiInputTokens ?? '—'} in /{' '}
+                {message.apiOutputTokens ?? '—'} out
+              </div>
+              <div>
+                Cost: Rp{' '}
+                {(message.apiCostRp ?? 0).toLocaleString('id-ID', {
+                  maximumFractionDigits: 2,
+                })}{' '}
+                · Charged: Rp{' '}
+                {(message.revenueRp ?? 0).toLocaleString('id-ID', {
+                  maximumFractionDigits: 0,
+                })}
+              </div>
+              <div
+                className={cn(
+                  (message.profitRp ?? 0) < 0 && 'font-semibold',
+                )}
+              >
+                Profit: Rp{' '}
+                {(message.profitRp ?? 0).toLocaleString('id-ID', {
+                  maximumFractionDigits: 2,
+                })}
+              </div>
+            </div>
+          </details>
+        )}
       </div>
     </div>
   )

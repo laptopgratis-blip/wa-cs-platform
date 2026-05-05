@@ -5,7 +5,10 @@ export const aiModelCreateSchema = z.object({
   name: z.string().trim().min(2).max(80),
   provider: z.enum(['ANTHROPIC', 'OPENAI', 'GOOGLE']),
   modelId: z.string().trim().min(2).max(120),
-  costPerMessage: z.number().int().positive().max(1000),
+  costMode: z.enum(['AUTO', 'MANUAL']).optional(),
+  costPerMessage: z.number().int().positive().max(100_000),
+  inputPricePer1M: z.number().nonnegative().max(10_000).optional(),
+  outputPricePer1M: z.number().nonnegative().max(10_000).optional(),
   description: z.string().max(500).nullable().optional(),
   isActive: z.boolean().optional(),
 })

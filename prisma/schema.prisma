@@ -242,6 +242,10 @@ model AiModel {
   provider            AiProvider
   modelId             String      // "claude-haiku-4-5-20251001"
 
+  // 'AUTO' = costPerMessage di-set otomatis dari PricingSettings (lihat
+  // /admin/pricing-settings + tombol Re-calculate di /admin/models).
+  // 'MANUAL' = admin override langsung, sistem tidak overwrite saat recalc.
+  costMode            String      @default("AUTO")
   // Berapa token platform yang dipotong per balasan AI yang sukses.
   // Admin set manual berdasarkan posisi tier model.
   costPerMessage      Int         @default(1)
@@ -344,7 +348,21 @@ model Message {
   content     String        @db.Text
   role        MessageRole
   status      MessageStatus @default(SENT)
-  tokensUsed  Int?          // berapa token platform dipotong
+  tokensUsed  Int?          // berapa token platform dipotong (legacy alias dari tokensCharged)
+  // ─── Profitability tracking (di-set saat role=AI) ───
+  // Token aktual dari response provider (input/output prompt). Null untuk
+  // pesan yang dibuat sebelum fitur ini ada.
+  apiInputTokens  Int?
+  apiOutputTokens Int?
+  // Cost provider real dalam IDR (kurs di-snapshot dari PricingSettings saat
+  // pesan dibuat). Disimpan supaya dashboard tidak perlu re-hitung.
+  apiCostRp       Float?
+  // Token platform yang dipotong dari user (snapshot dari model.costPerMessage).
+  tokensCharged   Int?
+  // Pendapatan platform (IDR) = tokensCharged × pricePerToken (snapshot kurs jual).
+  revenueRp       Float?
+  // Profit (IDR) = revenueRp - apiCostRp. Bisa negatif (= rugi) → trigger alert.
+  profitRp        Float?
   createdAt   DateTime      @default(now())
 
   contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -352,6 +370,7 @@ model Message {
 
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
+  @@index([createdAt])
 }
 
 // ─────────────────────────────────────────
@@ -610,4 +629,66 @@ model SiteSettings {
   key       String   @unique
   value     String   @db.Text
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────
+// PRICING SETTINGS (singleton, dipakai admin tools + wa-service untuk
+// hitung biaya & rekomendasi token per pesan)
+// ─────────────────────────────────────────
+
+// Singleton — selalu 1 row. Akses via lib/pricing-settings.ts:getPricingSettings().
+model PricingSettings {
+  id                    String   @id @default(cuid())
+  // Target margin minimum (%) yang dipakai mode AUTO di AiModel untuk hitung
+  // costPerMessage. Juga jadi threshold status badge di UI.
+  marginTarget          Float    @default(50)
+  // Estimasi rata-rata token per balasan AI (dipakai saat hitung
+  // costPerMessage rekomendasi sebelum ada data riil).
+  estimatedInputTokens  Int      @default(1600)
+  estimatedOutputTokens Int      @default(300)
+  // Kurs USD→IDR. Update saat dollar bergerak signifikan supaya cost akurat.
+  usdRate               Float    @default(16000)
+  // Harga jual platform per 1 token (IDR). Dipakai untuk hitung pendapatan
+  // dan rekomendasi.
+  pricePerToken         Float    @default(2)
+  updatedAt             DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────
+// ALERTS (profitability monitor)
+// ─────────────────────────────────────────
+
+// Generate oleh /api/cron/profitability-check, ditampilkan di sidebar admin
+// (bell icon) sampai admin tandai sudah dibaca.
+model Alert {
+  id        String   @id @default(cuid())
+  level     String   // 'RED' | 'YELLOW' | 'GREEN'
+  category  String   // 'PROFIT_NEGATIVE' | 'MARGIN_LOW' | 'ANOMALY'
+  title     String
+  message   String   @db.Text
+  metadata  Json?    // bebas — biasanya { modelId, profitRp, marginPct, ... }
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isRead, createdAt])
+}
+
+// ─────────────────────────────────────────
+// API KEYS (provider AI — encrypted di DB)
+// ─────────────────────────────────────────
+
+// Satu row per provider (ANTHROPIC/OPENAI/GOOGLE). apiKey di-encrypt dengan
+// AES-256-GCM (lib/crypto.ts) memakai ENCRYPTION_KEY dari env. Halaman
+// /admin/api-keys mengelola CRUD + test koneksi. wa-service mengambil key
+// (sudah di-decrypt) lewat internal API supaya satu sumber kebenaran.
+model ApiKey {
+  id             String    @id @default(cuid())
+  provider       String    @unique // 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
+  apiKey         String    @db.Text
+  isActive       Boolean   @default(true)
+  lastTestedAt   DateTime?
+  lastTestStatus String?   // 'SUCCESS' | 'FAILED'
+  lastTestError  String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }

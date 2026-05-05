@@ -37,6 +37,7 @@ export async function GET(_req: Request, { params }: Params) {
     })
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)
 
+    const isAdmin = session.user.role === 'ADMIN'
     const messages = await prisma.message.findMany({
       where: { contactId },
       orderBy: { createdAt: 'asc' },
@@ -47,6 +48,18 @@ export async function GET(_req: Request, { params }: Params) {
         role: true,
         status: true,
         createdAt: true,
+        // Field cost di-include hanya untuk admin (data sensitif).
+        ...(isAdmin
+          ? {
+              apiInputTokens: true,
+              apiOutputTokens: true,
+              apiCostRp: true,
+              tokensCharged: true,
+              revenueRp: true,
+              profitRp: true,
+              waSession: { select: { model: { select: { name: true } } } },
+            }
+          : {}),
       },
     })
 
@@ -55,12 +68,24 @@ export async function GET(_req: Request, { params }: Params) {
         ...contact,
         lastMessageAt: contact.lastMessageAt?.toISOString() ?? null,
       },
+      isAdmin,
       messages: messages.map((m) => ({
         id: m.id,
         content: m.content,
         role: m.role,
         status: m.status,
         createdAt: m.createdAt.toISOString(),
+        ...(isAdmin
+          ? {
+              apiInputTokens: (m as { apiInputTokens?: number | null }).apiInputTokens ?? null,
+              apiOutputTokens: (m as { apiOutputTokens?: number | null }).apiOutputTokens ?? null,
+              apiCostRp: (m as { apiCostRp?: number | null }).apiCostRp ?? null,
+              tokensCharged: (m as { tokensCharged?: number | null }).tokensCharged ?? null,
+              revenueRp: (m as { revenueRp?: number | null }).revenueRp ?? null,
+              profitRp: (m as { profitRp?: number | null }).profitRp ?? null,
+              modelName: (m as { waSession?: { model?: { name: string } | null } | null }).waSession?.model?.name ?? null,
+            }
+          : {}),
       })),
     })
   } catch (err) {

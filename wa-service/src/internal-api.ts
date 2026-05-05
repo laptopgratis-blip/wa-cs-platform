@@ -28,8 +28,16 @@ export interface InternalSoulConfig {
     modelId: string
     provider: 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
     costPerMessage: number
+    inputPricePer1M: number // USD per 1M token
+    outputPricePer1M: number
     isActive: boolean
   } | null
+  // Snapshot pricing settings supaya wa-service bisa hitung profit per pesan
+  // tanpa hop tambahan (lihat ai-handler.ts).
+  pricing: {
+    usdRate: number
+    pricePerToken: number
+  }
 }
 
 export interface InternalMessageHistoryItem {
@@ -99,6 +107,14 @@ export const internalApi = {
     role: MessageRole
     tokensUsed?: number
     withHistory?: boolean
+    // Profitability tracking (di-set untuk pesan AI). Boleh kosong → field
+    // di DB null untuk pesan customer / pre-feature.
+    apiInputTokens?: number
+    apiOutputTokens?: number
+    apiCostRp?: number
+    tokensCharged?: number
+    revenueRp?: number
+    profitRp?: number
   }) {
     return request<InternalSaveMessageResult>('/api/internal/messages', {
       method: 'POST',

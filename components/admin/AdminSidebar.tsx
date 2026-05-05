@@ -14,8 +14,11 @@ import {
   Calculator,
   Cpu,
   Globe,
+  Key,
+  LineChart,
   Settings,
   Shield,
+  Sliders,
   Sparkles,
   TrendingUp,
   Users,
@@ -24,6 +27,7 @@ import {
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
+import { AlertsBell } from '@/components/admin/AlertsBell'
 import { cn } from '@/lib/utils'
 
 type Role = 'USER' | 'ADMIN' | 'FINANCE'
@@ -39,10 +43,13 @@ interface MenuItem {
 const menu: MenuItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: BarChart3, roles: ['ADMIN'] },
   { href: '/admin/models', label: 'AI Models', icon: Cpu, roles: ['ADMIN'] },
+  { href: '/admin/api-keys', label: 'API Keys', icon: Key, roles: ['ADMIN'] },
   { href: '/admin/soul-settings', label: 'Soul Settings', icon: Sparkles, roles: ['ADMIN'] },
   { href: '/admin/packages', label: 'Token Packages', icon: Box, roles: ['ADMIN'] },
   { href: '/admin/lp-packages', label: 'Paket LP', icon: Globe, roles: ['ADMIN'] },
   { href: '/admin/pricing-calculator', label: 'Pricing Calculator', icon: Calculator, roles: ['ADMIN'] },
+  { href: '/admin/pricing-settings', label: 'Pricing Settings', icon: Sliders, roles: ['ADMIN'] },
+  { href: '/admin/profitability', label: 'Profitability', icon: LineChart, roles: ['ADMIN'] },
   { href: '/admin/bank-accounts', label: 'Rekening Bank', icon: Building2, roles: ['ADMIN'] },
   { href: '/admin/finance', label: 'Finance', icon: Wallet, roles: ['ADMIN', 'FINANCE'] },
   { href: '/admin/lp-upgrades', label: 'Upgrade LP', icon: TrendingUp, roles: ['ADMIN', 'FINANCE'] },
@@ -70,10 +77,11 @@ export function AdminSidebar({
         <div className="flex size-9 items-center justify-center rounded-lg bg-red-100 text-red-600">
           <Shield className="size-4" />
         </div>
-        <div className="leading-tight">
+        <div className="flex-1 leading-tight">
           <p className="font-display text-base font-bold text-warm-900">Admin</p>
           <p className="text-[11px] font-medium text-red-600">Hulao</p>
         </div>
+        {role === 'ADMIN' && <AlertsBell />}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">

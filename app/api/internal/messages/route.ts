@@ -17,6 +17,14 @@ const bodySchema = z.object({
   tokensUsed: z.number().int().nonnegative().optional(),
   // Kalau true: setelah simpan, ambil 10 pesan terakhir untuk konteks AI.
   withHistory: z.boolean().optional(),
+  // Profitability tracking — di-set untuk pesan AI. Optional (legacy /
+  // pesan customer biarkan null di DB).
+  apiInputTokens: z.number().int().nonnegative().optional(),
+  apiOutputTokens: z.number().int().nonnegative().optional(),
+  apiCostRp: z.number().nonnegative().optional(),
+  tokensCharged: z.number().int().nonnegative().optional(),
+  revenueRp: z.number().nonnegative().optional(),
+  profitRp: z.number().optional(), // boleh negatif (= rugi)
 })
 
 // Normalisasi phoneNumber sebelum lookup/create kontak supaya tidak duplikat.
@@ -95,6 +103,12 @@ export async function POST(req: Request) {
         content: body.content,
         role: body.role,
         tokensUsed: body.tokensUsed ?? null,
+        apiInputTokens: body.apiInputTokens ?? null,
+        apiOutputTokens: body.apiOutputTokens ?? null,
+        apiCostRp: body.apiCostRp ?? null,
+        tokensCharged: body.tokensCharged ?? null,
+        revenueRp: body.revenueRp ?? null,
+        profitRp: body.profitRp ?? null,
       },
     })
 

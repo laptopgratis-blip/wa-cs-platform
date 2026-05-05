@@ -18,9 +18,44 @@ import path from 'node:path'
 import qrcode from 'qrcode'
 import type { Server as IOServer } from 'socket.io'
 
-import { generateReply } from './ai-handler.js'
-import { internalApi } from './internal-api.js'
+import { generateReply, type AiUsage } from './ai-handler.js'
+import { internalApi, type InternalSoulConfig } from './internal-api.js'
 import { tokenChecker } from './token-checker.js'
+
+// Hitung field cost untuk pesan AI dari usage provider + harga model +
+// snapshot pricing settings. Output langsung dipakai sebagai body
+// saveMessage. Kalau usage hilang (mis. provider tidak mengembalikan),
+// field tetap dikirim sebagai 0 supaya dashboard punya data yang konsisten.
+function buildCostFields(
+  model: NonNullable<InternalSoulConfig['model']>,
+  pricing: InternalSoulConfig['pricing'],
+  usage: AiUsage | undefined,
+): {
+  apiInputTokens: number
+  apiOutputTokens: number
+  apiCostRp: number
+  tokensCharged: number
+  revenueRp: number
+  profitRp: number
+} {
+  const inputTokens = usage?.inputTokens ?? 0
+  const outputTokens = usage?.outputTokens ?? 0
+  const apiCostUsd =
+    (inputTokens * model.inputPricePer1M +
+      outputTokens * model.outputPricePer1M) /
+    1_000_000
+  const apiCostRp = apiCostUsd * pricing.usdRate
+  const tokensCharged = model.costPerMessage
+  const revenueRp = tokensCharged * pricing.pricePerToken
+  return {
+    apiInputTokens: inputTokens,
+    apiOutputTokens: outputTokens,
+    apiCostRp,
+    tokensCharged,
+    revenueRp,
+    profitRp: revenueRp - apiCostRp,
+  }
+}
 import type {
   ConnectedEvent,
   DisconnectedEvent,
@@ -408,7 +443,7 @@ export class WaManager {
         console.error(`[wa-manager:${sessionId}] getSoul gagal:`, cfg.error)
         return
       }
-      const { soul, model, userId } = cfg.data
+      const { soul, model, userId, pricing } = cfg.data
       if (!soul || !model) {
         // Belum dikonfigurasi user — biarkan, tidak balas.
         return
@@ -434,6 +469,12 @@ export class WaManager {
       })
       if (!ai.ok || !ai.reply) {
         console.error(`[wa-manager:${sessionId}] AI error:`, ai.error)
+        if (ai.invalidApiKey) {
+          this.updateState(entry, {
+            status: 'PAUSED',
+            lastError: ai.error ?? 'API key invalid',
+          })
+        }
         return
       }
 
@@ -462,6 +503,7 @@ export class WaManager {
       }
 
       // 7. Simpan balasan AI ke DB (history untuk percakapan berikutnya).
+      const cost = buildCostFields(model, pricing, ai.usage)
       await internalApi
         .saveMessage({
           sessionId,
@@ -469,6 +511,7 @@ export class WaManager {
           content: ai.reply,
           role: 'AI',
           tokensUsed: model.costPerMessage,
+          ...cost,
         })
         .catch((err) =>
           console.error(`[wa-manager:${sessionId}] save AI msg:`, err),
@@ -494,6 +537,7 @@ export class WaManager {
     outcome:
       | 'replied'
       | 'paused_no_token'
+      | 'paused_invalid_apikey'
       | 'no_soul_or_model'
       | 'ai_paused_for_contact'
       | 'save_message_failed'
@@ -525,7 +569,7 @@ export class WaManager {
     if (!cfg.success || !cfg.data) {
       return { outcome: 'no_soul_or_model', error: cfg.error }
     }
-    const { soul, model, userId } = cfg.data
+    const { soul, model, userId, pricing } = cfg.data
     if (!soul || !model) {
       return { outcome: 'no_soul_or_model', error: 'Soul/model belum di-set' }
     }
@@ -563,6 +607,15 @@ export class WaManager {
       latestUserMessage: message,
     })
     if (!ai.ok || !ai.reply) {
+      if (ai.invalidApiKey) {
+        if (entry) {
+          this.updateState(entry, {
+            status: 'PAUSED',
+            lastError: ai.error ?? 'API key invalid',
+          })
+        }
+        return { outcome: 'paused_invalid_apikey', error: ai.error }
+      }
       return { outcome: 'ai_error', error: ai.error }
     }
 
@@ -591,6 +644,7 @@ export class WaManager {
     }
 
     // 7. Save reply AI ke DB.
+    const cost = buildCostFields(model, pricing, ai.usage)
     await internalApi
       .saveMessage({
         sessionId,
@@ -598,6 +652,7 @@ export class WaManager {
         content: ai.reply,
         role: 'AI',
         tokensUsed: model.costPerMessage,
+        ...cost,
       })
       .catch((err) =>
         console.error(`[wa-manager:${sessionId}] (TEST) save AI msg:`, err),

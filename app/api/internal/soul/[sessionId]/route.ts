@@ -4,6 +4,7 @@
 import { NextResponse } from 'next/server'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
+import { getPricingSettings } from '@/lib/pricing-settings'
 import { prisma } from '@/lib/prisma'
 import { buildSystemPrompt, type Language } from '@/lib/soul'
 
@@ -23,7 +24,17 @@ export async function GET(req: Request, { params }: Params) {
         id: true,
         userId: true,
         soul: true,
-        model: { select: { id: true, modelId: true, provider: true, costPerMessage: true, isActive: true } },
+        model: {
+          select: {
+            id: true,
+            modelId: true,
+            provider: true,
+            costPerMessage: true,
+            inputPricePer1M: true,
+            outputPricePer1M: true,
+            isActive: true,
+          },
+        },
       },
     })
 
@@ -45,6 +56,10 @@ export async function GET(req: Request, { params }: Params) {
         })
       : null
 
+    // Sertakan pricing snapshot supaya wa-service bisa hitung apiCostRp /
+    // revenueRp / profitRp tanpa hop tambahan.
+    const pricing = await getPricingSettings()
+
     return NextResponse.json({
       success: true,
       data: {
@@ -59,6 +74,10 @@ export async function GET(req: Request, { params }: Params) {
             }
           : null,
         model: wa.model,
+        pricing: {
+          usdRate: pricing.usdRate,
+          pricePerToken: pricing.pricePerToken,
+        },
       },
     })
   } catch (err) {

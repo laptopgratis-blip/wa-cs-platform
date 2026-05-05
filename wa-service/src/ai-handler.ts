@@ -8,6 +8,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenerativeAI, type Content } from '@google/generative-ai'
 import OpenAI from 'openai'
 
+import { ApiKeyError, getApiKey } from './ai-keys.js'
 import type { InternalMessageHistoryItem } from './internal-api.js'
 
 const MAX_TOKENS = 800
@@ -29,20 +30,32 @@ export interface GenerateReplyInput {
   latestUserMessage: string
 }
 
+export interface AiUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
 export interface GenerateReplyResult {
   ok: boolean
   reply?: string
   error?: string
+  // Token aktual dari response provider (di-set saat ok=true). Dipakai
+  // untuk hitung cost real per pesan.
+  usage?: AiUsage
+  // Set true kalau gagal karena API key tidak ada/invalid — caller bisa
+  // surface outcome paused_invalid_apikey dan skip retry.
+  invalidApiKey?: boolean
 }
 
 // ─────────────────────────────────────────
-// Lazy-init clients per provider — process.env baru valid setelah dotenv
-// jalan di index.ts; jangan evaluate di top-level.
+// Lazy-init clients per provider — apiKey diambil dari Next.js
+// (/api/internal/ai-keys/:provider) lewat ai-keys.ts (cache 60s). Cache SDK
+// client di memory: re-init kalau key berubah supaya tidak pakai key lama.
 // ─────────────────────────────────────────
 
 let cachedAnthropic: { client: Anthropic; key: string } | null = null
-function getAnthropic(): { client: Anthropic; apiKey: string } {
-  const apiKey = process.env.ANTHROPIC_API_KEY || ''
+async function getAnthropic(): Promise<{ client: Anthropic; apiKey: string }> {
+  const apiKey = await getApiKey('ANTHROPIC')
   if (cachedAnthropic && cachedAnthropic.key === apiKey) {
     return { client: cachedAnthropic.client, apiKey }
   }
@@ -51,8 +64,8 @@ function getAnthropic(): { client: Anthropic; apiKey: string } {
 }
 
 let cachedOpenai: { client: OpenAI; key: string } | null = null
-function getOpenai(): { client: OpenAI; apiKey: string } {
-  const apiKey = process.env.OPENAI_API_KEY || ''
+async function getOpenai(): Promise<{ client: OpenAI; apiKey: string }> {
+  const apiKey = await getApiKey('OPENAI')
   if (cachedOpenai && cachedOpenai.key === apiKey) {
     return { client: cachedOpenai.client, apiKey }
   }
@@ -61,8 +74,11 @@ function getOpenai(): { client: OpenAI; apiKey: string } {
 }
 
 let cachedGoogle: { client: GoogleGenerativeAI; key: string } | null = null
-function getGoogle(): { client: GoogleGenerativeAI; apiKey: string } {
-  const apiKey = process.env.GOOGLE_AI_API_KEY || ''
+async function getGoogle(): Promise<{
+  client: GoogleGenerativeAI
+  apiKey: string
+}> {
+  const apiKey = await getApiKey('GOOGLE')
   if (cachedGoogle && cachedGoogle.key === apiKey) {
     return { client: cachedGoogle.client, apiKey }
   }
@@ -83,6 +99,9 @@ export async function generateReply(
     if (input.provider === 'GOOGLE') return await replyViaGoogle(input)
     return { ok: false, error: `Provider tidak dikenal: ${input.provider}` }
   } catch (err) {
+    if (err instanceof ApiKeyError) {
+      return { ok: false, error: err.message, invalidApiKey: true }
+    }
     const e = err as { status?: number; message?: string }
     return {
       ok: false,
@@ -98,8 +117,7 @@ export async function generateReply(
 async function replyViaAnthropic(
   input: GenerateReplyInput,
 ): Promise<GenerateReplyResult> {
-  const { client, apiKey } = getAnthropic()
-  if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY belum di-set' }
+  const { client } = await getAnthropic()
 
   const messages = toAlternatingMessages(input.history, input.latestUserMessage)
   if (messages.length === 0) {
@@ -120,14 +138,20 @@ async function replyViaAnthropic(
     .trim()
 
   if (!reply) return { ok: false, error: 'AI tidak mengembalikan teks' }
-  return { ok: true, reply }
+  return {
+    ok: true,
+    reply,
+    usage: {
+      inputTokens: res.usage?.input_tokens ?? 0,
+      outputTokens: res.usage?.output_tokens ?? 0,
+    },
+  }
 }
 
 async function replyViaOpenai(
   input: GenerateReplyInput,
 ): Promise<GenerateReplyResult> {
-  const { client, apiKey } = getOpenai()
-  if (!apiKey) return { ok: false, error: 'OPENAI_API_KEY belum di-set' }
+  const { client } = await getOpenai()
 
   // OpenAI Chat Completions: pakai role 'system' + alternating user/assistant.
   const alternating = toAlternatingMessages(input.history, input.latestUserMessage)
@@ -148,14 +172,20 @@ async function replyViaOpenai(
 
   const reply = res.choices[0]?.message?.content?.trim() ?? ''
   if (!reply) return { ok: false, error: 'AI tidak mengembalikan teks' }
-  return { ok: true, reply }
+  return {
+    ok: true,
+    reply,
+    usage: {
+      inputTokens: res.usage?.prompt_tokens ?? 0,
+      outputTokens: res.usage?.completion_tokens ?? 0,
+    },
+  }
 }
 
 async function replyViaGoogle(
   input: GenerateReplyInput,
 ): Promise<GenerateReplyResult> {
-  const { client, apiKey } = getGoogle()
-  if (!apiKey) return { ok: false, error: 'GOOGLE_AI_API_KEY belum di-set' }
+  const { client } = await getGoogle()
 
   // Google: system instruction terpisah dari history. Role-nya 'user'/'model'
   // (bukan 'assistant'). Pakai startChat() supaya history dikelola SDK.
@@ -184,7 +214,15 @@ async function replyViaGoogle(
   const res = await chat.sendMessage(last.content)
   const reply = res.response.text().trim()
   if (!reply) return { ok: false, error: 'AI tidak mengembalikan teks' }
-  return { ok: true, reply }
+  const meta = res.response.usageMetadata
+  return {
+    ok: true,
+    reply,
+    usage: {
+      inputTokens: meta?.promptTokenCount ?? 0,
+      outputTokens: meta?.candidatesTokenCount ?? 0,
+    },
+  }
 }
 
 // ─────────────────────────────────────────

@@ -30,6 +30,15 @@ export interface ChatMessage {
   role: MessageRole
   status: MessageStatus
   createdAt: string
+  // Profitability fields — null untuk pesan customer / pre-feature, dan
+  // hanya di-populate kalau session.role === 'ADMIN'.
+  apiInputTokens?: number | null
+  apiOutputTokens?: number | null
+  apiCostRp?: number | null
+  tokensCharged?: number | null
+  revenueRp?: number | null
+  profitRp?: number | null
+  modelName?: string | null
 }
 
 export interface ChatContact {
