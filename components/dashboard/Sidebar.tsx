@@ -1,37 +1,17 @@
 'use client'
 
 // Sidebar utama dashboard — light theme.
-// Background putih, accent orange untuk active state.
-import {
-  BarChart3,
-  CreditCard,
-  Globe,
-  Home,
-  Inbox,
-  MessageCircle,
-  Send,
-  Sparkles,
-  TrendingUp,
-  Users,
-} from 'lucide-react'
+// Menu di-grup berdasarkan kategori (PRODUKTIVITAS, LAPORAN, AKUN). Section
+// header tipis di atas tiap grup biar mudah dipindai. Sumber data dari
+// lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
+// dengan Drawer mobile.
+import { MessageCircle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-import { cn } from '@/lib/utils'
 import { formatNumber } from '@/lib/format'
-
-const menu = [
-  { href: '/dashboard', label: 'Dashboard', icon: Home },
-  { href: '/whatsapp', label: 'WhatsApp', icon: MessageCircle },
-  { href: '/soul', label: 'Soul', icon: Sparkles },
-  { href: '/inbox', label: 'Inbox', icon: Inbox },
-  { href: '/contacts', label: 'Contacts', icon: Users },
-  { href: '/broadcast', label: 'Broadcast', icon: Send },
-  { href: '/landing-pages', label: 'Landing Page', icon: Globe },
-  { href: '/landing-pages/upgrade', label: 'Upgrade LP', icon: TrendingUp },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/billing', label: 'Billing', icon: CreditCard },
-]
+import { USER_NAV_GROUPS, USER_NAV_HOME } from '@/lib/navigation'
+import { cn } from '@/lib/utils'
 
 interface SidebarProps {
   className?: string
@@ -42,6 +22,11 @@ interface SidebarProps {
 
 export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
   const pathname = usePathname()
+
+  function isActive(href: string): boolean {
+    if (!pathname) return false
+    return pathname === href || pathname.startsWith(href + '/')
+  }
 
   return (
     <aside
@@ -63,43 +48,40 @@ export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
 
       {/* Menu */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
+        {/* Home (Dashboard) */}
         <ul className="space-y-1">
-          {menu.map(({ href, label, icon: Icon }) => {
-            const active =
-              pathname === href || pathname?.startsWith(href + '/')
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  onClick={onNavigate}
-                  className={cn(
-                    'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150',
-                    active
-                      ? 'bg-primary-50 text-primary-700 font-semibold'
-                      : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
-                  )}
-                >
-                  {/* Left accent bar saat active */}
-                  {active && (
-                    <span
-                      aria-hidden
-                      className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary-500"
-                    />
-                  )}
-                  <Icon
-                    className={cn(
-                      'size-4 shrink-0 transition-colors',
-                      active
-                        ? 'text-primary-600'
-                        : 'text-warm-500 group-hover:text-warm-700',
-                    )}
-                  />
-                  {label}
-                </Link>
-              </li>
-            )
-          })}
+          <li>
+            <SidebarLink
+              href={USER_NAV_HOME.href}
+              label={USER_NAV_HOME.label}
+              Icon={USER_NAV_HOME.icon}
+              active={isActive(USER_NAV_HOME.href)}
+              onClick={onNavigate}
+            />
+          </li>
         </ul>
+
+        {/* Grup */}
+        {USER_NAV_GROUPS.map((group) => (
+          <div key={group.label} className="mt-4">
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-warm-400">
+              {group.label}
+            </p>
+            <ul className="space-y-1">
+              {group.items.map((it) => (
+                <li key={it.href}>
+                  <SidebarLink
+                    href={it.href}
+                    label={it.label}
+                    Icon={it.icon}
+                    active={isActive(it.href)}
+                    onClick={onNavigate}
+                  />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {/* Saldo Token — warna & label adaptif sesuai level saldo */}
@@ -172,5 +154,48 @@ export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
         <p className="text-[11px] text-warm-400">v0.1.0 — beta</p>
       </div>
     </aside>
+  )
+}
+
+function SidebarLink({
+  href,
+  label,
+  Icon,
+  active,
+  onClick,
+}: {
+  href: string
+  label: string
+  Icon: (typeof USER_NAV_GROUPS)[number]['items'][number]['icon']
+  active: boolean
+  onClick?: () => void
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className={cn(
+        'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150',
+        active
+          ? 'bg-primary-50 text-primary-700 font-semibold'
+          : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
+      )}
+    >
+      {active && (
+        <span
+          aria-hidden
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary-500"
+        />
+      )}
+      <Icon
+        className={cn(
+          'size-4 shrink-0 transition-colors',
+          active
+            ? 'text-primary-600'
+            : 'text-warm-500 group-hover:text-warm-700',
+        )}
+      />
+      {label}
+    </Link>
   )
 }

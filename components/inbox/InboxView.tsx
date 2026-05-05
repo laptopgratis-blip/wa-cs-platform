@@ -2,8 +2,14 @@
 
 // Container utama halaman inbox: kelola filter/search/selectedId state,
 // fetch list, render split panel.
+//
+// Mobile: hanya 1 panel tampil — list saat tidak ada selection, chat
+// full-screen saat conversation di-pilih (dengan tombol back ke list).
+// Desktop: split panel seperti biasa.
 import { Inbox as InboxIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { cn } from '@/lib/utils'
 
 import { ChatView } from './ChatView'
 import { ConversationList } from './ConversationList'
@@ -79,8 +85,15 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
   )
 
   return (
-    <div className="flex h-[calc(100svh-3.5rem)] overflow-hidden border-t bg-background">
-      <aside className="w-80 shrink-0 border-r">
+    <div className="flex h-[calc(100svh-3.5rem-4rem)] overflow-hidden border-t bg-background md:h-[calc(100svh-3.5rem)]">
+      {/* List — full width di mobile saat tidak ada selection,
+          fixed-width sidebar di desktop. */}
+      <aside
+        className={cn(
+          'shrink-0 border-r md:w-80 md:block',
+          selected ? 'hidden md:block' : 'w-full',
+        )}
+      >
         <ConversationList
           conversations={conversations}
           counts={counts}
@@ -96,11 +109,21 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
           onSelect={setSelectedId}
         />
       </aside>
-      <section className="flex-1 h-full overflow-hidden">
+      {/* Chat — hanya tampil di mobile saat ada selection. */}
+      <section
+        className={cn(
+          'h-full overflow-hidden md:flex-1 md:flex',
+          selected ? 'flex flex-1' : 'hidden md:flex',
+        )}
+      >
         {selected ? (
-          <ChatView contactId={selected.id} onChanged={refresh} />
+          <ChatView
+            contactId={selected.id}
+            onChanged={refresh}
+            onBack={() => setSelectedId(null)}
+          />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-muted-foreground">
             <InboxIcon className="size-10" />
             <p>Pilih percakapan di sebelah kiri untuk lihat chat.</p>
           </div>

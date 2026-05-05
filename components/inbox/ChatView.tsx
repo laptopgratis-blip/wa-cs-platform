@@ -3,6 +3,7 @@
 // Panel kanan inbox: header + bubble chat + input box.
 // Komponen mandiri yang fetch sendiri data per contactId; parent cukup pass id.
 import {
+  ArrowLeft,
   Bot,
   CheckCircle2,
   Download,
@@ -37,9 +38,11 @@ import type { ChatContact, ChatMessage } from './types'
 interface ChatViewProps {
   contactId: string
   onChanged: () => void
+  /** Mobile only — kembali ke list. */
+  onBack?: () => void
 }
 
-export function ChatView({ contactId, onChanged }: ChatViewProps) {
+export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   const [contact, setContact] = useState<ChatContact | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
@@ -233,16 +236,27 @@ export function ChatView({ contactId, onChanged }: ChatViewProps) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Avatar className="size-10">
+        <div className="flex min-w-0 items-center gap-3">
+          {/* Tombol back hanya tampil di mobile (md:hidden). */}
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-warm-100 md:hidden"
+              aria-label="Kembali"
+            >
+              <ArrowLeft className="size-5" />
+            </button>
+          )}
+          <Avatar className="size-10 shrink-0">
             {contact.avatar && <AvatarImage src={contact.avatar} alt={contact.name ?? ''} />}
             <AvatarFallback>
               {(contact.name || contact.phoneNumber).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <p className="font-medium">{contact.name || `+${contact.phoneNumber}`}</p>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <p className="truncate font-medium">{contact.name || `+${contact.phoneNumber}`}</p>
+            <p className="truncate text-xs text-muted-foreground">
               +{contact.phoneNumber}
               {contact.waSession?.displayName && ` · via ${contact.waSession.displayName}`}
             </p>

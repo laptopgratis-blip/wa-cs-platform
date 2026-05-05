@@ -1,11 +1,13 @@
 // Layout untuk semua halaman dashboard. Sudah di-protect oleh middleware,
-// tapi getServerSession() di sini juga jadi sumber data user untuk Topbar.
+// tapi getServerSession() di sini juga jadi sumber data user untuk Topbar
+// + Drawer mobile.
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { Topbar } from '@/components/dashboard/Topbar'
+import { MobileNav } from '@/components/layout/MobileNav'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -17,18 +19,18 @@ export default async function DashboardLayout({
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
-  // Fetch saldo token sekali di server — di-pass ke Sidebar.
+  // Fetch saldo token sekali di server — di-pass ke Sidebar (desktop) +
+  // Drawer (mobile).
   const balance = await prisma.tokenBalance.findUnique({
     where: { userId: session.user.id },
     select: { balance: true },
   })
+  const tokenBalance = balance?.balance ?? 0
 
   return (
     <div className="flex min-h-svh w-full">
-      <Sidebar
-        className="hidden md:flex"
-        tokenBalance={balance?.balance ?? 0}
-      />
+      {/* Desktop sidebar */}
+      <Sidebar className="hidden md:flex" tokenBalance={tokenBalance} />
       <div className="flex flex-1 flex-col">
         <Topbar
           name={session.user.name}
@@ -36,9 +38,22 @@ export default async function DashboardLayout({
           image={session.user.image}
         />
         {/* Padding diberikan per-halaman supaya halaman seperti /inbox bisa
-            full-bleed (split panel) tanpa di-pad parent. */}
-        <main className="flex-1 overflow-hidden">{children}</main>
+            full-bleed (split panel) tanpa di-pad parent. Padding-bottom
+            untuk mobile supaya konten tidak ketutup BottomNav. */}
+        <main className="flex-1 overflow-hidden pb-16 md:pb-0">
+          {children}
+        </main>
       </div>
+      {/* Mobile bottom nav + drawer (md:hidden internally) */}
+      <MobileNav
+        user={{
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+          role: session.user.role,
+        }}
+        tokenBalance={tokenBalance}
+      />
     </div>
   )
 }
