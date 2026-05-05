@@ -94,3 +94,28 @@ export const lpUpgradePackageCreateSchema = z.object({
 })
 export const lpUpgradePackageUpdateSchema = lpUpgradePackageCreateSchema.partial()
 export type LpUpgradePackageCreateInput = z.infer<typeof lpUpgradePackageCreateSchema>
+
+// Soul Testing Lab — request body untuk start simulation. totalRounds dibatasi
+// max 30 supaya biaya aman (1 ronde ≈ Rp 50-200 tergantung model). Per-agen
+// pakai SoulPersonality + SoulStyle (sumber data: Soul Settings) — bukan Soul.
+export const soulSimulationCreateSchema = z.object({
+  sellerPersonalityId: z.string().min(1, 'Kepribadian penjual wajib dipilih'),
+  sellerStyleId: z.string().min(1, 'Gaya balas penjual wajib dipilih'),
+  sellerModelId: z.string().min(1, 'Model penjual wajib dipilih'),
+  sellerContext: z.string().trim().min(10, 'Konteks bisnis minimal 10 karakter').max(8000),
+  buyerPersonalityId: z.string().min(1, 'Kepribadian pembeli wajib dipilih'),
+  buyerStyleId: z.string().min(1, 'Gaya balas pembeli wajib dipilih'),
+  buyerModelId: z.string().min(1, 'Model pembeli wajib dipilih'),
+  buyerScenario: z.string().trim().min(10, 'Skenario pembeli minimal 10 karakter').max(8000),
+  totalRounds: z.number().int().min(2, 'Minimal 2 ronde').max(30, 'Maksimal 30 ronde'),
+  starterRole: z.enum(['SELLER', 'BUYER']),
+  starterMessage: z.string().trim().min(2, 'Pesan pembuka minimal 2 karakter').max(2000),
+})
+export type SoulSimulationCreateInput = z.infer<typeof soulSimulationCreateSchema>
+
+export const soulSimulationPresetCreateSchema = z.object({
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(80),
+  description: z.string().trim().max(300).nullable().optional(),
+  config: soulSimulationCreateSchema, // simpan setup utuh
+})
+export type SoulSimulationPresetCreateInput = z.infer<typeof soulSimulationPresetCreateSchema>
