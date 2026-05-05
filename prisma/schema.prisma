@@ -46,6 +46,12 @@ model User {
   landingPages      LandingPage[]
   lpImages          LpImage[]
   lpQuota           UserQuota?
+  soulSimulations   SoulSimulation[]
+  soulSimulationPresets SoulSimulationPreset[]
+  knowledge         UserKnowledge[]
+  salesFlows        UserSalesFlow[]
+  orderSessions     OrderSession[]
+  orders            UserOrder[]
 }
 
 // NextAuth models
@@ -194,6 +200,10 @@ model Soul {
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   waSessions  WhatsappSession[]
+
+  // Pemakaian sebagai agen di Soul Testing Lab.
+  sellerSimulations SoulSimulation[] @relation("SimSellerSoul")
+  buyerSimulations  SoulSimulation[] @relation("SimBuyerSoul")
 }
 
 // ─────────────────────────────────────────
@@ -211,6 +221,10 @@ model SoulPersonality {
   order               Int      @default(0)
   createdAt           DateTime @default(now())
 
+  // Pemakaian sebagai agen di Soul Testing Lab.
+  sellerSimulations SoulSimulation[] @relation("SimSellerPersonality")
+  buyerSimulations  SoulSimulation[] @relation("SimBuyerPersonality")
+
   @@index([isActive, order])
 }
 
@@ -222,6 +236,10 @@ model SoulStyle {
   isActive            Boolean  @default(true)
   order               Int      @default(0)
   createdAt           DateTime @default(now())
+
+  // Pemakaian sebagai agen di Soul Testing Lab.
+  sellerSimulations SoulSimulation[] @relation("SimSellerStyle")
+  buyerSimulations  SoulSimulation[] @relation("SimBuyerStyle")
 
   @@index([isActive, order])
 }
@@ -266,6 +284,10 @@ model AiModel {
 
   waSessions  WhatsappSession[]
   userAccess  UserModelAccess[]
+
+  // Pemakaian sebagai engine AI di Soul Testing Lab.
+  sellerSimulations SoulSimulation[] @relation("SimSellerModel")
+  buyerSimulations  SoulSimulation[] @relation("SimBuyerModel")
 }
 
 // Model access per user (admin bisa restrict)
@@ -318,6 +340,8 @@ model Contact {
   user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
   messages  Message[]
+  orderSessions OrderSession[]
+  orders        UserOrder[]
 
   @@unique([waSessionId, phoneNumber])
   @@index([userId, pipelineStage])
@@ -737,4 +761,255 @@ model ApiKey {
   lastTestError  String?   @db.Text
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// SOUL TESTING LAB — Simulasi 2 AI (Penjual vs Pembeli) untuk uji efektivitas
+// Soul. Dipanggil admin dari /admin/soul-lab. Engine: lib/services/soul-simulation.ts
+// ─────────────────────────────────────────
+
+enum SoulSimulationStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SoulSimulationOutcome {
+  SOLD
+  REJECTED
+  INCONCLUSIVE
+}
+
+enum SoulSimulationRole {
+  SELLER
+  BUYER
+}
+
+model SoulSimulation {
+  id              String   @id @default(cuid())
+  triggeredBy     String
+  triggerUser     User     @relation(fields: [triggeredBy], references: [id], onDelete: Cascade)
+
+  // Setup penjual (agen yang mau di-test)
+  // sellerSoulId — LEGACY (dipakai sebelum migrasi Personality+Style). Nullable
+  // supaya row baru bisa skip; row lama tetap kebaca buat history.
+  sellerSoulId         String?
+  sellerSoul           Soul?           @relation("SimSellerSoul", fields: [sellerSoulId], references: [id])
+  sellerPersonalityId  String?
+  sellerPersonality    SoulPersonality? @relation("SimSellerPersonality", fields: [sellerPersonalityId], references: [id])
+  sellerStyleId        String?
+  sellerStyle          SoulStyle?      @relation("SimSellerStyle", fields: [sellerStyleId], references: [id])
+  sellerModelId        String
+  sellerModel          AiModel         @relation("SimSellerModel", fields: [sellerModelId], references: [id])
+  sellerContext        String          @db.Text // konteks bisnis: produk, harga, promo
+
+  // Setup pembeli (lawan main) — sama strukturnya dengan penjual.
+  buyerSoulId         String?
+  buyerSoul           Soul?           @relation("SimBuyerSoul", fields: [buyerSoulId], references: [id])
+  buyerPersonalityId  String?
+  buyerPersonality    SoulPersonality? @relation("SimBuyerPersonality", fields: [buyerPersonalityId], references: [id])
+  buyerStyleId        String?
+  buyerStyle          SoulStyle?      @relation("SimBuyerStyle", fields: [buyerStyleId], references: [id])
+  buyerModelId        String
+  buyerModel          AiModel         @relation("SimBuyerModel", fields: [buyerModelId], references: [id])
+  buyerScenario       String          @db.Text // skenario pembeli: situasi, motivasi, keberatan
+
+  // Pengaturan jalannya simulasi
+  totalRounds     Int      @default(10)
+  starterRole     SoulSimulationRole
+  starterMessage  String   @db.Text
+
+  // Status (string supaya gampang transition: RUNNING → COMPLETED/FAILED/CANCELLED)
+  status          SoulSimulationStatus @default(RUNNING)
+  currentRound    Int      @default(0)
+  errorMessage    String?  @db.Text
+
+  // Hasil percakapan (JSON array: { role, content, timestamp, tokens })
+  conversation    Json     @default("[]")
+  evaluationScore Float?
+  evaluationData  Json?
+  outcome         SoulSimulationOutcome?
+
+  // Cost tracking — dibebankan ke triggerUser
+  totalInputTokens  Int    @default(0)
+  totalOutputTokens Int    @default(0)
+  totalCostRp       Float  @default(0)
+
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([triggeredBy, createdAt])
+  @@index([status, createdAt])
+  @@index([sellerSoulId])
+  @@index([sellerPersonalityId])
+}
+
+// ─────────────────────────────────────────
+// USER SALES FLOW — alur otomatis (COD, Transfer, Booking, Konsultasi, Custom)
+// yang dijalankan saat keyword trigger cocok dengan pesan customer. Saat flow
+// aktif, balasan diatur script (hemat token AI). Selesai → notif admin.
+// ─────────────────────────────────────────
+
+model UserSalesFlow {
+  id              String   @id @default(cuid())
+  userId          String
+
+  name            String
+  // COD | TRANSFER | BOOKING | CONSULTATION | CUSTOM — string supaya gampang
+  // nambah template baru tanpa migrate.
+  template        String
+  description     String?
+  triggerKeywords String[] @default([])
+
+  // Array pertanyaan terurut. Tiap step: { fieldName, question, validation }.
+  // Lihat lib/services/flow-engine.ts untuk daftar validation yang didukung.
+  steps           Json     @default("[]")
+  // { notifyAdmin, adminPhone, replyMessage, bankInfo? } — lihat lib/sales-flow-templates.ts.
+  finalAction     Json     @default("{}")
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions OrderSession[]
+
+  @@index([userId, isActive])
+}
+
+// State per-contact untuk flow yang sedang berjalan. Satu kontak hanya boleh
+// punya satu OrderSession ACTIVE pada satu waktu (di-enforce di flow-engine).
+model OrderSession {
+  id              String   @id @default(cuid())
+  userId          String
+  contactId       String
+  flowId          String
+
+  currentStep     Int      @default(0)
+  // Map fieldName → jawaban customer yang sudah divalidasi.
+  collectedData   Json     @default("{}")
+  // ACTIVE | COMPLETED | ABANDONED | CANCELLED | FAILED
+  status          String   @default("ACTIVE")
+
+  startedAt       DateTime @default(now())
+  // Diupdate tiap kali customer balas. Kalau > 30 menit lewat, otomatis
+  // di-mark ABANDONED saat pesan baru masuk (lazy cleanup).
+  lastActivityAt  DateTime @default(now())
+  completedAt     DateTime?
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  flow    UserSalesFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  order   UserOrder?
+
+  @@index([userId, status])
+  @@index([contactId, status])
+  @@index([flowId, status])
+}
+
+// ─────────────────────────────────────────
+// USER ORDER — pesanan customer yang sudah jadi (auto-create saat OrderSession
+// completed, atau manual via API). Kolom paymentMethod & paymentStatus &
+// deliveryStatus dipakai admin untuk track status pengiriman & pembayaran.
+// ─────────────────────────────────────────
+
+model UserOrder {
+  id              String   @id @default(cuid())
+  userId          String
+  contactId       String
+  // Asal flow yang generate order ini. Null kalau dibuat manual atau flow
+  // di-hapus belakangan (onDelete: SetNull).
+  orderSessionId  String?  @unique
+
+  customerName    String
+  customerPhone   String
+  customerAddress String?  @db.Text
+
+  // Array { name, qty, price? } — Phase 3 belum ada item collection di flow,
+  // jadi default kosong. User bisa edit manual via UI atau Phase 4 nanti.
+  items           Json     @default("[]")
+  totalAmount     Float?
+  // Catatan internal admin (tidak ditampilkan ke customer).
+  notes           String?  @db.Text
+
+  // COD | TRANSFER | BOOKING | CONSULTATION | FREE — string supaya gampang
+  // nambah method baru tanpa migrate.
+  paymentMethod   String
+  // PENDING | PAID | CANCELLED.
+  paymentStatus   String   @default("PENDING")
+  paymentProofUrl String?
+
+  // PENDING | PROCESSING | SHIPPED | DELIVERED | CANCELLED.
+  deliveryStatus  String   @default("PENDING")
+  trackingNumber  String?
+
+  // Snapshot nama flow (mis. "Pengiriman COD") supaya tampil di UI tanpa join.
+  flowName        String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact      Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  orderSession OrderSession? @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, paymentStatus])
+  @@index([userId, deliveryStatus])
+}
+
+// ─────────────────────────────────────────
+// USER KNOWLEDGE BASE — info bisnis (testimoni, sertifikat, FAQ, link, file)
+// yang AI inject ke system prompt saat keyword di triggerKeywords match pesan
+// customer. Dipakai supaya AI bisa kasih jawaban kontekstual + (opsional)
+// kirim file pendukung.
+// ─────────────────────────────────────────
+
+model UserKnowledge {
+  id              String    @id @default(cuid())
+  userId          String
+
+  title           String
+  // TEXT | IMAGE | FILE | LINK — divalidasi di API layer (Zod), bukan enum
+  // supaya gampang nambah jenis baru tanpa migrate schema.
+  contentType     String
+
+  textContent     String?   @db.Text
+  fileUrl         String?   // /uploads/knowledge/<userId>/<filename>
+  linkUrl         String?
+  // Caption untuk IMAGE/FILE/LINK — dikirim AI saat attach atau jadi konteks.
+  caption         String?   @db.Text
+
+  // Kata kunci pemicu. Postgres native string array (lihat Broadcast.targetTags).
+  triggerKeywords String[]  @default([])
+
+  isActive        Boolean   @default(true)
+  triggerCount    Int       @default(0)
+  lastTriggeredAt DateTime?
+  order           Int       @default(0)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([userId, order])
+}
+
+model SoulSimulationPreset {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  // Snapshot setup: { sellerSoulId, sellerModelId, sellerContext, buyerSoulId,
+  // buyerModelId, buyerScenario, totalRounds, starterRole, starterMessage }
+  config          Json
+  createdBy       String
+  creator         User     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+
+  @@index([createdBy, createdAt])
 }

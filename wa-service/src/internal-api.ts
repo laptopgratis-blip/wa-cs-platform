@@ -60,6 +60,36 @@ export interface InternalTokenBalance {
   totalPurchased: number
 }
 
+export interface InternalKnowledgeMatch {
+  // List entry yang match keyword di pesan customer.
+  items: Array<{
+    id: string
+    title: string
+    contentType: string
+    textContent: string | null
+    fileUrl: string | null
+    linkUrl: string | null
+    caption: string | null
+  }>
+  // Blok teks siap append ke system prompt — dibangun server-side.
+  promptBlock: string
+}
+
+export interface InternalFlowResult {
+  // true = wa-service kirim `reply` lalu SKIP AI generation.
+  // false = lanjut ke AI normal.
+  handled: boolean
+  reply?: string
+  // Kalau ada, wa-service kirim notifikasi ke admin via session WA yang sama.
+  notifyAdmin?: { phoneNumber: string; message: string }
+  meta?: {
+    flowId?: string
+    flowName?: string
+    sessionId?: string
+    status?: 'started' | 'continued' | 'completed' | 'abandoned' | 'cancelled'
+  }
+}
+
 interface ApiResponse<T> {
   success: boolean
   data?: T
@@ -155,6 +185,32 @@ export const internalApi = {
     return request<{ id: string }>(
       `/api/internal/broadcasts/${encodeURIComponent(broadcastId)}/progress`,
       { method: 'POST', body: JSON.stringify(input) },
+    )
+  },
+
+  // Process pesan customer melalui flow engine (sales flow).
+  // Kalau handled=true, wa-service tanggung jawab kirim reply + notifyAdmin
+  // (kalau ada) lewat Baileys.
+  processFlow(input: {
+    sessionId: string
+    contactId: string
+    message: string
+  }) {
+    return request<InternalFlowResult>('/api/internal/flow/process', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+
+  // Cari entry knowledge yang match keyword pesan customer untuk satu session.
+  // Side-effect di Next.js: increment triggerCount + lastTriggeredAt.
+  getKnowledge(sessionId: string, message: string) {
+    return request<InternalKnowledgeMatch>(
+      `/api/internal/knowledge/${encodeURIComponent(sessionId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      },
     )
   },
 

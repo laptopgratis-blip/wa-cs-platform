@@ -15,6 +15,7 @@ import {
 } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import P from 'pino'
 import qrcode from 'qrcode'
 import type { Server as IOServer } from 'socket.io'
 
@@ -144,6 +145,7 @@ export class WaManager {
       browser: ['Hulao', 'Chrome', '1.0.0'],
       syncFullHistory: false,
       markOnlineOnConnect: false,
+      logger: P({ level: 'warn' }),
     })
     entry.socket = sock
 
@@ -151,7 +153,7 @@ export class WaManager {
 
     sock.ev.on('messages.upsert', (event) => {
       // Hanya pesan baru (bukan history sync). Process async, jangan block.
-      console.log("[DEBUG] messages.upsert type:", event.type, "count:", event.messages.length); if (event.type !== 'notify') return
+      if (event.type !== 'notify') return
       for (const msg of event.messages) {
         this.handleIncomingMessage(entry, msg).catch((err) => {
           console.error(`[wa-manager:${sessionId}] handleIncomingMessage:`, err)
@@ -437,6 +439,50 @@ export class WaManager {
       // Kalau CS sedang ambil alih kontak ini → simpan saja, jangan AI reply.
       if (saved.data.contact?.aiPaused) return
 
+      // 1.5 Sales Flow: kalau ada OrderSession aktif atau pesan ini cocok
+      // trigger keyword, flow engine yang handle (script-based, hemat token).
+      // Kalau gagal → diam-diam fallback ke AI normal.
+      const flow = await internalApi.processFlow({
+        sessionId,
+        contactId: saved.data.contactId,
+        message: content,
+      })
+      if (flow.success && flow.data?.handled && flow.data.reply) {
+        // Kirim balasan flow ke customer.
+        try {
+          await entry.socket?.sendMessage(remoteJid, { text: flow.data.reply })
+        } catch (err) {
+          console.error(`[wa-manager:${sessionId}] flow sendMessage gagal:`, err)
+        }
+        // Simpan reply ke DB sebagai pesan AI (untuk inbox visibility).
+        await internalApi
+          .saveMessage({
+            sessionId,
+            phoneNumber,
+            content: flow.data.reply,
+            role: 'AI',
+            tokensUsed: 0,
+          })
+          .catch((err) =>
+            console.error(`[wa-manager:${sessionId}] flow save msg:`, err),
+          )
+
+        // Notifikasi admin kalau flow selesai dan setting-nya aktif.
+        if (flow.data.notifyAdmin) {
+          const { phoneNumber: adminPhone, message: adminMsg } =
+            flow.data.notifyAdmin
+          // sendText sudah handle JID + connection check. Best-effort: log
+          // kalau gagal, jangan menahan flow customer-side.
+          this.sendText(sessionId, adminPhone, adminMsg).catch((err) =>
+            console.error(
+              `[wa-manager:${sessionId}] notif admin gagal:`,
+              err,
+            ),
+          )
+        }
+        return
+      }
+
       // 2. Ambil soul + model. Kalau belum di-set → skip reply.
       const cfg = await internalApi.getSoul(sessionId)
       if (!cfg.success || !cfg.data) {
@@ -459,9 +505,17 @@ export class WaManager {
         return
       }
 
-      // 4. Generate balasan — provider routing di ai-handler.
+      // 4. Ambil knowledge yang match keyword di pesan customer. Best-effort:
+      // kalau gagal, lanjut tanpa knowledge — jangan menahan reply.
+      const kb = await internalApi.getKnowledge(sessionId, content)
+      const augmentedPrompt =
+        kb.success && kb.data && kb.data.promptBlock
+          ? soul.systemPrompt + kb.data.promptBlock
+          : soul.systemPrompt
+
+      // 5. Generate balasan — provider routing di ai-handler.
       const ai = await generateReply({
-        systemPrompt: soul.systemPrompt,
+        systemPrompt: augmentedPrompt,
         provider: model.provider,
         modelId: model.modelId,
         history: saved.data.history,
@@ -598,9 +652,16 @@ export class WaManager {
       return { outcome: 'paused_no_token' }
     }
 
-    // 4. Generate AI reply.
+    // 4. Ambil knowledge yang match keyword (best-effort, sama seperti flow live).
+    const kb = await internalApi.getKnowledge(sessionId, message)
+    const augmentedPrompt =
+      kb.success && kb.data && kb.data.promptBlock
+        ? soul.systemPrompt + kb.data.promptBlock
+        : soul.systemPrompt
+
+    // 5. Generate AI reply.
     const ai = await generateReply({
-      systemPrompt: soul.systemPrompt,
+      systemPrompt: augmentedPrompt,
       provider: model.provider,
       modelId: model.modelId,
       history: saved.data.history,
