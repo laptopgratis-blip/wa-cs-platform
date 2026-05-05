@@ -18,6 +18,7 @@ import { prisma } from '@/lib/prisma'
 
 const ASSUMED_INPUT = 2_000
 const ASSUMED_OUTPUT = 250
+const USD_TO_IDR = 16_000
 
 interface BudgetRow {
   component: string
@@ -39,7 +40,7 @@ const totalInputAvg = budgetRows.reduce((s, r) => s + r.avg, 0)
 
 export async function SoulTokenBudget() {
   // Ambil model aktif beserta harga provider — data ini sudah ada di tabel
-  // AiModel (inputPricePer1M / outputPricePer1M dalam IDR, kurs $1=16k).
+  // AiModel (inputPricePer1M / outputPricePer1M dalam USD per 1 juta token).
   const models = await prisma.aiModel.findMany({
     where: { isActive: true },
     orderBy: [{ inputPricePer1M: 'asc' }],
@@ -123,8 +124,8 @@ export async function SoulTokenBudget() {
           <p className="text-xs text-muted-foreground">
             Asumsi {formatNumber(ASSUMED_INPUT)} token input +{' '}
             {formatNumber(ASSUMED_OUTPUT)} token output. Harga di-ambil dari
-            kolom inputPricePer1M / outputPricePer1M (IDR per 1 juta token,
-            kurs $1 = Rp 16.000).
+            kolom inputPricePer1M / outputPricePer1M (USD per 1 juta token,
+            kurs $1 = Rp {formatNumber(USD_TO_IDR)}).
           </p>
         </CardHeader>
         <CardContent>
@@ -143,9 +144,10 @@ export async function SoulTokenBudget() {
               </TableHeader>
               <TableBody>
                 {models.map((m) => {
-                  const costIdr =
+                  const costUsd =
                     (ASSUMED_INPUT * m.inputPricePer1M) / 1_000_000 +
                     (ASSUMED_OUTPUT * m.outputPricePer1M) / 1_000_000
+                  const costIdr = costUsd * USD_TO_IDR
                   return (
                     <TableRow key={m.id}>
                       <TableCell>

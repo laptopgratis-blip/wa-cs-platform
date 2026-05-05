@@ -2,12 +2,10 @@
 // Data awal untuk database — jalankan: npx prisma db seed
 //
 // Catatan harga:
-// - inputPricePer1M / outputPricePer1M = IDR per 1 juta token (kurs $1 = 16k).
+// - inputPricePer1M / outputPricePer1M = USD per 1 juta token (harga provider).
 // - costPerMessage = jumlah token PLATFORM yang dipotong dari saldo user
-//   per balasan AI sukses. Disesuaikan ke tier biaya provider:
-//     Tier 1 (Haiku, Gemini Flash) → 1 token  (~1.0–1.2 IDR cost provider)
-//     Tier 2 (Sonnet, GPT-5 Mini)  → 4 token  (~4.5–5.0 IDR cost provider)
-//     Tier 3 (Gemini 2.5 Pro)      → 13 token (~15.6 IDR cost provider)
+//   per balasan AI sukses. Set lewat /admin/pricing-calculator (tombol Apply)
+//   supaya margin platform sesuai target.
 
 import { PrismaClient, AiProvider, LpTier } from '@prisma/client'
 
@@ -19,8 +17,8 @@ const models = [
     name: 'Claude Haiku (Cepat & Hemat)',
     provider: AiProvider.ANTHROPIC,
     modelId: 'claude-haiku-4-5-20251001',
-    inputPricePer1M: 800,
-    outputPricePer1M: 4000,
+    inputPricePer1M: 0.80,
+    outputPricePer1M: 4.00,
     avgTokensPerMessage: 500,
     costPerMessage: 1,
     isActive: true,
@@ -30,8 +28,8 @@ const models = [
     name: 'Claude Sonnet (Pintar)',
     provider: AiProvider.ANTHROPIC,
     modelId: 'claude-sonnet-4-6',
-    inputPricePer1M: 3000,
-    outputPricePer1M: 15000,
+    inputPricePer1M: 3.00,
+    outputPricePer1M: 15.00,
     avgTokensPerMessage: 500,
     costPerMessage: 4,
     isActive: true,
@@ -42,8 +40,8 @@ const models = [
     name: 'GPT-5 Mini (Hemat)',
     provider: AiProvider.OPENAI,
     modelId: 'gpt-5-mini',
-    inputPricePer1M: 4000,
-    outputPricePer1M: 16000,
+    inputPricePer1M: 0.15,
+    outputPricePer1M: 0.60,
     avgTokensPerMessage: 500,
     costPerMessage: 4,
     isActive: true,
@@ -54,8 +52,8 @@ const models = [
     name: 'Gemini 2.0 Flash (Hemat)',
     provider: AiProvider.GOOGLE,
     modelId: 'gemini-2.0-flash',
-    inputPricePer1M: 750,
-    outputPricePer1M: 3000,
+    inputPricePer1M: 0.10,
+    outputPricePer1M: 0.40,
     avgTokensPerMessage: 500,
     costPerMessage: 1,
     isActive: true,
@@ -65,8 +63,8 @@ const models = [
     name: 'Gemini 2.5 Pro (Pintar)',
     provider: AiProvider.GOOGLE,
     modelId: 'gemini-2.5-pro',
-    inputPricePer1M: 12500,
-    outputPricePer1M: 50000,
+    inputPricePer1M: 1.25,
+    outputPricePer1M: 10.00,
     avgTokensPerMessage: 500,
     costPerMessage: 13,
     isActive: true,

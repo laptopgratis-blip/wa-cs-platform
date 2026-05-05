@@ -35,7 +35,6 @@ export default async function AdminPricingCalculatorPage() {
           costPerMessage: m.costPerMessage,
           inputPricePer1M: m.inputPricePer1M,
           outputPricePer1M: m.outputPricePer1M,
-          avgTokensPerMessage: m.avgTokensPerMessage,
         }))}
         packages={packages.map((p) => ({
           id: p.id,

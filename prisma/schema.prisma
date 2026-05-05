@@ -246,11 +246,11 @@ model AiModel {
   // Admin set manual berdasarkan posisi tier model.
   costPerMessage      Int         @default(1)
 
-  // Harga aktual provider (IDR per 1 juta token). Dipakai untuk transparansi
+  // Harga aktual provider (USD per 1 juta token). Dipakai untuk transparansi
   // di dashboard admin & untuk hitung margin platform vs cost provider.
   // Default 0 = belum di-set oleh admin (back-compat untuk existing rows).
-  inputPricePer1M     Int         @default(0)
-  outputPricePer1M    Int         @default(0)
+  inputPricePer1M     Float       @default(0)
+  outputPricePer1M    Float       @default(0)
   // Estimasi rata-rata token per balasan WA (input prompt + history + output).
   // Dipakai untuk hitung biaya per pesan: avgTokensPerMessage / 1_000_000 *
   // (input + output) / 2  → IDR per pesan.
