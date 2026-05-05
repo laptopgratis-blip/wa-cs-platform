@@ -460,6 +460,8 @@ model Payment {
   paymentMethod String?
   reference     String?       @unique // reference dari Tripay (T0001xxxxx)
   paymentUrl    String?       // checkout_url Tripay untuk redirect user
+  payCode       String?       // VA number atau kode bayar convenience store (DIRECT channels)
+  paymentName   String?       // Nama channel human-readable, mis. "BRI Virtual Account"
   paidAt        DateTime?
   expiredAt     DateTime?
   createdAt     DateTime      @default(now())

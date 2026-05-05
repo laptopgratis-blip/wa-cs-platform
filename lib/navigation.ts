@@ -22,6 +22,7 @@ import {
   LineChart,
   MessageCircle,
   Package,
+  Receipt,
   Send,
   Settings,
   ShoppingBag,
@@ -71,7 +72,10 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'AKUN',
-    items: [{ label: 'Billing', href: '/billing', icon: CreditCard }],
+    items: [
+      { label: 'Billing', href: '/billing', icon: CreditCard },
+      { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
+    ],
   },
 ]
 

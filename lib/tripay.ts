@@ -52,6 +52,8 @@ export interface CreateTransactionResult {
   paymentUrl: string // checkout_url Tripay
   expiredAt: Date
   paymentMethod: string
+  paymentName: string // nama channel human-readable, mis. "BRI Virtual Account"
+  payCode: string | null // VA number / kode bayar (DIRECT channels)
 }
 
 interface TripayApiResponse<T> {
@@ -155,6 +157,8 @@ export async function createTransaction(
       paymentUrl: body.data.checkout_url,
       expiredAt: new Date(body.data.expired_time * 1000),
       paymentMethod: body.data.payment_method,
+      paymentName: body.data.payment_name,
+      payCode: body.data.pay_code ?? null,
     }
   } catch (err) {
     unwrapAxiosError(err, 'createTransaction')
@@ -194,4 +198,119 @@ export function verifySignature(rawBody: string, signature: string): boolean {
   const b = Buffer.from(signature, 'utf8')
   if (a.length !== b.length) return false
   return crypto.timingSafeEqual(a, b)
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAYMENT CHANNELS — daftar channel aktif di merchant
+// ─────────────────────────────────────────────────────────────
+
+export interface TripayPaymentChannel {
+  group: string // "Virtual Account", "E-Wallet", "Convenience Store"
+  code: string // "BRIVA", "QRIS", "ALFAMART"
+  name: string // "BRI Virtual Account"
+  type: 'direct' | 'redirect'
+  fee_merchant: { flat: number; percent: number }
+  fee_customer: { flat: number; percent: number }
+  total_fee: { flat: number; percent: string }
+  minimum_fee: number
+  maximum_fee: number
+  minimum_amount: number
+  maximum_amount: number
+  icon_url: string
+  active: boolean
+}
+
+// Channel yang menggunakan REDIRECT flow — user dikirim ke checkout_url Tripay.
+// Sisanya pakai DIRECT flow — pay_code ditampilkan in-app.
+export const REDIRECT_CHANNELS = new Set(['QRIS', 'QRISC', 'QRIS2', 'SHOPEEPAY', 'OVO', 'DANA'])
+
+export function isRedirectChannel(code: string): boolean {
+  return REDIRECT_CHANNELS.has(code)
+}
+
+// Ambil daftar channel pembayaran aktif dari Tripay.
+export async function getPaymentChannels(): Promise<TripayPaymentChannel[]> {
+  assertConfig()
+  try {
+    const res = await http.get<TripayApiResponse<TripayPaymentChannel[]>>(
+      '/merchant/payment-channel',
+    )
+    const body = res.data
+    if (!body.success || !body.data) {
+      throw new Error(body.message ?? 'Gagal mengambil daftar channel')
+    }
+    return body.data.filter((ch) => ch.active)
+  } catch (err) {
+    unwrapAxiosError(err, 'getPaymentChannels')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FEE CALCULATOR — hitung biaya per channel untuk nominal tertentu
+// ─────────────────────────────────────────────────────────────
+
+export interface TripayFeeResult {
+  code: string
+  name: string
+  fee: {
+    flat: number
+    percent: string
+    min: number | null
+    max: number | null
+  }
+  total_fee: {
+    merchant: number
+    customer: number
+  }
+}
+
+// Hitung biaya transaksi untuk channel + nominal tertentu.
+export async function getFeeCalculation(
+  code: string,
+  amount: number,
+): Promise<TripayFeeResult[]> {
+  assertConfig()
+  try {
+    const res = await http.get<TripayApiResponse<TripayFeeResult[]>>(
+      '/merchant/fee-calculator',
+      { params: { code, amount } },
+    )
+    const body = res.data
+    if (!body.success || !body.data) {
+      throw new Error(body.message ?? 'Gagal menghitung biaya')
+    }
+    return body.data
+  } catch (err) {
+    unwrapAxiosError(err, 'getFeeCalculation')
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// PAYMENT INSTRUCTION — instruksi bayar per channel
+// ─────────────────────────────────────────────────────────────
+
+export interface TripayPaymentInstructionStep {
+  title: string
+  steps: string[]
+}
+
+// Ambil instruksi pembayaran untuk channel tertentu. Instruksi mengandung
+// placeholder {{pay_code}} yang bisa di-replace di frontend.
+export async function getPaymentInstruction(
+  code: string,
+): Promise<TripayPaymentInstructionStep[]> {
+  assertConfig()
+  try {
+    const res = await http.get<TripayApiResponse<TripayPaymentInstructionStep[]>>(
+      '/payment/instruction',
+      { params: { code } },
+    )
+    const body = res.data
+    if (!body.success || !body.data) {
+      throw new Error(body.message ?? 'Gagal mengambil instruksi pembayaran')
+    }
+    return body.data
+  } catch (err) {
+    unwrapAxiosError(err, 'getPaymentInstruction')
+  }
 }

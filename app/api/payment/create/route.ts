@@ -1,5 +1,5 @@
 // POST /api/payment/create
-// Body: { packageId: string }
+// Body: { packageId: string, method?: string }
 // Buat Payment di DB (status PENDING) + minta checkout dari Tripay,
 // simpan reference & paymentUrl, return orderId untuk frontend redirect
 // ke /checkout/[orderId].
@@ -10,7 +10,10 @@ import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { createTransaction } from '@/lib/tripay'
 
-const bodySchema = z.object({ packageId: z.string().min(1) })
+const bodySchema = z.object({
+  packageId: z.string().min(1),
+  method: z.string().min(1).optional(),
+})
 
 // Order ID format: WA-<timestamp>-<random>. Wajib unik dan max 50 char.
 function makeOrderId(): string {
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
         tokenAmount: pkg.tokenAmount,
         customerName: user.name ?? 'Customer',
         customerEmail: user.email,
+        method: parsed.data.method,
         callbackUrl: `${baseUrl}/api/payment/tripay-webhook`,
         returnUrl: `${baseUrl}/checkout/${orderId}`,
       })
@@ -78,6 +82,8 @@ export async function POST(req: Request) {
           reference: tx.reference,
           paymentUrl: tx.paymentUrl,
           paymentMethod: tx.paymentMethod,
+          paymentName: tx.paymentName,
+          payCode: tx.payCode,
           expiredAt: tx.expiredAt,
         },
       })
@@ -87,6 +93,8 @@ export async function POST(req: Request) {
           orderId,
           reference: tx.reference,
           paymentUrl: tx.paymentUrl,
+          payCode: tx.payCode,
+          paymentName: tx.paymentName,
           amount: pkg.price,
           tokenAmount: pkg.tokenAmount,
           packageName: pkg.name,
