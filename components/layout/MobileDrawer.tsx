@@ -28,6 +28,7 @@ import {
   ADMIN_NAV_HOME,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
+  filterGroupsByOrderSystem,
   filterGroupsByRole,
   type NavGroup,
   type Role,
@@ -45,6 +46,8 @@ interface MobileDrawerProps {
   }
   /** Saldo token user — untuk card di drawer. */
   tokenBalance?: number | null
+  /** Akses Order System (paket POWER). Default false. */
+  hasOrderSystemAccess?: boolean
 }
 
 export function MobileDrawer({
@@ -52,12 +55,17 @@ export function MobileDrawer({
   onOpenChange,
   user,
   tokenBalance,
+  hasOrderSystemAccess = false,
 }: MobileDrawerProps) {
   const pathname = usePathname()
   const close = () => onOpenChange(false)
 
-  // Filter admin groups by role; user groups selalu tampil.
-  const userGroups = USER_NAV_GROUPS
+  // Filter admin groups by role; user groups selalu tampil kecuali Order System
+  // section yang difilter berdasarkan paket.
+  const userGroups = filterGroupsByOrderSystem(
+    USER_NAV_GROUPS,
+    hasOrderSystemAccess,
+  )
   const adminGroups: NavGroup[] =
     user.role === 'ADMIN' || user.role === 'FINANCE'
       ? filterGroupsByRole(ADMIN_NAV_GROUPS, user.role)

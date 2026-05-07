@@ -10,7 +10,11 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { formatNumber } from '@/lib/format'
-import { USER_NAV_GROUPS, USER_NAV_HOME } from '@/lib/navigation'
+import {
+  USER_NAV_GROUPS,
+  USER_NAV_HOME,
+  filterGroupsByOrderSystem,
+} from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
@@ -18,10 +22,21 @@ interface SidebarProps {
   onNavigate?: () => void
   /** Saldo token user untuk card di bawah. Null = sembunyi (mis. admin). */
   tokenBalance?: number | null
+  /** Akses ke Order System (paket POWER). Default false. */
+  hasOrderSystemAccess?: boolean
 }
 
-export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
+export function Sidebar({
+  className,
+  onNavigate,
+  tokenBalance,
+  hasOrderSystemAccess = false,
+}: SidebarProps) {
   const pathname = usePathname()
+  const groups = filterGroupsByOrderSystem(
+    USER_NAV_GROUPS,
+    hasOrderSystemAccess,
+  )
 
   function isActive(href: string): boolean {
     if (!pathname) return false
@@ -62,7 +77,7 @@ export function Sidebar({ className, onNavigate, tokenBalance }: SidebarProps) {
         </ul>
 
         {/* Grup */}
-        {USER_NAV_GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.label} className="mt-4">
             <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-warm-400">
               {group.label}

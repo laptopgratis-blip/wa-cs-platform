@@ -4,6 +4,7 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { orderUpdateSchema } from '@/lib/validations/order'
 
@@ -29,18 +30,21 @@ export async function GET(_req: Request, { params }: Params) {
   if (!order) return jsonError('Pesanan tidak ditemukan', 404)
 
   // Ambil 20 pesan terakhir dari kontak ini supaya admin bisa cek konteks
-  // tanpa pindah ke /inbox. Hanya field essential.
-  const messages = await prisma.message.findMany({
-    where: { contactId: order.contactId },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-    select: {
-      id: true,
-      content: true,
-      role: true,
-      createdAt: true,
-    },
-  })
+  // tanpa pindah ke /inbox. Hanya field essential. Skip kalau order tidak
+  // punya contact (mis. order dari OrderForm publik).
+  const messages = order.contactId
+    ? await prisma.message.findMany({
+        where: { contactId: order.contactId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          content: true,
+          role: true,
+          createdAt: true,
+        },
+      })
+    : []
 
   return jsonOk({
     ...order,
@@ -97,19 +101,53 @@ export async function PATCH(req: Request, { params }: Params) {
           ? { paymentMethod: data.paymentMethod }
           : {}),
         ...(data.paymentStatus !== undefined
-          ? { paymentStatus: data.paymentStatus }
+          ? {
+              paymentStatus: data.paymentStatus,
+              // Auto-stamp paidAt / cancelledAt saat status transisi.
+              ...(data.paymentStatus === 'PAID' && { paidAt: new Date() }),
+              ...(data.paymentStatus === 'CANCELLED' && {
+                cancelledAt: new Date(),
+              }),
+            }
           : {}),
         ...(data.paymentProofUrl !== undefined
           ? { paymentProofUrl: data.paymentProofUrl }
           : {}),
         ...(data.deliveryStatus !== undefined
-          ? { deliveryStatus: data.deliveryStatus }
+          ? {
+              deliveryStatus: data.deliveryStatus,
+              ...(data.deliveryStatus === 'SHIPPED' && {
+                shippedAt: new Date(),
+              }),
+              ...(data.deliveryStatus === 'DELIVERED' && {
+                deliveredAt: new Date(),
+              }),
+            }
           : {}),
         ...(data.trackingNumber !== undefined
           ? { trackingNumber: data.trackingNumber }
           : {}),
+        ...(data.cancelledReason !== undefined
+          ? { cancelledReason: data.cancelledReason }
+          : {}),
       },
     })
+
+    // Pixel server-side fire saat transisi ke PAID — fire Purchase. Hanya
+    // untuk e-commerce orders (punya invoiceNumber + orderFormId). Best-
+    // effort, async, tidak block response.
+    if (
+      data.paymentStatus === 'PAID' &&
+      existing.paymentStatus !== 'PAID' &&
+      updated.invoiceNumber &&
+      updated.orderFormId
+    ) {
+      firePixelEventForOrder({
+        orderId: updated.id,
+        eventName: 'Purchase',
+      }).catch(() => {})
+    }
+
     return jsonOk({
       ...updated,
       createdAt: updated.createdAt.toISOString(),

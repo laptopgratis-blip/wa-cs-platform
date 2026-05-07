@@ -17,9 +17,14 @@ interface MobileNavProps {
     role: Role
   }
   tokenBalance?: number | null
+  hasOrderSystemAccess?: boolean
 }
 
-export function MobileNav({ user, tokenBalance }: MobileNavProps) {
+export function MobileNav({
+  user,
+  tokenBalance,
+  hasOrderSystemAccess,
+}: MobileNavProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   return (
     <>
@@ -29,6 +34,7 @@ export function MobileNav({ user, tokenBalance }: MobileNavProps) {
         onOpenChange={setDrawerOpen}
         user={user}
         tokenBalance={tokenBalance}
+        hasOrderSystemAccess={hasOrderSystemAccess}
       />
     </>
   )

@@ -112,6 +112,7 @@ const lpUpgradePackages = [
     isPopular: false,
     isActive: true,
     sortOrder: 1,
+    canUseOrderSystem: false,
   },
   {
     name: 'Popular',
@@ -123,10 +124,11 @@ const lpUpgradePackages = [
     isPopular: true,
     isActive: true,
     sortOrder: 2,
+    canUseOrderSystem: false,
   },
   {
     name: 'Power',
-    description: 'Untuk agensi atau bisnis dengan banyak campaign sekaligus.',
+    description: 'Untuk agensi atau bisnis dengan banyak campaign sekaligus. Termasuk Order System: Form Order, Invoice Otomatis, Multi-Payment, Subsidi Ongkir, Flash Sale.',
     tier: LpTier.POWER,
     maxLp: 999,
     maxStorageMB: 500,
@@ -134,6 +136,7 @@ const lpUpgradePackages = [
     isPopular: false,
     isActive: true,
     sortOrder: 3,
+    canUseOrderSystem: true,
   },
 ]
 

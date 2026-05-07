@@ -40,9 +40,26 @@ export interface OrderListItem {
   trackingNumber: string | null
   flowName: string | null
   notes: string | null
-  contactId: string
+  contactId: string | null
   createdAt: string
   updatedAt: string
+  // E-commerce fields (Phase 3, optional — null untuk order WA flow lama)
+  invoiceNumber?: string | null
+  paymentProofUrl?: string | null
+  shippingCourier?: string | null
+  shippingService?: string | null
+  shippingCityName?: string | null
+  shippingProvinceName?: string | null
+  subtotalRp?: number
+  flashSaleDiscountRp?: number
+  shippingCostRp?: number
+  shippingSubsidyRp?: number
+  appliedZoneName?: string | null
+  totalRp?: number
+  uniqueCode?: number | null
+  // Pixel tracking (Phase 3 Pixel)
+  pixelLeadFiredAt?: string | null
+  pixelPurchaseFiredAt?: string | null
 }
 
 export interface OrdersCounts {
@@ -117,14 +134,55 @@ export function OrdersList({ initial, initialCounts }: Props) {
     }
   }
 
+  async function refirePixel(order: OrderListItem) {
+    if (!order.invoiceNumber) return
+    // Tentukan event yang relevan: kalau Purchase belum fired, fire Purchase.
+    // Kalau Lead juga belum (mis. order baru yg gagal sama sekali), fire Lead.
+    const eventName: 'Purchase' | 'Lead' =
+      order.paymentStatus === 'PAID' || order.paymentMethod === 'COD'
+        ? 'Purchase'
+        : order.pixelLeadFiredAt
+          ? 'Purchase'  // Lead sudah, kemungkinan user mau push Purchase manual
+          : 'Lead'
+    try {
+      const res = await fetch(`/api/orders/${order.id}/refire-pixel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventName }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error ?? 'Gagal re-fire pixel')
+        return
+      }
+      const d = json.data
+      if (d.succeeded > 0) {
+        toast.success(`${eventName} fired — ${d.succeeded} sukses`)
+      } else if (d.skipped > 0 && d.fired === 0) {
+        toast.info(`${eventName} sudah pernah fired — di-skip (dedup)`)
+      } else {
+        toast.warning(`${eventName} dicoba tapi gagal — cek logs`)
+      }
+      void refetch()
+    } catch {
+      toast.error('Terjadi kesalahan jaringan')
+    }
+  }
+
   async function quickAction(
     order: OrderListItem,
-    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered',
+    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered' | 'reject',
   ) {
     const body: Record<string, unknown> = {}
     if (action === 'mark_paid') body.paymentStatus = 'PAID'
     if (action === 'mark_shipped') body.deliveryStatus = 'SHIPPED'
     if (action === 'mark_delivered') body.deliveryStatus = 'DELIVERED'
+    if (action === 'reject') {
+      const reason = window.prompt('Alasan penolakan (opsional):') ?? ''
+      body.paymentStatus = 'CANCELLED'
+      body.deliveryStatus = 'CANCELLED'
+      if (reason.trim()) body.cancelledReason = reason.trim()
+    }
 
     const res = await fetch(`/api/orders/${order.id}`, {
       method: 'PATCH',
@@ -143,7 +201,9 @@ export function OrdersList({ initial, initialCounts }: Props) {
         ? 'Ditandai lunas'
         : action === 'mark_shipped'
           ? 'Ditandai dikirim'
-          : 'Ditandai selesai',
+          : action === 'mark_delivered'
+            ? 'Ditandai selesai'
+            : 'Order ditolak',
     )
     void refetch()
   }
@@ -247,6 +307,7 @@ export function OrdersList({ initial, initialCounts }: Props) {
               order={o}
               onOpenDetail={() => setDetailId(o.id)}
               onQuickAction={quickAction}
+              onRefirePixel={refirePixel}
             />
           ))}
         </div>
@@ -268,12 +329,17 @@ interface CardProps {
   onOpenDetail: () => void
   onQuickAction: (
     order: OrderListItem,
-    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered',
+    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered' | 'reject',
   ) => void
+  onRefirePixel: (order: OrderListItem) => void
 }
 
-function OrderCard({ order, onOpenDetail, onQuickAction }: CardProps) {
-  const isUnpaid = order.paymentStatus === 'PENDING'
+function OrderCard({ order, onOpenDetail, onQuickAction, onRefirePixel }: CardProps) {
+  const isUnpaid =
+    order.paymentStatus === 'PENDING' ||
+    order.paymentStatus === 'WAITING_CONFIRMATION'
+  const isWaitingConfirmation =
+    order.paymentStatus === 'WAITING_CONFIRMATION'
   const isPaid = order.paymentStatus === 'PAID'
   const isShipped = order.deliveryStatus === 'SHIPPED'
   const isDelivered = order.deliveryStatus === 'DELIVERED'
@@ -326,10 +392,88 @@ function OrderCard({ order, onOpenDetail, onQuickAction }: CardProps) {
           {order.items.length > 0 && (
             <p>🛒 {itemsSummary}</p>
           )}
-          {order.totalAmount !== null && (
-            <p>💰 Total: Rp {order.totalAmount.toLocaleString('id-ID')}</p>
+          {/* E-commerce breakdown — kalau ada invoiceNumber */}
+          {order.invoiceNumber ? (
+            <div className="rounded-lg bg-warm-50 px-2 py-1.5 text-xs text-warm-700 space-y-0.5">
+              <p className="font-mono text-warm-900">📄 {order.invoiceNumber}</p>
+              {(order.subtotalRp ?? 0) > 0 && (
+                <p>💰 Subtotal: Rp {(order.subtotalRp ?? 0).toLocaleString('id-ID')}</p>
+              )}
+              {(order.flashSaleDiscountRp ?? 0) > 0 && (
+                <p className="text-amber-700">⚡ Hemat Flash: -Rp {(order.flashSaleDiscountRp ?? 0).toLocaleString('id-ID')}</p>
+              )}
+              {(order.shippingCostRp ?? 0) > 0 && (
+                <p>
+                  🚚 Ongkir{' '}
+                  {order.shippingCourier && order.shippingService
+                    ? `${order.shippingCourier.toUpperCase()} ${order.shippingService}`
+                    : ''}
+                  : Rp {(order.shippingCostRp ?? 0).toLocaleString('id-ID')}
+                </p>
+              )}
+              {(order.shippingSubsidyRp ?? 0) > 0 && (
+                <p className="text-blue-700">
+                  🎁 Subsidi {order.appliedZoneName ?? ''}: -Rp {(order.shippingSubsidyRp ?? 0).toLocaleString('id-ID')}
+                </p>
+              )}
+              <p className="font-bold text-warm-900">
+                Total: Rp {((order.totalRp ?? order.totalAmount) ?? 0).toLocaleString('id-ID')}
+                {order.uniqueCode ? ` (kode +${order.uniqueCode})` : ''}
+              </p>
+            </div>
+          ) : (
+            order.totalAmount !== null && (
+              <p>💰 Total: Rp {order.totalAmount.toLocaleString('id-ID')}</p>
+            )
           )}
-          <p>💳 Bayar: {order.paymentMethod}</p>
+          <p>
+            💳 Bayar: {order.paymentMethod}
+            {order.paymentProofUrl && (
+              <a
+                href={order.paymentProofUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-2 text-primary-600 underline"
+              >
+                Lihat bukti
+              </a>
+            )}
+          </p>
+          {/* Pixel tracking status — hanya untuk e-commerce orders */}
+          {order.invoiceNumber && (
+            <div className="flex items-start justify-between gap-2 text-xs text-warm-600">
+              <span className="flex-1">
+                📊 Pixel:{' '}
+                {order.pixelPurchaseFiredAt ? (
+                  <span className="text-emerald-700">
+                    ✅ Purchase fired ·{' '}
+                    {formatRelativeTime(order.pixelPurchaseFiredAt)}
+                  </span>
+                ) : order.pixelLeadFiredAt ? (
+                  <>
+                    <span className="text-emerald-700">
+                      ✅ Lead fired ·{' '}
+                      {formatRelativeTime(order.pixelLeadFiredAt)}
+                    </span>
+                    <span className="ml-1 text-warm-500">
+                      · Purchase pending (saat tandai PAID)
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-warm-500">
+                    ⏳ Belum ada pixel fired
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => onRefirePixel(order)}
+                className="shrink-0 rounded border border-warm-300 px-1.5 py-0.5 text-[10px] text-warm-600 hover:bg-warm-100"
+              >
+                Re-fire
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs">
@@ -348,9 +492,24 @@ function OrderCard({ order, onOpenDetail, onQuickAction }: CardProps) {
             <Button
               size="sm"
               variant="outline"
+              className={
+                isWaitingConfirmation
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  : ''
+              }
               onClick={() => onQuickAction(order, 'mark_paid')}
             >
-              ✓ Tandai Lunas
+              ✓ {isWaitingConfirmation ? 'Konfirmasi Bayar' : 'Tandai Lunas'}
+            </Button>
+          )}
+          {isUnpaid && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:bg-destructive/10"
+              onClick={() => onQuickAction(order, 'reject')}
+            >
+              ✕ Tolak
             </Button>
           )}
           {isPaid && !isShipped && !isDelivered && (

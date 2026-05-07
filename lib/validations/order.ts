@@ -1,7 +1,14 @@
 // Zod schema untuk update UserOrder (dari halaman /pesanan).
 import { z } from 'zod'
 
-export const PAYMENT_STATUSES = ['PENDING', 'PAID', 'CANCELLED'] as const
+// WAITING_CONFIRMATION ditambah Phase 4 — status saat customer sudah upload
+// bukti tapi penjual belum konfirmasi.
+export const PAYMENT_STATUSES = [
+  'PENDING',
+  'WAITING_CONFIRMATION',
+  'PAID',
+  'CANCELLED',
+] as const
 export const DELIVERY_STATUSES = [
   'PENDING',
   'PROCESSING',
@@ -35,6 +42,7 @@ export const orderUpdateSchema = z.object({
   paymentProofUrl: z.string().trim().max(500).optional().nullable(),
   deliveryStatus: z.enum(DELIVERY_STATUSES).optional(),
   trackingNumber: z.string().trim().max(80).optional().nullable(),
+  cancelledReason: z.string().trim().max(500).optional().nullable(),
 })
 
 export type OrderUpdateInput = z.infer<typeof orderUpdateSchema>

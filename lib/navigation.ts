@@ -6,6 +6,7 @@
 // PRODUKTIVITAS, LAPORAN, AKUN untuk user; MANAJEMEN, AI & SOUL, ANALISIS
 // untuk admin.
 import {
+  Activity,
   BarChart3,
   BookOpen,
   Box,
@@ -14,18 +15,21 @@ import {
   Cpu,
   CreditCard,
   DollarSign,
+  FileText,
   FlaskConical,
   Globe,
   Home,
   Inbox,
   Key,
   LineChart,
+  MapPin,
   MessageCircle,
   Package,
   Receipt,
   Send,
   Settings,
   ShoppingBag,
+  ShoppingCart,
   Sliders,
   Sparkles,
   TrendingUp,
@@ -47,6 +51,9 @@ export interface NavItem {
 export interface NavGroup {
   label: string
   items: NavItem[]
+  // Group hanya tampil kalau user punya akses Order System (paket POWER).
+  // Filter dilakukan di komponen yang konsumsi (Sidebar, MobileDrawer).
+  requiresOrderSystem?: boolean
 }
 
 // ─── USER (dashboard) ─────────────────────────────────────────────────
@@ -75,6 +82,19 @@ export const USER_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Billing', href: '/billing', icon: CreditCard },
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
+    ],
+  },
+  // Order System — hanya tampil untuk user paket POWER. Filter di komponen
+  // konsumer berdasarkan flag hasOrderSystemAccess (lib/order-system-gate).
+  {
+    label: 'ORDER SYSTEM',
+    requiresOrderSystem: true,
+    items: [
+      { label: 'Produk', href: '/products', icon: ShoppingCart },
+      { label: 'Form Order', href: '/order-forms', icon: FileText },
+      { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
+      { label: 'Rekening', href: '/bank-accounts', icon: Building2 },
+      { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
     ],
   },
 ]
@@ -223,4 +243,13 @@ export function filterGroupsByRole(
       items: g.items.filter((i) => !i.roles || i.roles.includes(role)),
     }))
     .filter((g) => g.items.length > 0)
+}
+
+// Filter group berdasarkan akses Order System. Group dengan requiresOrderSystem
+// di-skip kalau hasAccess=false. Dipakai di Sidebar (desktop) + MobileDrawer.
+export function filterGroupsByOrderSystem(
+  groups: NavGroup[],
+  hasOrderSystemAccess: boolean,
+): NavGroup[] {
+  return groups.filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
 }

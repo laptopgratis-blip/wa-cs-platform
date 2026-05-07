@@ -60,6 +60,13 @@ model User {
   salesFlows        UserSalesFlow[]
   orderSessions     OrderSession[]
   orders            UserOrder[]
+  products          Product[]
+  userBankAccounts  UserBankAccount[]
+  shippingProfile   UserShippingProfile?
+  orderForms        OrderForm[]
+  shippingZones     ShippingZone[]
+  pixelIntegrations PixelIntegration[]
+  pixelEventLogs    PixelEventLog[]
 }
 
 // NextAuth models
@@ -693,6 +700,10 @@ model LpUpgradePackage {
   isPopular    Boolean  @default(false)
   isActive     Boolean  @default(true)
   sortOrder    Int      @default(0)
+  // Akses Order System (Phase 1, 2026-05-07): Form Order, Invoice Otomatis,
+  // Multi-Payment, Subsidi Ongkir, Flash Sale. Default false untuk semua paket;
+  // di-set true HANYA untuk paket POWER via seed.
+  canUseOrderSystem Boolean @default(false)
   createdAt    DateTime @default(now())
 
   payments       Payment[]
@@ -1098,7 +1109,10 @@ model OrderSession {
 model UserOrder {
   id              String   @id @default(cuid())
   userId          String
-  contactId       String
+  // Nullable per Phase 3 (2026-05-07): order dari OrderForm publik tidak
+  // selalu match contact existing (customer belum chat via WA). Untuk
+  // backward-compat, order dari WA flow tetap isi contactId.
+  contactId       String?
   // Asal flow yang generate order ini. Null kalau dibuat manual atau flow
   // di-hapus belakangan (onDelete: SetNull).
   orderSessionId  String?  @unique
@@ -1128,16 +1142,73 @@ model UserOrder {
   // Snapshot nama flow (mis. "Pengiriman COD") supaya tampil di UI tanpa join.
   flowName        String?
 
+  // ─────────────────────────────────────────
+  // E-COMMERCE FIELDS (Phase 1 Order System, 2026-05-07)
+  // Semua optional/default — order dari WA sales flow tetap pakai field di atas
+  // tanpa breaking. Order dari OrderForm public mengisi field ini.
+  // ─────────────────────────────────────────
+  orderFormId          String?
+  invoiceNumber        String?      @unique
+  customerEmail        String?
+
+  shippingProvinceId   String?
+  shippingProvinceName String?
+  shippingCityId       String?
+  shippingCityName     String?
+  shippingAddress      String?      @db.Text
+  shippingPostalCode   String?
+
+  subtotalRp           Float        @default(0)
+  flashSaleDiscountRp  Float        @default(0)
+  shippingCourier      String?
+  shippingService      String?
+  shippingCostRp       Float        @default(0)
+  shippingSubsidyRp    Float        @default(0)
+  shippingEtd          String?
+  totalRp              Float        @default(0)
+
+  appliedZoneId        String?
+  appliedZoneName      String?
+
+  bankAccountSnapshot  Json?
+  uniqueCode           Int?
+
+  paymentNote          String?      @db.Text
+  cancelledReason      String?
+
+  paidAt               DateTime?
+  shippedAt            DateTime?
+  deliveredAt          DateTime?
+  cancelledAt          DateTime?
+
+  // ─────────────────────────────────────────
+  // PIXEL TRACKING ATTRIBUTION (Phase 1 Pixel Tracking, 2026-05-07)
+  // Click IDs di-capture dari URL params di public order form, dipakai untuk
+  // server-side pixel match (Meta CAPI butuh fbc, Google butuh gclid, dll).
+  // UTM untuk attribution analytics.
+  // ─────────────────────────────────────────
+  fbclid               String?
+  gclid                String?
+  ttclid               String?
+  utmSource            String?
+  utmMedium            String?
+  utmCampaign          String?
+  // Timestamp saat pixel event sukses fire — untuk dedup & UI status.
+  pixelLeadFiredAt     DateTime?
+  pixelPurchaseFiredAt DateTime?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  contact      Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   orderSession OrderSession? @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
+  pixelEventLogs PixelEventLog[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, paymentStatus])
   @@index([userId, deliveryStatus])
+  @@index([invoiceNumber])
 }
 
 // ─────────────────────────────────────────
@@ -1191,4 +1262,266 @@ model SoulSimulationPreset {
   createdAt       DateTime @default(now())
 
   @@index([createdBy, createdAt])
+}
+
+// ─────────────────────────────────────────
+// ORDER SYSTEM (Phase 1, 2026-05-07) — fitur khusus paket POWER:
+// Form Order publik, Invoice otomatis, Multi-payment, Subsidi Ongkir,
+// Flash Sale. Akses dijaga via LpUpgradePackage.canUseOrderSystem.
+// ─────────────────────────────────────────
+
+model Product {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  description     String?  @db.Text
+  price           Float
+  weightGrams     Int      @default(500)
+  imageUrl        String?
+  // null = unlimited stock (untuk produk digital atau pre-order).
+  stock           Int?
+
+  // Flash sale — disiapkan di Phase 1, dipakai di Phase 4. Aktif kalau
+  // flashSaleActive=true DAN now di antara start/end DAN sold < quota.
+  flashSalePrice    Float?
+  flashSaleStartAt  DateTime?
+  flashSaleEndAt    DateTime?
+  flashSaleQuota    Int?
+  flashSaleSold     Int      @default(0)
+  flashSaleActive   Boolean  @default(false)
+
+  isActive        Boolean  @default(true)
+  order           Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// Multi-rekening user untuk terima transfer dari customer. Snapshot disalin
+// ke UserOrder.bankAccountSnapshot saat order dibuat supaya invoice lama tetap
+// valid walau user hapus rekening belakangan.
+model UserBankAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bankName      String   // BCA, Mandiri, BRI, BNI, Permata, dll
+  accountNumber String
+  accountName   String
+
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false)
+  order         Int      @default(0)
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId, isActive])
+}
+
+// Profil pengiriman & WA konfirmasi per user. 1:1 dengan User. Kolom origin
+// dipakai untuk hitung ongkir RajaOngkir dari kota asal user.
+model UserShippingProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // RajaOngkir city ID kota asal pengiriman. Null sampai user setup di UI.
+  originCityId       String?
+  originCityName     String?
+  originProvinceName String?
+
+  // Whitelist kurir yang ditampilkan di form order public.
+  enabledCouriers    String[] @default([])  // ['jne','sicepat','jnt','anteraja']
+  defaultWeightGrams Int      @default(500)
+
+  // WA confirmation: nomor user & template pesan untuk customer kirim bukti.
+  // Format nomor: 6281234567890 (no '+', no '0' di depan).
+  waConfirmNumber    String?
+  waConfirmTemplate  String?  @db.Text
+  waConfirmActive    Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Form order publik. User bikin form, dapat slug, share link ke customer.
+// Customer akses via /order/<slug> (no auth).
+model OrderForm {
+  id                   String   @id @default(cuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  slug                 String   @unique
+  name                 String
+  description          String?  @db.Text
+  // Subset Product.id yang ditampilkan. Kosong = tampilkan semua produk aktif user.
+  productIds           String[] @default([])
+
+  acceptCod            Boolean  @default(true)
+  acceptTransfer       Boolean  @default(true)
+  // Ongkir flat untuk COD (skip RajaOngkir). null = pakai RajaOngkir juga.
+  shippingFlatCod      Float?
+
+  showFlashSaleCounter Boolean  @default(true)
+  showShippingPromo    Boolean  @default(true)
+
+  // PixelIntegration ID yang aktif untuk form ini (Phase 1 Pixel Tracking,
+  // 2026-05-07). Multi-pixel — user bisa pakai 3 platform sekaligus per form.
+  enabledPixelIds      String[] @default([])
+
+  isActive             Boolean  @default(true)
+  views                Int      @default(0)
+  submissions          Int      @default(0)
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([slug])
+  @@index([userId])
+}
+
+// Aturan subsidi ongkir per zona. Match-nya by city ID atau province ID dari
+// RajaOngkir. Priority tinggi menang kalau ada konflik (mis. "Bandung"
+// vs "Jawa Barat" → Bandung lebih spesifik, set priority lebih tinggi).
+model ShippingZone {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name           String
+  // ALL = semua wilayah. CITY = match by cityIds. PROVINCE = match by provinceIds.
+  matchType      String   @default("CITY")
+  cityIds        String[] @default([])
+  provinceIds    String[] @default([])
+  // Snapshot nama untuk display tanpa fetch RajaOngkir lagi.
+  cityNames      String[] @default([])
+  provinceNames  String[] @default([])
+
+  // NONE = tidak ada subsidi. FLAT_AMOUNT = potong nominal tetap.
+  // PERCENT = potong % dari ongkir. FREE = gratis ongkir penuh.
+  subsidyType    String   @default("NONE")
+  subsidyValue   Float    @default(0)
+  // Syarat minimum subtotal produk supaya subsidi/free ongkir aktif.
+  minimumOrder   Float?
+
+  startsAt       DateTime?
+  endsAt         DateTime?
+
+  isActive       Boolean  @default(true)
+  priority       Int      @default(0)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// Cache hasil hit RajaOngkir 6 jam supaya hemat quota (Starter 500 hit/hari).
+// cacheKey format: "<originCityId>:<destCityId>:<weight>:<courierA,courierB>".
+model ShippingCostCache {
+  id           String   @id @default(cuid())
+  cacheKey     String   @unique
+  responseJson Json
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────
+// PIXEL TRACKING (Phase 1, 2026-05-07) — fitur khusus paket POWER:
+// Browser pixel + Server-side CAPI untuk Meta, Google Ads, TikTok.
+// Encrypt accessToken dengan AES-256-GCM (lib/crypto.ts) sebelum simpan.
+// ─────────────────────────────────────────
+
+model PixelIntegration {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // META | GOOGLE_ADS | GA4 | TIKTOK — string biasa supaya gampang nambah
+  // platform baru tanpa migrate enum.
+  platform        String
+  // Nama yg user lihat di list, mis. "Meta - Akun Cleanoz".
+  displayName     String
+
+  // Browser pixel ID — bentuk berbeda per platform:
+  //   META: 15-16 digit
+  //   GA4: G-XXXXXXXXXX
+  //   GOOGLE_ADS: AW-XXXXXXXXXX
+  //   TIKTOK: C-style ID (mis. C12ABC34DEF56)
+  pixelId         String
+
+  // Server-side (CAPI / Events API / Measurement Protocol)
+  serverSideEnabled Boolean @default(false)
+  // Encrypted dengan lib/crypto.ts (AES-256-GCM). Decrypt sebelum dipakai.
+  accessToken     String?  @db.Text
+
+  // Google Ads specific (per-conversion label)
+  conversionLabelInitiateCheckout String?
+  conversionLabelLead             String?
+  conversionLabelPurchase         String?
+
+  // Test mode — Meta test events code untuk debug tanpa pollute prod data.
+  testEventCode   String?
+  isTestMode      Boolean  @default(false)
+
+  isActive        Boolean  @default(true)
+
+  // Stats — di-update saat event sukses fire.
+  totalEvents     Int      @default(0)
+  lastEventAt     DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  eventLogs       PixelEventLog[]
+
+  @@index([userId, platform])
+  @@index([userId, isActive])
+}
+
+// Log SEMUA event yang di-fire (browser & server) untuk debug, audit, dan
+// retry. eventId dipakai untuk dedup browser+server (Meta requirement).
+model PixelEventLog {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Nullable supaya log tetap ada walau pixel di-delete (debug history).
+  pixelId         String?
+  pixel           PixelIntegration? @relation(fields: [pixelId], references: [id], onDelete: SetNull)
+
+  orderId         String?
+  order           UserOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  platform        String
+  eventName       String   // Purchase, Lead, AddPaymentInfo, ViewContent, dll
+  // Stable ID per event — browser & server kirim eventId sama supaya Meta
+  // dedup. Format: <eventName>_<orderId-or-sessionId>_<timestamp>.
+  eventId         String
+
+  // BROWSER = di-fire dari client via gtag/fbq/ttq.
+  // SERVER = di-fire dari API route via CAPI/Events API.
+  source          String
+
+  payload         Json
+
+  responseStatus  Int?
+  responseBody    String?  @db.Text
+  errorMessage    String?  @db.Text
+
+  retryCount      Int      @default(0)
+  succeeded       Boolean  @default(false)
+
+  createdAt       DateTime @default(now())
+
+  @@index([orderId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([eventId])
+  @@index([succeeded, retryCount])
 }
