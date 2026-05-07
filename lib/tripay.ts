@@ -35,7 +35,12 @@ const http = axios.create({
 export interface CreateTransactionInput {
   orderId: string // dipakai sebagai merchant_ref
   amount: number // rupiah
-  tokenAmount: number
+  tokenAmount?: number // legacy: untuk pembelian token, jadi label item
+  // Override item name di order_items — wajib kalau ini bukan pembelian token
+  // (mis. subscription LP). Kalau tidak diisi & tokenAmount ada, fallback ke
+  // "Paket Token (X token)".
+  itemName?: string
+  itemSku?: string
   customerName: string
   customerEmail: string
   // Optional: override method default. Lihat https://tripay.co.id/developer untuk daftar.
@@ -131,8 +136,11 @@ export async function createTransaction(
     customer_email: input.customerEmail,
     order_items: [
       {
-        sku: 'TOKEN-PACKAGE',
-        name: `Paket Token (${input.tokenAmount} token)`.slice(0, 100),
+        sku: input.itemSku ?? 'TOKEN-PACKAGE',
+        name: (
+          input.itemName ??
+          `Paket Token (${input.tokenAmount ?? 0} token)`
+        ).slice(0, 100),
         price: input.amount,
         quantity: 1,
       },

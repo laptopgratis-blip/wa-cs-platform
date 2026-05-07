@@ -2,11 +2,11 @@
 // Kanan: tombol notif + avatar dropdown.
 'use client'
 
-import { Bell } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 
 import { UserMenu } from '@/components/dashboard/UserMenu'
-import { Button } from '@/components/ui/button'
+import { NotificationBell } from '@/components/notification/NotificationBell'
+import { PlanBadge } from '@/components/subscription/PlanBadge'
 
 interface TopbarProps {
   name?: string | null
@@ -54,20 +54,9 @@ export function Topbar({ name, email, image }: TopbarProps) {
         </span>
       </div>
 
-      <div className="flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Notifikasi"
-          className="relative text-warm-500 hover:bg-warm-100 hover:text-warm-800"
-        >
-          <Bell className="size-4" />
-          {/* Indicator dot — placeholder untuk notif belum dibaca */}
-          <span
-            aria-hidden
-            className="absolute right-2 top-2 size-1.5 rounded-full bg-primary-500"
-          />
-        </Button>
+      <div className="flex items-center gap-2">
+        <PlanBadge />
+        <NotificationBell />
         <UserMenu name={name} email={email} image={image} />
       </div>
     </header>

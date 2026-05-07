@@ -43,6 +43,14 @@ model User {
   aiModelAccess     UserModelAccess[]
   manualPayments    ManualPayment[] @relation("UserManualPayments")
   confirmedPayments ManualPayment[] @relation("ConfirmedByUser")
+  subscriptions     Subscription[]
+  subscriptionNotifications SubscriptionNotification[]
+  approvedSubscriptionInvoices SubscriptionInvoice[] @relation("ApprovedSubscriptionInvoice")
+  // Pointer ke subscription aktif user — denormalisasi supaya middleware
+  // & UI tidak perlu join Subscription tiap request. Auto-update via
+  // service layer (activate/expire).
+  currentSubscriptionId  String?
+  currentPlanExpiresAt   DateTime?
   landingPages      LandingPage[]
   lpImages          LpImage[]
   lpQuota           UserQuota?
@@ -674,7 +682,14 @@ model LpUpgradePackage {
   tier         LpTier
   maxLp        Int
   maxStorageMB Int
+  // Harga one-time legacy. Per Mei 2026 sistem pakai subscription bulanan,
+  // tapi field ini dipertahankan untuk grandfathered user yg sudah upgrade
+  // sebelum subscription system + display di history.
   price        Int      // dalam Rupiah
+  // Harga subscription per bulan (Rupiah). Default 0 = belum disetel admin
+  // (paket ini di-skip di /pricing). Hitung total = priceMonthly × durationMonths,
+  // lalu apply diskon dari DURATION_DISCOUNTS (lihat lib/subscription-pricing.ts).
+  priceMonthly Int      @default(0)
   isPopular    Boolean  @default(false)
   isActive     Boolean  @default(true)
   sortOrder    Int      @default(0)
@@ -682,8 +697,128 @@ model LpUpgradePackage {
 
   payments       Payment[]
   manualPayments ManualPayment[]
+  subscriptions  Subscription[]
 
   @@index([isActive, sortOrder])
+}
+
+// ─────────────────────────────────────────
+// SUBSCRIPTION (Prepaid Bulanan)
+// ─────────────────────────────────────────
+
+// Subscription user ke paket LP. Prepaid model: user bayar di muka 1/3/6/12
+// bulan, dapat diskon untuk durasi panjang (lihat lib/subscription-pricing.ts).
+//
+// Status:
+//   PENDING   = invoice belum dibayar (atau belum dikonfirmasi admin)
+//   ACTIVE    = sudah dibayar, akses fitur premium aktif sampai endDate
+//   EXPIRED   = endDate lewat, user otomatis turun ke FREE (cron daily)
+//   CANCELLED = user/admin cancel; tetap aktif sampai endDate (no refund)
+//
+// `isLifetime` true untuk grandfathered user yg sudah upgrade lewat
+// LpUpgradePackage one-time SEBELUM subscription system live. endDate
+// diset ke 2099-12-31 supaya tidak pernah expire. durationMonths = 999.
+model Subscription {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lpPackageId       String
+  lpPackage         LpUpgradePackage @relation(fields: [lpPackageId], references: [id])
+
+  durationMonths    Int      // 1 | 3 | 6 | 12 | 999 (lifetime)
+  isLifetime        Boolean  @default(false)
+  startDate         DateTime
+  endDate           DateTime
+
+  // String biasa, bukan enum, supaya gampang nambah state baru tanpa migrate.
+  status            String   @default("PENDING")
+
+  priceBase         Float    @default(0) // total tanpa diskon (priceMonthly × durationMonths)
+  discountPct       Float    @default(0)
+  priceFinal        Float    @default(0) // setelah diskon, di-bulatkan ke ratusan rupiah
+
+  invoices          SubscriptionInvoice[]
+
+  cancelledAt       DateTime?
+  cancelledReason   String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([endDate, status])
+}
+
+// Invoice per pembayaran subscription. Satu Subscription bisa punya banyak
+// invoice (mis. user perpanjang → invoice baru, status ACTIVE tetap di
+// subscription induk). Status PENDING bisa transisi ke WAITING_CONFIRMATION
+// (manual transfer, sudah upload bukti) → PAID (admin approve) atau ke
+// EXPIRED (24 jam tidak dibayar).
+model SubscriptionInvoice {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  invoiceNumber   String   @unique
+  amount          Float    // Total final yg harus dibayar (untuk manual transfer
+                           // includes uniqueCode supaya gampang identify)
+  uniqueCode      Int      @default(0) // 100-999, untuk manual transfer identification
+  description     String   @db.Text
+
+  status          String   @default("PENDING")
+                           // PENDING | WAITING_CONFIRMATION | PAID | EXPIRED | CANCELLED
+  paidAt          DateTime?
+
+  paymentMethod   String   // TRIPAY | MANUAL_TRANSFER
+
+  // Tripay fields (kalau paymentMethod=TRIPAY)
+  tripayReference String?
+  tripayMerchantRef String? @unique
+  paymentUrl      String?  @db.Text
+  paymentChannel  String?  // BCA_VA, BNI_VA, QRIS, OVO, etc
+
+  // Manual transfer fields (kalau paymentMethod=MANUAL_TRANSFER)
+  manualProofUrl  String?  // /uploads/payment-proofs/<filename>
+  manualNote      String?  @db.Text
+  approvedBy      String?  // userId admin yg approve
+  approvedByUser  User?    @relation("ApprovedSubscriptionInvoice", fields: [approvedBy], references: [id])
+  approvedAt      DateTime?
+
+  expiresAt       DateTime // 24 jam dari create
+  createdAt       DateTime @default(now())
+
+  @@index([invoiceNumber])
+  @@index([status, expiresAt])
+  @@index([subscriptionId, status])
+}
+
+// In-app + WA notification log. type: PAYMENT_SUCCESS, PAYMENT_FAILED,
+// EXPIRING_7D, EXPIRING_3D, EXPIRING_1D, EXPIRED. channel: IN_APP, WA, EMAIL.
+//
+// Cron reminder cek existing record per (userId, subscriptionId, type) untuk
+// idempotency — tidak dobel kirim notifikasi sama.
+model SubscriptionNotification {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId  String?
+
+  type            String
+  channel         String   @default("IN_APP")
+
+  title           String
+  message         String   @db.Text
+  // Optional URL yg dituju saat user klik notifikasi.
+  link            String?
+
+  sentAt          DateTime?
+  readAt          DateTime?
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, subscriptionId, type])
 }
 
 // ─────────────────────────────────────────
