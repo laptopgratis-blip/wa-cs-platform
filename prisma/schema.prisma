@@ -593,6 +593,7 @@ model LandingPage {
 
   user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   images LpImage[]
+  visits LpVisit[]
 
   @@index([userId, isPublished])
 }
@@ -623,9 +624,39 @@ model UserQuota {
   maxLp         Int     @default(1)
   maxStorageMB  Int     @default(5)
   storageUsedMB Float   @default(0)
+  // Per-image limit (MB) — beda dgn maxStorageMB (total). Free user dibatasi
+  // upload kecil supaya gambar gigantes tidak makan storage cepat.
+  maxImageSizeMB Int    @default(1)
+  // Visitor cap bulanan untuk LP user ini. Free user dibatasi 1k/bln supaya
+  // bandwidth tidak boncos kalau ada LP yg viral.
+  maxVisitorMonth Int   @default(1000)
+  // Apakah user boleh pakai AI generate. Free user OFF — harus upgrade.
+  // Selain itu ada token threshold check di /api/lp/generate.
+  canAiGenerate Boolean @default(false)
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Tracking pengunjung public LP. Dipakai untuk:
+// 1. Throttle per-IP (10 visit/menit/IP/LP) — cegah scrape/DoS
+// 2. Cap bulanan per plan user (UserQuota.maxVisitorMonth)
+// 3. Analytics owner LP
+//
+// IP di-hash dgn SHA256 + IP_SALT (bukan plaintext) untuk privacy + GDPR.
+// Auto-cleanup >90 hari via cron /api/cron/cleanup-lp.
+model LpVisit {
+  id            String      @id @default(cuid())
+  landingPageId String
+  ipHash        String
+  userAgent     String?     @db.Text
+  referer       String?     @db.Text
+  createdAt     DateTime    @default(now())
+
+  landingPage   LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@index([landingPageId, createdAt])
+  @@index([ipHash, landingPageId, createdAt])
 }
 
 // ─────────────────────────────────────────

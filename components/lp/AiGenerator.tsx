@@ -5,11 +5,28 @@
 // langsung mengganti htmlContent di editor.
 //
 // Collapsible — default collapsed setelah generate sukses (kasih ruang ke editor).
-import { ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Gem,
+  Loader2,
+  PenLine,
+  Sparkles,
+} from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -27,6 +44,29 @@ import {
   type LpStyle,
 } from '@/lib/validations/lp-generate'
 
+// Template prompt yg di-copy saat user free dialihkan ke alur manual.
+// User tinggal isi placeholder, paste ke ChatGPT/Claude.ai gratis, lalu paste
+// HTML hasil ke editor Hulao.
+const MANUAL_PROMPT_TEMPLATE = `Buat HTML landing page lengkap untuk bisnis saya:
+
+Nama Bisnis: [tulis nama]
+Produk/Jasa: [deskripsi]
+Target Customer: [siapa]
+Tone: [profesional/santai/sales-y]
+Warna Brand: [warna utama]
+Call to Action: [tombol utama]
+Nomor WhatsApp: [nomor]
+
+Buat HTML lengkap dengan:
+- Inline CSS (tidak pakai file terpisah)
+- Mobile responsive
+- Hero section dengan headline kuat
+- Features/Benefits, Testimonials, FAQ section
+- Footer dengan kontak
+- Tombol WhatsApp click-to-chat
+
+Berikan hanya kode HTML lengkap dalam satu file, tanpa penjelasan tambahan.`
+
 interface Props {
   lpId: string
   // Hasil HTML masuk ke HTML editor di shell.
@@ -34,6 +74,7 @@ interface Props {
 }
 
 export function AiGenerator({ lpId, onGenerated }: Props) {
+  const router = useRouter()
   const [open, setOpen] = useState(true)
   const [description, setDescription] = useState('')
   const [imageUrls, setImageUrls] = useState('')
@@ -46,6 +87,26 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
     inputTokens: number
     outputTokens: number
   } | null>(null)
+  // Modal "Saldo tidak cukup" — muncul saat backend return 402 INSUFFICIENT_TOKEN.
+  // Tidak block fitur lain; user tinggal pilih top-up, copy prompt manual,
+  // atau lanjut tanpa AI.
+  const [insufficientInfo, setInsufficientInfo] = useState<{
+    message: string
+    minRequired: number
+    currentBalance: number
+  } | null>(null)
+
+  async function copyPromptTemplate() {
+    try {
+      await navigator.clipboard.writeText(MANUAL_PROMPT_TEMPLATE)
+      toast.success(
+        'Prompt sudah di-copy! Paste di ChatGPT atau Claude.ai untuk generate HTML, lalu paste hasilnya di editor di bawah.',
+      )
+      setInsufficientInfo(null)
+    } catch {
+      toast.error('Browser tidak izinkan akses clipboard. Copy manual dari halaman ini.')
+    }
+  }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault()
@@ -71,7 +132,25 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
           aiUsage: { inputTokens: number; outputTokens: number }
         }
         error?: string
+        message?: string
+        minRequired?: number
+        currentBalance?: number
       }
+
+      // Backend signal saldo tidak cukup — tampilkan modal opsi alternatif.
+      if (
+        res.status === 402 &&
+        json.error === 'INSUFFICIENT_TOKEN' &&
+        typeof json.minRequired === 'number'
+      ) {
+        setInsufficientInfo({
+          message: json.message ?? 'Saldo token tidak cukup untuk AI generate.',
+          minRequired: json.minRequired,
+          currentBalance: json.currentBalance ?? 0,
+        })
+        return
+      }
+
       if (!res.ok || !json.success || !json.data) {
         toast.error(json.error || 'Gagal generate')
         return
@@ -256,6 +335,68 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
           )}
         </form>
       )}
+
+      <Dialog
+        open={Boolean(insufficientInfo)}
+        onOpenChange={(o) => !o && setInsufficientInfo(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="size-5 text-primary-500" />
+              Saldo Token Tidak Cukup
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <span className="block">
+                AI Generate butuh saldo token aktif minimal{' '}
+                <strong>
+                  {insufficientInfo?.minRequired.toLocaleString('id-ID')}
+                </strong>{' '}
+                token. Saldomu sekarang:{' '}
+                <strong>
+                  {insufficientInfo?.currentBalance.toLocaleString('id-ID')}
+                </strong>
+                .
+              </span>
+              <span className="block">
+                Kamu masih bisa buat LP keren tanpa AI dari Hulao — pakai cara ini:
+              </span>
+              <ol className="ml-5 list-decimal space-y-1 text-sm">
+                <li>Klik <strong>Copy Prompt Template</strong> di bawah</li>
+                <li>Paste di ChatGPT atau Claude.ai (gratis)</li>
+                <li>Copy HTML hasilnya</li>
+                <li>Paste di editor Hulao bagian bawah, preview & publish</li>
+              </ol>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button
+              variant="default"
+              className="w-full justify-start"
+              onClick={copyPromptTemplate}
+            >
+              <Copy className="mr-2 size-4" />
+              Copy Prompt Template
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => router.push('/billing')}
+            >
+              <Gem className="mr-2 size-4" />
+              Top Up Token
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => setInsufficientInfo(null)}
+            >
+              <PenLine className="mr-2 size-4" />
+              Lanjut Tanpa AI (Edit HTML Manual)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

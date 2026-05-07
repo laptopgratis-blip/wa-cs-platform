@@ -5,10 +5,43 @@
 // lengkap <!DOCTYPE html>... — kalau di-render via dangerouslySetInnerHTML
 // dalam page.tsx, hasilnya nested <html> yang invalid).
 //
+// Per LP optimization (2026-05-07):
+// - Track visitor di tabel LpVisit (IP di-hash, bukan plaintext) untuk
+//   analytics + throttling.
+// - Throttle 10 visit/menit per IP/LP — cegah scraping/DoS basic.
+// - Cap bulanan per plan owner (UserQuota.maxVisitorMonth) — kalau lewat,
+//   render halaman placeholder "tidak tersedia". Tujuan: hemat bandwidth
+//   VPS untuk LP user free yg viral.
+//
 // Tidak ada auth check — middleware juga tidak include /p/* di matcher.
+import crypto from 'node:crypto'
+
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+
+// Hash IP supaya tidak simpan plaintext (privacy + GDPR). Salt dari env supaya
+// hash tidak bisa di-rainbow-table-kan kalau DB bocor.
+function hashIp(ip: string): string {
+  const salt = process.env.IP_SALT ?? 'hulao-default-ip-salt-rotate-me'
+  return crypto.createHash('sha256').update(`${ip}|${salt}`).digest('hex')
+}
+
+// Ambil IP klien — Traefik forward via x-forwarded-for. Fallback ke unknown
+// kalau header hilang (mis. test lokal). Throttle berbasis hash, jadi dua IP
+// "unknown" akan di-counted bersama — tidak ideal tapi aman (lebih ketat).
+function clientIpFrom(headers: Headers): string {
+  const fwd = headers.get('x-forwarded-for')
+  if (fwd) {
+    const first = fwd.split(',')[0]?.trim()
+    if (first) return first
+  }
+  return headers.get('x-real-ip') ?? 'unknown'
+}
+
+const THROTTLE_PER_MIN = 10
+const QUOTA_EXCEEDED_HTML = `<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Halaman Sementara Tidak Tersedia</title><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#1f1f1f;background:#fafafa;padding:24px}main{max-width:480px;text-align:center}h1{font-size:1.75rem;margin:0 0 12px;color:#ea580c}p{color:#555;line-height:1.6}small{display:block;margin-top:32px;color:#999;font-size:11px}</style></head><body><main><h1>🔒 Halaman Sementara Tidak Tersedia</h1><p>Pemilik halaman ini telah mencapai batas pengunjung untuk bulan ini.</p><p>Silakan coba kembali bulan depan, atau hubungi pemilik langsung.</p><small>Powered by Hulao</small></main></body></html>`
 
 interface Params {
   params: Promise<{ slug: string }>
@@ -89,7 +122,7 @@ ${content}
 </html>`
 }
 
-export async function GET(_req: Request, { params }: Params) {
+export async function GET(req: Request, { params }: Params) {
   const { slug } = await params
 
   const lp = await prisma.landingPage.findUnique({
@@ -101,6 +134,12 @@ export async function GET(_req: Request, { params }: Params) {
       metaTitle: true,
       metaDesc: true,
       isPublished: true,
+      // userId + plan-derived maxVisitorMonth untuk cek cap bulanan.
+      user: {
+        select: {
+          lpQuota: { select: { maxVisitorMonth: true } },
+        },
+      },
     },
   })
 
@@ -113,8 +152,61 @@ export async function GET(_req: Request, { params }: Params) {
     )
   }
 
-  // Fire-and-forget viewCount increment — JANGAN await supaya tidak slow render.
-  // Error di-swallow karena view count bukan critical path.
+  // ── Visitor tracking + throttle ─────────────────────────────────────────
+  const ipHash = hashIp(clientIpFrom(req.headers))
+  const oneMinuteAgo = new Date(Date.now() - 60_000)
+
+  // Per-IP throttle: maksimum 10 visit/menit untuk LP yg sama. Counter pakai
+  // tabel LpVisit yg juga jadi log analytics — tidak butuh redis terpisah.
+  const recentFromIp = await prisma.lpVisit.count({
+    where: {
+      landingPageId: lp.id,
+      ipHash,
+      createdAt: { gte: oneMinuteAgo },
+    },
+  })
+  if (recentFromIp >= THROTTLE_PER_MIN) {
+    return new NextResponse('Too many requests', {
+      status: 429,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Retry-After': '60',
+      },
+    })
+  }
+
+  // Cap bulanan per-LP berdasar plan owner. Kalau quota habis, render placeholder
+  // 503 "tidak tersedia" — search engine masih bisa crawl tapi user value 0.
+  const startOfMonth = new Date()
+  startOfMonth.setDate(1)
+  startOfMonth.setHours(0, 0, 0, 0)
+  const monthlyCount = await prisma.lpVisit.count({
+    where: { landingPageId: lp.id, createdAt: { gte: startOfMonth } },
+  })
+  const cap = lp.user.lpQuota?.maxVisitorMonth ?? 1000
+  if (monthlyCount >= cap) {
+    return new NextResponse(QUOTA_EXCEEDED_HTML, {
+      status: 503,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=3600',
+        'X-Robots-Tag': 'noindex',
+      },
+    })
+  }
+
+  // Fire-and-forget visitor record + viewCount — JANGAN await supaya tidak slow
+  // render. Error di-swallow karena observability bukan critical path.
+  prisma.lpVisit
+    .create({
+      data: {
+        landingPageId: lp.id,
+        ipHash,
+        userAgent: req.headers.get('user-agent')?.slice(0, 500) ?? null,
+        referer: req.headers.get('referer')?.slice(0, 500) ?? null,
+      },
+    })
+    .catch((err) => console.error('[/p/:slug] gagal save LpVisit:', err))
   prisma.landingPage
     .update({
       where: { id: lp.id },

@@ -1,6 +1,7 @@
 // Admin dashboard — stats agregat platform.
 import { Activity, CreditCard, MessageCircle, Users } from 'lucide-react'
 
+import { ServerStatusCard } from '@/components/admin/ServerStatusCard'
 import { SoulTokenBudget } from '@/components/admin/SoulTokenBudget'
 import {
   Card,
@@ -96,6 +97,10 @@ export default async function AdminDashboardPage() {
 
       <div className="mt-6">
         <SoulTokenBudget />
+      </div>
+
+      <div className="mt-6">
+        <ServerStatusCard />
       </div>
 
       <Card className="mt-6">

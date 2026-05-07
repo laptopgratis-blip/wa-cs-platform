@@ -18,6 +18,11 @@ import {
 
 // Fixed cost per generation. User spec: "Potong 10 token dari balance".
 const TOKENS_PER_GENERATION = 10
+// Threshold minimal saldo token aktif untuk boleh akses AI generate.
+// User free dengan saldo di bawah ini di-block — diarahkan ke alur manual
+// (copy prompt template ke ChatGPT/Claude.ai gratis lalu paste). Tujuan:
+// hemat biaya AI provider untuk user yg tidak generate revenue.
+const MIN_BALANCE_FOR_AI = 1000
 
 // Max output tokens — HTML landing page bisa panjang. Streaming aman sampai
 // 64K (cap Haiku 4.5).
@@ -103,16 +108,27 @@ export async function POST(req: Request) {
     if (!lp) return jsonError('Landing page tidak ditemukan', 404)
     if (lp.userId !== session.user.id) return jsonError('Forbidden', 403)
 
-    // 2. Cek saldo token >= 10 (cek dulu sebelum panggil Claude — jangan
-    //    sampai panggil AI lalu user gak bisa bayar)
+    // 2. Cek saldo token. Dua threshold:
+    //    - MIN_BALANCE_FOR_AI (1000): minimum untuk akses fitur AI generate.
+    //      Kalau di bawah ini, user diarahkan ke alur manual (copy prompt
+    //      template). Hemat biaya AI provider untuk user free yg low LTV.
+    //    - TOKENS_PER_GENERATION (10): biaya per panggilan; di-charge setelah
+    //      AI sukses respond.
     const balance = await prisma.tokenBalance.findUnique({
       where: { userId: session.user.id },
       select: { balance: true },
     })
-    if (!balance || balance.balance < TOKENS_PER_GENERATION) {
-      return jsonError(
-        `Saldo token tidak cukup. Butuh minimal ${TOKENS_PER_GENERATION} token, saldo kamu ${balance?.balance ?? 0}.`,
-        402,
+    const currentBalance = balance?.balance ?? 0
+    if (currentBalance < MIN_BALANCE_FOR_AI) {
+      return Response.json(
+        {
+          success: false,
+          error: 'INSUFFICIENT_TOKEN',
+          message: `AI Generate butuh saldo token aktif minimal ${MIN_BALANCE_FOR_AI.toLocaleString('id-ID')} token. Saldo kamu sekarang: ${currentBalance.toLocaleString('id-ID')}. Top up atau pakai cara manual (copy prompt template).`,
+          minRequired: MIN_BALANCE_FOR_AI,
+          currentBalance,
+        },
+        { status: 402 },
       )
     }
 

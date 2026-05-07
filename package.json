@@ -38,6 +38,7 @@
     "react-hook-form": "^7.74.0",
     "recharts": "^3.8.1",
     "shadcn": "^4.6.0",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "sonner": "^2.0.7",
@@ -52,6 +53,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "node-addon-api": "^8.7.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"

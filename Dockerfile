@@ -1,15 +1,21 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build untuk Next.js — standalone output.
-# Image final ~120-180 MB (vs 800+ MB kalau full node_modules dibawa).
+# Pakai node:20-bookworm-slim (Debian glibc) bukan Alpine karena sharp punya
+# prebuilt binary untuk glibc — Alpine perlu compile dari source dgn node-gyp,
+# python, vips-dev (~5+ menit build).
+# Image final ~150-200 MB.
 
 # ─────────────────────────────────────────
 # Stage 1 — deps
 # ─────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:20-bookworm-slim AS deps
 WORKDIR /app
 
-# libc6-compat dibutuhkan untuk beberapa native module (mis. sharp, prisma).
-RUN apk add --no-cache libc6-compat openssl
+# OpenSSL untuk Prisma engine. Tidak perlu install vips-dev — sharp pakai
+# prebuilt binary yg sudah include libvips.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
 # Install dependency dulu (layer ini cache di sebagian besar build).
 COPY package.json package-lock.json ./
@@ -19,7 +25,7 @@ RUN npm ci
 # ─────────────────────────────────────────
 # Stage 2 — builder
 # ─────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 # Copy dep + source code lengkap untuk build.
@@ -40,7 +46,7 @@ RUN npm run build
 # ─────────────────────────────────────────
 # Stage 3 — runner (image final)
 # ─────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -48,9 +54,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Non-root user — best practice security.
-RUN apk add --no-cache openssl && addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 nextjs
+# OpenSSL untuk Prisma. Bookworm-slim sudah include libvips runtime via
+# sharp prebuilt — tidak perlu install terpisah.
+RUN apt-get update -qq && apt-get install -y --no-install-recommends \
+    openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 1001 nodejs \
+ && useradd --system --uid 1001 --gid nodejs nextjs
 
 # Standalone output sudah include node_modules minimal yang ditrace.
 # Lihat https://nextjs.org/docs/app/api-reference/next-config-js/output
