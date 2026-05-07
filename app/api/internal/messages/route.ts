@@ -13,10 +13,14 @@ const bodySchema = z.object({
   phoneNumber: z.string().min(1), // nomor lawan bicara (tanpa @s.whatsapp.net)
   pushName: z.string().nullish(),
   content: z.string().min(1),
-  role: z.enum(['USER', 'AI', 'HUMAN']),
+  role: z.enum(['USER', 'AI', 'HUMAN', 'AGENT']),
   tokensUsed: z.number().int().nonnegative().optional(),
   // Kalau true: setelah simpan, ambil 10 pesan terakhir untuk konteks AI.
   withHistory: z.boolean().optional(),
+  // Asal pesan AGENT/AI — null/absent untuk pesan customer.
+  source: z.enum(['WA_DIRECT', 'WEB_DASHBOARD', 'AI']).optional(),
+  // ID pesan dari Baileys (msg.key.id) — untuk dedup outgoing message.
+  externalMsgId: z.string().nullish(),
   // Profitability tracking — di-set untuk pesan AI. Optional (legacy /
   // pesan customer biarkan null di DB).
   apiInputTokens: z.number().int().nonnegative().optional(),
@@ -109,6 +113,8 @@ export async function POST(req: Request) {
         tokensCharged: body.tokensCharged ?? null,
         revenueRp: body.revenueRp ?? null,
         profitRp: body.profitRp ?? null,
+        source: body.source ?? null,
+        externalMsgId: body.externalMsgId ?? null,
       },
     })
 

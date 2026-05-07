@@ -57,7 +57,7 @@ export async function GET(req: Request) {
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { content: true, role: true, createdAt: true },
+          select: { content: true, role: true, source: true, createdAt: true },
         },
       },
     })
@@ -77,6 +77,7 @@ export async function GET(req: Request) {
         ? {
             content: c.messages[0].content,
             role: c.messages[0].role,
+            source: c.messages[0].source,
             createdAt: c.messages[0].createdAt.toISOString(),
           }
         : null,

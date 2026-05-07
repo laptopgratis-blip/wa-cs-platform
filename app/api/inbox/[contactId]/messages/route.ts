@@ -47,6 +47,7 @@ export async function GET(_req: Request, { params }: Params) {
         content: true,
         role: true,
         status: true,
+        source: true,
         createdAt: true,
         // Field cost di-include hanya untuk admin (data sensitif).
         ...(isAdmin
@@ -74,6 +75,7 @@ export async function GET(_req: Request, { params }: Params) {
         content: m.content,
         role: m.role,
         status: m.status,
+        source: m.source,
         createdAt: m.createdAt.toISOString(),
         ...(isAdmin
           ? {

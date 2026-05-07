@@ -58,6 +58,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
+# Script-script one-off (mis. migration data). Standalone trace tidak include
+# scripts/ karena bukan bagian dari app code, jadi copy manual.
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+
 # Sediakan folder uploads (akan di-mount sebagai volume oleh docker compose).
 RUN mkdir -p /app/public/uploads/proofs /app/public/uploads/lp-images \
  && chown -R nextjs:nodejs /app/public/uploads

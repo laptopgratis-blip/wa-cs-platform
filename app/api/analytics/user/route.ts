@@ -13,7 +13,7 @@ const DAYS = 30
 
 interface DailyMessageRow {
   day: Date
-  role: 'USER' | 'AI' | 'HUMAN'
+  role: 'USER' | 'AI' | 'HUMAN' | 'AGENT'
   count: bigint
 }
 
@@ -144,14 +144,30 @@ export async function GET() {
     // Build 30-day series — fill gap kalau tidak ada pesan di tanggal tertentu.
     const dailyMap = new Map<
       string,
-      { dateISO: string; label: string; USER: number; AI: number; HUMAN: number; tokens: number }
+      {
+        dateISO: string
+        label: string
+        USER: number
+        AI: number
+        HUMAN: number
+        AGENT: number
+        tokens: number
+      }
     >()
     for (let i = 0; i < DAYS; i++) {
       const d = new Date(since)
       d.setDate(d.getDate() + i)
       const iso = d.toISOString().slice(0, 10)
       const label = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
-      dailyMap.set(iso, { dateISO: iso, label, USER: 0, AI: 0, HUMAN: 0, tokens: 0 })
+      dailyMap.set(iso, {
+        dateISO: iso,
+        label,
+        USER: 0,
+        AI: 0,
+        HUMAN: 0,
+        AGENT: 0,
+        tokens: 0,
+      })
     }
     for (const row of dailyMessages) {
       const iso = new Date(row.day).toISOString().slice(0, 10)

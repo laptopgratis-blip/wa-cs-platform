@@ -37,7 +37,9 @@ export async function POST(req: Request, { params }: Params) {
     })
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)
 
-    // 1. Kirim ke wa-service.
+    // 1. Kirim ke wa-service. Response berisi messageId (Baileys key.id) yang
+    // kita simpan sebagai externalMsgId — dipakai dedup saat event upsert
+    // fromMe untuk pesan yang sama masuk lagi.
     const send = await waService.sendMessage(
       contact.waSessionId,
       contact.phoneNumber,
@@ -47,14 +49,16 @@ export async function POST(req: Request, { params }: Params) {
       return jsonError(send.error || 'Gagal kirim ke WhatsApp', 502)
     }
 
-    // 2. Simpan ke DB.
+    // 2. Simpan ke DB sebagai AGENT/WEB_DASHBOARD.
     const message = await prisma.message.create({
       data: {
         contactId: contact.id,
         waSessionId: contact.waSessionId,
         content: parsed.data.content,
-        role: 'HUMAN',
+        role: 'AGENT',
         status: 'SENT',
+        source: 'WEB_DASHBOARD',
+        externalMsgId: send.data?.messageId ?? null,
       },
       select: {
         id: true,

@@ -51,7 +51,7 @@ interface OrderDetail {
   messages: Array<{
     id: string
     content: string
-    role: 'USER' | 'AI' | 'HUMAN'
+    role: 'USER' | 'AI' | 'HUMAN' | 'AGENT'
     createdAt: string
   }>
 }

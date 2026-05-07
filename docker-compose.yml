@@ -5,6 +5,30 @@
 #   - DNS hulao.id + www.hulao.id sudah point ke IP VPS (76.13.192.225)
 
 services:
+  postgres:
+    # Postgres self-hosted — match major version dengan Supabase (17.x) supaya
+    # SQL dump kompatibel dua arah. Alpine = image kecil & cepat.
+    image: postgres:17-alpine
+    container_name: hulao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hulao
+      POSTGRES_DB: hulao
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - hulao-postgres-data:/var/lib/postgresql/data
+    secrets:
+      - postgres_password
+    networks:
+      # Hanya internal — JANGAN expose port 5432 ke host/public.
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hulao -d hulao"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
   nextjs:
     build:
       context: .
@@ -26,7 +50,10 @@ services:
       - traefik-public
       - internal
     depends_on:
-      - wa-service
+      postgres:
+        condition: service_healthy
+      wa-service:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       # Router HTTPS untuk hulao.id + www
@@ -34,7 +61,7 @@ services:
       - "traefik.http.routers.hulao.entrypoints=websecure"
       - "traefik.http.routers.hulao.tls=true"
       - "traefik.http.routers.hulao.tls.certresolver=letsencrypt"
-      - "traefik.http.services.hulao.loadbalancer.server.url=http://172.16.3.2:3000"
+      - "traefik.http.services.hulao.loadbalancer.server.url=http://127.0.0.1:3000"
       # Redirect www → apex (preferensi SEO).
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.regex=^https://www\\.hulao\\.id/(.*)"
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.replacement=https://hulao.id/$$1"
@@ -54,6 +81,9 @@ services:
     volumes:
       # Persist Baileys credentials — kalau hilang user harus scan QR ulang.
       - ./wa-service/sessions:/app/sessions
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - internal
     labels:
@@ -62,7 +92,7 @@ services:
       - "traefik.http.routers.wa-socket.entrypoints=websecure"
       - "traefik.http.routers.wa-socket.tls=true"
       - "traefik.http.routers.wa-socket.tls.certresolver=letsencrypt"
-      - "traefik.http.services.wa-socket.loadbalancer.server.url=http://172.16.4.2:3001"
+      - "traefik.http.services.wa-socket.loadbalancer.server.url=http://127.0.0.1:3001"
       - "traefik.docker.network=traefik-public"
 
   uploads-server:
@@ -75,10 +105,19 @@ services:
       - internal
     restart: unless-stopped
 
+volumes:
+  # Data Postgres — managed volume supaya permission-nya benar (postgres user
+  # dalam container = uid 70 di alpine image).
+  hulao-postgres-data:
+
+secrets:
+  # Password Postgres dibaca dari file supaya tidak terlihat di `docker inspect`
+  # atau crash log. File-nya 0600 di host, hanya dibaca compose.
+  postgres_password:
+    file: ./secrets/postgres_password
+
 networks:
   traefik-public:
     external: true
   internal:
     driver: bridge
-
-

@@ -21,6 +21,7 @@ import type { Server as IOServer } from 'socket.io'
 
 import { generateReply, type AiUsage } from './ai-handler.js'
 import { internalApi, type InternalSoulConfig } from './internal-api.js'
+import { resolvePhoneNumber } from './lib/jid-resolver.js'
 import { tokenChecker } from './token-checker.js'
 
 // Hitung field cost untuk pesan AI dari usage provider + harga model +
@@ -73,6 +74,10 @@ interface SessionEntry {
   // Set kontak yang sedang diproses AI (kunci: phoneNumber). Hindari double-reply
   // kalau customer kirim banyak pesan beruntun.
   inFlight: Set<string>
+  // ID pesan outgoing yang baru-baru ini kita kirim sendiri (msg.key.id). Dipakai
+  // untuk dedup event messages.upsert fromMe — cegah race antara save ke DB di
+  // Next.js dan event echo dari Baileys. Entry di-evict setelah 60 detik.
+  recentlySentIds: Set<string>
 }
 
 export class WaManager {
@@ -111,6 +116,13 @@ export class WaManager {
     return this.sessions.get(sessionId)?.state ?? null
   }
 
+  // Akses socket Baileys (read-only) untuk operasi yang butuh signalRepository,
+  // mis. LID resolution di endpoint /lid/resolve. Return null kalau session
+  // belum di-restore atau socket-nya putus.
+  getSocket(sessionId: string): WASocket | null {
+    return this.sessions.get(sessionId)?.socket ?? null
+  }
+
   // Mulai (atau lanjutkan) satu sesi. Idempoten — kalau sudah jalan, return state saat ini.
   async connect(sessionId: string): Promise<SessionState> {
     const existing = this.sessions.get(sessionId)
@@ -133,6 +145,7 @@ export class WaManager {
       socket: null,
       intentionallyClosed: false,
       inFlight: new Set<string>(),
+      recentlySentIds: new Set<string>(),
     }
     entry.intentionallyClosed = false
     this.updateState(entry, { status: 'CONNECTING' })
@@ -330,11 +343,15 @@ export class WaManager {
 
   // Kirim pesan teks ke nomor tertentu lewat session ini. Dipakai oleh
   // CS untuk reply manual via /api/inbox/[contactId]/send.
+  //
+  // Return messageId (Baileys msg.key.id) supaya caller bisa simpan ke DB
+  // sebagai externalMsgId. Itu memungkinkan dedup saat event messages.upsert
+  // fromMe masuk untuk pesan ini.
   async sendText(
     sessionId: string,
     phoneNumber: string,
     text: string,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
     const entry = this.sessions.get(sessionId)
     if (!entry || !entry.socket) {
       return { ok: false, error: 'session tidak aktif' }
@@ -349,12 +366,22 @@ export class WaManager {
       ? phoneNumber
       : `${phoneNumber}@s.whatsapp.net`
     try {
-      await entry.socket.sendMessage(jid, { text })
-      return { ok: true }
+      const result = await entry.socket.sendMessage(jid, { text })
+      const messageId = result?.key?.id ?? undefined
+      if (messageId) this.markSent(entry, messageId)
+      return { ok: true, messageId }
     } catch (err) {
       console.error(`[wa-manager:${sessionId}] sendText gagal:`, err)
       return { ok: false, error: (err as Error).message }
     }
+  }
+
+  // Tandai messageId sebagai pesan outgoing yang sudah kita kirim — supaya
+  // event messages.upsert fromMe untuk ID ini di-skip (cegah duplikat /
+  // misclassification sebagai WA_DIRECT). Auto-evict 60 detik kemudian.
+  private markSent(entry: SessionEntry, messageId: string): void {
+    entry.recentlySentIds.add(messageId)
+    setTimeout(() => entry.recentlySentIds.delete(messageId), 60_000).unref()
   }
 
   // Tutup koneksi sosket. Kalau wipe=true → hapus credentials juga (logout permanen).
@@ -395,20 +422,68 @@ export class WaManager {
     entry: SessionEntry,
     msg: WAMessage,
   ): Promise<void> {
-    // Filter: hanya pesan dari customer (bukan kita), bukan group, bukan status,
-    // dan punya konten teks. Skip pesan protokol (delete, edit, dst.).
+    // Filter umum: bukan group, bukan status, punya konten teks, bukan
+    // pesan protokol. Berlaku untuk pesan customer maupun fromMe.
     if (!msg.message) return
-    if (msg.key.fromMe) return
+    if (msg.message.protocolMessage || msg.message.reactionMessage) return
     const remoteJid = msg.key.remoteJid
     if (!remoteJid) return
     if (remoteJid === 'status@broadcast') return
     if (remoteJid.endsWith('@g.us')) return // skip grup untuk MVP
-    if (msg.message.protocolMessage || msg.message.reactionMessage) return
 
     const content = extractText(msg)
     if (!content) return // bukan pesan teks (media/sticker/dll.)
 
-    const phoneNumber = remoteJid.includes("@lid") ? remoteJid : remoteJid.split("@")[0] ?? remoteJid
+    const sessionId = entry.state.sessionId
+    // Resolve LID → PN. Helper sudah handle cache + fallback ke LID kalau
+    // mapping belum ada.
+    const phoneNumber = await resolvePhoneNumber(entry.socket, remoteJid)
+    const externalMsgId = msg.key.id ?? null
+
+    // ── Branch fromMe: pesan dari device/akun ini sendiri ──
+    // Ini terjadi saat: (a) kita kirim via API web, (b) AI/flow kirim balasan,
+    // (c) CS balas langsung dari WA HP. Hanya kasus (c) yang harus disimpan
+    // sebagai pesan AGENT — sisanya sudah disimpan oleh code yang memicu kirim.
+    if (msg.key.fromMe) {
+      // Skip echo untuk pesan yang baru saja kita kirim sendiri (mempercepat
+      // path tanpa hit DB) — handled by recentlySentIds + check-exists.
+      if (externalMsgId && entry.recentlySentIds.has(externalMsgId)) return
+
+      if (externalMsgId) {
+        const existsRes = await internalApi.checkMessageExists({
+          externalMsgId,
+          sessionId,
+        })
+        if (existsRes.success && existsRes.data?.exists) return
+      }
+
+      // Pesan dari device sendiri yang BELUM tercatat. Cek apakah kontak
+      // sedang ditakeover CS — kalau iya, ini balasan CS via WA HP.
+      const statusRes = await internalApi.getContactStatus({
+        sessionId,
+        phoneNumber,
+      })
+      if (!statusRes.success || !statusRes.data) return
+      if (!statusRes.data.aiPaused) return
+
+      await internalApi
+        .saveMessage({
+          sessionId,
+          phoneNumber,
+          pushName: msg.pushName ?? null,
+          content,
+          role: 'AGENT',
+          source: 'WA_DIRECT',
+          externalMsgId,
+          withHistory: false,
+        })
+        .catch((err) =>
+          console.error(`[wa-manager:${sessionId}] save WA_DIRECT msg:`, err),
+        )
+      return
+    }
+
+    // ── Branch !fromMe: pesan dari customer ──
     const inFlightKey = phoneNumber
     if (entry.inFlight.has(inFlightKey)) {
       // Pesan beruntun dari kontak yang sama — biarkan flow yang sedang
@@ -417,7 +492,6 @@ export class WaManager {
     }
     entry.inFlight.add(inFlightKey)
 
-    const sessionId = entry.state.sessionId
     try {
       // 1. Simpan pesan customer + minta history.
       const saved = await internalApi.saveMessage({
@@ -449,8 +523,13 @@ export class WaManager {
       })
       if (flow.success && flow.data?.handled && flow.data.reply) {
         // Kirim balasan flow ke customer.
+        let flowMsgId: string | null = null
         try {
-          await entry.socket?.sendMessage(remoteJid, { text: flow.data.reply })
+          const sent = await entry.socket?.sendMessage(remoteJid, {
+            text: flow.data.reply,
+          })
+          flowMsgId = sent?.key?.id ?? null
+          if (flowMsgId) this.markSent(entry, flowMsgId)
         } catch (err) {
           console.error(`[wa-manager:${sessionId}] flow sendMessage gagal:`, err)
         }
@@ -461,6 +540,8 @@ export class WaManager {
             phoneNumber,
             content: flow.data.reply,
             role: 'AI',
+            source: 'AI',
+            externalMsgId: flowMsgId,
             tokensUsed: 0,
           })
           .catch((err) =>
@@ -550,8 +631,13 @@ export class WaManager {
       }
 
       // 6. Kirim balasan via Baileys.
+      let aiMsgId: string | null = null
       try {
-        await entry.socket?.sendMessage(remoteJid, { text: ai.reply })
+        const sent = await entry.socket?.sendMessage(remoteJid, {
+          text: ai.reply,
+        })
+        aiMsgId = sent?.key?.id ?? null
+        if (aiMsgId) this.markSent(entry, aiMsgId)
       } catch (err) {
         console.error(`[wa-manager:${sessionId}] sendMessage gagal:`, err)
       }
@@ -564,6 +650,8 @@ export class WaManager {
           phoneNumber,
           content: ai.reply,
           role: 'AI',
+          source: 'AI',
+          externalMsgId: aiMsgId,
           tokensUsed: model.costPerMessage,
           ...cost,
         })

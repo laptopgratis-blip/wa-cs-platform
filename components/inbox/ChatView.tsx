@@ -401,19 +401,32 @@ function Bubble({
   isAdmin: boolean
 }) {
   const isOutgoing = message.role !== 'USER'
+  const isAgent = message.role === 'AGENT' || message.role === 'HUMAN'
   // Hanya tampilkan cost detail kalau: admin, role AI, dan ada datanya.
   const showCost =
     isAdmin &&
     message.role === 'AI' &&
     (message.apiCostRp !== null && message.apiCostRp !== undefined)
+  // Bubble AGENT pakai warna hijau muda supaya gampang dibedakan dari AI
+  // (primary). Outgoing tapi non-AGENT/AI tetap pakai warna primary.
+  const bubbleClass = !isOutgoing
+    ? 'bg-background border'
+    : isAgent
+      ? 'bg-green-100 text-green-950 border border-green-200'
+      : 'bg-primary text-primary-foreground'
+  // Label asal untuk pesan AGENT — bantu CS tahu balasan datang dari mana.
+  const agentLabel =
+    message.source === 'WA_DIRECT'
+      ? 'CS via WA'
+      : message.source === 'WEB_DASHBOARD'
+        ? 'CS via Web'
+        : 'CS'
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
           'max-w-[70%] rounded-2xl px-3 py-2 text-sm shadow-sm',
-          isOutgoing
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-background border',
+          bubbleClass,
         )}
       >
         {message.role === 'AI' && (
@@ -421,9 +434,9 @@ function Bubble({
             <Bot className="size-3" /> AI
           </div>
         )}
-        {message.role === 'HUMAN' && (
+        {isAgent && (
           <div className="mb-1 flex items-center gap-1 text-[10px] uppercase opacity-80">
-            <Hand className="size-3" /> CS
+            <Hand className="size-3" /> {agentLabel}
           </div>
         )}
         <p className="whitespace-pre-wrap break-words">{message.content}</p>

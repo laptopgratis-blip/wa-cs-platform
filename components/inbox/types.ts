@@ -3,6 +3,10 @@ import type { MessageRole, MessageStatus, PipelineStage } from '@prisma/client'
 
 export type InboxFilter = 'all' | 'ai' | 'attention' | 'resolved'
 
+// Asal pesan AGENT/AI: WA_DIRECT (CS balas langsung dari WA HP), WEB_DASHBOARD
+// (CS balas dari inbox web), AI (otomatis). null = legacy/customer.
+export type MessageSource = 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI'
+
 export interface InboxConversation {
   id: string
   phoneNumber: string
@@ -14,7 +18,12 @@ export interface InboxConversation {
   isResolved: boolean
   lastMessageAt: string | null
   waSession: { id: string; displayName: string | null; phoneNumber: string | null } | null
-  lastMessage: { content: string; role: MessageRole; createdAt: string } | null
+  lastMessage: {
+    content: string
+    role: MessageRole
+    source: MessageSource | null
+    createdAt: string
+  } | null
 }
 
 export interface InboxCounts {
@@ -29,6 +38,8 @@ export interface ChatMessage {
   content: string
   role: MessageRole
   status: MessageStatus
+  // Asal pesan untuk role AGENT/AI. Null untuk customer / pesan lama.
+  source: MessageSource | null
   createdAt: string
   // Profitability fields — null untuk pesan customer / pre-feature, dan
   // hanya di-populate kalau session.role === 'ADMIN'.

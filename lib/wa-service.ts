@@ -69,13 +69,14 @@ export const waService = {
     return request<WaServiceSession>(`/sessions/${encodeURIComponent(sessionId)}`)
   },
   sendMessage(sessionId: string, phoneNumber: string, content: string) {
-    return request<{ sessionId: string; phoneNumber: string }>(
-      `/sessions/${encodeURIComponent(sessionId)}/send-message`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ phoneNumber, content }),
-      },
-    )
+    return request<{
+      sessionId: string
+      phoneNumber: string
+      messageId: string | null
+    }>(`/sessions/${encodeURIComponent(sessionId)}/send-message`, {
+      method: 'POST',
+      body: JSON.stringify({ phoneNumber, content }),
+    })
   },
   startBroadcast(input: {
     sessionId: string

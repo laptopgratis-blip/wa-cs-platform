@@ -355,7 +355,10 @@ model Contact {
 enum MessageRole {
   USER    // Pesan dari customer WA
   AI      // Balasan dari AI
-  HUMAN   // Balasan manual dari CS manusia
+  HUMAN   // Legacy: dulu dipakai untuk CS reply via web. Pesan baru pakai AGENT
+          // + source. Disimpan supaya pesan lama tetap render.
+  AGENT   // Balasan dari CS manusia (web atau langsung dari WA HP).
+          // Bedakan asalnya lewat field `source`.
 }
 
 enum MessageStatus {
@@ -387,6 +390,13 @@ model Message {
   revenueRp       Float?
   // Profit (IDR) = revenueRp - apiCostRp. Bisa negatif (= rugi) → trigger alert.
   profitRp        Float?
+  // Asal pesan untuk role AGENT — bedakan CS reply via web vs langsung dari
+  // WA HP. Nilai: 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI' | null. Null untuk
+  // pesan lama (pre-feature) atau pesan customer.
+  source          String?
+  // ID pesan dari Baileys (msg.key.id) — dipakai untuk dedup saat event
+  // messages.upsert masuk untuk pesan yang baru saja kita kirim sendiri.
+  externalMsgId   String?
   createdAt   DateTime      @default(now())
 
   contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -395,6 +405,7 @@ model Message {
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
   @@index([createdAt])
+  @@index([externalMsgId])
 }
 
 // ─────────────────────────────────────────

@@ -12,7 +12,11 @@ function serviceSecret(): string {
   return process.env.WA_SERVICE_SECRET || ''
 }
 
-export type MessageRole = 'USER' | 'AI' | 'HUMAN'
+export type MessageRole = 'USER' | 'AI' | 'HUMAN' | 'AGENT'
+
+// Asal pesan — bedakan CS reply via web vs langsung dari WA HP, vs balasan
+// AI (untuk konsistensi schema). Null = legacy/customer message.
+export type MessageSource = 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI'
 
 export interface InternalSoulConfig {
   sessionId: string
@@ -137,6 +141,11 @@ export const internalApi = {
     role: MessageRole
     tokensUsed?: number
     withHistory?: boolean
+    // Asal pesan untuk role AGENT/AI. Null untuk pesan customer / pre-feature.
+    source?: MessageSource
+    // ID pesan dari Baileys (msg.key.id) — dipakai untuk dedup saat event
+    // messages.upsert masuk untuk pesan yang baru kita kirim sendiri.
+    externalMsgId?: string | null
     // Profitability tracking (di-set untuk pesan AI). Boleh kosong → field
     // di DB null untuk pesan customer / pre-feature.
     apiInputTokens?: number
@@ -150,6 +159,26 @@ export const internalApi = {
       method: 'POST',
       body: JSON.stringify(input),
     })
+  },
+
+  // Cek apakah message dengan externalMsgId tertentu sudah disimpan untuk
+  // sessionId ini. Dipakai handleIncomingMessage saat fromMe=true untuk dedup
+  // pesan yang sudah di-save lewat /api/inbox/[contactId]/send.
+  checkMessageExists(input: { externalMsgId: string; sessionId: string }) {
+    return request<{ exists: boolean }>(
+      '/api/internal/messages/check-exists',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  },
+
+  // Cek status takeover (aiPaused) sebuah kontak. Return null kalau kontak
+  // belum ada — caller skip processing supaya tidak auto-create kontak hanya
+  // dari pesan outgoing pertama (mis. broadcast).
+  getContactStatus(input: { sessionId: string; phoneNumber: string }) {
+    return request<{ aiPaused: boolean; contactId: string } | null>(
+      '/api/internal/contacts/status',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
   },
 
   checkTokens(userId: string) {

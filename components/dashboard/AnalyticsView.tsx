@@ -89,7 +89,7 @@ interface RecentContact {
   lastMessageAt: string | null
   lastMessage: {
     content: string
-    role: 'USER' | 'AI' | 'HUMAN'
+    role: 'USER' | 'AI' | 'HUMAN' | 'AGENT'
     createdAt: string
   } | null
 }

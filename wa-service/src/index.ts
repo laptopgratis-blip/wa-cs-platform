@@ -141,6 +141,46 @@ app.post('/broadcasts/:broadcastId/cancel', requireSecret, (req, res) => {
   res.json({ success: true, data: { broadcastId, cancelled } })
 })
 
+// Resolve satu atau beberapa LID JID ke nomor PN, dipakai oleh script migration
+// merge-lid-contacts.js. Body: { sessionId, lids: string[] }.
+// Response.results[i].pn = null kalau Baileys tidak punya mappingnya.
+app.post('/lid/resolve', requireSecret, async (req, res) => {
+  const body = req.body as
+    | { sessionId?: string; lids?: string[] }
+    | undefined
+  if (
+    !body?.sessionId ||
+    !Array.isArray(body.lids) ||
+    body.lids.length === 0
+  ) {
+    res
+      .status(400)
+      .json({ success: false, error: 'sessionId dan lids[] wajib' })
+    return
+  }
+  const sock = manager.getSocket(body.sessionId)
+  // Lazy import supaya unit test gampang stub kalau perlu.
+  const { resolvePhoneNumber } = await import('./lib/jid-resolver.js')
+  const results: Array<{ lid: string; pn: string | null }> = []
+  for (const lid of body.lids) {
+    if (typeof lid !== 'string' || !lid) {
+      results.push({ lid: String(lid), pn: null })
+      continue
+    }
+    try {
+      const resolved = await resolvePhoneNumber(sock, lid)
+      // Anggap berhasil hanya kalau hasilnya BUKAN LID lagi (artinya beneran
+      // ke-resolve ke nomor). Kalau sama (fallback), tandai null.
+      const isPn = /^\d+$/.test(resolved)
+      results.push({ lid, pn: isPn ? resolved : null })
+    } catch (err) {
+      console.error('[wa-service] /lid/resolve error:', err)
+      results.push({ lid, pn: null })
+    }
+  }
+  res.json({ success: true, data: { results } })
+})
+
 app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) => {
   const sessionId = String(req.params.sessionId ?? '')
   const body = req.body as { phoneNumber?: string; content?: string } | undefined
@@ -155,7 +195,16 @@ app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) =>
     res.status(400).json({ success: false, error: result.error || 'gagal kirim' })
     return
   }
-  res.json({ success: true, data: { sessionId, phoneNumber: body.phoneNumber } })
+  res.json({
+    success: true,
+    data: {
+      sessionId,
+      phoneNumber: body.phoneNumber,
+      // ID Baileys dari pesan yang baru dikirim — caller simpan sebagai
+      // externalMsgId untuk dedup saat event messages.upsert fromMe masuk.
+      messageId: result.messageId ?? null,
+    },
+  })
 })
 
 // Dev-only endpoint untuk test flow incoming message tanpa Baileys.

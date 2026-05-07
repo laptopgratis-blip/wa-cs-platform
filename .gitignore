@@ -47,3 +47,6 @@ wa-service/node_modules/
 wa-service/sessions/
 public/uploads/
 wa-service/dist/
+secrets/
+.build.log
+.mcp.json

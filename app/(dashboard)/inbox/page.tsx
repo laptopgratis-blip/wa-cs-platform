@@ -7,6 +7,7 @@ import { InboxView } from '@/components/inbox/InboxView'
 import type {
   InboxConversation,
   InboxCounts,
+  MessageSource,
 } from '@/components/inbox/types'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -39,7 +40,7 @@ export default async function InboxPage() {
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
-            select: { content: true, role: true, createdAt: true },
+            select: { content: true, role: true, source: true, createdAt: true },
           },
         },
       }),
@@ -70,6 +71,7 @@ export default async function InboxPage() {
       ? {
           content: c.messages[0].content,
           role: c.messages[0].role,
+          source: (c.messages[0].source ?? null) as MessageSource | null,
           createdAt: c.messages[0].createdAt.toISOString(),
         }
       : null,

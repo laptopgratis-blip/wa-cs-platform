@@ -229,9 +229,14 @@ async function replyViaGoogle(
 // Helpers
 // ─────────────────────────────────────────
 
-// Convert history (USER/AI/HUMAN) jadi format alternating user/assistant,
+// Convert history (USER/AI/HUMAN/AGENT) jadi format alternating user/assistant,
 // lalu pastikan pesan terakhir adalah user (latestUserMessage).
 // Format ini netral — masing-masing provider tinggal map role-nya.
+//
+// Pesan AGENT/HUMAN dimasukkan sebagai 'assistant' tapi diberi label "[CS]: "
+// supaya AI paham bahwa balasan tersebut datang dari customer service manusia,
+// bukan dari dirinya sendiri. Penting saat kontak di-resume dari mode takeover
+// — AI butuh konteks apa yang sudah dijawab CS untuk lanjut natural.
 function toAlternatingMessages(
   history: InternalMessageHistoryItem[],
   latestUserMessage: string,
@@ -241,12 +246,14 @@ function toAlternatingMessages(
   for (const m of history) {
     const role: 'user' | 'assistant' = m.role === 'USER' ? 'user' : 'assistant'
     if (!m.content) continue
+    const isCs = m.role === 'AGENT' || m.role === 'HUMAN'
+    const text = isCs ? `[CS]: ${m.content}` : m.content
     // Hindari dua pesan beruntun dengan role sama — gabungkan.
     const last = out[out.length - 1]
     if (last && last.role === role) {
-      last.content += `\n\n${m.content}`
+      last.content += `\n\n${text}`
     } else {
-      out.push({ role, content: m.content })
+      out.push({ role, content: text })
     }
   }
 

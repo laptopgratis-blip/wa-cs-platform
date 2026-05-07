@@ -109,7 +109,10 @@ export function ConversationList({
                     <div className="flex items-center gap-1.5">
                       <p className="line-clamp-1 flex-1 text-xs text-muted-foreground">
                         {c.lastMessage?.role === 'AI' && '🤖 '}
-                        {c.lastMessage?.role === 'HUMAN' && '👤 '}
+                        {(c.lastMessage?.role === 'AGENT' ||
+                          c.lastMessage?.role === 'HUMAN') &&
+                          '👤 '}
+                        {c.lastMessage?.role === 'USER' && '💬 '}
                         {c.lastMessage?.content || 'Belum ada pesan'}
                       </p>
                       <ConvBadges
