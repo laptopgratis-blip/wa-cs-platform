@@ -68,10 +68,13 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // Saat login pertama: salin id & role ke token.
+      // Saat login pertama: salin id & role ke token. Skip validasi user-exists
+      // di bawah karena baru ke-fetch dari authorize().
       if (user) {
         token.uid = user.id
         token.role = (user as { role?: 'USER' | 'ADMIN' | 'FINANCE' }).role ?? 'USER'
+        token.userCheckedAt = Date.now()
+        return token
       }
       // Refresh role dari DB kalau token sudah ada tapi role belum tersimpan
       // (mis. login pertama via Google → user dibuat oleh adapter).
@@ -83,6 +86,23 @@ export const authOptions: NextAuthOptions = {
         if (dbUser) {
           token.uid = dbUser.id
           token.role = dbUser.role
+          token.userCheckedAt = Date.now()
+        }
+      }
+
+      // Self-heal: validasi uid masih ada di DB. Cache 5 menit per token supaya
+      // tidak hit DB tiap request. Kalau user sudah hilang (data loss / delete
+      // admin), return token kosong — NextAuth treat as logged out, browser
+      // otomatis redirect ke /login di request berikutnya tanpa error FK 500.
+      if (token.uid) {
+        const lastCheck = (token.userCheckedAt as number | undefined) ?? 0
+        if (Date.now() - lastCheck > 5 * 60 * 1000) {
+          const exists = await prisma.user.findUnique({
+            where: { id: token.uid as string },
+            select: { id: true },
+          })
+          if (!exists) return {} as typeof token
+          token.userCheckedAt = Date.now()
         }
       }
       return token
