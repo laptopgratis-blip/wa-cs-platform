@@ -1,4 +1,7 @@
-// Hero — gradient warm-50 → white, dot grid overlay, headline besar.
+// Hero — repositioning customer-centric (2026-05-08).
+// Headline mass-market: humor + relatable benefit yang jelas. Sub-headline
+// outcome bisnis. Trust strip pakai value props (skip live count karena
+// belum scale). Eyebrow tetap brand AI provider untuk credibility.
 import { ArrowRight, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
@@ -7,12 +10,10 @@ import { Button } from '@/components/ui/button'
 export function Hero() {
   return (
     <section className="relative overflow-hidden border-b border-warm-200">
-      {/* Background: gradient diagonal warm-50 ke white */}
       <div
         aria-hidden
         className="absolute inset-0 -z-20 bg-gradient-to-br from-primary-50 via-warm-50 to-white"
       />
-      {/* Subtle dot grid pattern */}
       <div
         aria-hidden
         className="dot-grid absolute inset-0 -z-10 opacity-[0.06]"
@@ -20,28 +21,26 @@ export function Hero() {
 
       <div className="container mx-auto px-4 py-20 md:py-28 lg:py-32">
         <div className="mx-auto flex max-w-3xl flex-col items-center text-center opacity-0 animate-fade-slide-up">
-          {/* Eyebrow pill */}
           <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700">
             <Sparkles className="size-3" />
-            Powered by Anthropic Claude
+            Powered by Anthropic Claude · Google Gemini · OpenAI
           </span>
 
-          {/* Headline */}
           <h1 className="mt-6 font-display text-4xl font-extrabold leading-[1.05] tracking-tight text-warm-900 md:text-5xl lg:text-6xl">
-            CS WhatsApp{' '}
+            CS WhatsApp yang{' '}
             <span className="inline-block rounded-2xl bg-primary-100 px-3 py-0.5 text-primary-600">
-              Otomatis
-            </span>{' '}
-            dengan AI
+              ga capek
+            </span>
+            ,
+            <br className="hidden sm:block" /> ga libur, ga minta naik gaji.
           </h1>
 
-          <p className="mt-6 max-w-xl text-base text-warm-600 md:text-lg">
-            <span className="font-semibold text-warm-900">Hulao</span>{' '}
-            menghubungkan WhatsApp bisnis kamu dengan AI — balas pelanggan 24/7,
-            kelola CRM, dan buat landing page dalam satu platform.
+          <p className="mt-6 max-w-2xl text-base text-warm-600 md:text-lg">
+            AI yang kenal produk kamu balas pelanggan dalam{' '}
+            <span className="font-semibold text-warm-900">3 detik</span>, 24/7.
+            Kamu fokus produksi, AI yang handle chat sampai closing.
           </p>
 
-          {/* CTAs */}
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
             <Button
               asChild
@@ -49,7 +48,7 @@ export function Hero() {
               className="h-12 rounded-full bg-primary-500 px-8 font-semibold text-white shadow-orange hover:bg-primary-600 hover:shadow-orange-lg"
             >
               <Link href="/register">
-                Mulai Gratis
+                Coba Gratis Sekarang
                 <ArrowRight className="ml-2 size-4" />
               </Link>
             </Button>
@@ -63,9 +62,25 @@ export function Hero() {
             </Button>
           </div>
 
-          <p className="mt-5 text-xs text-warm-500">
-            Tanpa kartu kredit · Token gratis untuk coba
-          </p>
+          {/* Trust strip — value props yang menjawab keberatan instant */}
+          <ul className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-medium text-warm-600">
+            <li className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-primary-500" />
+              Free selamanya
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-primary-500" />
+              Tanpa kartu kredit
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-primary-500" />
+              Token tidak expired
+            </li>
+            <li className="flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-primary-500" />
+              Setup &lt; 5 menit
+            </li>
+          </ul>
         </div>
       </div>
     </section>

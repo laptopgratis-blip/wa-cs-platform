@@ -20,6 +20,9 @@ export function Footer() {
           <Link href="#cara-kerja" className="transition-colors hover:text-warm-900">
             Cara Kerja
           </Link>
+          <Link href="#power" className="transition-colors hover:text-warm-900">
+            Untuk Scaling
+          </Link>
           <Link href="#harga" className="transition-colors hover:text-warm-900">
             Harga
           </Link>

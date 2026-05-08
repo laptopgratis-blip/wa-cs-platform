@@ -1,25 +1,26 @@
-// Section "Cara Kerja" — 4 langkah dengan nomor besar orange + connector line.
-import { Plug, ScanLine, Sparkles, UserPlus } from 'lucide-react'
+// Section "Cara Kerja" — disederhanakan dari 4 step jadi 3 step (2026-05-08).
+// Daftar akun di-fold ke step 1 supaya total step terlihat lebih ringan.
+// Pesan sekuensial: scan QR → set Soul → AI bales.
+import { ScanLine, Sparkles, Zap } from 'lucide-react'
 
 const steps = [
-  { num: '01', icon: UserPlus, title: 'Daftar', desc: 'Buat akun gratis dalam 1 menit.' },
+  {
+    num: '01',
+    icon: ScanLine,
+    title: 'Hubungkan WhatsApp',
+    desc: 'Daftar (gratis), scan QR code dari HP — bisnis kamu langsung tertaut. 30 detik selesai.',
+  },
   {
     num: '02',
-    icon: ScanLine,
-    title: 'Hubungkan WA',
-    desc: 'Scan QR code dari WhatsApp di HP — bisnismu langsung tertaut.',
+    icon: Sparkles,
+    title: 'Set "Soul" AI',
+    desc: 'Atur kepribadian (ramah/profesional), gaya balasan, dan info produk. Template tinggal isi — tidak perlu nulis prompt panjang.',
   },
   {
     num: '03',
-    icon: Sparkles,
-    title: 'Set Soul',
-    desc: 'Atur kepribadian AI: ramah/profesional, info produk, gaya balasan.',
-  },
-  {
-    num: '04',
-    icon: Plug,
-    title: 'Aktif!',
-    desc: 'AI mulai membalas pesan customer otomatis. Kamu bisa ambil alih kapanpun.',
+    icon: Zap,
+    title: 'AI mulai bales',
+    desc: 'Customer chat → AI jawab dalam 3 detik. Kamu lihat semua di inbox. Takeover kapan saja kalau perlu.',
   },
 ]
 
@@ -32,21 +33,20 @@ export function HowItWorks() {
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="font-display text-3xl font-extrabold tracking-tight text-warm-900 md:text-4xl">
-            Hidup dalam 4 langkah
+            Hidup dalam 3 langkah
           </h2>
           <p className="mt-3 text-warm-600">
             Dari sign up sampai AI menjawab customer pertamamu — kurang dari 5 menit.
           </p>
         </div>
 
-        <div className="mx-auto mt-14 grid max-w-5xl gap-8 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto mt-14 grid max-w-5xl gap-8 md:grid-cols-3">
           {steps.map(({ num, icon: Icon, title, desc }, idx) => (
             <div key={title} className="relative">
-              {/* Connector line antara step (hanya tampil di lg up) */}
               {idx < steps.length - 1 && (
                 <div
                   aria-hidden
-                  className="absolute left-[60%] top-7 hidden h-px w-[80%] bg-gradient-to-r from-primary-200 to-transparent lg:block"
+                  className="absolute left-[60%] top-7 hidden h-px w-[80%] bg-gradient-to-r from-primary-200 to-transparent md:block"
                 />
               )}
               <div className="relative">
