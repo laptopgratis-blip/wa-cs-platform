@@ -259,9 +259,13 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
       if (data.data.succeeded) {
         toast.success(data.data.hint ?? 'Test event terkirim')
       } else {
+        // Backend `hint` sudah parse Meta error_user_msg → descriptive.
+        // Toast sengaja durasi panjang supaya user sempat baca hint.
         toast.error(
-          data.data.errorMessage ??
+          data.data.hint ??
+            data.data.errorMessage ??
             `Status ${data.data.responseStatus} — cek logs.`,
+          { duration: 10_000 },
         )
       }
       await refreshList()

@@ -13,7 +13,7 @@ import { sendMetaEvent } from '@/lib/pixel-senders/meta'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   let session
@@ -35,6 +35,14 @@ export async function POST(
     )
   }
 
+  // Real UA + IP dari request supaya Meta bisa match minimal 1 user_data field.
+  // Tanpa user_data, Meta reject 400 (subcode 2804050: customer info insufficient).
+  const userAgent =
+    req.headers.get('user-agent') ?? 'Mozilla/5.0 (Hulao TestEvent)'
+  const fwdFor = req.headers.get('x-forwarded-for')
+  const clientIp =
+    fwdFor?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || null
+
   const eventId = `Test_${pixel.id}_${Date.now()}`
   const eventTime = Math.floor(Date.now() / 1000)
 
@@ -54,9 +62,17 @@ export async function POST(
         eventName: 'PageView',
         eventId,
         eventTime,
-        userData: {},
+        // Dummy hashed email + phone supaya Meta dapat user_data minimal.
+        // Email/phone akan di-hash SHA256 oleh sender. UA + IP dari request
+        // asli supaya match score-nya valid (bukan dummy yg invariant).
+        userData: {
+          email: 'test@hulao.id',
+          phone: '6281234567890',
+          clientUserAgent: userAgent,
+          clientIpAddress: clientIp,
+        },
         customData: {},
-        sourceUrl: 'https://hulao.id/test-event',
+        sourceUrl: 'https://hulao.id/integrations/pixels',
       })
       succeeded = result.succeeded
       responseStatus = result.status
@@ -68,6 +84,45 @@ export async function POST(
   } catch (err) {
     errorMessage = String(err)
   }
+
+  // Parse Meta error response supaya hint user descriptive — bukan "Status 400".
+  const isTestMode = pixel.isTestMode
+  const testEventCode = pixel.testEventCode
+  const buildHint = (): string => {
+    if (succeeded) {
+      return isTestMode && testEventCode
+        ? 'Test event terkirim. Cek Meta Events Manager → Test Events.'
+        : 'Test event terkirim. Cek Meta Events Manager → Overview (1-2 menit).'
+    }
+    if (errorMessage) return errorMessage
+    try {
+      const parsed = JSON.parse(responseBody) as {
+        error?: {
+          message?: string
+          code?: number
+          error_subcode?: number
+          error_user_title?: string
+          error_user_msg?: string
+        }
+      }
+      const e = parsed.error
+      if (e?.error_user_msg) {
+        const title = e.error_user_title ?? 'Meta menolak event'
+        // Truncate supaya muat di toast — full message tetap di logs.
+        const msg = e.error_user_msg.length > 240
+          ? e.error_user_msg.slice(0, 240) + '…'
+          : e.error_user_msg
+        return `${title}. ${msg}`
+      }
+      if (e?.message) {
+        return `Meta: ${e.message}${e.code ? ` (code ${e.code})` : ''}`
+      }
+    } catch {
+      // responseBody bukan JSON — fall through.
+    }
+    return `Status ${responseStatus || 'unknown'} — cek detail di logs.`
+  }
+  const hint = buildHint()
 
   // Log event regardless (sukses atau gagal) untuk audit trail.
   await prisma.pixelEventLog.create({
@@ -100,8 +155,6 @@ export async function POST(
     responseStatus,
     responseBody: responseBody || null,
     errorMessage,
-    hint: succeeded
-      ? 'Cek Meta Events Manager → Test Events untuk lihat eventnya.'
-      : errorMessage ?? `Status ${responseStatus} — cek detail di logs.`,
+    hint,
   })
 }
