@@ -24,6 +24,11 @@ export default async function ProductsPage() {
   const products = await prisma.product.findMany({
     where: { userId: session.user.id },
     orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+    include: {
+      variants: {
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      },
+    },
   })
 
   return (
@@ -34,6 +39,17 @@ export default async function ProductsPage() {
         flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
+        variants: p.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          sku: v.sku,
+          price: v.price,
+          weightGrams: v.weightGrams,
+          stock: v.stock,
+          imageUrl: v.imageUrl,
+          isActive: v.isActive,
+          sortOrder: v.sortOrder,
+        })),
       }))}
       limit={PRODUCT_LIMIT_PER_USER}
     />

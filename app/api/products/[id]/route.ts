@@ -29,48 +29,108 @@ export async function PATCH(
   try {
     const existing = await prisma.product.findFirst({
       where: { id, userId: session.user.id },
+      include: { variants: { select: { id: true } } },
     })
     if (!existing) return jsonError('Produk tidak ditemukan', 404)
 
     const data = parsed.data
-    const updated = await prisma.product.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.price !== undefined && { price: data.price }),
-        ...(data.weightGrams !== undefined && { weightGrams: data.weightGrams }),
-        ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),
-        ...(data.stock !== undefined && { stock: data.stock }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-        ...(data.order !== undefined && { order: data.order }),
-        ...(data.flashSaleActive !== undefined && {
-          flashSaleActive: data.flashSaleActive,
-        }),
-        ...(data.flashSalePrice !== undefined && {
-          flashSalePrice: data.flashSalePrice,
-        }),
-        ...(data.flashSaleStartAt !== undefined && {
-          flashSaleStartAt: data.flashSaleStartAt
-            ? new Date(data.flashSaleStartAt)
-            : null,
-        }),
-        ...(data.flashSaleEndAt !== undefined && {
-          flashSaleEndAt: data.flashSaleEndAt
-            ? new Date(data.flashSaleEndAt)
-            : null,
-        }),
-        ...(data.flashSaleQuota !== undefined && {
-          flashSaleQuota: data.flashSaleQuota,
-        }),
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Update field utama produk.
+      await tx.product.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.description !== undefined && { description: data.description }),
+          ...(data.price !== undefined && { price: data.price }),
+          ...(data.weightGrams !== undefined && { weightGrams: data.weightGrams }),
+          ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),
+          ...(data.stock !== undefined && { stock: data.stock }),
+          ...(data.isActive !== undefined && { isActive: data.isActive }),
+          ...(data.order !== undefined && { order: data.order }),
+          ...(data.flashSaleActive !== undefined && {
+            flashSaleActive: data.flashSaleActive,
+          }),
+          ...(data.flashSalePrice !== undefined && {
+            flashSalePrice: data.flashSalePrice,
+          }),
+          ...(data.flashSaleStartAt !== undefined && {
+            flashSaleStartAt: data.flashSaleStartAt
+              ? new Date(data.flashSaleStartAt)
+              : null,
+          }),
+          ...(data.flashSaleEndAt !== undefined && {
+            flashSaleEndAt: data.flashSaleEndAt
+              ? new Date(data.flashSaleEndAt)
+              : null,
+          }),
+          ...(data.flashSaleQuota !== undefined && {
+            flashSaleQuota: data.flashSaleQuota,
+          }),
+        },
+      })
+
+      // 2. Sync varian — full replace strategy.
+      // Kalau client kirim `variants` (bisa empty array), kita anggap itu
+      // sumber kebenaran: delete varian yang tidak ada di payload, update
+      // yang match by id, create yang tanpa id.
+      if (data.variants !== undefined) {
+        const incomingIds = new Set(
+          data.variants.filter((v) => v.id).map((v) => v.id as string),
+        )
+        const existingIds = existing.variants.map((v) => v.id)
+        // Delete varian yang dihapus dari UI.
+        const toDelete = existingIds.filter((vid) => !incomingIds.has(vid))
+        if (toDelete.length > 0) {
+          await tx.productVariant.deleteMany({
+            where: { id: { in: toDelete }, productId: id },
+          })
+        }
+        // Upsert satu-satu (Prisma tidak punya `upsertMany`).
+        for (let idx = 0; idx < data.variants.length; idx++) {
+          const v = data.variants[idx]
+          const payload = {
+            name: v.name,
+            sku: v.sku ?? null,
+            price: v.price,
+            weightGrams: v.weightGrams,
+            stock: v.stock ?? null,
+            imageUrl: v.imageUrl ?? null,
+            isActive: v.isActive ?? true,
+            sortOrder: v.sortOrder ?? idx,
+          }
+          if (v.id && existingIds.includes(v.id)) {
+            await tx.productVariant.update({
+              where: { id: v.id },
+              data: payload,
+            })
+          } else {
+            await tx.productVariant.create({
+              data: { ...payload, productId: id },
+            })
+          }
+        }
+      }
+
+      // 3. Re-fetch dengan varian fresh untuk response.
+      return tx.product.findUniqueOrThrow({
+        where: { id },
+        include: {
+          variants: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+        },
+      })
     })
+
     return jsonOk({
       ...updated,
       flashSaleStartAt: updated.flashSaleStartAt?.toISOString() ?? null,
       flashSaleEndAt: updated.flashSaleEndAt?.toISOString() ?? null,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
+      variants: updated.variants.map((v) => ({
+        ...v,
+        createdAt: v.createdAt.toISOString(),
+        updatedAt: v.updatedAt.toISOString(),
+      })),
     })
   } catch (err) {
     console.error('[PATCH /api/products/[id]] gagal:', err)
@@ -92,17 +152,25 @@ export async function DELETE(
   try {
     const existing = await prisma.product.findFirst({
       where: { id, userId: session.user.id },
+      include: { variants: { select: { imageUrl: true } } },
     })
     if (!existing) return jsonError('Produk tidak ditemukan', 404)
 
+    // Cascade ke varian via Prisma onDelete: Cascade.
     await prisma.product.delete({ where: { id } })
 
-    // Hapus file foto best-effort (tidak fatal kalau gagal).
-    if (existing.imageUrl?.startsWith('/uploads/products/')) {
+    // Hapus file foto produk + foto varian best-effort (tidak fatal kalau gagal).
+    const imageUrls = [
+      existing.imageUrl,
+      ...existing.variants.map((v) => v.imageUrl),
+    ].filter(
+      (u): u is string => !!u && u.startsWith('/uploads/products/'),
+    )
+    for (const url of imageUrls) {
       const filePath = path.join(
         process.cwd(),
         'public',
-        existing.imageUrl.replace(/^\//, ''),
+        url.replace(/^\//, ''),
       )
       await unlink(filePath).catch(() => {})
     }

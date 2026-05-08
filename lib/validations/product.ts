@@ -2,6 +2,30 @@ import { z } from 'zod'
 
 // Limit produk per user supaya storage & UI tetap manageable.
 export const PRODUCT_LIMIT_PER_USER = 100
+// Cap varian per produk supaya tidak meledak (ribuan baris) yang nyusahin
+// pricing engine dan UI selector.
+export const VARIANT_LIMIT_PER_PRODUCT = 50
+
+// Schema satu varian saat user submit dari dialog produk. Dipakai PATCH
+// /api/products/[id] untuk full-replace varian.
+// `id` opsional: kalau ada → varian existing yang di-update; kalau tidak →
+// varian baru yang akan di-create.
+export const productVariantInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().trim().min(1, 'Nama varian wajib diisi').max(80),
+  sku: z.string().trim().max(80).nullable().optional(),
+  price: z
+    .number()
+    .min(0, 'Harga varian tidak boleh negatif')
+    .max(1_000_000_000),
+  weightGrams: z.number().int().min(1).max(150_000),
+  stock: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  imageUrl: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+})
+
+export type ProductVariantInput = z.infer<typeof productVariantInputSchema>
 
 export const productCreateSchema = z
   .object({
@@ -29,6 +53,13 @@ export const productCreateSchema = z
     flashSaleStartAt: z.string().datetime().nullable().optional(),
     flashSaleEndAt: z.string().datetime().nullable().optional(),
     flashSaleQuota: z.number().int().min(1).max(1_000_000).nullable().optional(),
+
+    // Varian (Phase 5). Optional di create — biasanya user tambah belakangan
+    // via edit. Kalau diisi pas create, akan di-create sekaligus.
+    variants: z
+      .array(productVariantInputSchema)
+      .max(VARIANT_LIMIT_PER_PRODUCT, `Maksimal ${VARIANT_LIMIT_PER_PRODUCT} varian per produk`)
+      .optional(),
   })
   .refine(
     (v) => {
@@ -64,6 +95,12 @@ const productBaseSchema = z.object({
   flashSaleStartAt: z.string().datetime().nullable(),
   flashSaleEndAt: z.string().datetime().nullable(),
   flashSaleQuota: z.number().int().min(1).max(1_000_000).nullable(),
+  // Varian — kalau dikirim, server akan replace seluruh varian existing
+  // (delete yang tidak ada di payload, update yang ID-nya match, create yang
+  // tidak punya ID).
+  variants: z
+    .array(productVariantInputSchema)
+    .max(VARIANT_LIMIT_PER_PRODUCT),
 })
 
 export const productUpdateSchema = productBaseSchema.partial()

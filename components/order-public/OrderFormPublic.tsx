@@ -38,6 +38,15 @@ import {
 } from '@/components/order-system/DestinationPicker'
 import { formatNumber } from '@/lib/format'
 
+interface PublicVariant {
+  id: string
+  name: string
+  price: number
+  weightGrams: number
+  stock: number | null
+  imageUrl: string | null
+}
+
 interface PublicProduct {
   id: string
   name: string
@@ -52,6 +61,13 @@ interface PublicProduct {
   flashSaleEndAt: string | null
   flashSaleQuota: number | null
   flashSaleSold: number
+  variants?: PublicVariant[]
+}
+
+// Composite key untuk qty state — kalau produk punya varian, key = "pid:vid"
+// supaya varian beda di-track terpisah. Kalau gak ada varian, key = pid.
+function lineKey(productId: string, variantId: string | null): string {
+  return variantId ? `${productId}:${variantId}` : productId
 }
 
 interface FormProps {
@@ -248,12 +264,34 @@ export function OrderFormPublic({
 
   const items = useMemo(() => {
     return products.flatMap((p) => {
+      // Phase 5: produk dengan varian → satu line per varian (key composite),
+      // produk single → satu line dengan key = productId. Flash sale hanya
+      // di-apply untuk produk single (tidak ada di varian-level).
+      if (p.variants && p.variants.length > 0) {
+        return p.variants.flatMap((v) => {
+          const q = qty[lineKey(p.id, v.id)] ?? 0
+          if (q <= 0) return []
+          return [
+            {
+              productId: p.id,
+              variantId: v.id,
+              name: `${p.name} – ${v.name}`,
+              qty: q,
+              price: v.price,
+              originalPrice: v.price,
+              isFlashSale: false,
+              weight: v.weightGrams,
+            },
+          ]
+        })
+      }
       const q = qty[p.id] ?? 0
       if (q <= 0) return []
       const fs = computeFlashSale(p)
       return [
         {
           productId: p.id,
+          variantId: null as string | null,
           name: p.name,
           qty: q,
           price: fs.price,
@@ -357,37 +395,52 @@ export function OrderFormPublic({
       : selectedCourier?.cost ?? 0
   const total = subtotal + shippingCost  // subsidi belum dihitung di client
 
-  function inc(productId: string, max?: number | null) {
+  function inc(
+    productId: string,
+    variantId: string | null,
+    max?: number | null,
+  ) {
+    const key = lineKey(productId, variantId)
     setQty((q) => {
-      const cur = q[productId] ?? 0
+      const cur = q[key] ?? 0
       if (max != null && cur >= max) return q
-      const next = { ...q, [productId]: cur + 1 }
-      // Fire AddToCart untuk produk ini saat qty bertambah dari 0 ke 1.
-      // Untuk increment selanjutnya kita skip — supaya tidak spam pixel.
+      const next = { ...q, [key]: cur + 1 }
+      // Fire AddToCart saat qty bertambah dari 0 ke 1. Untuk produk dengan
+      // varian, content_id pakai variantId supaya pixel bisa attribute ke
+      // varian spesifik. Skip increment selanjutnya supaya tidak spam pixel.
       if (cur === 0) {
         const product = products.find((p) => p.id === productId)
         if (product) {
-          const fs = computeFlashSale(product)
+          const variant = variantId
+            ? product.variants?.find((v) => v.id === variantId) ?? null
+            : null
+          const fs = variant
+            ? { active: false, price: variant.price }
+            : computeFlashSale(product)
+          const contentId = variantId ?? productId
           firePixelEvent(
             'AddToCart',
             {
-              content_ids: [productId],
-              contents: [{ id: productId, quantity: 1, item_price: fs.price }],
+              content_ids: [contentId],
+              contents: [
+                { id: contentId, quantity: 1, item_price: fs.price },
+              ],
               currency: 'IDR',
               value: fs.price,
             },
-            generateEventId('AddToCart', `${sessionId}_${productId}`),
+            generateEventId('AddToCart', `${sessionId}_${contentId}`),
           )
         }
       }
       return next
     })
   }
-  function dec(productId: string) {
+  function dec(productId: string, variantId: string | null) {
+    const key = lineKey(productId, variantId)
     setQty((q) => {
-      const cur = q[productId] ?? 0
+      const cur = q[key] ?? 0
       if (cur <= 0) return q
-      return { ...q, [productId]: cur - 1 }
+      return { ...q, [key]: cur - 1 }
     })
   }
 
@@ -420,7 +473,11 @@ export function OrderFormPublic({
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         customerEmail: customerEmail.trim() || null,
-        items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
+        items: items.map((i) => ({
+          productId: i.productId,
+          variantId: i.variantId,
+          qty: i.qty,
+        })),
         shippingDestinationId: destination.id,
         shippingProvinceName: destination.province_name,
         shippingCityName: destination.city_name,
@@ -512,84 +569,170 @@ export function OrderFormPublic({
             <ul className="space-y-3">
               {products.map((p) => {
                 const fs = computeFlashSale(p)
+                const hasVariants = (p.variants?.length ?? 0) > 0
                 const cur = qty[p.id] ?? 0
                 return (
                   <li
                     key={p.id}
-                    className="flex gap-3 rounded-lg border bg-warm-50 p-3"
+                    className="rounded-lg border bg-warm-50 p-3"
                   >
-                    <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-warm-100">
-                      {p.imageUrl ? (
-                        <Image
-                          src={p.imageUrl}
-                          alt={p.name}
-                          fill
-                          sizes="80px"
-                          className="object-cover"
-                        />
-                      ) : (
-                        <div className="flex size-full items-center justify-center text-warm-400">
-                          <Package className="size-6" />
+                    <div className="flex gap-3">
+                      <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-warm-100">
+                        {p.imageUrl ? (
+                          <Image
+                            src={p.imageUrl}
+                            alt={p.name}
+                            fill
+                            sizes="80px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="flex size-full items-center justify-center text-warm-400">
+                            <Package className="size-6" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col min-w-0">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="font-semibold text-warm-900">{p.name}</p>
+                          {!hasVariants && fs.active && (
+                            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                              <Zap className="mr-1 size-3" /> Flash
+                            </Badge>
+                          )}
+                          {hasVariants && (
+                            <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                              {p.variants!.length} pilihan
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-1 flex-col min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <p className="font-semibold text-warm-900">{p.name}</p>
-                        {fs.active && (
-                          <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                            <Zap className="mr-1 size-3" /> Flash
-                          </Badge>
+                        {p.description && (
+                          <p className="line-clamp-2 text-xs text-warm-600">
+                            {p.description}
+                          </p>
+                        )}
+                        {hasVariants ? (
+                          <p className="mt-1 text-xs text-warm-500">
+                            Pilih varian di bawah
+                          </p>
+                        ) : (
+                          <>
+                            <div className="mt-1 flex items-baseline gap-2">
+                              <span className="text-base font-bold text-primary-600">
+                                Rp {formatNumber(fs.price)}
+                              </span>
+                              {fs.active && (
+                                <span className="text-xs text-warm-500 line-through">
+                                  Rp {formatNumber(p.price)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-warm-500">
+                              {p.weightGrams} g
+                              {p.stock != null && ` · Stok: ${p.stock}`}
+                              {fs.active &&
+                                p.flashSaleQuota != null &&
+                                ` · ${p.flashSaleSold}/${p.flashSaleQuota} terjual`}
+                            </p>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => dec(p.id, null)}
+                                disabled={cur <= 0}
+                                className="size-8 p-0"
+                              >
+                                <Minus className="size-3.5" />
+                              </Button>
+                              <span className="w-10 text-center font-semibold tabular-nums">
+                                {cur}
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => inc(p.id, null, p.stock)}
+                                disabled={p.stock != null && cur >= p.stock}
+                                className="size-8 p-0"
+                              >
+                                <Plus className="size-3.5" />
+                              </Button>
+                            </div>
+                          </>
                         )}
                       </div>
-                      {p.description && (
-                        <p className="line-clamp-2 text-xs text-warm-600">
-                          {p.description}
-                        </p>
-                      )}
-                      <div className="mt-1 flex items-baseline gap-2">
-                        <span className="text-base font-bold text-primary-600">
-                          Rp {formatNumber(fs.price)}
-                        </span>
-                        {fs.active && (
-                          <span className="text-xs text-warm-500 line-through">
-                            Rp {formatNumber(p.price)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-warm-500">
-                        {p.weightGrams} g
-                        {p.stock != null && ` · Stok: ${p.stock}`}
-                        {fs.active &&
-                          p.flashSaleQuota != null &&
-                          ` · ${p.flashSaleSold}/${p.flashSaleQuota} terjual`}
-                      </p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => dec(p.id)}
-                          disabled={cur <= 0}
-                          className="size-8 p-0"
-                        >
-                          <Minus className="size-3.5" />
-                        </Button>
-                        <span className="w-10 text-center font-semibold tabular-nums">
-                          {cur}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => inc(p.id, p.stock)}
-                          disabled={p.stock != null && cur >= p.stock}
-                          className="size-8 p-0"
-                        >
-                          <Plus className="size-3.5" />
-                        </Button>
-                      </div>
                     </div>
+
+                    {/* Daftar varian — satu sub-row per varian dengan qty
+                        selector sendiri. */}
+                    {hasVariants && (
+                      <ul className="mt-3 space-y-2 border-t border-warm-200 pt-3">
+                        {p.variants!.map((v) => {
+                          const vq = qty[lineKey(p.id, v.id)] ?? 0
+                          return (
+                            <li
+                              key={v.id}
+                              className="flex gap-3 rounded-md bg-white p-2"
+                            >
+                              <div className="size-14 shrink-0 overflow-hidden rounded-md border bg-warm-50">
+                                {v.imageUrl || p.imageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={v.imageUrl ?? p.imageUrl ?? ''}
+                                    alt={v.name}
+                                    className="size-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex size-full items-center justify-center text-warm-400">
+                                    <Package className="size-5" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex flex-1 flex-col min-w-0">
+                                <p className="text-sm font-medium text-warm-900">
+                                  {v.name}
+                                </p>
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-sm font-bold text-primary-600">
+                                    Rp {formatNumber(v.price)}
+                                  </span>
+                                  <span className="text-xs text-warm-500">
+                                    {v.weightGrams} g
+                                    {v.stock != null && ` · Stok: ${v.stock}`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => dec(p.id, v.id)}
+                                  disabled={vq <= 0}
+                                  className="size-8 p-0"
+                                >
+                                  <Minus className="size-3.5" />
+                                </Button>
+                                <span className="w-8 text-center text-sm font-semibold tabular-nums">
+                                  {vq}
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => inc(p.id, v.id, v.stock)}
+                                  disabled={v.stock != null && vq >= v.stock}
+                                  className="size-8 p-0"
+                                >
+                                  <Plus className="size-3.5" />
+                                </Button>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
                   </li>
                 )
               })}

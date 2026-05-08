@@ -12,8 +12,14 @@ import { calculateShippingCost } from '@/lib/services/rajaongkir'
 
 export interface PricingItemSnapshot {
   productId: string
+  // Phase 5 (2026-05-08): kalau produk punya varian, customer wajib kirim
+  // variantId. Snapshot ini di-store di UserOrder.items (JSON), juga jadi
+  // sumber data invoice/follow-up — sengaja denormalized supaya tetap valid
+  // walau varian dihapus belakangan.
+  variantId: string | null
+  variantName: string | null
   name: string
-  price: number          // harga efektif (flash sale kalau aktif)
+  price: number          // harga efektif (flash sale kalau aktif, varian kalau ada)
   originalPrice: number  // harga normal sebelum flash sale
   qty: number
   weight: number         // weight per unit (gram)
@@ -40,7 +46,7 @@ export interface PricingResult {
 
 interface CalculateInput {
   userId: string
-  items: Array<{ productId: string; qty: number }>
+  items: Array<{ productId: string; variantId?: string | null; qty: number }>
   shippingDestinationId?: number
   shippingProvinceName?: string | null
   shippingCityName?: string | null
@@ -136,11 +142,14 @@ function describeZone(z: {
 export async function calculateOrderTotal(
   input: CalculateInput,
 ): Promise<PricingResult> {
-  // 1. Ambil produk + cek flash sale.
+  // 1. Ambil produk + varian aktif sekaligus.
   const products = await prisma.product.findMany({
     where: {
       id: { in: input.items.map((i) => i.productId) },
       userId: input.userId,
+    },
+    include: {
+      variants: { where: { isActive: true } },
     },
   })
 
@@ -154,24 +163,44 @@ export async function calculateOrderTotal(
     if (!product) continue
     if (!product.isActive) continue
 
-    const flash = isFlashSaleActive(product)
-    const effective = flash && product.flashSalePrice != null
-      ? product.flashSalePrice
-      : product.price
+    // Phase 5: kalau produk punya varian, customer WAJIB pilih varian.
+    // Skip item kalau variantId tidak match — defensive: server tidak boleh
+    // tag-along ke harga produk default kalau ada varian (bisa salah harga).
+    const hasVariants = product.variants.length > 0
+    let variant = null as (typeof product.variants)[number] | null
+    if (hasVariants) {
+      if (!item.variantId) continue
+      variant = product.variants.find((v) => v.id === item.variantId) ?? null
+      if (!variant) continue
+    }
+
+    // Flash sale dihitung relative ke harga PRODUK (bukan varian) supaya
+    // discount berlaku global per produk. Untuk varian: pakai harga varian
+    // langsung (flash sale tidak di-apply per-varian dulu di Phase 5).
+    const flash = !variant && isFlashSaleActive(product)
+    const basePrice = variant ? variant.price : product.price
+    const effective =
+      flash && product.flashSalePrice != null
+        ? product.flashSalePrice
+        : basePrice
+    const weight = variant ? variant.weightGrams : product.weightGrams
 
     subtotal += effective * item.qty
     if (flash && product.flashSalePrice != null) {
       flashSaleDiscount += (product.price - product.flashSalePrice) * item.qty
     }
-    totalWeight += product.weightGrams * item.qty
+    totalWeight += weight * item.qty
 
     itemsSnapshot.push({
       productId: product.id,
-      name: product.name,
+      variantId: variant?.id ?? null,
+      variantName: variant?.name ?? null,
+      // Display name di invoice/notif: gabung "Produk – Varian".
+      name: variant ? `${product.name} – ${variant.name}` : product.name,
       price: effective,
-      originalPrice: product.price,
+      originalPrice: basePrice,
       qty: item.qty,
-      weight: product.weightGrams,
+      weight,
       isFlashSale: flash,
     })
   }

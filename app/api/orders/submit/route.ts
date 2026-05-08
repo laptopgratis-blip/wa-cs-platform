@@ -81,7 +81,11 @@ export async function POST(req: Request) {
     // 4. Hitung total (sumber kebenaran — JANGAN trust client).
     const pricing = await calculateOrderTotal({
       userId: form.userId,
-      items: data.items,
+      items: data.items.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId ?? null,
+        qty: i.qty,
+      })),
       shippingDestinationId: data.shippingDestinationId,
       shippingProvinceName: data.shippingProvinceName,
       shippingCityName: data.shippingCityName,

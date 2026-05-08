@@ -70,6 +70,14 @@ export default async function PublicOrderPage({ params }: PageProps) {
   const products = await prisma.product.findMany({
     where: productWhere,
     orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+    include: {
+      // Hanya varian aktif yang dikirim ke client. Customer tidak boleh
+      // pilih varian off — sama logic-nya dengan product.isActive.
+      variants: {
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      },
+    },
   })
 
   return (
@@ -102,6 +110,14 @@ export default async function PublicOrderPage({ params }: PageProps) {
         flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
         flashSaleQuota: p.flashSaleQuota,
         flashSaleSold: p.flashSaleSold,
+        variants: p.variants.map((v) => ({
+          id: v.id,
+          name: v.name,
+          price: v.price,
+          weightGrams: v.weightGrams,
+          stock: v.stock,
+          imageUrl: v.imageUrl,
+        })),
       }))}
     />
   )

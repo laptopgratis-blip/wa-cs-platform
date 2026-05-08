@@ -6,6 +6,10 @@ import { z } from 'zod'
 
 export const submitOrderItemSchema = z.object({
   productId: z.string().min(1),
+  // variantId opsional — null/undefined kalau produk tidak punya varian.
+  // Server akan reject kalau produk yang punya varian tapi item tidak kasih
+  // variantId (atau sebaliknya).
+  variantId: z.string().min(1).nullable().optional(),
   qty: z.number().int().min(1).max(1000),
 })
 

@@ -21,6 +21,11 @@ export async function GET() {
     const items = await prisma.product.findMany({
       where: { userId: session.user.id },
       orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+      include: {
+        variants: {
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        },
+      },
     })
     return jsonOk({
       items: items.map((p) => ({
@@ -29,6 +34,11 @@ export async function GET() {
         flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
         createdAt: p.createdAt.toISOString(),
         updatedAt: p.updatedAt.toISOString(),
+        variants: p.variants.map((v) => ({
+          ...v,
+          createdAt: v.createdAt.toISOString(),
+          updatedAt: v.updatedAt.toISOString(),
+        })),
       })),
       limit: PRODUCT_LIMIT_PER_USER,
       used: items.length,
@@ -82,6 +92,25 @@ export async function POST(req: Request) {
           ? new Date(data.flashSaleEndAt)
           : null,
         flashSaleQuota: data.flashSaleQuota ?? null,
+        ...(data.variants && data.variants.length > 0
+          ? {
+              variants: {
+                create: data.variants.map((v, idx) => ({
+                  name: v.name,
+                  sku: v.sku ?? null,
+                  price: v.price,
+                  weightGrams: v.weightGrams,
+                  stock: v.stock ?? null,
+                  imageUrl: v.imageUrl ?? null,
+                  isActive: v.isActive ?? true,
+                  sortOrder: v.sortOrder ?? idx,
+                })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        variants: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
       },
     })
     return jsonOk(
@@ -91,6 +120,11 @@ export async function POST(req: Request) {
         flashSaleEndAt: created.flashSaleEndAt?.toISOString() ?? null,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
+        variants: created.variants.map((v) => ({
+          ...v,
+          createdAt: v.createdAt.toISOString(),
+          updatedAt: v.updatedAt.toISOString(),
+        })),
       },
       201,
     )

@@ -1312,10 +1312,46 @@ model Product {
   isActive Boolean @default(true)
   order    Int     @default(0)
 
+  // Varian produk (Phase 5, 2026-05-08). Kalau array kosong → produk single
+  // (pakai harga/stok/berat di field utama). Kalau ≥1 varian → customer
+  // wajib pilih varian di form order, dan harga/stok/berat dipakai dari varian.
+  variants ProductVariant[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, isActive])
+}
+
+// Varian produk — opsional. Setiap baris = satu kombinasi varian dengan
+// nama bebas (mis. "12ml", "Putih - L", "Pink Besar"). User bisa edit nama
+// label sebagai single-axis bebas; multi-axis dilakukan dengan nama gabungan
+// supaya skema simple dan tidak butuh attribute matrix.
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Label yang ditampilkan ke customer di form order, mis. "30ml" atau "Hitam M".
+  name        String
+  // SKU opsional untuk inventaris. Tidak unique global karena per-user scope.
+  sku         String?
+  // Override price/weight/stock/image dari Product. Kalau null untuk imageUrl,
+  // fall back ke product.imageUrl di UI. Tapi price/weight WAJIB diisi
+  // (tidak diturunkan dari product) supaya pricing engine deterministik.
+  price       Float
+  weightGrams Int     @default(500)
+  // null = unlimited stock (sama semantic seperti Product.stock).
+  stock       Int?
+  imageUrl    String?
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, isActive, sortOrder])
 }
 
 // Multi-rekening user untuk terima transfer dari customer. Snapshot disalin

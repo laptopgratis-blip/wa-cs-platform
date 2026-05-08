@@ -1,10 +1,12 @@
 'use client'
 
 // CRUD produk untuk Order System. Phase 2: tanpa flash sale UI (field di DB
-// disiapkan, UI input masuk Phase 4).
+// disiapkan, UI input masuk Phase 4). Phase 5 (2026-05-08): tambah editor varian.
 import {
   Edit3,
+  GripVertical,
   Image as ImageIcon,
+  Layers,
   Package,
   Plus,
   Trash2,
@@ -32,6 +34,18 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber } from '@/lib/format'
 
+interface ProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  weightGrams: number
+  stock: number | null
+  imageUrl: string | null
+  isActive: boolean
+  sortOrder: number
+}
+
 interface Product {
   id: string
   name: string
@@ -49,6 +63,26 @@ interface Product {
   flashSaleEndAt: string | null
   flashSaleQuota: number | null
   flashSaleSold: number
+  variants?: ProductVariant[]
+}
+
+// Variant row state di form (sebelum disubmit). Pakai `tempKey` untuk React
+// `key` saat varian belum ada `id` dari server. Sengaja tidak pakai array
+// index karena tabrakan saat user delete row tengah.
+interface VariantFormRow {
+  tempKey: string
+  id?: string
+  name: string
+  sku: string
+  price: number
+  weightGrams: number
+  stock: number | null
+  imageUrl: string | null
+  isActive: boolean
+}
+
+function makeVariantKey(): string {
+  return `v_${Math.random().toString(36).slice(2, 10)}`
 }
 
 interface ProductsClientProps {
@@ -83,7 +117,13 @@ const EMPTY_FORM = {
   flashSaleStartLocal: '',
   flashSaleEndLocal: '',
   flashSaleQuota: '' as string | number,
+  // Phase 5 (2026-05-08) — varian. Kalau kosong = produk single (pakai
+  // harga/stok di field utama). Kalau ada ≥1 varian = customer wajib pilih
+  // varian di form order, harga utama produk diabaikan.
+  variants: [] as VariantFormRow[],
 }
+
+const VARIANT_LIMIT = 50
 
 export function ProductsClient({
   initialProducts,
@@ -120,9 +160,84 @@ export function ProductsClient({
       flashSaleStartLocal: isoToLocalInput(p.flashSaleStartAt),
       flashSaleEndLocal: isoToLocalInput(p.flashSaleEndAt),
       flashSaleQuota: p.flashSaleQuota ?? '',
+      variants: (p.variants ?? []).map((v) => ({
+        tempKey: makeVariantKey(),
+        id: v.id,
+        name: v.name,
+        sku: v.sku ?? '',
+        price: v.price,
+        weightGrams: v.weightGrams,
+        stock: v.stock,
+        imageUrl: v.imageUrl,
+        isActive: v.isActive,
+      })),
     })
     setUnlimitedStock(p.stock === null)
     setDialogOpen(true)
+  }
+
+  function addVariant() {
+    setForm((f) => {
+      if (f.variants.length >= VARIANT_LIMIT) return f
+      // Default field varian baru pakai field utama produk supaya user gak
+      // perlu re-isi semua dari nol.
+      return {
+        ...f,
+        variants: [
+          ...f.variants,
+          {
+            tempKey: makeVariantKey(),
+            name: '',
+            sku: '',
+            price: f.price,
+            weightGrams: f.weightGrams,
+            stock: f.stock,
+            imageUrl: null,
+            isActive: true,
+          },
+        ],
+      }
+    })
+  }
+
+  function updateVariant(tempKey: string, patch: Partial<VariantFormRow>) {
+    setForm((f) => ({
+      ...f,
+      variants: f.variants.map((v) =>
+        v.tempKey === tempKey ? { ...v, ...patch } : v,
+      ),
+    }))
+  }
+
+  function removeVariant(tempKey: string) {
+    setForm((f) => ({
+      ...f,
+      variants: f.variants.filter((v) => v.tempKey !== tempKey),
+    }))
+  }
+
+  async function handleVariantUpload(tempKey: string, file: File) {
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Ukuran maksimal 8 MB')
+      return
+    }
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/products/upload', {
+        method: 'POST',
+        body: fd,
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        toast.error(data.error ?? 'Gagal upload foto varian')
+        return
+      }
+      updateVariant(tempKey, { imageUrl: data.data.url })
+      toast.success('Foto varian diupload')
+    } catch {
+      toast.error('Terjadi kesalahan jaringan')
+    }
   }
 
   async function refreshList() {
@@ -171,6 +286,22 @@ export function ProductsClient({
       toast.error('Berat minimal 1 gram')
       return
     }
+    // Validasi varian — semua row harus punya nama + harga ≥0 + berat ≥1.
+    for (let i = 0; i < form.variants.length; i++) {
+      const v = form.variants[i]
+      if (!v.name.trim()) {
+        toast.error(`Varian #${i + 1}: nama wajib diisi`)
+        return
+      }
+      if (v.price < 0) {
+        toast.error(`Varian "${v.name}": harga tidak boleh negatif`)
+        return
+      }
+      if (v.weightGrams < 1) {
+        toast.error(`Varian "${v.name}": berat minimal 1 gram`)
+        return
+      }
+    }
     // Validasi flash sale di client supaya error message kelihatan langsung.
     if (form.flashSaleActive) {
       if (
@@ -217,6 +348,17 @@ export function ProductsClient({
           form.flashSaleActive && form.flashSaleQuota !== ''
             ? Number(form.flashSaleQuota)
             : null,
+        variants: form.variants.map((v, idx) => ({
+          ...(v.id ? { id: v.id } : {}),
+          name: v.name.trim(),
+          sku: v.sku.trim() || null,
+          price: Number(v.price),
+          weightGrams: Number(v.weightGrams),
+          stock: v.stock == null ? null : Number(v.stock),
+          imageUrl: v.imageUrl,
+          isActive: v.isActive,
+          sortOrder: idx,
+        })),
       }
       const url = editingId
         ? `/api/products/${editingId}`
@@ -313,6 +455,12 @@ export function ProductsClient({
                       {p.name}
                     </p>
                     <div className="flex flex-wrap gap-1">
+                      {p.variants && p.variants.length > 0 && (
+                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                          <Layers className="mr-0.5 size-3" />
+                          {p.variants.length} varian
+                        </Badge>
+                      )}
                       {p.flashSaleActive && (
                         <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
                           <Zap className="mr-0.5 size-3" /> Flash
@@ -439,14 +587,17 @@ export function ProductsClient({
             <div className="space-y-1.5">
               <Label>Foto Produk</Label>
               <div className="flex items-start gap-3">
-                <div className="relative size-24 shrink-0 overflow-hidden rounded-lg border bg-warm-50">
+                <div className="size-24 shrink-0 overflow-hidden rounded-lg border bg-warm-50">
                   {form.imageUrl ? (
-                    <Image
+                    // Plain <img> di sini (bukan next/image): preview ukurannya
+                    // kecil (96px) jadi optimization gak worth, dan next/image
+                    // dengan `fill` di Radix Dialog portal bisa stuck saat src
+                    // baru pertama kali masuk dari null.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
                       src={form.imageUrl}
-                      alt="preview"
-                      fill
-                      sizes="96px"
-                      className="object-cover"
+                      alt="Preview foto produk"
+                      className="size-full object-cover"
                     />
                   ) : (
                     <div className="flex size-full items-center justify-center text-warm-400">
@@ -531,6 +682,221 @@ export function ProductsClient({
                   setForm((f) => ({ ...f, isActive: v }))
                 }
               />
+            </div>
+
+            {/* Varian section (Phase 5) */}
+            <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-blue-50 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <Label className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+                    <Layers className="size-4" />
+                    Varian Produk
+                  </Label>
+                  <p className="mt-1 text-xs text-blue-800">
+                    Optional. Kalau diisi, customer harus pilih salah satu di
+                    Form Order. Harga & stok utama di atas akan diabaikan.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={addVariant}
+                  disabled={form.variants.length >= VARIANT_LIMIT}
+                  className="shrink-0"
+                >
+                  <Plus className="mr-1 size-3.5" />
+                  Tambah Varian
+                </Button>
+              </div>
+
+              {form.variants.length === 0 ? (
+                <p className="rounded border border-dashed border-blue-300 bg-white/60 px-3 py-4 text-center text-xs text-blue-800">
+                  Belum ada varian. Klik &ldquo;Tambah Varian&rdquo; untuk
+                  bikin opsi seperti ukuran (12ml/30ml), warna+ukuran (Putih M),
+                  atau paket bundling.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {form.variants.map((v, idx) => (
+                    <li
+                      key={v.tempKey}
+                      className="rounded-lg border border-blue-200 bg-white p-3"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="mt-2 hidden text-blue-300 md:block">
+                          <GripVertical className="size-4" />
+                        </div>
+
+                        {/* Foto varian (96px) */}
+                        <div className="size-20 shrink-0 overflow-hidden rounded-lg border bg-warm-50">
+                          {v.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={v.imageUrl}
+                              alt={`Foto varian ${v.name || idx + 1}`}
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex size-full items-center justify-center text-warm-400">
+                              <ImageIcon className="size-6" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-2 min-w-0">
+                          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-900">
+                                Nama Varian
+                              </Label>
+                              <Input
+                                value={v.name}
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    name: e.target.value,
+                                  })
+                                }
+                                placeholder="Contoh: 30ml / Putih M / Paket 2 botol"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-900">
+                                SKU (opsional)
+                              </Label>
+                              <Input
+                                value={v.sku}
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    sku: e.target.value,
+                                  })
+                                }
+                                placeholder="CLN-30"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-900">
+                                Harga (Rp)
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={500}
+                                value={v.price}
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    price: Number(e.target.value) || 0,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-900">
+                                Berat (g)
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                step={50}
+                                value={v.weightGrams}
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    weightGrams: Number(e.target.value) || 0,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs text-blue-900">
+                                Stok
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                value={v.stock ?? ''}
+                                placeholder="∞"
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    stock:
+                                      e.target.value === ''
+                                        ? null
+                                        : Number(e.target.value) || 0,
+                                  })
+                                }
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                            <div className="flex items-center gap-2">
+                              <Label className="cursor-pointer text-xs text-blue-900">
+                                Aktif
+                              </Label>
+                              <Switch
+                                checked={v.isActive}
+                                onCheckedChange={(c) =>
+                                  updateVariant(v.tempKey, { isActive: c })
+                                }
+                              />
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <label className="inline-flex">
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0]
+                                    if (f) handleVariantUpload(v.tempKey, f)
+                                    e.target.value = ''
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  asChild
+                                >
+                                  <span className="cursor-pointer">
+                                    <Upload className="mr-1 size-3.5" />
+                                    {v.imageUrl ? 'Ganti foto' : 'Foto varian'}
+                                  </span>
+                                </Button>
+                              </label>
+                              {v.imageUrl && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive hover:bg-destructive/10"
+                                  onClick={() =>
+                                    updateVariant(v.tempKey, { imageUrl: null })
+                                  }
+                                >
+                                  Hapus foto
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-destructive hover:bg-destructive/10"
+                                onClick={() => removeVariant(v.tempKey)}
+                              >
+                                <Trash2 className="mr-1 size-3.5" />
+                                Hapus
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             {/* Flash Sale section */}
