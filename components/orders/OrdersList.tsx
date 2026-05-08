@@ -1,178 +1,177 @@
 'use client'
 
-// Halaman utama /pesanan. Tabs + search + date filter + cards.
-// Refetch otomatis saat tab/search/date berubah (debounce search).
-import {
-  Download,
-  ExternalLink,
-  MessageCircle,
-  Package,
-  Search,
-} from 'lucide-react'
-import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+// Halaman utama /pesanan — orchestrator state + fetching.
+// Sub-component: OrdersStatsStrip, OrdersFilterBar, OrdersTable / OrderCardView,
+// OrdersBulkActionBar, OrderDetailDialog.
+//
+// View mode (table vs card) di-persist ke localStorage. Default: table —
+// lebih cocok untuk admin yang kelola ratusan order/hari.
+import { Download, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { OrderDetailDialog } from '@/components/orders/OrderDetailDialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatRelativeTime } from '@/lib/format-time'
 
-export interface OrderItem {
-  name: string
-  qty: number
-  price?: number | null
+import { OrderCardView } from './OrderCardView'
+import { OrderDetailDialog } from './OrderDetailDialog'
+import { OrdersBulkActionBar } from './OrdersBulkActionBar'
+import { OrdersFilterBar } from './OrdersFilterBar'
+import { OrdersStatsStrip } from './OrdersStatsStrip'
+import { OrdersTable } from './OrdersTable'
+import type {
+  OrderListItem,
+  OrdersCounts,
+  OrdersTotals,
+  QuickAction,
+  SmartFilter,
+  ViewMode,
+} from './types'
+
+// Re-export untuk backward compat (page.tsx lama import dari sini).
+export type { OrderListItem, OrdersCounts } from './types'
+
+const VIEW_KEY = 'hulao.orders.view'
+const PAGE_LIMIT = 50
+
+const ZERO_COUNTS: OrdersCounts = {
+  all: 0,
+  pending: 0,
+  paid: 0,
+  shipped: 0,
+  completed: 0,
+}
+const ZERO_TOTALS: OrdersTotals = {
+  todayCount: 0,
+  todayPaidRp: 0,
+  urgentCount: 0,
 }
 
-export interface OrderListItem {
-  id: string
-  customerName: string
-  customerPhone: string
-  customerAddress: string | null
-  items: OrderItem[]
-  totalAmount: number | null
-  paymentMethod: string
-  paymentStatus: string
-  deliveryStatus: string
-  trackingNumber: string | null
-  flowName: string | null
-  notes: string | null
-  contactId: string | null
-  createdAt: string
-  updatedAt: string
-  // E-commerce fields (Phase 3, optional — null untuk order WA flow lama)
-  invoiceNumber?: string | null
-  paymentProofUrl?: string | null
-  shippingCourier?: string | null
-  shippingService?: string | null
-  shippingCityName?: string | null
-  shippingProvinceName?: string | null
-  subtotalRp?: number
-  flashSaleDiscountRp?: number
-  shippingCostRp?: number
-  shippingSubsidyRp?: number
-  appliedZoneName?: string | null
-  totalRp?: number
-  uniqueCode?: number | null
-  // Pixel tracking (Phase 3 Pixel)
-  pixelLeadFiredAt?: string | null
-  pixelPurchaseFiredAt?: string | null
-}
-
-export interface OrdersCounts {
-  all: number
-  pending: number
-  paid: number
-  shipped: number
-  completed: number
-}
-
-const TABS: Array<{ key: keyof OrdersCounts; label: string }> = [
-  { key: 'all', label: 'Semua' },
-  { key: 'pending', label: 'Menunggu' },
-  { key: 'paid', label: 'Sudah Bayar' },
-  { key: 'shipped', label: 'Dikirim' },
-  { key: 'completed', label: 'Selesai' },
-]
-
-interface Props {
-  initial: OrderListItem[]
-  initialCounts: OrdersCounts
-}
-
-export function OrdersList({ initial, initialCounts }: Props) {
+export function OrdersList() {
   const [tab, setTab] = useState<keyof OrdersCounts>('all')
+  const [smart, setSmart] = useState<SmartFilter | null>(null)
   const [search, setSearch] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
-  const [orders, setOrders] = useState<OrderListItem[]>(initial)
-  const [counts, setCounts] = useState<OrdersCounts>(initialCounts)
-  const [loading, setLoading] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'TRANSFER' | null>(
+    null,
+  )
+  // Lazy init dari localStorage — jalan sekali di client, hindari setState
+  // di effect (react-hooks/set-state-in-effect rule).
+  const [view, setView] = useState<ViewMode>(() => {
+    if (typeof window === 'undefined') return 'table'
+    const saved = window.localStorage.getItem(VIEW_KEY)
+    return saved === 'card' ? 'card' : 'table'
+  })
+
+  const [orders, setOrders] = useState<OrderListItem[]>([])
+  const [counts, setCounts] = useState<OrdersCounts>(ZERO_COUNTS)
+  const [totals, setTotals] = useState<OrdersTotals>(ZERO_TOTALS)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = useCallback(() => setReloadKey((k) => k + 1), [])
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [detailId, setDetailId] = useState<string | null>(null)
 
-  // Debounce search supaya tidak fetch di setiap keystroke.
+  // Persist view ke localStorage saat berubah. Tidak setState — jadi aman
+  // di useEffect.
   useEffect(() => {
-    const tid = setTimeout(() => {
-      void refetch()
-    }, search ? 300 : 0)
-    return () => clearTimeout(tid)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, search, from, to])
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(VIEW_KEY, view)
+  }, [view])
 
-  async function refetch() {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      params.set('tab', String(tab))
-      if (search.trim()) params.set('q', search.trim())
-      if (from) params.set('from', new Date(from).toISOString())
-      if (to) {
-        // include sampai akhir hari `to`
-        const end = new Date(to)
-        end.setHours(23, 59, 59, 999)
-        params.set('to', end.toISOString())
-      }
-      const res = await fetch(`/api/orders?${params.toString()}`)
-      const json = (await res.json().catch(() => null)) as
-        | {
-            success: boolean
-            data?: { orders: OrderListItem[]; counts: OrdersCounts }
-            error?: string
-          }
-        | null
-      if (!res.ok || !json?.success || !json.data) {
-        toast.error(json?.error ?? 'Gagal memuat pesanan')
-        return
-      }
-      setOrders(json.data.orders)
-      setCounts(json.data.counts)
-    } finally {
-      setLoading(false)
+  // Build query string dari filter.
+  const queryString = useMemo(() => {
+    const p = new URLSearchParams()
+    p.set('tab', String(tab))
+    if (smart) p.set('f', smart)
+    if (search.trim()) p.set('q', search.trim())
+    if (from) p.set('from', new Date(from).toISOString())
+    if (to) {
+      const end = new Date(to)
+      end.setHours(23, 59, 59, 999)
+      p.set('to', end.toISOString())
     }
-  }
+    if (paymentMethod) p.set('pm', paymentMethod)
+    p.set('limit', String(PAGE_LIMIT))
+    return p.toString()
+  }, [tab, smart, search, from, to, paymentMethod])
 
-  async function refirePixel(order: OrderListItem) {
-    if (!order.invoiceNumber) return
-    // Tentukan event yang relevan: kalau Purchase belum fired, fire Purchase.
-    // Kalau Lead juga belum (mis. order baru yg gagal sama sekali), fire Lead.
-    const eventName: 'Purchase' | 'Lead' =
-      order.paymentStatus === 'PAID' || order.paymentMethod === 'COD'
-        ? 'Purchase'
-        : order.pixelLeadFiredAt
-          ? 'Purchase'  // Lead sudah, kemungkinan user mau push Purchase manual
-          : 'Lead'
+  // Initial / refetch saat filter berubah. Debounce search 300ms.
+  useEffect(() => {
+    const debounceMs = search ? 300 : 0
+    let cancelled = false
+    const tid = setTimeout(() => {
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/orders?${queryString}`, {
+            cache: 'no-store',
+          })
+          const json = await res.json()
+          if (cancelled) return
+          if (!res.ok || !json.success) {
+            toast.error(json.error ?? 'Gagal memuat pesanan')
+            return
+          }
+          setOrders(json.data.orders)
+          setCounts(json.data.counts)
+          setTotals(json.data.totals)
+          setNextCursor(json.data.nextCursor ?? null)
+          setSelectedIds(new Set())
+        } catch (e) {
+          if (cancelled) return
+          toast.error(e instanceof Error ? e.message : 'Network error')
+        } finally {
+          if (!cancelled) setLoading(false)
+        }
+      })()
+    }, debounceMs)
+    return () => {
+      cancelled = true
+      clearTimeout(tid)
+    }
+  }, [queryString, reloadKey, search])
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
     try {
-      const res = await fetch(`/api/orders/${order.id}/refire-pixel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventName }),
-      })
+      const res = await fetch(
+        `/api/orders?${queryString}&cursor=${encodeURIComponent(nextCursor)}`,
+        { cache: 'no-store' },
+      )
       const json = await res.json()
       if (!res.ok || !json.success) {
-        toast.error(json.error ?? 'Gagal re-fire pixel')
+        toast.error(json.error ?? 'Gagal memuat halaman berikutnya')
         return
       }
-      const d = json.data
-      if (d.succeeded > 0) {
-        toast.success(`${eventName} fired — ${d.succeeded} sukses`)
-      } else if (d.skipped > 0 && d.fired === 0) {
-        toast.info(`${eventName} sudah pernah fired — di-skip (dedup)`)
-      } else {
-        toast.warning(`${eventName} dicoba tapi gagal — cek logs`)
-      }
-      void refetch()
-    } catch {
-      toast.error('Terjadi kesalahan jaringan')
+      setOrders((prev) => [...prev, ...json.data.orders])
+      setNextCursor(json.data.nextCursor ?? null)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
-  async function quickAction(
-    order: OrderListItem,
-    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered' | 'reject',
-  ) {
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (prev.size >= orders.length) return new Set()
+      return new Set(orders.map((o) => o.id))
+    })
+  }
+
+  async function quickAction(order: OrderListItem, action: QuickAction) {
     const body: Record<string, unknown> = {}
     if (action === 'mark_paid') body.paymentStatus = 'PAID'
     if (action === 'mark_shipped') body.deliveryStatus = 'SHIPPED'
@@ -205,30 +204,129 @@ export function OrdersList({ initial, initialCounts }: Props) {
             ? 'Ditandai selesai'
             : 'Order ditolak',
     )
-    void refetch()
+    reload()
+  }
+
+  async function bulkAction(action: QuickAction) {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    const labelMap: Record<QuickAction, string> = {
+      mark_paid: 'lunas',
+      mark_shipped: 'dikirim',
+      mark_delivered: 'selesai',
+      reject: 'tolak',
+    }
+    if (
+      !confirm(
+        `Tandai ${ids.length} pesanan sebagai ${labelMap[action]}?`,
+      )
+    ) {
+      return
+    }
+    let cancelledReason: string | undefined
+    if (action === 'reject') {
+      cancelledReason =
+        window.prompt('Alasan penolakan (opsional):')?.trim() || undefined
+    }
+
+    setBulkBusy(true)
+    try {
+      const res = await fetch('/api/orders/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderIds: ids, action, cancelledReason }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error ?? 'Bulk update gagal')
+        return
+      }
+      const d = json.data
+      toast.success(
+        `${d.updated} di-update, ${d.skipped} di-skip${
+          d.failed > 0 ? `, ${d.failed} gagal` : ''
+        }`,
+      )
+      setSelectedIds(new Set())
+      reload()
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  async function updateTracking(orderId: string, value: string) {
+    const res = await fetch(`/api/orders/${orderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackingNumber: value || null }),
+    })
+    const json = (await res.json().catch(() => null)) as
+      | { success: boolean; error?: string }
+      | null
+    if (!res.ok || !json?.success) {
+      toast.error(json?.error ?? 'Gagal update resi')
+      return
+    }
+    toast.success('Resi tersimpan')
+    reload()
+  }
+
+  async function refirePixel(order: OrderListItem) {
+    if (!order.invoiceNumber) return
+    const eventName: 'Purchase' | 'Lead' =
+      order.paymentStatus === 'PAID' || order.paymentMethod === 'COD'
+        ? 'Purchase'
+        : order.pixelLeadFiredAt
+          ? 'Purchase'
+          : 'Lead'
+    try {
+      const res = await fetch(`/api/orders/${order.id}/refire-pixel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventName }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error ?? 'Gagal re-fire pixel')
+        return
+      }
+      const d = json.data
+      if (d.succeeded > 0) {
+        toast.success(`${eventName} fired — ${d.succeeded} sukses`)
+      } else if (d.skipped > 0 && d.fired === 0) {
+        toast.info(`${eventName} sudah pernah fired — di-skip`)
+      } else {
+        toast.warning(`${eventName} dicoba tapi gagal — cek logs`)
+      }
+      reload()
+    } catch {
+      toast.error('Network error')
+    }
   }
 
   function exportCsv() {
-    const params = new URLSearchParams()
-    params.set('tab', String(tab))
-    if (from) params.set('from', new Date(from).toISOString())
-    if (to) {
-      const end = new Date(to)
-      end.setHours(23, 59, 59, 999)
-      params.set('to', end.toISOString())
-    }
-    window.open(`/api/orders/export?${params.toString()}`, '_blank')
+    const p = new URLSearchParams(queryString)
+    p.delete('limit')
+    window.open(`/api/orders/export?${p.toString()}`, '_blank')
+  }
+
+  function clearAllFilters() {
+    setSmart(null)
+    setSearch('')
+    setFrom('')
+    setTo('')
+    setPaymentMethod(null)
   }
 
   return (
     <>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
             Pesanan Masuk
           </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Pesanan yang ditangani AI dan flow otomatis.
+          <p className="mt-0.5 text-sm text-warm-500">
+            Kelola order COD & Transfer dari semua channel.
           </p>
         </div>
         <Button variant="outline" onClick={exportCsv}>
@@ -237,370 +335,90 @@ export function OrdersList({ initial, initialCounts }: Props) {
         </Button>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama, nomor HP, atau catatan..."
-            className="pl-9"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="w-auto"
-            aria-label="Dari tanggal"
-          />
-          <span className="text-sm text-muted-foreground">—</span>
-          <Input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="w-auto"
-            aria-label="Sampai tanggal"
-          />
-        </div>
-      </div>
+      <OrdersStatsStrip
+        todayCount={totals.todayCount}
+        todayPaidRp={totals.todayPaidRp}
+        urgentCount={totals.urgentCount}
+        onClickUrgent={() => {
+          setSmart('urgent')
+          setTab('all')
+        }}
+      />
 
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={(v) => setTab(v as keyof OrdersCounts)}>
-        <TabsList className="w-full justify-start overflow-x-auto">
-          {TABS.map((t) => (
-            <TabsTrigger key={t.key} value={t.key} className="gap-2">
-              {t.label}
-              <Badge variant="secondary" className="font-normal">
-                {counts[t.key]}
-              </Badge>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <OrdersFilterBar
+        tab={tab}
+        smart={smart}
+        search={search}
+        from={from}
+        to={to}
+        paymentMethod={paymentMethod}
+        counts={counts}
+        urgentCount={totals.urgentCount}
+        view={view}
+        onTabChange={(v) => {
+          setTab(v)
+          setSmart(null) // tab dan smart mutually exclusive di server
+        }}
+        onSmartChange={setSmart}
+        onSearchChange={setSearch}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onPaymentMethodChange={setPaymentMethod}
+        onViewChange={setView}
+        onClearAll={clearAllFilters}
+      />
 
-      {/* List */}
-      {loading && orders.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          Memuat...
-        </p>
-      ) : orders.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <Package className="size-10 text-muted-foreground" />
-            <div className="space-y-1">
-              <p className="font-medium">Belum ada pesanan</p>
-              <p className="text-sm text-muted-foreground">
-                Pesanan masuk akan muncul di sini saat customer selesai flow
-                pemesanan.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {view === 'table' ? (
+        <OrdersTable
+          orders={orders}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onToggleSelectAll={toggleSelectAll}
+          onOpenDetail={setDetailId}
+          onQuickAction={quickAction}
+          onUpdateTracking={updateTracking}
+          loading={loading}
+        />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {orders.map((o) => (
-            <OrderCard
-              key={o.id}
-              order={o}
-              onOpenDetail={() => setDetailId(o.id)}
-              onQuickAction={quickAction}
-              onRefirePixel={refirePixel}
-            />
-          ))}
+        <OrderCardView
+          orders={orders}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onOpenDetail={setDetailId}
+          onQuickAction={quickAction}
+          onRefirePixel={refirePixel}
+          loading={loading}
+        />
+      )}
+
+      {nextCursor && (
+        <div className="flex justify-center py-2">
+          <Button
+            variant="outline"
+            onClick={loadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore && <Loader2 className="mr-2 size-4 animate-spin" />}
+            Muat lebih banyak
+          </Button>
         </div>
       )}
 
+      <OrdersBulkActionBar
+        selectedCount={selectedIds.size}
+        busy={bulkBusy}
+        onAction={bulkAction}
+        onClear={() => setSelectedIds(new Set())}
+      />
+
+      {/* Key supaya dialog remount fresh per orderId — initial state loading=true
+          works tanpa setState di body effect. */}
       <OrderDetailDialog
+        key={detailId ?? 'closed'}
         orderId={detailId}
         onClose={() => setDetailId(null)}
-        onChanged={() => void refetch()}
+        onChanged={reload}
       />
     </>
   )
 }
-
-// ── Card untuk satu pesanan ─────────────────────────────────────────────────
-
-interface CardProps {
-  order: OrderListItem
-  onOpenDetail: () => void
-  onQuickAction: (
-    order: OrderListItem,
-    action: 'mark_paid' | 'mark_shipped' | 'mark_delivered' | 'reject',
-  ) => void
-  onRefirePixel: (order: OrderListItem) => void
-}
-
-function OrderCard({ order, onOpenDetail, onQuickAction, onRefirePixel }: CardProps) {
-  const isUnpaid =
-    order.paymentStatus === 'PENDING' ||
-    order.paymentStatus === 'WAITING_CONFIRMATION'
-  const isWaitingConfirmation =
-    order.paymentStatus === 'WAITING_CONFIRMATION'
-  const isPaid = order.paymentStatus === 'PAID'
-  const isShipped = order.deliveryStatus === 'SHIPPED'
-  const isDelivered = order.deliveryStatus === 'DELIVERED'
-  const isCancelled =
-    order.paymentStatus === 'CANCELLED' || order.deliveryStatus === 'CANCELLED'
-  const isNew = useMemo(() => {
-    return Date.now() - new Date(order.createdAt).getTime() < 1000 * 60 * 60
-  }, [order.createdAt])
-
-  const itemsSummary =
-    order.items.length === 0
-      ? '—'
-      : order.items
-          .slice(0, 3)
-          .map((it) => `${it.name}${it.qty > 1 ? ` × ${it.qty}` : ''}`)
-          .join(', ')
-  return (
-    <Card className="rounded-xl border-warm-200 shadow-sm">
-      <CardContent className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 text-xs">
-            {isNew && <Badge className="bg-emerald-500 text-white">🆕 Baru</Badge>}
-            {isCancelled && (
-              <Badge variant="outline" className="text-destructive">
-                Dibatalkan
-              </Badge>
-            )}
-            <span className="text-muted-foreground">
-              {formatRelativeTime(order.createdAt)}
-            </span>
-          </span>
-          {order.flowName && (
-            <Badge variant="secondary" className="font-normal">
-              {order.flowName}
-            </Badge>
-          )}
-        </div>
-
-        <div className="space-y-1 text-sm">
-          <p className="font-medium">👤 {order.customerName}</p>
-          <p className="text-muted-foreground">📞 {order.customerPhone}</p>
-          {order.customerAddress && (
-            <p className="line-clamp-2 text-muted-foreground">
-              📍 {order.customerAddress}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1 border-t pt-2 text-sm">
-          {order.items.length > 0 && (
-            <p>🛒 {itemsSummary}</p>
-          )}
-          {/* E-commerce breakdown — kalau ada invoiceNumber */}
-          {order.invoiceNumber ? (
-            <div className="rounded-lg bg-warm-50 px-2 py-1.5 text-xs text-warm-700 space-y-0.5">
-              <p className="font-mono text-warm-900">📄 {order.invoiceNumber}</p>
-              {(order.subtotalRp ?? 0) > 0 && (
-                <p>💰 Subtotal: Rp {(order.subtotalRp ?? 0).toLocaleString('id-ID')}</p>
-              )}
-              {(order.flashSaleDiscountRp ?? 0) > 0 && (
-                <p className="text-amber-700">⚡ Hemat Flash: -Rp {(order.flashSaleDiscountRp ?? 0).toLocaleString('id-ID')}</p>
-              )}
-              {(order.shippingCostRp ?? 0) > 0 && (
-                <p>
-                  🚚 Ongkir{' '}
-                  {order.shippingCourier && order.shippingService
-                    ? `${order.shippingCourier.toUpperCase()} ${order.shippingService}`
-                    : ''}
-                  : Rp {(order.shippingCostRp ?? 0).toLocaleString('id-ID')}
-                </p>
-              )}
-              {(order.shippingSubsidyRp ?? 0) > 0 && (
-                <p className="text-blue-700">
-                  🎁 Subsidi {order.appliedZoneName ?? ''}: -Rp {(order.shippingSubsidyRp ?? 0).toLocaleString('id-ID')}
-                </p>
-              )}
-              <p className="font-bold text-warm-900">
-                Total: Rp {((order.totalRp ?? order.totalAmount) ?? 0).toLocaleString('id-ID')}
-                {order.uniqueCode ? ` (kode +${order.uniqueCode})` : ''}
-              </p>
-            </div>
-          ) : (
-            order.totalAmount !== null && (
-              <p>💰 Total: Rp {order.totalAmount.toLocaleString('id-ID')}</p>
-            )
-          )}
-          <p>
-            💳 Bayar: {order.paymentMethod}
-            {order.paymentProofUrl && (
-              <a
-                href={order.paymentProofUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-2 text-primary-600 underline"
-              >
-                Lihat bukti
-              </a>
-            )}
-          </p>
-          {/* Pixel tracking status — hanya untuk e-commerce orders */}
-          {order.invoiceNumber && (
-            <div className="flex items-start justify-between gap-2 text-xs text-warm-600">
-              <span className="flex-1">
-                📊 Pixel:{' '}
-                {order.pixelPurchaseFiredAt ? (
-                  <span className="text-emerald-700">
-                    ✅ Purchase fired ·{' '}
-                    {formatRelativeTime(order.pixelPurchaseFiredAt)}
-                  </span>
-                ) : order.pixelLeadFiredAt ? (
-                  <>
-                    <span className="text-emerald-700">
-                      ✅ Lead fired ·{' '}
-                      {formatRelativeTime(order.pixelLeadFiredAt)}
-                    </span>
-                    <span className="ml-1 text-warm-500">
-                      · Purchase pending (saat tandai PAID)
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-warm-500">
-                    ⏳ Belum ada pixel fired
-                  </span>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={() => onRefirePixel(order)}
-                className="shrink-0 rounded border border-warm-300 px-1.5 py-0.5 text-[10px] text-warm-600 hover:bg-warm-100"
-              >
-                Re-fire
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 border-t pt-2 text-xs">
-          <span className="text-muted-foreground">Status:</span>
-          <PaymentBadge status={order.paymentStatus} />
-          <DeliveryBadge status={order.deliveryStatus} />
-          {order.trackingNumber && (
-            <span className="text-muted-foreground">
-              · Resi: {order.trackingNumber}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 border-t pt-3">
-          {isUnpaid && (
-            <Button
-              size="sm"
-              variant="outline"
-              className={
-                isWaitingConfirmation
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                  : ''
-              }
-              onClick={() => onQuickAction(order, 'mark_paid')}
-            >
-              ✓ {isWaitingConfirmation ? 'Konfirmasi Bayar' : 'Tandai Lunas'}
-            </Button>
-          )}
-          {isUnpaid && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-destructive hover:bg-destructive/10"
-              onClick={() => onQuickAction(order, 'reject')}
-            >
-              ✕ Tolak
-            </Button>
-          )}
-          {isPaid && !isShipped && !isDelivered && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onQuickAction(order, 'mark_shipped')}
-            >
-              📦 Tandai Dikirim
-            </Button>
-          )}
-          {isShipped && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onQuickAction(order, 'mark_delivered')}
-            >
-              ✅ Tandai Selesai
-            </Button>
-          )}
-          <Button size="sm" onClick={onOpenDetail}>
-            <ExternalLink className="mr-1 size-3" />
-            Detail
-          </Button>
-          <Button asChild size="sm" variant="ghost">
-            <Link href={`/inbox?contact=${order.contactId}`}>
-              <MessageCircle className="mr-1 size-3" />
-              Chat
-            </Link>
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function PaymentBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    PENDING: {
-      label: '⏳ Belum bayar',
-      className: 'bg-amber-100 text-amber-900 dark:bg-amber-950/40',
-    },
-    PAID: {
-      label: '✓ Lunas',
-      className: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40',
-    },
-    CANCELLED: {
-      label: 'Dibatalkan',
-      className: 'bg-warm-100 text-warm-700 dark:bg-warm-900/40',
-    },
-  }
-  const v = map[status] ?? { label: status, className: '' }
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${v.className}`}
-    >
-      {v.label}
-    </span>
-  )
-}
-
-function DeliveryBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; className: string }> = {
-    PENDING: {
-      label: '⏳ Menunggu kirim',
-      className: 'bg-warm-100 text-warm-900 dark:bg-warm-900/40',
-    },
-    PROCESSING: {
-      label: '⚙️ Proses',
-      className: 'bg-sky-100 text-sky-900 dark:bg-sky-950/40',
-    },
-    SHIPPED: {
-      label: '🚚 Dikirim',
-      className: 'bg-blue-100 text-blue-900 dark:bg-blue-950/40',
-    },
-    DELIVERED: {
-      label: '✅ Selesai',
-      className: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/40',
-    },
-    CANCELLED: {
-      label: 'Dibatalkan',
-      className: 'bg-warm-100 text-warm-700 dark:bg-warm-900/40',
-    },
-  }
-  const v = map[status] ?? { label: status, className: '' }
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${v.className}`}
-    >
-      {v.label}
-    </span>
-  )
-}
-

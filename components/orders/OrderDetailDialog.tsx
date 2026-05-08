@@ -65,7 +65,10 @@ interface Props {
 
 export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
   const [data, setData] = useState<OrderDetail | null>(null)
-  const [loading, setLoading] = useState(false)
+  // Initial true — parent render dialog with `key={orderId}` per detail buka,
+  // jadi component remount fresh tiap kali. Loading state akan false setelah
+  // fetch selesai. Hindari setLoading(true) di body effect.
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState('')
@@ -75,17 +78,18 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
   const [notes, setNotes] = useState('')
 
   useEffect(() => {
-    if (!orderId) {
-      setData(null)
-      return
-    }
-    void (async () => {
-      setLoading(true)
+    if (!orderId) return
+    // Tidak setState di body effect (rule react-hooks/set-state-in-effect).
+    // Initial state useState(false) dan kita set ke true via lazy approach:
+    // toggle local cancel flag sekaligus drive loading=true via state in async.
+    let cancelled = false
+    ;(async () => {
       try {
         const res = await fetch(`/api/orders/${orderId}`)
         const json = (await res.json().catch(() => null)) as
           | { success: boolean; data?: OrderDetail; error?: string }
           | null
+        if (cancelled) return
         if (!res.ok || !json?.success || !json.data) {
           toast.error(json?.error ?? 'Gagal memuat pesanan')
           onClose()
@@ -98,9 +102,12 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
         setTrackingNumber(json.data.trackingNumber ?? '')
         setNotes(json.data.notes ?? '')
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     })()
+    return () => {
+      cancelled = true
+    }
   }, [orderId, onClose])
 
   async function handleSave() {
