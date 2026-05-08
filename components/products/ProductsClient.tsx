@@ -3,14 +3,18 @@
 // CRUD produk untuk Order System. Phase 2: tanpa flash sale UI (field di DB
 // disiapkan, UI input masuk Phase 4). Phase 5 (2026-05-08): tambah editor varian.
 import {
+  ArrowLeft,
+  ArrowRight,
   Edit3,
   GripVertical,
   Image as ImageIcon,
   Layers,
   Package,
   Plus,
+  Star,
   Trash2,
   Upload,
+  X,
   Zap,
 } from 'lucide-react'
 import Image from 'next/image'
@@ -53,6 +57,8 @@ interface Product {
   price: number
   weightGrams: number
   imageUrl: string | null
+  // Galeri foto produk (max 10). Item pertama = cover.
+  images: string[]
   stock: number | null
   isActive: boolean
   order: number
@@ -65,6 +71,8 @@ interface Product {
   flashSaleSold: number
   variants?: ProductVariant[]
 }
+
+const MAX_IMAGES = 10
 
 // Variant row state di form (sebelum disubmit). Pakai `tempKey` untuk React
 // `key` saat varian belum ada `id` dari server. Sengaja tidak pakai array
@@ -109,7 +117,9 @@ const EMPTY_FORM = {
   description: '',
   price: 0,
   weightGrams: 500,
-  imageUrl: null as string | null,
+  // Galeri foto utama. Cover di-derive dari index 0 di server. UI hanya
+  // mengelola array ini — tidak perlu state imageUrl terpisah.
+  images: [] as string[],
   stock: null as number | null,
   isActive: true,
   flashSaleActive: false,
@@ -152,7 +162,14 @@ export function ProductsClient({
       description: p.description ?? '',
       price: p.price,
       weightGrams: p.weightGrams,
-      imageUrl: p.imageUrl,
+      // Backwards compat — kalau produk lama belum punya `images` populated tapi
+      // ada `imageUrl`, tampilkan sebagai single-item gallery.
+      images:
+        p.images && p.images.length > 0
+          ? p.images
+          : p.imageUrl
+            ? [p.imageUrl]
+            : [],
       stock: p.stock,
       isActive: p.isActive,
       flashSaleActive: p.flashSaleActive,
@@ -246,31 +263,82 @@ export function ProductsClient({
     if (data.success) setProducts(data.data.items)
   }
 
-  async function handleUpload(file: File) {
+  async function uploadOne(file: File): Promise<string | null> {
     if (file.size > 8 * 1024 * 1024) {
-      toast.error('Ukuran maksimal 8 MB')
-      return
+      toast.error(`File "${file.name}" melebihi 8 MB`)
+      return null
     }
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/products/upload', {
+      method: 'POST',
+      body: fd,
+    })
+    const data = await res.json()
+    if (!res.ok || !data.success) {
+      toast.error(data.error ?? `Gagal upload "${file.name}"`)
+      return null
+    }
+    return data.data.url as string
+  }
+
+  async function handleUpload(files: FileList) {
+    if (files.length === 0) return
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const res = await fetch('/api/products/upload', {
-        method: 'POST',
-        body: fd,
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        toast.error(data.error ?? 'Gagal upload')
+      // Hitung sisa slot supaya tidak melebihi MAX_IMAGES total.
+      const slots = MAX_IMAGES - form.images.length
+      if (slots <= 0) {
+        toast.error(`Maksimal ${MAX_IMAGES} foto`)
         return
       }
-      setForm((f) => ({ ...f, imageUrl: data.data.url }))
-      toast.success('Foto diupload')
+      const list = Array.from(files).slice(0, slots)
+      if (files.length > slots) {
+        toast.error(
+          `Hanya ${slots} foto yang ditambahkan (sisa slot dari ${MAX_IMAGES}).`,
+        )
+      }
+      const urls: string[] = []
+      for (const file of list) {
+        const url = await uploadOne(file)
+        if (url) urls.push(url)
+      }
+      if (urls.length > 0) {
+        setForm((f) => ({ ...f, images: [...f.images, ...urls] }))
+        toast.success(`${urls.length} foto diupload`)
+      }
     } catch {
       toast.error('Terjadi kesalahan jaringan')
     } finally {
       setUploading(false)
     }
+  }
+
+  function removeImage(index: number) {
+    setForm((f) => ({
+      ...f,
+      images: f.images.filter((_, i) => i !== index),
+    }))
+  }
+
+  function moveImage(index: number, direction: -1 | 1) {
+    setForm((f) => {
+      const next = [...f.images]
+      const target = index + direction
+      if (target < 0 || target >= next.length) return f
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return { ...f, images: next }
+    })
+  }
+
+  function setCover(index: number) {
+    setForm((f) => {
+      if (index === 0 || index >= f.images.length) return f
+      const next = [...f.images]
+      const [chosen] = next.splice(index, 1)
+      next.unshift(chosen)
+      return { ...f, images: next }
+    })
   }
 
   async function handleSubmit() {
@@ -331,7 +399,8 @@ export function ProductsClient({
         description: form.description.trim() || null,
         price: Number(form.price),
         weightGrams: Number(form.weightGrams),
-        imageUrl: form.imageUrl,
+        // Server akan derive cover (imageUrl) dari images[0] secara otomatis.
+        images: form.images,
         stock: unlimitedStock ? null : Number(form.stock ?? 0),
         isActive: form.isActive,
         flashSaleActive: form.flashSaleActive,
@@ -584,65 +653,119 @@ export function ProductsClient({
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Foto Produk</Label>
-              <div className="flex items-start gap-3">
-                <div className="size-24 shrink-0 overflow-hidden rounded-lg border bg-warm-50">
-                  {form.imageUrl ? (
-                    // Plain <img> di sini (bukan next/image): preview ukurannya
-                    // kecil (96px) jadi optimization gak worth, dan next/image
-                    // dengan `fill` di Radix Dialog portal bisa stuck saat src
-                    // baru pertama kali masuk dari null.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={form.imageUrl}
-                      alt="Preview foto produk"
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex size-full items-center justify-center text-warm-400">
-                      <ImageIcon className="size-7" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1 space-y-2">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0]
-                      if (f) handleUpload(f)
-                      e.target.value = ''
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={uploading}
-                  >
-                    <Upload className="mr-1 size-3.5" />
-                    {uploading ? 'Mengunggah…' : 'Pilih Foto'}
-                  </Button>
-                  {form.imageUrl && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setForm((f) => ({ ...f, imageUrl: null }))}
-                      className="text-destructive hover:bg-destructive/10"
-                    >
-                      Hapus foto
-                    </Button>
-                  )}
-                  <p className="text-xs text-warm-500">
-                    JPG / PNG / WebP, max 8 MB. Otomatis dikompres ke WebP.
-                  </p>
-                </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Foto Produk</Label>
+                <span className="text-xs text-warm-500">
+                  {form.images.length}/{MAX_IMAGES}
+                </span>
               </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleUpload(e.target.files)
+                  }
+                  e.target.value = ''
+                }}
+              />
+              {form.images.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-warm-50 text-warm-500 transition-colors hover:bg-warm-100 disabled:opacity-60"
+                >
+                  <Upload className="size-6" />
+                  <span className="text-sm">
+                    {uploading ? 'Mengunggah…' : 'Pilih foto (bisa pilih banyak sekaligus)'}
+                  </span>
+                </button>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+                  {form.images.map((url, idx) => (
+                    <div
+                      key={`${url}-${idx}`}
+                      className={`group relative aspect-square overflow-hidden rounded-lg border bg-warm-50 ${
+                        idx === 0 ? 'ring-2 ring-primary-500' : ''
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Foto produk #${idx + 1}`}
+                        className="size-full object-cover"
+                      />
+                      {idx === 0 && (
+                        <span className="absolute left-1 top-1 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                          Cover
+                        </span>
+                      )}
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/55 p-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <button
+                          type="button"
+                          aria-label="Geser kiri"
+                          onClick={() => moveImage(idx, -1)}
+                          disabled={idx === 0}
+                          className="rounded p-1 text-white hover:bg-white/20 disabled:opacity-40"
+                        >
+                          <ArrowLeft className="size-3.5" />
+                        </button>
+                        {idx !== 0 && (
+                          <button
+                            type="button"
+                            aria-label="Jadikan cover"
+                            title="Jadikan cover"
+                            onClick={() => setCover(idx)}
+                            className="rounded p-1 text-white hover:bg-white/20"
+                          >
+                            <Star className="size-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label="Hapus foto"
+                          onClick={() => removeImage(idx)}
+                          className="rounded p-1 text-rose-200 hover:bg-rose-500/40"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Geser kanan"
+                          onClick={() => moveImage(idx, 1)}
+                          disabled={idx === form.images.length - 1}
+                          className="rounded p-1 text-white hover:bg-white/20 disabled:opacity-40"
+                        >
+                          <ArrowRight className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {form.images.length < MAX_IMAGES && (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={uploading}
+                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-warm-50 text-warm-500 transition-colors hover:bg-warm-100 disabled:opacity-60"
+                    >
+                      <Plus className="size-5" />
+                      <span className="text-[10px]">
+                        {uploading ? 'Upload…' : 'Tambah'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-xs text-warm-500">
+                JPG / PNG / WebP, max 8 MB per foto. Maksimal {MAX_IMAGES} foto.
+                Foto pertama jadi cover di list & invoice. Klik bintang untuk
+                set sebagai cover.
+              </p>
             </div>
 
             <div className="space-y-2 rounded-lg border bg-warm-50 p-3">

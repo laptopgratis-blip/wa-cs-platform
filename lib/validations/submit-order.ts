@@ -36,7 +36,17 @@ export const submitOrderSchema = z
     shippingDistrictName: z.string().nullable().optional(),
     shippingSubdistrictName: z.string().nullable().optional(),
     shippingPostalCode: z.string().nullable().optional(),
-    shippingAddress: z.string().min(5, 'Alamat lengkap wajib diisi').max(500),
+    // Opsional — wajib hanya kalau form butuh alamat (server-side check).
+    // Kalau diisi, minimal 5 karakter; kalau kosong, biarkan null/undefined.
+    shippingAddress: z
+      .string()
+      .max(500)
+      .optional()
+      .nullable()
+      .refine(
+        (v) => v == null || v.trim().length === 0 || v.trim().length >= 5,
+        'Alamat lengkap minimal 5 karakter',
+      ),
 
     // Payment
     paymentMethod: z.enum(['COD', 'TRANSFER']),

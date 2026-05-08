@@ -43,6 +43,9 @@ export async function PATCH(
         ...(data.shippingFlatCod !== undefined && {
           shippingFlatCod: data.shippingFlatCod,
         }),
+        ...(data.requireShipping !== undefined && {
+          requireShipping: data.requireShipping,
+        }),
         ...(data.showFlashSaleCounter !== undefined && {
           showFlashSaleCounter: data.showFlashSaleCounter,
         }),

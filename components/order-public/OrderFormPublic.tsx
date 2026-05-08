@@ -3,6 +3,8 @@
 // Form Order publik — customer-facing, mobile-first. Live pricing yang
 // dihitung sisi server (POST /api/shipping/cost untuk ongkir RajaOngkir).
 import {
+  ChevronLeft,
+  ChevronRight,
   CreditCard,
   Loader2,
   MapPin,
@@ -54,6 +56,9 @@ interface PublicProduct {
   price: number
   weightGrams: number
   imageUrl: string | null
+  // Galeri foto produk untuk carousel. Server fallback ke [imageUrl] kalau
+  // produk lama belum punya `images` array.
+  images: string[]
   stock: number | null
   flashSaleActive: boolean
   flashSalePrice: number | null
@@ -77,6 +82,8 @@ interface FormProps {
   acceptCod: boolean
   acceptTransfer: boolean
   shippingFlatCod: number | null
+  // false = produk digital, alamat & ongkir di-hide di form publik.
+  requireShipping: boolean
   showFlashSaleCounter: boolean
   showShippingPromo: boolean
   ownerName: string
@@ -119,6 +126,109 @@ function computeFlashSale(p: PublicProduct): {
     return { active: false, price: p.price }
   }
   return { active: true, price: p.flashSalePrice, ends: end ?? undefined }
+}
+
+// Mini-carousel untuk thumbnail produk di list. Dibuat inline supaya tidak
+// nambah dependency carousel eksternal — UX-nya cukup: prev/next + dot
+// indicator + swipe (touch) untuk mobile. Saat hanya 1 foto, jatuh ke single
+// image (tidak ada arrow/dots).
+interface ProductImageCarouselProps {
+  images: string[]
+  alt: string
+  size?: 'sm' | 'md'
+}
+
+function ProductImageCarousel({ images, alt, size = 'sm' }: ProductImageCarouselProps) {
+  const [idx, setIdx] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+  const count = images.length
+
+  // Pastikan idx tetap valid kalau images berubah length (mis. produk update).
+  useEffect(() => {
+    if (idx >= count) setIdx(0)
+  }, [count, idx])
+
+  const sizeClass = size === 'md' ? 'size-32' : 'size-20'
+
+  if (count === 0) {
+    return (
+      <div
+        className={`relative ${sizeClass} shrink-0 overflow-hidden rounded-lg bg-warm-100`}
+      >
+        <div className="flex size-full items-center justify-center text-warm-400">
+          <Package className="size-6" />
+        </div>
+      </div>
+    )
+  }
+
+  function go(delta: number) {
+    setIdx((cur) => (cur + delta + count) % count)
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]?.clientX ?? null
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchStartX.current == null) return
+    const endX = e.changedTouches[0]?.clientX ?? touchStartX.current
+    const delta = endX - touchStartX.current
+    if (Math.abs(delta) > 30) go(delta > 0 ? -1 : 1)
+    touchStartX.current = null
+  }
+
+  return (
+    <div
+      className={`relative ${sizeClass} shrink-0 overflow-hidden rounded-lg bg-warm-100`}
+      onTouchStart={count > 1 ? onTouchStart : undefined}
+      onTouchEnd={count > 1 ? onTouchEnd : undefined}
+    >
+      <Image
+        key={images[idx]}
+        src={images[idx]}
+        alt={alt}
+        fill
+        sizes={size === 'md' ? '128px' : '80px'}
+        className="object-cover"
+      />
+      {count > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Foto sebelumnya"
+            onClick={(e) => {
+              e.stopPropagation()
+              go(-1)
+            }}
+            className="absolute left-1 top-1/2 -translate-y-1/2 rounded-full bg-black/45 p-1 text-white opacity-90 hover:bg-black/65"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Foto berikutnya"
+            onClick={(e) => {
+              e.stopPropagation()
+              go(1)
+            }}
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full bg-black/45 p-1 text-white opacity-90 hover:bg-black/65"
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
+          <div className="absolute inset-x-0 bottom-1 flex justify-center gap-0.5">
+            {images.map((_, i) => (
+              <span
+                key={i}
+                className={`size-1 rounded-full ${
+                  i === idx ? 'bg-white' : 'bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 function formatCountdown(ms: number) {
@@ -334,7 +444,13 @@ export function OrderFormPublic({
   }, [flashEndsAt])
 
   // Saat customer pilih destinasi + payment TRANSFER → fetch ongkir.
+  // Form digital (requireShipping=false) selalu skip — tidak ada alamat & ongkir.
   useEffect(() => {
+    if (!form.requireShipping) {
+      setCourierOptions([])
+      setSelectedCourier(null)
+      return
+    }
     if (paymentMethod !== 'TRANSFER') {
       setCourierOptions([])
       setSelectedCourier(null)
@@ -386,11 +502,14 @@ export function OrderFormPublic({
     totalWeight,
     items.length,
     form.slug,
+    form.requireShipping,
   ])
 
   // Computed totals (preview di client; server tetap re-hitung saat submit).
-  const shippingCost =
-    paymentMethod === 'COD'
+  // Form digital (requireShipping=false) tidak punya ongkir — selalu 0.
+  const shippingCost = !form.requireShipping
+    ? 0
+    : paymentMethod === 'COD'
       ? form.shippingFlatCod ?? 0
       : selectedCourier?.cost ?? 0
   const total = subtotal + shippingCost  // subsidi belum dihitung di client
@@ -453,17 +572,19 @@ export function OrderFormPublic({
       toast.error('Nama & nomor HP wajib diisi')
       return
     }
-    if (!destination) {
-      toast.error('Pilih kota tujuan dulu')
-      return
-    }
-    if (!shippingAddress.trim() || shippingAddress.trim().length < 5) {
-      toast.error('Alamat lengkap minimal 5 karakter')
-      return
-    }
-    if (paymentMethod === 'TRANSFER' && !selectedCourier) {
-      toast.error('Pilih kurir dulu')
-      return
+    if (form.requireShipping) {
+      if (!destination) {
+        toast.error('Pilih kota tujuan dulu')
+        return
+      }
+      if (!shippingAddress.trim() || shippingAddress.trim().length < 5) {
+        toast.error('Alamat lengkap minimal 5 karakter')
+        return
+      }
+      if (paymentMethod === 'TRANSFER' && !selectedCourier) {
+        toast.error('Pilih kurir dulu')
+        return
+      }
     }
 
     setSubmitting(true)
@@ -478,14 +599,22 @@ export function OrderFormPublic({
           variantId: i.variantId,
           qty: i.qty,
         })),
-        shippingDestinationId: destination.id,
-        shippingProvinceName: destination.province_name,
-        shippingCityName: destination.city_name,
-        shippingPostalCode: destination.zip_code,
-        shippingAddress: shippingAddress.trim(),
+        // Saat form digital (!requireShipping) field shipping di-skip —
+        // server akan treat shipping cost = 0 dan customerAddress = null.
+        shippingDestinationId: form.requireShipping ? destination?.id : undefined,
+        shippingProvinceName: form.requireShipping
+          ? destination?.province_name
+          : null,
+        shippingCityName: form.requireShipping ? destination?.city_name : null,
+        shippingPostalCode: form.requireShipping ? destination?.zip_code : null,
+        shippingAddress: form.requireShipping ? shippingAddress.trim() : null,
         paymentMethod,
-        shippingCourier: selectedCourier?.code ?? null,
-        shippingService: selectedCourier?.service ?? null,
+        shippingCourier: form.requireShipping
+          ? selectedCourier?.code ?? null
+          : null,
+        shippingService: form.requireShipping
+          ? selectedCourier?.service ?? null
+          : null,
         notes: notes.trim() || null,
         // Tracking metadata untuk pixel attribution (Phase 2/3).
         ...trackingMeta,
@@ -577,21 +706,17 @@ export function OrderFormPublic({
                     className="rounded-lg border bg-warm-50 p-3"
                   >
                     <div className="flex gap-3">
-                      <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-warm-100">
-                        {p.imageUrl ? (
-                          <Image
-                            src={p.imageUrl}
-                            alt={p.name}
-                            fill
-                            sizes="80px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <div className="flex size-full items-center justify-center text-warm-400">
-                            <Package className="size-6" />
-                          </div>
-                        )}
-                      </div>
+                      <ProductImageCarousel
+                        images={
+                          p.images && p.images.length > 0
+                            ? p.images
+                            : p.imageUrl
+                              ? [p.imageUrl]
+                              : []
+                        }
+                        alt={p.name}
+                        size={p.images && p.images.length > 1 ? 'md' : 'sm'}
+                      />
                       <div className="flex flex-1 flex-col min-w-0">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <p className="font-semibold text-warm-900">{p.name}</p>
@@ -746,7 +871,7 @@ export function OrderFormPublic({
         <CardContent className="space-y-3 p-4">
           <h2 className="flex items-center gap-2 font-semibold text-warm-900">
             <MapPin className="size-4" />
-            Data Pengiriman
+            {form.requireShipping ? 'Data Pengiriman' : 'Data Pemesan'}
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1.5">
@@ -780,29 +905,33 @@ export function OrderFormPublic({
               placeholder="email@domain.com"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label>Kota / Kecamatan / Kelurahan Tujuan</Label>
-            <DestinationPicker
-              value={destination}
-              onChange={setDestination}
-              endpoint={`/api/orders/destinations-preview?slug=${encodeURIComponent(form.slug)}`}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cust-addr">Alamat Lengkap</Label>
-            <Textarea
-              id="cust-addr"
-              rows={3}
-              value={shippingAddress}
-              onChange={(e) => setShippingAddress(e.target.value)}
-              placeholder="Nama jalan, nomor rumah, RT/RW, patokan…"
-            />
-          </div>
+          {form.requireShipping && (
+            <>
+              <div className="space-y-1.5">
+                <Label>Kota / Kecamatan / Kelurahan Tujuan</Label>
+                <DestinationPicker
+                  value={destination}
+                  onChange={setDestination}
+                  endpoint={`/api/orders/destinations-preview?slug=${encodeURIComponent(form.slug)}`}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cust-addr">Alamat Lengkap</Label>
+                <Textarea
+                  id="cust-addr"
+                  rows={3}
+                  value={shippingAddress}
+                  onChange={(e) => setShippingAddress(e.target.value)}
+                  placeholder="Nama jalan, nomor rumah, RT/RW, patokan…"
+                />
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
       {/* Pengiriman (RajaOngkir options for TRANSFER) */}
-      {paymentMethod === 'TRANSFER' && (
+      {form.requireShipping && paymentMethod === 'TRANSFER' && (
         <Card className="mb-4">
           <CardContent className="p-4">
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-warm-900">
@@ -952,22 +1081,24 @@ export function OrderFormPublic({
                   <span>-Rp {formatNumber(flashSaleDiscount)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span>
-                  Ongkir{' '}
-                  {paymentMethod === 'TRANSFER' && selectedCourier
-                    ? `${selectedCourier.code.toUpperCase()} ${selectedCourier.service}`
-                    : paymentMethod === 'COD'
-                      ? '(COD)'
-                      : ''}
-                </span>
-                <span>
-                  {shippingCost > 0
-                    ? `Rp ${formatNumber(shippingCost)}`
-                    : '—'}
-                </span>
-              </div>
-              {form.showShippingPromo && (
+              {form.requireShipping && (
+                <div className="flex justify-between text-sm">
+                  <span>
+                    Ongkir{' '}
+                    {paymentMethod === 'TRANSFER' && selectedCourier
+                      ? `${selectedCourier.code.toUpperCase()} ${selectedCourier.service}`
+                      : paymentMethod === 'COD'
+                        ? '(COD)'
+                        : ''}
+                  </span>
+                  <span>
+                    {shippingCost > 0
+                      ? `Rp ${formatNumber(shippingCost)}`
+                      : '—'}
+                  </span>
+                </div>
+              )}
+              {form.requireShipping && form.showShippingPromo && (
                 <p className="text-xs text-warm-500">
                   *Subsidi/promo ongkir akan dihitung otomatis saat submit.
                 </p>

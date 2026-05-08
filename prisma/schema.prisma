@@ -1296,7 +1296,12 @@ model Product {
   description String? @db.Text
   price       Float
   weightGrams Int     @default(500)
+  // Cover image — auto-sync ke images[0] saat user upload multi. Tetap di-keep
+  // sebagai field tunggal untuk consumer lama (invoice, orderCard, dll).
   imageUrl    String?
+  // Galeri multi-image (max 10, di-enforce di Zod). Urutan = urutan tampil
+  // di carousel di form publik. Item pertama = cover.
+  images      String[] @default([])
   // null = unlimited stock (untuk produk digital atau pre-order).
   stock       Int?
 
@@ -1418,6 +1423,9 @@ model OrderForm {
   acceptTransfer  Boolean @default(true)
   // Ongkir flat untuk COD (skip RajaOngkir). null = pakai RajaOngkir juga.
   shippingFlatCod Float?
+
+  // false = produk digital, customer tidak perlu isi alamat & ongkir di-skip.
+  requireShipping Boolean @default(true)
 
   showFlashSaleCounter Boolean @default(true)
   showShippingPromo    Boolean @default(true)

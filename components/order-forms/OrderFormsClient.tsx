@@ -44,6 +44,7 @@ interface OrderForm {
   acceptCod: boolean
   acceptTransfer: boolean
   shippingFlatCod: number | null
+  requireShipping: boolean
   showFlashSaleCounter: boolean
   showShippingPromo: boolean
   enabledPixelIds: string[]
@@ -88,6 +89,7 @@ const EMPTY_FORM = {
   acceptCod: true,
   acceptTransfer: true,
   shippingFlatCod: '' as string | number,
+  requireShipping: true,
   showFlashSaleCounter: true,
   showShippingPromo: true,
   enabledPixelIds: [] as string[],
@@ -121,6 +123,7 @@ export function OrderFormsClient({
       acceptCod: f.acceptCod,
       acceptTransfer: f.acceptTransfer,
       shippingFlatCod: f.shippingFlatCod ?? '',
+      requireShipping: f.requireShipping,
       showFlashSaleCounter: f.showFlashSaleCounter,
       showShippingPromo: f.showShippingPromo,
       enabledPixelIds: f.enabledPixelIds,
@@ -174,6 +177,7 @@ export function OrderFormsClient({
           form.shippingFlatCod === ''
             ? null
             : Number(form.shippingFlatCod) || 0,
+        requireShipping: form.requireShipping,
         showFlashSaleCounter: form.showFlashSaleCounter,
         showShippingPromo: form.showShippingPromo,
         enabledPixelIds: form.enabledPixelIds,
@@ -433,6 +437,26 @@ export function OrderFormsClient({
               </p>
             </div>
 
+            <div className="space-y-2 rounded-lg border bg-warm-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="cursor-pointer text-sm">
+                    Butuh alamat pengiriman
+                  </Label>
+                  <p className="text-xs text-warm-500">
+                    Matikan untuk produk digital (e-book, voucher, lisensi).
+                    Customer tidak diminta alamat & ongkir di-skip.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.requireShipping}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, requireShipping: v }))
+                  }
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
                 <Checkbox
@@ -440,8 +464,16 @@ export function OrderFormsClient({
                   onCheckedChange={(v) =>
                     setForm((f) => ({ ...f, acceptCod: !!v }))
                   }
+                  disabled={!form.requireShipping}
                 />
-                <span className="text-sm font-medium">Terima COD</span>
+                <span className="text-sm font-medium">
+                  Terima COD
+                  {!form.requireShipping && (
+                    <span className="ml-1 text-xs font-normal text-warm-500">
+                      (tidak relevan untuk produk digital)
+                    </span>
+                  )}
+                </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
                 <Checkbox
@@ -454,7 +486,7 @@ export function OrderFormsClient({
               </label>
             </div>
 
-            {form.acceptCod && (
+            {form.acceptCod && form.requireShipping && (
               <div className="space-y-1.5">
                 <Label htmlFor="of-cod-flat">
                   Ongkir Flat untuk COD (Rp, opsional)

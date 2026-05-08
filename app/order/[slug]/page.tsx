@@ -89,6 +89,7 @@ export default async function PublicOrderPage({ params }: PageProps) {
         acceptCod: form.acceptCod,
         acceptTransfer: form.acceptTransfer,
         shippingFlatCod: form.shippingFlatCod,
+        requireShipping: form.requireShipping,
         showFlashSaleCounter: form.showFlashSaleCounter,
         showShippingPromo: form.showShippingPromo,
         ownerName: form.user.name ?? 'Penjual',
@@ -103,6 +104,12 @@ export default async function PublicOrderPage({ params }: PageProps) {
         price: p.price,
         weightGrams: p.weightGrams,
         imageUrl: p.imageUrl,
+        images:
+          p.images && p.images.length > 0
+            ? p.images
+            : p.imageUrl
+              ? [p.imageUrl]
+              : [],
         stock: p.stock,
         flashSaleActive: p.flashSaleActive,
         flashSalePrice: p.flashSalePrice,

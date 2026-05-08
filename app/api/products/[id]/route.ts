@@ -10,6 +10,13 @@ import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 import { productUpdateSchema } from '@/lib/validations/product'
 
+// Hapus file dari /public/uploads/products/... best-effort.
+async function unlinkUpload(url: string | null | undefined) {
+  if (!url || !url.startsWith('/uploads/products/')) return
+  const filePath = path.join(process.cwd(), 'public', url.replace(/^\//, ''))
+  await unlink(filePath).catch(() => {})
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -34,6 +41,31 @@ export async function PATCH(
     if (!existing) return jsonError('Produk tidak ditemukan', 404)
 
     const data = parsed.data
+
+    // Galeri sync — kalau client kirim `images`, itu sumber kebenaran.
+    // Cover (imageUrl) di-derive dari images[0]. File yang dikeluarkan dari
+    // galeri di-unlink supaya tidak jadi sampah di disk.
+    let imageUpdate: { imageUrl?: string | null; images?: string[] } = {}
+    if (data.images !== undefined) {
+      const next = data.images
+      const removed = existing.images.filter((u) => !next.includes(u))
+      for (const u of removed) await unlinkUpload(u)
+      imageUpdate = {
+        images: next,
+        imageUrl: next[0] ?? null,
+      }
+    } else if (data.imageUrl !== undefined) {
+      // Backwards compat — kalau client lama hanya kirim imageUrl, sync ke images.
+      imageUpdate = {
+        imageUrl: data.imageUrl,
+        images: data.imageUrl ? [data.imageUrl] : [],
+      }
+      // Hapus foto lama yang tidak match dengan imageUrl baru.
+      for (const u of existing.images) {
+        if (u !== data.imageUrl) await unlinkUpload(u)
+      }
+    }
+
     const updated = await prisma.$transaction(async (tx) => {
       // 1. Update field utama produk.
       await tx.product.update({
@@ -43,7 +75,7 @@ export async function PATCH(
           ...(data.description !== undefined && { description: data.description }),
           ...(data.price !== undefined && { price: data.price }),
           ...(data.weightGrams !== undefined && { weightGrams: data.weightGrams }),
-          ...(data.imageUrl !== undefined && { imageUrl: data.imageUrl }),
+          ...imageUpdate,
           ...(data.stock !== undefined && { stock: data.stock }),
           ...(data.isActive !== undefined && { isActive: data.isActive }),
           ...(data.order !== undefined && { order: data.order }),
@@ -159,21 +191,13 @@ export async function DELETE(
     // Cascade ke varian via Prisma onDelete: Cascade.
     await prisma.product.delete({ where: { id } })
 
-    // Hapus file foto produk + foto varian best-effort (tidak fatal kalau gagal).
+    // Hapus file foto produk + galeri + foto varian best-effort.
     const imageUrls = [
       existing.imageUrl,
+      ...existing.images,
       ...existing.variants.map((v) => v.imageUrl),
-    ].filter(
-      (u): u is string => !!u && u.startsWith('/uploads/products/'),
-    )
-    for (const url of imageUrls) {
-      const filePath = path.join(
-        process.cwd(),
-        'public',
-        url.replace(/^\//, ''),
-      )
-      await unlink(filePath).catch(() => {})
-    }
+    ]
+    for (const url of imageUrls) await unlinkUpload(url)
 
     return jsonOk({ ok: true })
   } catch (err) {

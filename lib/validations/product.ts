@@ -5,6 +5,8 @@ export const PRODUCT_LIMIT_PER_USER = 100
 // Cap varian per produk supaya tidak meledak (ribuan baris) yang nyusahin
 // pricing engine dan UI selector.
 export const VARIANT_LIMIT_PER_PRODUCT = 50
+// Maksimal foto galeri per produk (carousel di form publik).
+export const PRODUCT_IMAGES_LIMIT = 10
 
 // Schema satu varian saat user submit dari dialog produk. Dipakai PATCH
 // /api/products/[id] untuk full-replace varian.
@@ -41,6 +43,11 @@ export const productCreateSchema = z
       .min(1, 'Berat minimal 1 gram')
       .max(150_000, 'Berat maksimal 150 kg'),
     imageUrl: z.string().nullable().optional(),
+    // Galeri multi-image. Server akan derive imageUrl = images[0] kalau ada.
+    images: z
+      .array(z.string().min(1))
+      .max(PRODUCT_IMAGES_LIMIT, `Maksimal ${PRODUCT_IMAGES_LIMIT} foto per produk`)
+      .optional(),
     // null = unlimited stock.
     stock: z.number().int().min(0).max(1_000_000).nullable().optional(),
     isActive: z.boolean().optional(),
@@ -87,6 +94,9 @@ const productBaseSchema = z.object({
   price: z.number().min(0).max(1_000_000_000),
   weightGrams: z.number().int().min(1).max(150_000),
   imageUrl: z.string().nullable(),
+  images: z
+    .array(z.string().min(1))
+    .max(PRODUCT_IMAGES_LIMIT, `Maksimal ${PRODUCT_IMAGES_LIMIT} foto per produk`),
   stock: z.number().int().min(0).max(1_000_000).nullable(),
   isActive: z.boolean(),
   order: z.number().int().min(0),

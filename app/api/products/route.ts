@@ -72,6 +72,11 @@ export async function POST(req: Request) {
       )
     }
     const data = parsed.data
+    // Sumber kebenaran galeri = `images` array. Cover (imageUrl) selalu derive
+    // dari images[0] supaya consumer lama (invoice, orderCard) tetap dapat
+    // foto utama tanpa perlu di-update.
+    const galleryImages = data.images ?? []
+    const cover = galleryImages[0] ?? data.imageUrl ?? null
     const created = await prisma.product.create({
       data: {
         userId: session.user.id,
@@ -79,7 +84,8 @@ export async function POST(req: Request) {
         description: data.description ?? null,
         price: data.price,
         weightGrams: data.weightGrams,
-        imageUrl: data.imageUrl ?? null,
+        imageUrl: cover,
+        images: galleryImages,
         stock: data.stock ?? null,
         isActive: data.isActive ?? true,
         order: data.order ?? count,

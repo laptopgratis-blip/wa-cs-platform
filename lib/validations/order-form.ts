@@ -10,6 +10,8 @@ export const orderFormCreateSchema = z.object({
   acceptCod: z.boolean().default(true),
   acceptTransfer: z.boolean().default(true),
   shippingFlatCod: z.number().min(0).nullable().optional(),
+  // false = produk digital — form tidak akan minta alamat, ongkir di-skip.
+  requireShipping: z.boolean().default(true),
   showFlashSaleCounter: z.boolean().default(true),
   showShippingPromo: z.boolean().default(true),
   isActive: z.boolean().default(true),

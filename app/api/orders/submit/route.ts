@@ -78,7 +78,21 @@ export async function POST(req: Request) {
       return jsonError('Form ini tidak menerima pembayaran Transfer', 400)
     }
 
-    // 4. Hitung total (sumber kebenaran — JANGAN trust client).
+    // 3b. Form fisik wajib alamat. Form digital (requireShipping=false) skip.
+    if (form.requireShipping) {
+      const addr = data.shippingAddress?.trim() ?? ''
+      if (addr.length < 5) {
+        return jsonError('Alamat lengkap minimal 5 karakter', 400)
+      }
+      if (data.paymentMethod === 'TRANSFER') {
+        if (!data.shippingDestinationId || !data.shippingCourier) {
+          return jsonError('Pilih kota tujuan & kurir dulu', 400)
+        }
+      }
+    }
+
+    // 4. Hitung total (sumber kebenaran — JANGAN trust client). Untuk form
+    // digital semua field shipping di-clear supaya pricing engine skip ongkir.
     const pricing = await calculateOrderTotal({
       userId: form.userId,
       items: data.items.map((i) => ({
@@ -86,14 +100,24 @@ export async function POST(req: Request) {
         variantId: i.variantId ?? null,
         qty: i.qty,
       })),
-      shippingDestinationId: data.shippingDestinationId,
-      shippingProvinceName: data.shippingProvinceName,
-      shippingCityName: data.shippingCityName,
-      selectedCourier: data.shippingCourier ?? undefined,
-      selectedService: data.shippingService ?? undefined,
+      shippingDestinationId: form.requireShipping
+        ? data.shippingDestinationId
+        : undefined,
+      shippingProvinceName: form.requireShipping
+        ? data.shippingProvinceName
+        : null,
+      shippingCityName: form.requireShipping ? data.shippingCityName : null,
+      selectedCourier: form.requireShipping
+        ? data.shippingCourier ?? undefined
+        : undefined,
+      selectedService: form.requireShipping
+        ? data.shippingService ?? undefined
+        : undefined,
       paymentMethod: data.paymentMethod,
       flatCodCost:
-        data.paymentMethod === 'COD' ? form.shippingFlatCod : undefined,
+        form.requireShipping && data.paymentMethod === 'COD'
+          ? form.shippingFlatCod
+          : undefined,
     })
 
     if (pricing.items.length === 0) {
@@ -163,16 +187,27 @@ export async function POST(req: Request) {
           customerName: data.customerName,
           customerPhone: phoneNorm,
           customerEmail: data.customerEmail ?? null,
-          customerAddress: data.shippingAddress,
+          customerAddress: form.requireShipping
+            ? data.shippingAddress ?? null
+            : null,
 
           shippingProvinceId: null,
-          shippingProvinceName: data.shippingProvinceName ?? null,
-          shippingCityId: data.shippingDestinationId
-            ? String(data.shippingDestinationId)
+          shippingProvinceName: form.requireShipping
+            ? data.shippingProvinceName ?? null
             : null,
-          shippingCityName: data.shippingCityName ?? null,
-          shippingAddress: data.shippingAddress,
-          shippingPostalCode: data.shippingPostalCode ?? null,
+          shippingCityId:
+            form.requireShipping && data.shippingDestinationId
+              ? String(data.shippingDestinationId)
+              : null,
+          shippingCityName: form.requireShipping
+            ? data.shippingCityName ?? null
+            : null,
+          shippingAddress: form.requireShipping
+            ? data.shippingAddress ?? null
+            : null,
+          shippingPostalCode: form.requireShipping
+            ? data.shippingPostalCode ?? null
+            : null,
 
           items: pricing.items as never,
           totalAmount: finalTotal,

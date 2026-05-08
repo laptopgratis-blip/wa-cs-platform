@@ -35,6 +35,7 @@ export default async function ProductsPage() {
     <ProductsClient
       initialProducts={products.map((p) => ({
         ...p,
+        images: p.images ?? [],
         flashSaleStartAt: p.flashSaleStartAt?.toISOString() ?? null,
         flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
         createdAt: p.createdAt.toISOString(),
