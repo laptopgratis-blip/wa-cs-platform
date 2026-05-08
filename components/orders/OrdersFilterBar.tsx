@@ -63,6 +63,18 @@ const SMART_CHIPS: Array<{
     emoji: '📅',
     description: '7 hari terakhir',
   },
+  {
+    key: 'unpaid_24h',
+    label: 'Belum Bayar > 24 jam',
+    emoji: '⏰',
+    description: 'PENDING/WAITING_CONFIRMATION lewat 24 jam',
+  },
+  {
+    key: 'auto_confirmed',
+    label: 'Auto-Confirmed',
+    emoji: '🤖',
+    description: 'Order yang status PAID-nya di-set otomatis (BCA/Moota)',
+  },
 ]
 
 const PM_NULL = '__ALL__'

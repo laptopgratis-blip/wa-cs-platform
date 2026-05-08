@@ -64,6 +64,8 @@ type SmartFilter =
   | 'today'
   | 'yesterday'
   | 'this_week'
+  | 'auto_confirmed'
+  | 'unpaid_24h'
 
 function parseSmart(v: string | null): SmartFilter | null {
   switch (v) {
@@ -73,6 +75,8 @@ function parseSmart(v: string | null): SmartFilter | null {
     case 'today':
     case 'yesterday':
     case 'this_week':
+    case 'auto_confirmed':
+    case 'unpaid_24h':
       return v
     default:
       return null
@@ -119,6 +123,17 @@ function buildSmartFilter(f: SmartFilter): Prisma.UserOrderWhereInput {
       start.setDate(start.getDate() - 7)
       return { createdAt: { gte: start } }
     }
+    case 'auto_confirmed':
+      // Order yang status PAID-nya di-set otomatis oleh BCA Auto-Reader / Moota,
+      // bukan manual. Untuk audit: cek mana yang machine-confirmed vs manual.
+      return { autoConfirmedBy: { not: null } }
+    case 'unpaid_24h': {
+      const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      return {
+        paymentStatus: { in: ['PENDING', 'WAITING_CONFIRMATION'] },
+        createdAt: { lte: cutoff },
+      }
+    }
   }
 }
 
@@ -126,6 +141,7 @@ const ORDER_SELECT = {
   id: true,
   customerName: true,
   customerPhone: true,
+  customerEmail: true,
   customerAddress: true,
   items: true,
   totalAmount: true,
@@ -135,11 +151,13 @@ const ORDER_SELECT = {
   trackingNumber: true,
   flowName: true,
   notes: true,
+  notesAdmin: true,
   contactId: true,
   createdAt: true,
   updatedAt: true,
   invoiceNumber: true,
   paymentProofUrl: true,
+  shippingAddress: true,
   shippingCourier: true,
   shippingService: true,
   shippingCityName: true,
@@ -151,8 +169,21 @@ const ORDER_SELECT = {
   appliedZoneName: true,
   totalRp: true,
   uniqueCode: true,
+  paidAt: true,
+  shippedAt: true,
+  deliveredAt: true,
+  autoConfirmedBy: true,
+  autoConfirmedAt: true,
+  utmSource: true,
+  utmMedium: true,
+  utmCampaign: true,
+  fbclid: true,
+  gclid: true,
+  ttclid: true,
   pixelLeadFiredAt: true,
   pixelPurchaseFiredAt: true,
+  orderForm: { select: { id: true, name: true, slug: true } },
+  tags: { select: { id: true, name: true, color: true } },
 } satisfies Prisma.UserOrderSelect
 
 export async function GET(req: Request) {
@@ -175,6 +206,24 @@ export async function GET(req: Request) {
     Math.max(Number(url.searchParams.get('limit') ?? 50), 1),
     100,
   )
+  // Optional tag filter — bisa multi via repeat param `?tag=ID&tag=ID` atau
+  // CSV single param `?tag=ID,ID`. Filter additive ke smart/tab.
+  const tagIdsRaw = url.searchParams.getAll('tag').flatMap((v) => v.split(','))
+  const tagIds = tagIdsRaw.map((s) => s.trim()).filter(Boolean)
+  // Optional sort: hanya kolom yang sortable di server. Default tetap
+  // createdAt desc kalau tidak diisi.
+  const sortRaw = url.searchParams.get('sort')
+  const dirRaw = url.searchParams.get('dir')
+  const SORTABLE_KEYS = new Set([
+    'createdAt',
+    'totalRp',
+    'paidAt',
+    'shippedAt',
+    'deliveredAt',
+  ])
+  const sortKey =
+    sortRaw && SORTABLE_KEYS.has(sortRaw) ? sortRaw : 'createdAt'
+  const sortDir: 'asc' | 'desc' = dirRaw === 'asc' ? 'asc' : 'desc'
 
   try {
     const baseWhere: Prisma.UserOrderWhereInput = {
@@ -184,9 +233,16 @@ export async function GET(req: Request) {
       baseWhere.OR = [
         { customerName: { contains: q, mode: 'insensitive' } },
         { customerPhone: { contains: q, mode: 'insensitive' } },
+        { customerEmail: { contains: q, mode: 'insensitive' } },
         { notes: { contains: q, mode: 'insensitive' } },
+        { notesAdmin: { contains: q, mode: 'insensitive' } },
         { invoiceNumber: { contains: q, mode: 'insensitive' } },
+        { trackingNumber: { contains: q, mode: 'insensitive' } },
       ]
+    }
+    if (tagIds.length > 0) {
+      // Match order yang punya MINIMAL satu dari tag yang dipilih (OR semantic).
+      baseWhere.tags = { some: { id: { in: tagIds } } }
     }
     const dateRange: Prisma.DateTimeFilter = {}
     if (fromRaw) {
@@ -220,7 +276,7 @@ export async function GET(req: Request) {
       await Promise.all([
         prisma.userOrder.findMany({
           where,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { [sortKey]: sortDir },
           take: limit + 1,
           ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
           select: ORDER_SELECT,

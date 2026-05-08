@@ -64,6 +64,8 @@ model User {
   userBankAccounts             UserBankAccount[]
   shippingProfile              UserShippingProfile?
   orderForms                   OrderForm[]
+  orderTags                    OrderTag[]
+  orderViewPreference          UserOrderViewPreference?
   shippingZones                ShippingZone[]
   pixelIntegrations            PixelIntegration[]
   pixelEventLogs               PixelEventLog[]
@@ -1134,8 +1136,14 @@ model UserOrder {
   // jadi default kosong. User bisa edit manual via UI atau Phase 4 nanti.
   items       Json    @default("[]")
   totalAmount Float?
-  // Catatan internal admin (tidak ditampilkan ke customer).
+  // Catatan dari customer saat order (mis. dari form publik). Search-able.
   notes       String? @db.Text
+  // Catatan internal admin — TIDAK ditampilkan ke customer di invoice page.
+  // Search-able di list pesanan.
+  notesAdmin  String? @db.Text
+
+  // Tags many-to-many. User pakai untuk segmentasi (VIP, Komplain, Repeat, dll).
+  tags        OrderTag[] @relation("OrderTags")
 
   // COD | TRANSFER | BOOKING | CONSULTATION | FREE — string supaya gampang
   // nambah method baru tanpa migrate.
@@ -1157,7 +1165,10 @@ model UserOrder {
   // tanpa breaking. Order dari OrderForm public mengisi field ini.
   // ─────────────────────────────────────────
   orderFormId   String?
-  invoiceNumber String? @unique
+  // Relasi ke OrderForm publik (kalau order via form share-link).
+  // SetNull supaya order existing tidak ikut terhapus saat form di-delete.
+  orderForm     OrderForm? @relation("OrderFormSubmissions", fields: [orderFormId], references: [id], onDelete: SetNull)
+  invoiceNumber String?    @unique
   customerEmail String?
 
   shippingProvinceId   String?
@@ -1226,6 +1237,53 @@ model UserOrder {
   @@index([userId, paymentStatus])
   @@index([userId, deliveryStatus])
   @@index([invoiceNumber])
+}
+
+// Tag admin untuk segmentasi order (VIP, Komplain, Repeat Buyer, dll). Per-user
+// scope. Many-to-many ke UserOrder via implicit join _OrderTags.
+model OrderTag {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  // Hex color (#RRGGBB) untuk badge di UI.
+  color     String @default("#6B7280")
+
+  orders UserOrder[] @relation("OrderTags")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+// Saved preference untuk halaman /pesanan — kolom yang aktif, urutan, sort,
+// dan filter terakhir. Per-user, 1 record. Frontend save debounced.
+model UserOrderViewPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Kunci kolom yang ditampilkan (subset dari ORDER_COLUMNS di lib/order-columns.ts).
+  // Empty array = pakai default (DEFAULT_VISIBLE_COLUMNS).
+  visibleColumns String[] @default([])
+  // Urutan kolom (kalau drag-and-drop diaktifkan). Empty = pakai urutan
+  // ORDER_COLUMNS bawaan.
+  columnOrder    String[] @default([])
+
+  // Snapshot filter terakhir dipakai (JSON object). Schema bebas — frontend
+  // yang interpret. Format: { paymentStatus: ['PAID'], shippingCourier: ['jne'], ... }
+  filters Json?
+
+  // Sort kolom + arah. Kalau null, frontend default ke createdAt desc.
+  sortColumn    String?
+  sortDirection String?
+
+  pageSize Int @default(50)
+
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────
@@ -1437,6 +1495,10 @@ model OrderForm {
   isActive    Boolean @default(true)
   views       Int     @default(0)
   submissions Int     @default(0)
+
+  // Back-relation untuk UserOrder.orderForm. Order yang submit via form ini
+  // akan tampil di sini.
+  userOrders UserOrder[] @relation("OrderFormSubmissions")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

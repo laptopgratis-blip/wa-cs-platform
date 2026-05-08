@@ -6,26 +6,34 @@
 //
 // View mode (table vs card) di-persist ke localStorage. Default: table —
 // lebih cocok untuk admin yang kelola ratusan order/hari.
-import { Download, Loader2 } from 'lucide-react'
+//
+// Phase 1 Custom Columns (2026-05-08): kolom yang aktif + sort di-persist ke
+// server via UserOrderViewPreference (hook useViewPreference). Tabel render
+// driven by `visibleColumns`. Tags + Notes Admin via inline edit.
+import { Columns, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 
+import { ColumnPickerModal } from './ColumnPickerModal'
 import { OrderCardView } from './OrderCardView'
 import { OrderDetailDialog } from './OrderDetailDialog'
 import { OrdersBulkActionBar } from './OrdersBulkActionBar'
 import { OrdersFilterBar } from './OrdersFilterBar'
 import { OrdersStatsStrip } from './OrdersStatsStrip'
 import { OrdersTable } from './OrdersTable'
+import { TagPickerDialog } from './TagPickerDialog'
 import type {
   OrderListItem,
+  OrderTagBadge,
   OrdersCounts,
   OrdersTotals,
   QuickAction,
   SmartFilter,
   ViewMode,
 } from './types'
+import { useViewPreference } from './useViewPreference'
 
 // Re-export untuk backward compat (page.tsx lama import dari sini).
 export type { OrderListItem, OrdersCounts } from './types'
@@ -76,6 +84,17 @@ export function OrdersList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [detailId, setDetailId] = useState<string | null>(null)
 
+  // Custom columns + sort dari preference user.
+  const { pref: viewPref, update: updateViewPref } = useViewPreference()
+
+  // Tag picker state — open per order.
+  const [tagPickerOrder, setTagPickerOrder] = useState<OrderListItem | null>(
+    null,
+  )
+
+  // Column picker modal.
+  const [columnPickerOpen, setColumnPickerOpen] = useState(false)
+
   // Persist view ke localStorage saat berubah. Tidak setState — jadi aman
   // di useEffect.
   useEffect(() => {
@@ -96,9 +115,20 @@ export function OrdersList() {
       p.set('to', end.toISOString())
     }
     if (paymentMethod) p.set('pm', paymentMethod)
+    if (viewPref.sortColumn) p.set('sort', viewPref.sortColumn)
+    if (viewPref.sortDirection) p.set('dir', viewPref.sortDirection)
     p.set('limit', String(PAGE_LIMIT))
     return p.toString()
-  }, [tab, smart, search, from, to, paymentMethod])
+  }, [
+    tab,
+    smart,
+    search,
+    from,
+    to,
+    paymentMethod,
+    viewPref.sortColumn,
+    viewPref.sortDirection,
+  ])
 
   // Initial / refetch saat filter berubah. Debounce search 300ms.
   useEffect(() => {
@@ -310,6 +340,35 @@ export function OrdersList() {
     window.open(`/api/orders/export?${p.toString()}`, '_blank')
   }
 
+  // Toggle sort: kalau klik kolom yang sama → flip direction. Kalau beda → set
+  // baru, default desc (paling sering yang user mau lihat untuk tanggal/total).
+  function handleToggleSort(key: string) {
+    if (viewPref.sortColumn === key) {
+      const next = viewPref.sortDirection === 'asc' ? 'desc' : 'asc'
+      updateViewPref({ sortDirection: next })
+    } else {
+      updateViewPref({ sortColumn: key, sortDirection: 'desc' })
+    }
+  }
+
+  // Patch local state ketika tag set diupdate per order — hindari full reload
+  // supaya UX cepat. Server sudah authoritative.
+  function handleTagsSaved(orderId: string, tags: OrderTagBadge[]) {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, tags } : o)),
+    )
+  }
+
+  function handleNotesAdminSaved(orderId: string, value: string | null) {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, notesAdmin: value } : o)),
+    )
+  }
+
+  function handleSaveColumns(columns: string[]) {
+    updateViewPref({ visibleColumns: columns })
+  }
+
   function clearAllFilters() {
     setSmart(null)
     setSearch('')
@@ -329,10 +388,23 @@ export function OrdersList() {
             Kelola order COD & Transfer dari semua channel.
           </p>
         </div>
-        <Button variant="outline" onClick={exportCsv}>
-          <Download className="mr-2 size-4" />
-          Export CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setColumnPickerOpen(true)}
+            title="Atur kolom yang tampil di tabel"
+          >
+            <Columns className="mr-2 size-4" />
+            Kolom
+            <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
+              {viewPref.visibleColumns.length}
+            </span>
+          </Button>
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="mr-2 size-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <OrdersStatsStrip
@@ -372,11 +444,17 @@ export function OrdersList() {
         <OrdersTable
           orders={orders}
           selectedIds={selectedIds}
+          visibleColumns={viewPref.visibleColumns}
+          sortColumn={viewPref.sortColumn}
+          sortDirection={viewPref.sortDirection}
+          onToggleSort={handleToggleSort}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
           onOpenDetail={setDetailId}
           onQuickAction={quickAction}
           onUpdateTracking={updateTracking}
+          onOpenTagPicker={(o) => setTagPickerOrder(o)}
+          onNotesAdminSaved={handleNotesAdminSaved}
           loading={loading}
         />
       ) : (
@@ -418,6 +496,25 @@ export function OrdersList() {
         orderId={detailId}
         onClose={() => setDetailId(null)}
         onChanged={reload}
+      />
+
+      <ColumnPickerModal
+        open={columnPickerOpen}
+        onOpenChange={setColumnPickerOpen}
+        visibleColumns={viewPref.visibleColumns}
+        onSave={handleSaveColumns}
+      />
+
+      <TagPickerDialog
+        open={!!tagPickerOrder}
+        onOpenChange={(open) => {
+          if (!open) setTagPickerOrder(null)
+        }}
+        orderId={tagPickerOrder?.id ?? null}
+        initialTags={tagPickerOrder?.tags ?? []}
+        onSaved={(tags) => {
+          if (tagPickerOrder) handleTagsSaved(tagPickerOrder.id, tags)
+        }}
       />
     </>
   )

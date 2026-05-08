@@ -6,10 +6,17 @@ export interface OrderItem {
   price?: number | null
 }
 
+export interface OrderTagBadge {
+  id: string
+  name: string
+  color: string
+}
+
 export interface OrderListItem {
   id: string
   customerName: string
   customerPhone: string
+  customerEmail?: string | null
   customerAddress: string | null
   items: OrderItem[]
   totalAmount: number | null
@@ -19,11 +26,13 @@ export interface OrderListItem {
   trackingNumber: string | null
   flowName: string | null
   notes: string | null
+  notesAdmin?: string | null
   contactId: string | null
   createdAt: string
   updatedAt: string
   invoiceNumber?: string | null
   paymentProofUrl?: string | null
+  shippingAddress?: string | null
   shippingCourier?: string | null
   shippingService?: string | null
   shippingCityName?: string | null
@@ -35,8 +44,21 @@ export interface OrderListItem {
   appliedZoneName?: string | null
   totalRp?: number
   uniqueCode?: number | null
+  paidAt?: string | null
+  shippedAt?: string | null
+  deliveredAt?: string | null
+  autoConfirmedBy?: string | null
+  autoConfirmedAt?: string | null
+  utmSource?: string | null
+  utmMedium?: string | null
+  utmCampaign?: string | null
+  fbclid?: string | null
+  gclid?: string | null
+  ttclid?: string | null
   pixelLeadFiredAt?: string | null
   pixelPurchaseFiredAt?: string | null
+  orderForm?: { id: string; name: string; slug: string } | null
+  tags?: OrderTagBadge[]
 }
 
 export interface OrdersCounts {
@@ -60,6 +82,8 @@ export type SmartFilter =
   | 'today'
   | 'yesterday'
   | 'this_week'
+  | 'auto_confirmed'
+  | 'unpaid_24h'
 
 export type ViewMode = 'table' | 'card'
 
