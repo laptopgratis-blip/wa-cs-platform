@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 
 const SCRAPER_SECRET = process.env.SCRAPER_SECRET || ''
@@ -69,6 +70,11 @@ export async function POST(req: Request) {
     // WA notification — kirim via wa-service (best-effort).
     sendAutoPaidNotification(order).catch((e) => {
       console.error(`[order-auto-paid] WA notif gagal ${order.id}:`, e)
+    })
+
+    // Generate follow-up queue PAYMENT_PAID — engine handle plan + WA gating.
+    generateQueueForOrder(order.id, 'PAYMENT_PAID').catch((e) => {
+      console.error(`[order-auto-paid] followup gagal ${order.id}:`, e)
     })
 
     return jsonOk({ ok: true, orderId: order.id })

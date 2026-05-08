@@ -14,6 +14,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
+import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { notifyNewOrder } from '@/lib/services/order-notif'
 import { calculateOrderTotal } from '@/lib/services/order-pricing'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
@@ -224,6 +225,11 @@ export async function POST(req: Request) {
 
     // Notif WA owner — fire-and-forget, jangan block response.
     notifyNewOrder(created.id).catch(() => {})
+
+    // Generate follow-up queue (POWER only, gating di engine).
+    generateQueueForOrder(created.id, 'ORDER_CREATED').catch((err) => {
+      console.error('[orders/submit] followup generate gagal:', err)
+    })
 
     // Pixel server-side fire — COD: Purchase langsung, TRANSFER: Lead saja
     // (Purchase nanti saat admin tandai PAID di /pesanan).

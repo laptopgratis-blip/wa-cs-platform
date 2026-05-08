@@ -217,6 +217,21 @@ export const internalApi = {
     )
   },
 
+  // Cek apakah pesan customer mengandung kata STOP (unsubscribe follow-up).
+  // Next.js handle: blacklist customer, cancel pending queue, return autoReply
+  // kalau perlu (wa-service yang kirim reply lewat Baileys supaya konsisten).
+  // isStop=false → continue ke flow engine + AI normal.
+  checkFollowupStop(input: {
+    sessionId: string
+    phoneNumber: string
+    content: string
+  }) {
+    return request<{ isStop: boolean; autoReply?: string }>(
+      '/api/internal/followup-stop-check',
+      { method: 'POST', body: JSON.stringify(input) },
+    )
+  },
+
   // Process pesan customer melalui flow engine (sales flow).
   // Kalau handled=true, wa-service tanggung jawab kirim reply + notifyAdmin
   // (kalau ada) lewat Baileys.

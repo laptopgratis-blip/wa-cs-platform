@@ -4,6 +4,11 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import {
+  cancelQueueForOrder,
+  generateQueueForOrder,
+  type FollowupEvent,
+} from '@/lib/services/followup-engine'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { orderUpdateSchema } from '@/lib/validations/order'
@@ -146,6 +151,45 @@ export async function PATCH(req: Request, { params }: Params) {
         orderId: updated.id,
         eventName: 'Purchase',
       }).catch(() => {})
+    }
+
+    // Follow-Up Order System hooks — detect transition & trigger event.
+    // Fire-and-forget; engine handle plan gating + WA gating + dedup.
+    const followupEvents: FollowupEvent[] = []
+    if (
+      data.paymentStatus === 'PAID' &&
+      existing.paymentStatus !== 'PAID'
+    ) {
+      followupEvents.push('PAYMENT_PAID')
+    }
+    if (
+      data.deliveryStatus === 'SHIPPED' &&
+      existing.deliveryStatus !== 'SHIPPED'
+    ) {
+      followupEvents.push('SHIPPED')
+    }
+    if (
+      data.deliveryStatus === 'DELIVERED' &&
+      existing.deliveryStatus !== 'DELIVERED'
+    ) {
+      followupEvents.push('COMPLETED')
+    }
+    if (
+      data.paymentStatus === 'CANCELLED' &&
+      existing.paymentStatus !== 'CANCELLED'
+    ) {
+      // Cancel pending queue dulu — supaya reminder yang udah scheduled tidak
+      // ke-kirim. Lalu generate template untuk event CANCELLED kalau user
+      // punya.
+      cancelQueueForOrder(updated.id, 'Order cancelled').catch((err) =>
+        console.error('[orders PATCH] cancelQueue:', err),
+      )
+      followupEvents.push('CANCELLED')
+    }
+    for (const event of followupEvents) {
+      generateQueueForOrder(updated.id, event).catch((err) =>
+        console.error(`[orders PATCH] followup ${event}:`, err),
+      )
     }
 
     return jsonOk({

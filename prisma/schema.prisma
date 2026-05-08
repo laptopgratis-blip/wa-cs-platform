@@ -71,6 +71,11 @@ model User {
   // satu integrasi BCA per user POWER untuk MVP.
   bankMutationIntegration      BankMutationIntegration?
   bankMutations                BankMutation[]
+  // Follow-Up Order System (2026-05-08) — auto-WA ke customer per event +
+  // delay. POWER only, gating di service layer.
+  followUpTemplates            FollowUpTemplate[]
+  followUpQueueItems           FollowUpQueue[]
+  followUpBlacklist            FollowUpBlacklist[]
 }
 
 // NextAuth models
@@ -1215,6 +1220,7 @@ model UserOrder {
   contact        Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
   orderSession   OrderSession?   @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
   pixelEventLogs PixelEventLog[]
+  followUpQueue  FollowUpQueue[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, paymentStatus])
@@ -1676,4 +1682,109 @@ model BankScrapeJob {
 
   @@index([integrationId, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Follow-Up Order System (2026-05-08, POWER only)
+// ─────────────────────────────────────────────────────────────
+// Pesan WA otomatis ke customer berdasarkan event order (created/paid/
+// shipped/completed/cancelled) atau N-hari setelah event. Gating WA
+// session, blacklist, retry, dedup per (order, template) ditangani di
+// lib/services/followup-engine.ts dan cron worker.
+
+model FollowUpTemplate {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Trigger event:
+  //   ORDER_CREATED, PAYMENT_PAID, SHIPPED, COMPLETED, CANCELLED
+  //   DAYS_AFTER_ORDER, DAYS_AFTER_PAID, DAYS_AFTER_SHIPPED
+  trigger       String
+  paymentMethod String? // null = both, COD, TRANSFER
+
+  // Codebase real pisah paymentStatus & deliveryStatus jadi 2 field, jadi
+  // gating di sini juga 2 field. Salah satu boleh null = tidak filter.
+  applyOnPaymentStatus  String? // PENDING, WAITING_CONFIRMATION, PAID, CANCELLED
+  applyOnDeliveryStatus String? // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+
+  delayDays Int @default(0) // 0 = immediate, max 30
+
+  name    String
+  message String @db.Text
+
+  isActive  Boolean @default(true)
+  order     Int     @default(0)
+  isDefault Boolean @default(false) // template auto-created saat enable pertama
+
+  scope       String  @default("GLOBAL") // GLOBAL, FORM
+  orderFormId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  queue FollowUpQueue[]
+
+  @@index([userId, trigger, isActive])
+}
+
+model FollowUpQueue {
+  id         String           @id @default(cuid())
+  userId     String
+  orderId    String
+  order      UserOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  templateId String
+  template   FollowUpTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  scheduledAt DateTime
+  status      String   @default("PENDING") // PENDING, SENT, FAILED, SKIPPED, CANCELLED
+
+  sentAt       DateTime?
+  failedReason String?   @db.Text
+  retryCount   Int       @default(0)
+
+  resolvedMessage String @db.Text
+  customerPhone   String
+
+  triggerEvent String // event yang trigger queue ini
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt, status])
+  @@index([orderId, status])
+  @@index([userId, status])
+}
+
+model FollowUpLog {
+  id         String  @id @default(cuid())
+  userId     String
+  orderId    String
+  templateId String?
+  queueId    String?
+
+  customerPhone String
+  message       String  @db.Text
+  status        String // SENT, FAILED
+  errorMessage  String? @db.Text
+
+  source String // AUTOMATIC, MANUAL
+
+  sentAt DateTime @default(now())
+
+  @@index([orderId, sentAt(sort: Desc)])
+  @@index([userId, sentAt(sort: Desc)])
+}
+
+model FollowUpBlacklist {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  customerPhone String
+  reason        String? // "Customer replied STOP", "Manual block", dll
+  blockedAt     DateTime @default(now())
+
+  @@unique([userId, customerPhone])
 }

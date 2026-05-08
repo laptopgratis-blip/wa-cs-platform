@@ -513,6 +513,45 @@ export class WaManager {
       // Kalau CS sedang ambil alih kontak ini → simpan saja, jangan AI reply.
       if (saved.data.contact?.aiPaused) return
 
+      // 1.4 Follow-Up STOP detection: kalau customer balas STOP/BERHENTI/dll,
+      // Next.js akan blacklist customer + cancel pending queue. Return
+      // autoReply opsional yang kita kirim balik via Baileys, lalu STOP semua
+      // proses lain (jangan trigger flow / AI). Best-effort — kalau call
+      // gagal, fallback diam ke flow normal.
+      const stopCheck = await internalApi.checkFollowupStop({
+        sessionId,
+        phoneNumber,
+        content,
+      })
+      if (stopCheck.success && stopCheck.data?.isStop) {
+        if (stopCheck.data.autoReply) {
+          try {
+            const sent = await entry.socket?.sendMessage(remoteJid, {
+              text: stopCheck.data.autoReply,
+            })
+            const msgId = sent?.key?.id ?? null
+            if (msgId) this.markSent(entry, msgId)
+            await internalApi
+              .saveMessage({
+                sessionId,
+                phoneNumber,
+                content: stopCheck.data.autoReply,
+                role: 'AI',
+                source: 'AI',
+                externalMsgId: msgId,
+                tokensUsed: 0,
+              })
+              .catch(() => {})
+          } catch (err) {
+            console.error(
+              `[wa-manager:${sessionId}] followup stop autoReply gagal:`,
+              err,
+            )
+          }
+        }
+        return
+      }
+
       // 1.5 Sales Flow: kalau ada OrderSession aktif atau pesan ini cocok
       // trigger keyword, flow engine yang handle (script-based, hemat token).
       // Kalau gagal → diam-diam fallback ke AI normal.

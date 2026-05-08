@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { OrderFollowUpSection } from '@/components/followup/OrderFollowUpSection'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -294,6 +295,9 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                 placeholder="Tidak terlihat customer, hanya untuk admin."
               />
             </div>
+
+            {/* Follow-Up Order System (POWER) — section read-only + manual send */}
+            <OrderFollowUpSection orderId={data.id} />
 
             {/* Chat history */}
             {data.messages.length > 0 && (

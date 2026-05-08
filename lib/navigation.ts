@@ -9,6 +9,7 @@ import {
   Activity,
   Banknote,
   BarChart3,
+  BellRing,
   BookOpen,
   Box,
   Building2,
@@ -102,6 +103,14 @@ export const USER_NAV_GROUPS: NavGroup[] = [
         label: 'Auto Confirm (BETA)',
         href: '/integrations/bank-mutation',
         icon: Banknote,
+      },
+      // Follow-Up Order System (2026-05-08) — pesan otomatis ke customer
+      // berdasarkan event order + delay hari.
+      { label: 'Follow-Up', href: '/pesanan/follow-up', icon: BellRing },
+      {
+        label: 'Template Follow-Up',
+        href: '/pesanan/templates',
+        icon: FileText,
       },
     ],
   },
