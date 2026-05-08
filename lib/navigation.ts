@@ -7,6 +7,7 @@
 // untuk admin.
 import {
   Activity,
+  Banknote,
   BarChart3,
   BookOpen,
   Box,
@@ -95,6 +96,13 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
       { label: 'Rekening', href: '/bank-accounts', icon: Building2 },
       { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
+      // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
+      // scraping mutasi BCA. Disclaimer & risk handling di halaman tujuan.
+      {
+        label: 'Auto Confirm (BETA)',
+        href: '/integrations/bank-mutation',
+        icon: Banknote,
+      },
     ],
   },
 ]
@@ -147,6 +155,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         label: 'Rekening Bank',
         href: '/admin/bank-accounts',
         icon: Building2,
+        roles: ['ADMIN'],
+      },
+      // Phase 1 BETA, 2026-05-08 — kill switch + monitor scraper BCA per user.
+      {
+        label: 'Bank Integrations (BETA)',
+        href: '/admin/bank-integrations',
+        icon: Banknote,
         roles: ['ADMIN'],
       },
     ],

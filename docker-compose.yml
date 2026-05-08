@@ -105,6 +105,37 @@ services:
       - internal
     restart: unless-stopped
 
+  bank-scraper:
+    # Puppeteer + Chromium service untuk Bank Mutation Auto-Reader (BETA,
+    # 2026-05-08). Hanya akses dari Next.js via internal network, TIDAK
+    # ekspos port public. Memori dibatasi 1G karena Chromium boros.
+    build:
+      context: ./bank-scraper
+      dockerfile: Dockerfile
+    container_name: hulao-bank-scraper
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NEXTJS_URL=http://nextjs:3000
+      - PORT=3002
+    volumes:
+      # Screenshot debug + cookie session storage (sessions tidak strict
+      # diperlukan karena cookie disimpan di DB, tapi handy untuk debug).
+      - ./bank-scraper/screenshots:/app/screenshots
+      - ./bank-scraper/sessions:/app/sessions
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    # Chromium butuh shm size yang lebih besar dari default Docker (64MB).
+    shm_size: '512mb'
+
 volumes:
   # Data Postgres — managed volume supaya permission-nya benar (postgres user
   # dalam container = uid 70 di alpine image).

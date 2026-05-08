@@ -1,0 +1,23 @@
+{
+  "name": "bank-scraper",
+  "version": "1.0.0",
+  "description": "Hulao bank-scraper service — Puppeteer scraping KlikBCA Individual untuk auto-confirm pembayaran transfer.",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "cheerio": "1.0.0",
+    "express": "4.21.2",
+    "prisma": "5.22.0",
+    "puppeteer-core": "22.15.0",
+    "puppeteer-extra": "3.3.6",
+    "puppeteer-extra-plugin-stealth": "2.11.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
