@@ -26,7 +26,13 @@ export const lpUpdateSchema = z
   .object({
     title: z.string().trim().min(2).max(120).optional(),
     slug: slugSchema.optional(),
-    htmlContent: z.string().max(500_000).optional(), // ~500 KB hard cap
+    // Limit 10 MB (~10 juta karakter). Cukup untuk LP yang detail dengan
+    // beberapa image base64 inline. Lebih dari ini biasanya artinya HTML
+    // tidak optimal — image harus di-upload sebagai file, bukan base64.
+    htmlContent: z
+      .string()
+      .max(10_000_000, 'HTML terlalu besar (>10 MB). Coba upload image sebagai file daripada base64 inline.')
+      .optional(),
     metaTitle: z.string().trim().max(160).nullable().optional(),
     metaDesc: z.string().trim().max(320).nullable().optional(),
     isPublished: z.boolean().optional(),

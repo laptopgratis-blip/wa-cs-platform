@@ -11,6 +11,10 @@ import { updateStorageUsed } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { lpUpdateSchema } from '@/lib/validations/lp'
 
+// HTML LP bisa sampai 10 MB (limit Zod di lib/validations/lp.ts). Naikkan
+// timeout supaya parse + save tidak ke-cut default 10 detik.
+export const maxDuration = 60
+
 interface Params {
   params: Promise<{ lpId: string }>
 }
