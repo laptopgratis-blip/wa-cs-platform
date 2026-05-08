@@ -20,7 +20,7 @@ const faqs = [
   },
   {
     q: 'Saya UMKM kecil, beneran masih relevan?',
-    a: 'Justru lebih relevan. UMKM yang owner-nya juga handle CS sendiri = paling rugi waktu. Pakai paket gratis: AI handle pertanyaan repetitive (harga, lokasi, ongkir), kamu fokus ke chat yang penting (negosiasi, custom order). Dengan begitu mau scale ke 50 chat/hari pun masih sanggup sendirian.',
+    a: 'Justru lebih relevan. UMKM yang owner-nya juga handle CS sendiri = paling rugi waktu. Top up paket token paling kecil aja: AI handle pertanyaan repetitive (harga, lokasi, ongkir), kamu fokus ke chat yang penting (negosiasi, custom order). Dengan begitu mau scale ke 50 chat/hari pun masih sanggup sendirian. Setup akun-nya sendiri gratis.',
   },
   {
     q: 'Saya pakai Tokopedia/Shopee juga, ngaruh gak?',

@@ -1,15 +1,15 @@
-// Lead magnet: bonus LP builder gratis pakai AI. Hook akuisisi terkuat
-// karena offer-nya konkret (gratis selamanya 1 LP) dan terhubung ke value
-// utama (LP customer langsung connect ke WA AI).
+// Lead magnet: 1 slot LP host gratis. Customer paste HTML dari builder favorit
+// (mis. ChatGPT/Claude.ai gratis di luar), Hulao deploy + connect ke WA bot.
+// Generator AI in-app opsional dan butuh saldo token — bukan klaim gratis.
 import { ArrowRight, Sparkles, Wand2, Zap } from 'lucide-react'
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
 
 const perks = [
-  '1 landing page profesional',
+  '1 slot landing page, host gratis selamanya',
   '1.000 pengunjung/bulan',
-  'AI generate dari deskripsi produk',
+  'Paste HTML dari builder favorit (ChatGPT/Claude.ai gratis di luar)',
   'Connect ke WA bot dengan 1 klik',
 ]
 
@@ -35,11 +35,12 @@ export function LpBuilderHook() {
             </span>
             <h2 className="mt-4 font-display text-3xl font-extrabold leading-tight tracking-tight text-warm-900 md:text-4xl">
               Belum punya landing page?{' '}
-              <span className="text-primary-600">AI bikinin gratis.</span>
+              <span className="text-primary-600">Pasang gratis pakai HTML.</span>
             </h2>
             <p className="mt-4 text-warm-700 md:text-lg">
-              Tulis deskripsi produk dalam 1 paragraf. AI Hulao bikin landing
-              page profesional dalam 30 detik. Tinggal pasang, langsung jualan.
+              Bikin LP di builder favorit kamu (ChatGPT, Claude.ai, Framer, dll
+              — gratis di luar), copy HTML-nya, paste di Hulao. Langsung bisa
+              dipakai dengan slug custom + connect ke WA bot.
             </p>
 
             <ul className="mt-6 space-y-2.5">
@@ -63,7 +64,7 @@ export function LpBuilderHook() {
                 className="h-12 rounded-full bg-primary-500 px-8 font-semibold text-white shadow-orange hover:bg-primary-600 hover:shadow-orange-lg"
               >
                 <Link href="/register">
-                  Coba Bikin LP Gratis
+                  Pasang LP Gratis
                   <ArrowRight className="ml-2 size-4" />
                 </Link>
               </Button>
@@ -72,20 +73,39 @@ export function LpBuilderHook() {
               Bonus: tombol order di LP langsung connect ke WA AI kamu. Customer
               klik → masuk WhatsApp → dibalas AI → closing.
             </p>
+            <p className="mt-2 text-xs text-warm-500">
+              Mau generate HTML otomatis langsung di Hulao? Tersedia di menu LP
+              builder — pakai saldo token (10 token per generate, butuh saldo
+              aktif minimal 1.000).
+            </p>
           </div>
 
           {/* Visual mockup — input prompt → output LP */}
           <div className="relative">
             <div className="rounded-2xl border border-warm-200 bg-card p-5 shadow-lg">
-              <div className="flex items-center gap-2 border-b border-warm-100 pb-3">
-                <Wand2 className="size-4 text-primary-500" />
-                <span className="text-xs font-medium text-warm-500">
-                  Generate Landing Page
+              <div className="flex items-center justify-between gap-2 border-b border-warm-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Wand2 className="size-4 text-primary-500" />
+                  <span className="text-xs font-medium text-warm-500">
+                    Paste HTML → Live LP
+                  </span>
+                </div>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                  Gratis
                 </span>
               </div>
-              <div className="mt-3 rounded-lg bg-warm-50 p-3 text-sm text-warm-700">
-                &ldquo;Saya jual madu hutan asli dari Sumbawa. Dipanen langsung
-                dari sarang lebah liar. Cocok untuk daya tahan tubuh.&rdquo;
+              <div className="mt-3 rounded-lg bg-warm-900 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">
+                &lt;!DOCTYPE html&gt;
+                <br />
+                &lt;html&gt;
+                <br />
+                &nbsp;&nbsp;&lt;head&gt;…&lt;/head&gt;
+                <br />
+                &nbsp;&nbsp;&lt;body&gt;<span className="text-warm-400">
+                  &nbsp;Madu Hutan…&nbsp;
+                </span>&lt;/body&gt;
+                <br />
+                &lt;/html&gt;
               </div>
               <div className="mt-3 flex items-center justify-center text-warm-400">
                 <ArrowRight className="size-5 rotate-90" />

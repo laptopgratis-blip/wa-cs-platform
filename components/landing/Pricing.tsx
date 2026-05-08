@@ -55,8 +55,13 @@ export function Pricing({ packages }: PricingProps) {
                 </span>
               </div>
               <p className="mt-1 text-sm text-warm-700">
-                1 nomor WA · 1 landing page AI · 1.000 visitor/bulan · Token
-                bonus untuk coba AI
+                1 nomor WA terhubung · 1 slot landing page (paste HTML dari
+                builder favorit kamu, mis. ChatGPT/Claude.ai) · 1.000
+                visitor/bulan
+              </p>
+              <p className="mt-1 text-xs text-warm-500">
+                Catatan: balasan AI WA & generator LP in-app butuh saldo token —
+                top up paket terkecil saat siap pakai.
               </p>
             </div>
           </div>
