@@ -10,8 +10,61 @@
 // (courseId, studentPhone) unique). Kegagalan tidak boleh blok flow utama
 // — wrap caller dgn try/catch + log, jangan throw.
 import { prisma } from '@/lib/prisma'
+import { waService } from '@/lib/wa-service'
 
 import { upsertEnrollment } from './enrollment'
+
+const PORTAL_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? 'https://hulao.id'
+
+async function findAdminWaSessionId(): Promise<string | null> {
+  const session = await prisma.whatsappSession.findFirst({
+    where: { status: 'CONNECTED', user: { role: 'ADMIN' } },
+    select: { id: true },
+    orderBy: { updatedAt: 'desc' },
+  })
+  return session?.id ?? null
+}
+
+async function sendCourseAccessNotif(input: {
+  studentPhone: string
+  studentName: string | null
+  courseTitle: string
+  courseSlug: string
+}): Promise<void> {
+  const adminSessionId = await findAdminWaSessionId()
+  if (!adminSessionId) {
+    console.warn(
+      `[lms-hook] WA admin session tidak CONNECTED — skip notif akses untuk ${input.studentPhone} (${input.courseTitle})`,
+    )
+    return
+  }
+  const greeting = input.studentName ? `Halo ${input.studentName}!` : 'Halo!'
+  const text = [
+    `*Akses Course Aktif 🎓*`,
+    '',
+    greeting,
+    `Pembayaran kamu untuk *${input.courseTitle}* sudah dikonfirmasi.`,
+    '',
+    `Buka akses sekarang:`,
+    `${PORTAL_URL}/belajar`,
+    '',
+    `Login pakai nomor WA ini lewat OTP — kamu akan langsung lihat course-nya.`,
+    '',
+    `_— Hulao Belajar_`,
+  ].join('\n')
+  const send = await waService.sendMessage(
+    adminSessionId,
+    input.studentPhone,
+    text,
+  )
+  if (!send.success) {
+    console.warn(
+      `[lms-hook] gagal kirim notif akses ke ${input.studentPhone}:`,
+      send.error,
+    )
+  }
+}
 
 // Normalize phone ke E.164-style Indonesia (628xxx, no '+'). Idempotent.
 // Input bisa "08xxx", "+628xxx", "628xxx", atau gabungan dgn space/dash.
@@ -75,7 +128,11 @@ export async function triggerEnrollmentForOrder(
       courseId: { not: null },
       course: { status: 'PUBLISHED' },
     },
-    select: { id: true, courseId: true },
+    select: {
+      id: true,
+      courseId: true,
+      course: { select: { title: true, slug: true } },
+    },
   })
   if (products.length === 0) return 0
 
@@ -89,8 +146,19 @@ export async function triggerEnrollmentForOrder(
 
   let count = 0
   for (const p of products) {
-    if (!p.courseId) continue
+    if (!p.courseId || !p.course) continue
     try {
+      // Cek apakah enrollment baru di-create (vs sudah ada → skip notif).
+      const existing = await prisma.enrollment.findUnique({
+        where: {
+          courseId_studentPhone: {
+            courseId: p.courseId,
+            studentPhone: phone,
+          },
+        },
+        select: { id: true, status: true },
+      })
+
       await upsertEnrollment({
         courseId: p.courseId,
         studentPhone: phone,
@@ -100,6 +168,22 @@ export async function triggerEnrollmentForOrder(
         invoiceNumber: order.invoiceNumber,
       })
       count += 1
+
+      // Notif WA hanya kalau benar-benar enrollment baru (atau di-reactivate
+      // dari REVOKED/EXPIRED). Re-order yg sudah ACTIVE → skip supaya tidak
+      // spam student tiap re-purchase.
+      const shouldNotify =
+        !existing || existing.status !== 'ACTIVE'
+      if (shouldNotify) {
+        void sendCourseAccessNotif({
+          studentPhone: phone,
+          studentName: order.customerName,
+          courseTitle: p.course.title,
+          courseSlug: p.course.slug,
+        }).catch((err) =>
+          console.error(`[lms-hook] notif akses gagal:`, err),
+        )
+      }
     } catch (err) {
       // Per-course error tidak boleh blok yg lain.
       console.error(

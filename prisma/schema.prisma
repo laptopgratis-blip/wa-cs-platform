@@ -2387,3 +2387,53 @@ model LessonProgress {
   @@unique([enrollmentId, lessonId])
   @@index([lessonId])
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// LMS Phase 2 — Portal student /belajar.
+// Student (pembeli course) login pakai WA OTP. Identitas = phone E.164,
+// match dgn Enrollment.studentPhone yg di-create otomatis saat order PAID.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Session cookie student. Dibuat saat OTP verified, di-pakai sebagai cookie
+// httpOnly. Default 30 hari supaya student tidak login terus-menerus.
+model StudentSession {
+  id           String   @id @default(cuid())
+  // Phone E.164 yg login. Banyak session per phone OK (multi-device).
+  studentPhone String
+  // Random secure token — value cookie. Cek dgn equality.
+  sessionToken String   @unique
+  // Snapshot info dari Enrollment terbaru — supaya tampilan portal cepat
+  // (no join). Update saat verify OTP atau saat enrollment baru.
+  studentName  String?
+  studentEmail String?
+  // User agent / IP buat audit di admin (Phase 4).
+  userAgent    String?  @db.Text
+  ipAddress    String?
+  expiresAt    DateTime
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([studentPhone])
+  @@index([expiresAt]) // cron cleanup expired
+}
+
+// OTP request — temporary record untuk phone yg request OTP. 6-digit kode
+// di-hash supaya tidak bocor walau DB dump. Verify dgn timingSafeEqual.
+// Throttle: max 3 OTP per phone per 60 menit (di-enforce di service).
+model StudentOtp {
+  id            String   @id @default(cuid())
+  studentPhone  String
+  // Hash sha256 dari OTP plaintext (lihat lib/services/lms/student-auth.ts).
+  otpHash       String
+  // 5 menit sejak issue. Setelah lewat, verify return error.
+  expiresAt     DateTime
+  // Counter percobaan verify untuk OTP ini. Setelah 5x salah, mark consumed
+  // supaya brute force capped.
+  attempts      Int      @default(0)
+  // Timestamp saat OTP dipakai sukses → mark consumed (tidak bisa di-replay).
+  consumedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([studentPhone, createdAt(sort: Desc)])
+  @@index([expiresAt])
+}
