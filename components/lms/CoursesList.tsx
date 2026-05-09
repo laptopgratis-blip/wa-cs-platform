@@ -1,6 +1,6 @@
 'use client'
 
-import { Layers, Pencil, Users } from 'lucide-react'
+import { BarChart3, Layers, Pencil, Users } from 'lucide-react'
 import Link from 'next/link'
 
 import { Badge } from '@/components/ui/badge'
@@ -101,7 +101,14 @@ export function CoursesList({ courses }: { courses: Course[] }) {
                 </div>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-3">
+                <Link
+                  href={`/lms/courses/${c.id}/analytics`}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-warm-600 hover:text-warm-900"
+                >
+                  <BarChart3 className="size-3.5" />
+                  Analytics
+                </Link>
                 <Link
                   href={`/lms/courses/${c.id}/edit`}
                   className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
