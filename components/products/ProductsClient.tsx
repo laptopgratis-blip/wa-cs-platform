@@ -586,7 +586,7 @@ export function ProductsClient({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] sm:max-w-2xl lg:max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Edit Produk' : 'Tambah Produk'}

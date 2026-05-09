@@ -263,3 +263,27 @@
   background-image: radial-gradient(circle, #d6d3d1 1px, transparent 1px);
   background-size: 24px 24px;
 }
+
+/* Social Proof popup di public order form. Tailwind v4 generate utility class
+   `.animate-[slide-up_0.35s_ease-out]` tapi keyframes harus di global CSS —
+   `<style jsx global>` di App Router tidak inject keyframes ke compiled CSS. */
+@keyframes slide-up {
+  from {
+    transform: translateY(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes slide-down {
+  from {
+    transform: translateY(-120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

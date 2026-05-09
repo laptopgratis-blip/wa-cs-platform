@@ -110,6 +110,10 @@ export const soulSimulationCreateSchema = z.object({
   totalRounds: z.number().int().min(2, 'Minimal 2 ronde').max(30, 'Maksimal 30 ronde'),
   starterRole: z.enum(['SELLER', 'BUYER']),
   starterMessage: z.string().trim().min(2, 'Pesan pembuka minimal 2 karakter').max(2000),
+  // Knowledge entries yang dipakai seller saat simulasi (mirror behavior
+  // produksi: keyword match terhadap pesan buyer). Admin cherry-pick dari
+  // UserKnowledge berbagai user. Kosong = tanpa knowledge. Limit 50.
+  sellerKnowledgeIds: z.array(z.string()).max(50, 'Maksimal 50 knowledge').default([]),
 })
 export type SoulSimulationCreateInput = z.infer<typeof soulSimulationCreateSchema>
 

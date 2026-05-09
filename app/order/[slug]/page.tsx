@@ -92,6 +92,9 @@ export default async function PublicOrderPage({ params }: PageProps) {
         requireShipping: form.requireShipping,
         showFlashSaleCounter: form.showFlashSaleCounter,
         showShippingPromo: form.showShippingPromo,
+        socialProofEnabled: form.socialProofEnabled,
+        socialProofPosition: form.socialProofPosition as 'top' | 'bottom',
+        socialProofIntervalSec: form.socialProofIntervalSec,
         ownerName: form.user.name ?? 'Penjual',
       }}
       isAvailable={isAvailable}

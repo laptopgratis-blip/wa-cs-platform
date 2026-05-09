@@ -19,6 +19,7 @@ import crypto from 'node:crypto'
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+import { parseUa } from '@/lib/ua-parse'
 
 // Hash IP supaya tidak simpan plaintext (privacy + GDPR). Salt dari env supaya
 // hash tidak bisa di-rainbow-table-kan kalau DB bocor.
@@ -104,6 +105,22 @@ function injectMeta(htmlDoc: string, metaBlock: string): string {
   // Note: hindari unused-variable warning untuk variabel awal — keep originals.
   void headOpenIdx
   void headOpenLen
+}
+
+// Inject tracker JS sebelum </body>. Kalau </body> tidak ada (HTML user
+// fragment yang kelewat wrap), append di akhir document.
+function injectTrackerScript(html: string, lpId: string): string {
+  const tag = `<script src="/lp-tracker.js" data-lp="${lpId}" async></script>`
+  const closingBody = html.match(/<\/body\s*>/i)
+  if (closingBody && closingBody.index !== undefined) {
+    return (
+      html.slice(0, closingBody.index) +
+      tag +
+      '\n' +
+      html.slice(closingBody.index)
+    )
+  }
+  return html + '\n' + tag
 }
 
 // Wrap HTML kalau user kasih fragment (jarang — AI kita instruct kasih
@@ -197,13 +214,39 @@ export async function GET(req: Request, { params }: Params) {
 
   // Fire-and-forget visitor record + viewCount — JANGAN await supaya tidak slow
   // render. Error di-swallow karena observability bukan critical path.
+  // LP Lab Phase 1 (2026-05-09): tambah deviceType/browser/os via UA parse +
+  // UTM extract dari URL — supaya analytics dashboard punya dimensi lengkap.
+  const userAgent = req.headers.get('user-agent') ?? ''
+  const parsedUa = parseUa(userAgent)
+  const reqUrl = new URL(req.url)
+  const utmSource = reqUrl.searchParams.get('utm_source')?.slice(0, 100) ?? null
+  const utmMedium = reqUrl.searchParams.get('utm_medium')?.slice(0, 100) ?? null
+  const utmCampaign = reqUrl.searchParams.get('utm_campaign')?.slice(0, 100) ?? null
+  // Geoip dari header reverse proxy kalau ada (Cloudflare/Vercel set ini).
+  // Traefik default tidak set — jadi biasanya null. Bisa ditambah nanti via
+  // service eksternal di Phase 2.
+  const country =
+    req.headers.get('cf-ipcountry')?.slice(0, 2) ??
+    req.headers.get('x-vercel-ip-country')?.slice(0, 2) ??
+    null
+  const city =
+    req.headers.get('x-vercel-ip-city')?.slice(0, 100) ??
+    null
   prisma.lpVisit
     .create({
       data: {
         landingPageId: lp.id,
         ipHash,
-        userAgent: req.headers.get('user-agent')?.slice(0, 500) ?? null,
+        userAgent: userAgent.slice(0, 500) || null,
         referer: req.headers.get('referer')?.slice(0, 500) ?? null,
+        deviceType: parsedUa.deviceType,
+        browser: parsedUa.browser,
+        os: parsedUa.os,
+        country,
+        city,
+        utmSource,
+        utmMedium,
+        utmCampaign,
       },
     })
     .catch((err) => console.error('[/p/:slug] gagal save LpVisit:', err))
@@ -235,9 +278,14 @@ export async function GET(req: Request, { params }: Params) {
   const html = lp.htmlContent.trim()
   const isFullDoc = /<head[^>]*>/i.test(html) && /<html[^>]*>/i.test(html)
 
-  const finalHtml = isFullDoc
+  let finalHtml = isFullDoc
     ? injectMeta(html, metaBlock)
     : wrapAsDocument(html, metaBlock)
+
+  // LP Lab Phase 1 — inject tracker JS sebelum </body>. Async + non-blocking.
+  // data-lp attribute dipakai tracker untuk identify lpId (tidak via URL
+  // supaya cache CDN tetap satu file untuk semua LP).
+  finalHtml = injectTrackerScript(finalHtml, lp.id)
 
   return new NextResponse(finalHtml, {
     status: 200,

@@ -10,6 +10,7 @@
 import {
   AlertTriangle,
   Bookmark,
+  BookOpen,
   CheckCircle2,
   Download,
   FlaskConical,
@@ -18,6 +19,7 @@ import {
   Play,
   RefreshCw,
   Save,
+  Search,
   Square,
   Trash2,
   XCircle,
@@ -80,6 +82,15 @@ interface ModelOption {
   modelId: string
   inputPricePer1M: number
   outputPricePer1M: number
+}
+interface KnowledgeOption {
+  id: string
+  title: string
+  contentType: string // TEXT | IMAGE | FILE | LINK
+  textContent: string | null
+  caption: string | null
+  triggerKeywords: string[]
+  user: { id: string; name: string | null; email: string }
 }
 interface ConversationTurn {
   role: 'SELLER' | 'BUYER'
@@ -152,6 +163,7 @@ interface PresetConfig {
   totalRounds: number
   starterRole: 'SELLER' | 'BUYER'
   starterMessage: string
+  sellerKnowledgeIds?: string[]
 }
 interface Preset {
   id: string
@@ -174,6 +186,7 @@ interface FormState {
   totalRounds: number
   starterRole: 'SELLER' | 'BUYER'
   starterMessage: string
+  sellerKnowledgeIds: string[]
 }
 
 const DEFAULT_FORM: FormState = {
@@ -188,6 +201,7 @@ const DEFAULT_FORM: FormState = {
   totalRounds: 10,
   starterRole: 'BUYER',
   starterMessage: 'halo kak, mau tanya',
+  sellerKnowledgeIds: [],
 }
 
 // ─────────────────────────────────────────
@@ -198,6 +212,7 @@ export function SoulLabManager() {
   const [personalities, setPersonalities] = useState<PersonalityOption[]>([])
   const [styles, setStyles] = useState<StyleOption[]>([])
   const [models, setModels] = useState<ModelOption[]>([])
+  const [knowledge, setKnowledge] = useState<KnowledgeOption[]>([])
   const [setupLoading, setSetupLoading] = useState(true)
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [activeSimId, setActiveSimId] = useState<string | null>(null)
@@ -222,6 +237,7 @@ export function SoulLabManager() {
           setPersonalities(json.data.personalities)
           setStyles(json.data.styles)
           setModels(json.data.models)
+          setKnowledge(json.data.knowledge ?? [])
         } else {
           toast.error(json.error || 'Gagal load data')
         }
@@ -380,7 +396,12 @@ export function SoulLabManager() {
   }
 
   function applyPreset(p: Preset) {
-    setForm(p.config)
+    // Defensive: preset lama (sebelum sellerKnowledgeIds ditambah) tidak punya
+    // field ini di config. Normalize ke array kosong supaya FormState tetap valid.
+    setForm({
+      ...p.config,
+      sellerKnowledgeIds: p.config.sellerKnowledgeIds ?? [],
+    })
     setPresetsOpen(false)
     toast.success(`Preset "${p.name}" dimuat`)
   }
@@ -447,6 +468,7 @@ export function SoulLabManager() {
           personalities={personalities}
           styles={styles}
           models={models}
+          knowledge={knowledge}
           sameAgents={sameAgents}
           estimateRp={estimateRp}
           estimating={estimating}
@@ -522,6 +544,7 @@ function SetupSection({
   personalities,
   styles,
   models,
+  knowledge,
   sameAgents,
   estimateRp,
   estimating,
@@ -534,6 +557,7 @@ function SetupSection({
   personalities: PersonalityOption[]
   styles: StyleOption[]
   models: ModelOption[]
+  knowledge: KnowledgeOption[]
   sameAgents: boolean
   estimateRp: number | null
   estimating: boolean
@@ -594,6 +618,15 @@ function SetupSection({
             </div>
           </div>
         )}
+
+        {/* Knowledge Base Picker — seller pakai entry yang dipilih saat
+            merespons. Mirror behavior produksi: keyword match terhadap pesan
+            buyer terbaru. Optional — kosong = tanpa knowledge. */}
+        <KnowledgePicker
+          knowledge={knowledge}
+          selectedIds={form.sellerKnowledgeIds}
+          onChange={(ids) => setF('sellerKnowledgeIds', ids)}
+        />
 
         {/* Pengaturan */}
         <div className="grid gap-4 rounded-lg border border-warm-200 bg-warm-50/50 p-4 md:grid-cols-3">
@@ -804,6 +837,180 @@ function AgentColumn({
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────
+// Knowledge picker — multi-select KB entries dari semua user untuk dipakai
+// seller saat simulasi. Filter by title/owner/keyword. Limit 50 entries
+// supaya tidak overflow saat retrieve.
+// ─────────────────────────────────────────
+
+const KNOWLEDGE_LIMIT = 50
+
+function KnowledgePicker({
+  knowledge,
+  selectedIds,
+  onChange,
+}: {
+  knowledge: KnowledgeOption[]
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [expanded, setExpanded] = useState(false)
+  const selectedSet = new Set(selectedIds)
+  const selectedCount = selectedIds.length
+
+  const filtered = knowledge.filter((k) => {
+    if (!query.trim()) return true
+    const q = query.toLowerCase()
+    return (
+      k.title.toLowerCase().includes(q) ||
+      k.user.email.toLowerCase().includes(q) ||
+      (k.user.name?.toLowerCase().includes(q) ?? false) ||
+      k.triggerKeywords.some((kw) => kw.toLowerCase().includes(q))
+    )
+  })
+
+  function toggle(id: string) {
+    if (selectedSet.has(id)) {
+      onChange(selectedIds.filter((x) => x !== id))
+    } else {
+      if (selectedSet.size >= KNOWLEDGE_LIMIT) return
+      onChange([...selectedIds, id])
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <Label className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+            <BookOpen className="size-4" /> Knowledge Base (opsional)
+          </Label>
+          <p className="mt-1 text-xs text-blue-800">
+            Pilih entry knowledge yang dipakai seller saat merespons. Engine akan
+            keyword-match ke pesan pembeli (sama dengan production behavior). Test
+            jadi lebih akurat karena seller punya info pendukung.
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="text-xs font-semibold text-blue-900">
+            {selectedCount}/{KNOWLEDGE_LIMIT}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-2 h-7 px-2 text-xs"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Tutup' : 'Pilih'}
+          </Button>
+        </div>
+      </div>
+
+      {selectedCount > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {selectedIds.map((id) => {
+            const k = knowledge.find((x) => x.id === id)
+            if (!k) return null
+            return (
+              <Badge
+                key={id}
+                variant="secondary"
+                className="cursor-pointer bg-blue-100 text-blue-900 hover:bg-blue-200"
+                onClick={() => toggle(id)}
+                title="Klik untuk hapus"
+              >
+                {k.title} ✕
+              </Badge>
+            )
+          })}
+        </div>
+      )}
+
+      {expanded && (
+        <div className="mt-3 space-y-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-blue-700" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari title, owner, atau keyword…"
+              className="h-8 pl-7 text-sm"
+            />
+          </div>
+          <div className="max-h-72 overflow-y-auto rounded border border-blue-200 bg-white">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-blue-700">
+                {knowledge.length === 0
+                  ? 'Belum ada knowledge entry di sistem. Buat dulu via /knowledge.'
+                  : 'Tidak ada match untuk query.'}
+              </p>
+            ) : (
+              <ul className="divide-y divide-blue-100">
+                {filtered.slice(0, 100).map((k) => {
+                  const checked = selectedSet.has(k.id)
+                  const disabled = !checked && selectedSet.size >= KNOWLEDGE_LIMIT
+                  return (
+                    <li key={k.id}>
+                      <label
+                        className={cn(
+                          'flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-blue-50',
+                          disabled && 'cursor-not-allowed opacity-50',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={() => toggle(k.id)}
+                          className="mt-1 size-4"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-2">
+                            <span className="text-sm font-medium text-warm-900">
+                              {k.title}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] uppercase"
+                            >
+                              {k.contentType}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-warm-500">
+                            {k.user.email}
+                          </p>
+                          {k.triggerKeywords.length > 0 && (
+                            <p className="mt-0.5 truncate text-[11px] text-blue-700">
+                              keywords: {k.triggerKeywords.join(', ')}
+                            </p>
+                          )}
+                          {(k.textContent || k.caption) && (
+                            <p className="mt-0.5 line-clamp-2 text-xs text-warm-600">
+                              {(k.textContent || k.caption || '').slice(0, 200)}
+                            </p>
+                          )}
+                        </div>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {filtered.length > 100 && (
+              <p className="border-t border-blue-100 px-3 py-2 text-center text-[11px] text-blue-700">
+                Menampilkan 100 dari {filtered.length} hasil — refine query untuk
+                lihat lainnya.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -78,6 +78,7 @@ const SMART_CHIPS: Array<{
 ]
 
 const PM_NULL = '__ALL__'
+const PRODUCT_NULL = '__ALL__'
 
 interface Props {
   tab: keyof OrdersCounts
@@ -86,6 +87,8 @@ interface Props {
   from: string
   to: string
   paymentMethod: 'COD' | 'TRANSFER' | null
+  productId: string | null
+  productOptions: Array<{ id: string; name: string }>
   counts: OrdersCounts
   urgentCount: number
   view: ViewMode
@@ -95,6 +98,7 @@ interface Props {
   onFromChange: (d: string) => void
   onToChange: (d: string) => void
   onPaymentMethodChange: (pm: 'COD' | 'TRANSFER' | null) => void
+  onProductChange: (id: string | null) => void
   onViewChange: (v: ViewMode) => void
   onClearAll: () => void
 }
@@ -106,6 +110,8 @@ export function OrdersFilterBar({
   from,
   to,
   paymentMethod,
+  productId,
+  productOptions,
   counts,
   urgentCount,
   view,
@@ -115,6 +121,7 @@ export function OrdersFilterBar({
   onFromChange,
   onToChange,
   onPaymentMethodChange,
+  onProductChange,
   onViewChange,
   onClearAll,
 }: Props) {
@@ -123,7 +130,8 @@ export function OrdersFilterBar({
     search.length > 0 ||
     from.length > 0 ||
     to.length > 0 ||
-    paymentMethod !== null
+    paymentMethod !== null ||
+    productId !== null
 
   return (
     <div className="space-y-3">
@@ -195,6 +203,27 @@ export function OrdersFilterBar({
             <SelectItem value={PM_NULL}>Semua Bayar</SelectItem>
             <SelectItem value="COD">COD</SelectItem>
             <SelectItem value="TRANSFER">Transfer</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={productId ?? PRODUCT_NULL}
+          onValueChange={(v) => onProductChange(v === PRODUCT_NULL ? null : v)}
+          disabled={productOptions.length === 0}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue
+              placeholder={
+                productOptions.length === 0 ? 'Belum ada produk' : 'Semua Produk'
+              }
+            />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={PRODUCT_NULL}>Semua Produk</SelectItem>
+            {productOptions.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">

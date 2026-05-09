@@ -138,6 +138,7 @@ export async function POST(req: Request) {
         totalRounds: data.totalRounds,
         starterRole: data.starterRole,
         starterMessage: data.starterMessage,
+        sellerKnowledgeIds: data.sellerKnowledgeIds,
         status: 'RUNNING',
       },
     })

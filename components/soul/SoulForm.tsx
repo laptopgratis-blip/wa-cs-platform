@@ -58,6 +58,10 @@ const DEFAULTS: SoulInitialValues = {
 
 const NONE = '__NONE__' as const
 
+// Sinkron dengan validasi server di lib/validations/soul.ts. ~1500 char =
+// ~375 token; cocok untuk info produk inti tanpa boros budget tiap reply.
+const BUSINESS_CONTEXT_LIMIT = 1500
+
 export function SoulForm({ initial, onDone }: SoulFormProps) {
   const router = useRouter()
   const isEdit = Boolean(initial?.id)
@@ -263,16 +267,64 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="businessContext">Konteks Bisnis</Label>
+          <div className="flex items-baseline justify-between">
+            <Label htmlFor="businessContext">Konteks Produk</Label>
+            <span
+              className={`text-xs tabular-nums ${
+                (watched.businessContext?.length ?? 0) > BUSINESS_CONTEXT_LIMIT
+                  ? 'font-semibold text-destructive'
+                  : (watched.businessContext?.length ?? 0) >
+                      BUSINESS_CONTEXT_LIMIT * 0.85
+                    ? 'text-amber-600'
+                    : 'text-muted-foreground'
+              }`}
+            >
+              {watched.businessContext?.length ?? 0}/{BUSINESS_CONTEXT_LIMIT}
+            </span>
+          </div>
           <Textarea
             id="businessContext"
-            rows={6}
-            placeholder="Info produk, harga, FAQ, jam buka, alamat toko, kebijakan return, dst."
+            rows={4}
+            placeholder={`Contoh:
+Cleanoz 12ml — Rp 89.000. Pembersih kerak kerang & jamur untuk kamar mandi/dapur.
+Cleanoz 30ml — Rp 175.000. Versi hemat untuk pemakaian sebulan penuh.
+Pengiriman J&T/SiCepat dari Bandung.`}
             {...form.register('businessContext')}
           />
-          <p className="text-xs text-muted-foreground">
-            Semua info ini akan dipakai AI untuk menjawab pertanyaan customer.
-          </p>
+          <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
+            <p className="font-semibold">
+              Cuma info inti produk (harga, fitur singkat).
+            </p>
+            <p className="mt-0.5 text-blue-800">
+              FAQ, jam buka, alamat toko, kebijakan return, testimoni, link
+              tokopedia/shopee, file panduan — simpan di{' '}
+              <a
+                href="/knowledge"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold underline hover:no-underline"
+              >
+                Knowledge Base
+              </a>
+              . Knowledge ditarik otomatis hanya saat customer tanya hal terkait
+              (keyword match), jadi tidak boros token tiap balasan.
+            </p>
+          </div>
+          {(watched.businessContext?.length ?? 0) > BUSINESS_CONTEXT_LIMIT && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <span className="font-semibold">⚠️ Konteks terlalu panjang.</span>{' '}
+              Pisahkan FAQ & info detail ke{' '}
+              <a
+                href="/knowledge"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold underline hover:no-underline"
+              >
+                /knowledge
+              </a>{' '}
+              — di sini cukup info produk inti saja.
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between rounded-lg border p-3">

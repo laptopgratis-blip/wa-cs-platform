@@ -53,6 +53,8 @@ model User {
   currentPlanExpiresAt         DateTime?
   landingPages                 LandingPage[]
   lpImages                     LpImage[]
+  lpGenerations                LpGeneration[]
+  lpOptimizations              LpOptimization[]
   lpQuota                      UserQuota?
   soulSimulations              SoulSimulation[]
   soulSimulationPresets        SoulSimulationPreset[]
@@ -617,9 +619,16 @@ model LandingPage {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  images LpImage[]
-  visits LpVisit[]
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images        LpImage[]
+  visits        LpVisit[]
+  events        LpEvent[]
+  heatmapBins   LpHeatmapBin[]
+  chatSignals   LpChatSignal[]
+  generations   LpGeneration[]
+  optimizations LpOptimization[]
+  versions      LpVersion[]
+  scores        LpScore[]
 
   @@index([userId, isPublished])
 }
@@ -641,6 +650,164 @@ model LpImage {
 
   @@index([userId, createdAt])
   @@index([lpId])
+}
+
+// LpScore — cache + history per compute. Setiap kali score di-compute (manual
+// refresh atau cron daily), insert row baru dengan total + breakdown + meta.
+//
+// Latest score: ORDER BY computedAt DESC LIMIT 1 per lpId.
+// Score-over-time chart: range query untuk anchor points di trend graph.
+//
+// Stale handling: API GET cek umur latest row — kalau >24 jam, recompute
+// on-demand (lazy refresh).
+model LpScore {
+  id            String @id @default(cuid())
+  landingPageId String
+
+  // Total 0-100 (derived dari sum breakdown — disimpan supaya gampang sort/query).
+  total Int
+
+  // Per-dimensi breakdown (struct JSON):
+  // { traffic: {score, max, detail}, engagement: {...}, conversion: {...},
+  //   content: {...}, technical: {...}, sentiment: {...} }
+  breakdownJson Json @default("{}")
+
+  // Window data yang dipakai compute (mis. 30 hari, 7 hari).
+  periodDays Int @default(30)
+
+  // Visit count yang ada di window — kalau < threshold, score "below confidence".
+  // Disimpan supaya UI bisa show disclaimer "data minim".
+  sampleVisits Int @default(0)
+
+  // Trigger: 'manual' (user klik refresh), 'cron' (daily), 'apply' (snapshot
+  // saat apply optimization untuk before/after compare).
+  trigger String @default("cron")
+
+  computedAt DateTime @default(now())
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@index([landingPageId, computedAt(sort: Desc)])
+}
+
+// LpOptimization — audit per call AI optimization Phase 4. Dicatat per call:
+// model, token actual, cost provider, platform token charge, suggestions JSON,
+// score estimate before/after, dan apakah user apply atau discard.
+//
+// Kalau apply: snapshot HTML before/after juga disimpan supaya bisa rollback
+// langsung dari record ini (selain via LpVersion). Kalau discard: tidak charge
+// token, hanya log (untuk audit perubahan minat user).
+model LpOptimization {
+  id     String @id @default(cuid())
+  lpId   String
+  userId String
+
+  // Sonnet — model paling cocok untuk reasoning (CRO suggestions). Snapshot
+  // supaya audit historis tetap akurat kalau model di-switch.
+  model        String
+  inputTokens  Int
+  outputTokens Int
+
+  inputPricePer1MUsd  Float @default(0)
+  outputPricePer1MUsd Float @default(0)
+  providerCostUsd     Float @default(0)
+  providerCostRp      Float @default(0)
+  // Platform tokens yang di-charge ke user balance. 0 kalau discard.
+  platformTokensCharged Int @default(0)
+
+  // Output AI — di-validate parse JSON sebelum simpan.
+  suggestionsJson Json   @default("[]") // [{title, rationale, impact}]
+  focusAreasJson  Json   @default("[]") // ["pricing","social_proof",...]
+  scoreBefore     Int? // estimasi 0-100 dari AI atas LP saat ini
+  scoreAfter      Int? // estimasi setelah perbaikan diterapkan
+  // Konteks input yg di-feed ke AI — disimpan untuk transparency & debug.
+  contextSummary  String? @db.Text
+
+  // Apply state
+  applied         Boolean   @default(false)
+  appliedAt       DateTime?
+  // Snapshot HTML — beforeHtml selalu disimpan, afterHtml hanya kalau output
+  // valid. Kedua field nullable supaya record tetap bisa dibuat saat error.
+  beforeHtml      String?   @db.Text
+  afterHtml       String?   @db.Text
+  // Link ke LpVersion yang ter-create saat apply. Null kalau discard.
+  appliedVersionId String?
+
+  errorMessage String? @db.Text
+  createdAt    DateTime @default(now())
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lp   LandingPage @relation(fields: [lpId], references: [id], onDelete: Cascade)
+
+  @@index([lpId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+// LpVersion — snapshot HTML LP per perubahan signifikan. Source: 'manual'
+// (user save manual edit), 'ai' (apply AI optimization), 'restore' (revert
+// dari versi lain).
+//
+// Auto-prune: keep last 20 versi per LP — yang lebih lama dihapus oleh cron
+// /api/cron/cleanup-lp.
+model LpVersion {
+  id          String @id @default(cuid())
+  lpId        String
+  // Snapshot full HTML saat versi ini dibuat.
+  htmlContent String @db.Text
+  // Source tag untuk filter di UI history.
+  source      String // manual | ai | restore
+  // Optional reference: kalau source=ai, point ke LpOptimization yang trigger.
+  optimizationId String?
+  // Score estimate snapshot — dari evaluator (Phase 5) atau AI optimization estimate.
+  scoreSnapshot  Int?
+  // Note opsional dari user atau auto-generated ("Apply AI suggestions").
+  note        String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  lp LandingPage @relation(fields: [lpId], references: [id], onDelete: Cascade)
+
+  @@index([lpId, createdAt(sort: Desc)])
+}
+
+// Audit per-call AI generation untuk LP. Dicatat per generation supaya bisa
+// tracking biaya provider (token Anthropic × harga model) terpisah dari token
+// platform yang di-charge. Token platform = TokenTransaction (USAGE = -10);
+// di sini disimpan input/output token aktual + estimasi biaya USD/Rp untuk
+// reporting & sanity check apakah harga 10 token/generate masih cover biaya
+// AI provider.
+model LpGeneration {
+  id     String @id @default(cuid())
+  lpId   String
+  userId String
+
+  // Model yang dipakai (mis. claude-haiku-4-5). Disimpan supaya kalau model
+  // di-switch nanti, history tetap accurate per call.
+  model        String
+  inputTokens  Int
+  outputTokens Int
+
+  // Harga snapshot per 1M token (USD) saat call ini di-fire. Snapshot supaya
+  // perubahan harga provider di masa depan tidak ngerusak audit historis.
+  inputPricePer1MUsd  Float @default(0)
+  outputPricePer1MUsd Float @default(0)
+  // Hasil compute: provider cost dalam USD & Rp (pakai usdRate snapshot dari
+  // PricingSettings saat call). Dua-duanya disimpan supaya UI tidak perlu
+  // re-compute setiap render.
+  providerCostUsd     Float @default(0)
+  providerCostRp      Float @default(0)
+  // Token platform yang di-charge ke user untuk panggilan ini. Sumber kebenaran
+  // billing tetap di TokenTransaction; field ini sekadar mirror untuk JOIN-free
+  // reporting.
+  platformTokensCharged Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lp   LandingPage @relation(fields: [lpId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([lpId, createdAt(sort: Desc)])
 }
 
 // Kuota LP & storage per user. Tier hanya naik (lihat lib/lp-quota.ts).
@@ -679,10 +846,145 @@ model LpVisit {
   referer       String?  @db.Text
   createdAt     DateTime @default(now())
 
+  // ── LP Lab fields (2026-05-09) — engagement data per visit ──
+  // Extracted dari User-Agent saat insert (server-side, lightweight regex).
+  // Nullable supaya LpVisit lama (sebelum LP Lab) tetap valid.
+  deviceType String? // MOBILE | TABLET | DESKTOP | BOT
+  browser    String? // Chrome | Safari | Firefox | dst
+  os         String? // iOS | Android | Windows | macOS | Linux | dst
+
+  // Geoip (best-effort dari header reverse proxy atau API eksternal).
+  // Bisa null kalau lookup gagal / belum di-setup.
+  country String?
+  city    String?
+
+  // Engagement aggregates — di-update oleh tracker JS via /api/lp/events.
+  // Visit baru default null/false, sampai event scroll/click/unload datang.
+  scrollMaxPct   Int? // 0-100, max scroll yg pernah dicapai
+  timeOnPageSec  Int? // estimated dari last-event minus pageview, capped 30 menit
+  ctaClicked     Boolean @default(false) // any CTA clicked di visit ini
+  bounced        Boolean @default(true) // default true; false saat scrollMaxPct >= 25 OR timeOnPageSec >= 10
+
+  // UTM dari URL — hadir kalau visitor datang via campaign tracking.
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+
+  // Last activity timestamp untuk hitung session duration. Diupdate per
+  // event datang. NULL = visit cuma pageview tanpa engagement event.
+  lastEventAt DateTime?
+
   landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  events      LpEvent[]
 
   @@index([landingPageId, createdAt])
   @@index([ipHash, landingPageId, createdAt])
+  @@index([landingPageId, deviceType])
+}
+
+// LpHeatmapBin — aggregated click positions per grid cell. Storage strategy:
+// alih-alih simpan setiap click point (akan explode), kita bin ke 100×100
+// grid cell (1% resolution). Per device type beda layout, jadi key terdiri
+// dari (lpId, deviceType, xCell, yCell) — count incremented per click event
+// yang masuk ke cell itu.
+//
+// Heatmap.js rendering di UI: ambil semua bin untuk lpId+deviceType+period,
+// render dot per bin dengan radius+intensity proportional ke count.
+//
+// Cleanup: bin lebih dari 90 hari tidak di-purge — count tetap akurat
+// (hanya freshness yang menurun). Kalau butuh, tambah field updatedAt + cron
+// purge bin yang updatedAt < 90 hari ago.
+model LpHeatmapBin {
+  id            String @id @default(cuid())
+  landingPageId String
+  // MOBILE | TABLET | DESKTOP — null tidak di-track (BOT events di-skip).
+  deviceType    String
+  // 0-99 grid coords relative to (page width, page height) saat klik.
+  xCell         Int
+  yCell         Int
+  count         Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@unique([landingPageId, deviceType, xCell, yCell])
+  @@index([landingPageId, deviceType])
+}
+
+// LpChatSignal — aggregated customer concern signal per LP. Sumber: pesan WA
+// dari Contact yang convert dari LP (matched via UTM utm_source=lp_<slug>
+// di UserOrder, atau via OrderForm yang attached ke LP).
+//
+// Signal di-bucketing pakai keyword (lib/services/lp-chat-signals.ts):
+//   harga_mahal, gak_paham, gak_percaya, ragu_kualitas, gak_yakin, cocok_kebutuhan
+//
+// Update via cron daily — recompute count + sample 3 quote per bucket.
+// Quote di-anonymized (cuma snippet 80 char dari pesan customer).
+//
+// Period field = compute window (7d/30d) supaya bisa display "30 hari terakhir"
+// vs "7 hari terakhir" tanpa double-counting.
+model LpChatSignal {
+  id            String @id @default(cuid())
+  landingPageId String
+  category      String // harga_mahal | gak_paham | gak_percaya | ragu_kualitas | gak_yakin | cocok_kebutuhan
+  count         Int    @default(0)
+  // Sample quotes anonymized (max 3, max 80 char each), JSON array of strings.
+  // Dipakai UI tampil sample concern + jadi konteks AI optimization Phase 4.
+  sampleQuotes  Json   @default("[]")
+  // Window: 7 atau 30 hari (default 30).
+  periodDays    Int    @default(30)
+
+  computedAt DateTime @default(now())
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+
+  @@unique([landingPageId, category, periodDays])
+  @@index([landingPageId])
+}
+
+// LpEvent — granular tracker event per visit. Sumber data utama untuk
+// analytics dashboard dan AI optimization (CTR, scroll depth distribution,
+// CTA ranking, bounce funnel).
+//
+// Event types yang di-track tracker JS:
+//   pageview        — fire saat tracker boot (supplementary; LpVisit sudah
+//                     dibuat server-side di /p/<slug>). Di-skip oleh ingestion
+//                     karena duplikat.
+//   scroll_25/50/75/100 — milestone scroll depth
+//   cta_click       — klik tombol/link CTA. value = label tombol
+//   outbound_click  — klik link eksternal (wa.me, mailto, http://...). value = URL host
+//   form_submit     — submit form di LP. value = form action atau "form_inline"
+//   time_milestone  — sampling 30s/60s/120s untuk engagement quality
+//   page_unload     — fire saat user close tab/navigate away. value = total seconds di page
+//
+// Tidak track field input value, tidak track full mouse path. Mouse coords
+// untuk heatmap di-aggregate ke LpHeatmapBin (terpisah, Phase 3).
+model LpEvent {
+  id            String  @id @default(cuid())
+  landingPageId String
+  // Link ke LpVisit kalau bisa di-resolve via visitToken. Nullable supaya
+  // event yg datang dari visit lama (LpVisit sudah expired/deleted) tetap
+  // bisa di-insert untuk count agregat.
+  visitId       String?
+
+  eventType   String // lihat docs di atas model
+  eventValue  String? @db.Text // payload string opsional (label CTA, URL host, dll)
+  scrollPct   Int? // 0-100 saat event terjadi
+  timeOnPageSec Int? // detik sejak pageview saat event terjadi
+
+  // Repeat fields penting supaya bisa query LpEvent tanpa JOIN ke LpVisit.
+  ipHash     String
+  deviceType String?
+  createdAt  DateTime @default(now())
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  visit       LpVisit?    @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  @@index([landingPageId, eventType, createdAt])
+  @@index([landingPageId, createdAt])
+  @@index([visitId])
 }
 
 // ─────────────────────────────────────────
@@ -1020,6 +1322,14 @@ model SoulSimulation {
   totalRounds    Int                @default(10)
   starterRole    SoulSimulationRole
   starterMessage String             @db.Text
+
+  // Knowledge entries yang dipakai seller saat simulasi (mirror behavior
+  // produksi: retrieveRelevantKnowledge by keyword vs pesan buyer). Admin
+  // pilih cherry-pick dari UserKnowledge berbagai user supaya bisa test
+  // skenario yang akurat. Kosong = tanpa knowledge (default lama).
+  // FK lunak (string array) — life-cycle independen, kalau entry dihapus
+  // engine tinggal skip yang tidak ada.
+  sellerKnowledgeIds String[] @default([])
 
   // Status (string supaya gampang transition: RUNNING → COMPLETED/FAILED/CANCELLED)
   status       SoulSimulationStatus @default(RUNNING)
@@ -1487,6 +1797,13 @@ model OrderForm {
 
   showFlashSaleCounter Boolean @default(true)
   showShippingPromo    Boolean @default(true)
+
+  // Social Proof popup (2026-05-08). Tampilkan notifikasi pembeli sebelumnya
+  // di form publik. Data dari UserOrder PAID milik form owner.
+  // Position: "top" | "bottom". IntervalSec: jeda antar popup (3-30 detik).
+  socialProofEnabled     Boolean @default(false)
+  socialProofPosition    String  @default("bottom")
+  socialProofIntervalSec Int     @default(8)
 
   // PixelIntegration ID yang aktif untuk form ini (Phase 1 Pixel Tracking,
   // 2026-05-07). Multi-pixel — user bisa pakai 3 platform sekaligus per form.

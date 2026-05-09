@@ -29,9 +29,8 @@ export const AI_MODELS_BY_PROVIDER: Record<AiProviderId, AiModelPreset[]> = {
   ],
   GOOGLE: [
     { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Pintar)', inputPricePer1M: 1.25, outputPricePer1M: 10 },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', inputPricePer1M: 0.30, outputPricePer1M: 2.50 },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Hemat)', inputPricePer1M: 0.10, outputPricePer1M: 0.40 },
-    { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Termurah)', inputPricePer1M: 0.075, outputPricePer1M: 0.30 },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Hemat)', inputPricePer1M: 0.30, outputPricePer1M: 2.50 },
+    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite (Termurah)', inputPricePer1M: 0.10, outputPricePer1M: 0.40 },
   ],
 }
 

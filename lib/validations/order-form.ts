@@ -14,6 +14,11 @@ export const orderFormCreateSchema = z.object({
   requireShipping: z.boolean().default(true),
   showFlashSaleCounter: z.boolean().default(true),
   showShippingPromo: z.boolean().default(true),
+  // Social Proof popup di public form. Data ditarik dari UserOrder PAID milik
+  // form owner. Interval 3-30 detik supaya tidak terlalu spammy / terlalu jarang.
+  socialProofEnabled: z.boolean().default(false),
+  socialProofPosition: z.enum(['top', 'bottom']).default('bottom'),
+  socialProofIntervalSec: z.number().int().min(3).max(30).default(8),
   isActive: z.boolean().default(true),
   // Pixel tracking (Phase 2 Pixel) — PixelIntegration.id yg aktif untuk form.
   enabledPixelIds: z.array(z.string()).default([]),

@@ -28,6 +28,21 @@ const MIN_BALANCE_FOR_AI = 1000
 // 64K (cap Haiku 4.5).
 const MAX_OUTPUT_TOKENS = 16_000
 
+// Snapshot harga model — sengaja hardcoded supaya tidak butuh JOIN ke AiModel
+// table per call. Kalau Anthropic naikkan harga atau kita switch model,
+// update di sini + (untuk audit historis) row LpGeneration tetap simpan
+// snapshot saat call dilakukan.
+// Sumber: lib/ai-models-list.ts.
+const MODEL_PRICING_USD_PER_1M: Record<string, { input: number; output: number }> = {
+  'claude-haiku-4-5': { input: 1, output: 5 },
+  'claude-sonnet-4-6': { input: 3, output: 15 },
+  'claude-sonnet-4-5': { input: 3, output: 15 },
+  'claude-opus-4-7': { input: 15, output: 75 },
+  'claude-opus-4-5': { input: 15, output: 75 },
+}
+// Fallback rate kalau PricingSettings.usdRate kosong — kira-kira IDR per USD.
+const DEFAULT_USD_RATE = 16_000
+
 const SYSTEM_PROMPT = `Kamu adalah expert web developer yang membuat landing page HTML yang indah dan konversi tinggi.
 
 ATURAN OUTPUT (WAJIB):
@@ -36,12 +51,41 @@ ATURAN OUTPUT (WAJIB):
 - TIDAK ADA markdown code fence (\`\`\`html), TIDAK ADA penjelasan, TIDAK ADA komentar di luar HTML.
 - Output langsung byte pertama HTML, tanpa preamble.
 
+ATURAN LAYOUT (PENTING — DEFAULT VERTIKAL 1 KOLOM):
+- WAJIB single-column vertical layout. Section disusun stack ke bawah,
+  full-width container (max-width ~640px-720px untuk readability), center-aligned.
+  Goal: pengunjung tinggal scroll dari atas ke bawah, langsung sampai ke CTA tanpa
+  decision overhead.
+- TIDAK ADA sidebar. TIDAK ADA multi-column layout. TIDAK ADA hero
+  split kiri-kanan teks/gambar. Bahkan di desktop, layout tetap 1 kolom yang
+  di-center supaya konsisten dengan flow mobile.
+- Pengecualian sempit (boleh dipakai HEMAT, tapi tetap di dalam container):
+  grid 2-3 kolom kecil untuk daftar fitur/benefit (kartu icon + teks pendek)
+  ATAU 2 kolom testimoni → maksimum 1-2 section seperti ini di seluruh LP.
+- Urutan section ideal (top → bottom):
+  1) Hero (judul kuat + sub-headline + tombol CTA pertama langsung di hero)
+  2) Pain points / masalah customer (kalau relevan)
+  3) Solusi / value proposition produk (1-2 paragraf)
+  4) Benefit / fitur utama (grid kecil 2-3 kolom OK di sini)
+  5) Social proof / testimoni (max 1 section, layout 1 kolom atau 2 kolom)
+  6) CTA utama lagi (tombol besar, mudah di-tap)
+  7) FAQ singkat (3-5 pertanyaan, accordion atau plain Q&A) — opsional
+  8) Footer minimal (CTA terakhir + info kontak)
+- Setiap section padding vertikal cukup (min 48px desktop, 32px mobile)
+  supaya tidak terlalu dempet saat di-scroll.
+
 ATURAN DESAIN:
-- Responsif mobile dan desktop (pakai meta viewport + media query).
+- Responsif mobile dan desktop (pakai meta viewport + media query). Karena
+  layout 1 kolom, perbedaan mobile vs desktop hanya font-size, padding, dan
+  ukuran gambar — tidak butuh re-layout dramatis.
 - Pakai CSS modern (flexbox/grid, custom properties, transitions).
 - Hierarki visual jelas: hero → benefit → CTA.
 - Gunakan gambar dari URL yang diberikan user — JANGAN buat URL gambar baru.
-- Tombol CTA harus mencolok, mudah diklik di mobile (min 44x44px tap area).
+- Tombol CTA harus mencolok, mudah diklik di mobile (min 44x44px tap area,
+  lebar tombol di mobile bisa ~80% container supaya susah ke-miss).
+- CTA muncul minimal 2x: di hero & di section terakhir sebelum footer.
+  Boleh tambahan CTA sticky di bawah viewport (position:sticky bottom) kalau
+  cocok dengan style.
 - Aksesibilitas dasar: alt text untuk semua <img>, kontras warna cukup.
 
 ATURAN BAHASA:
@@ -242,11 +286,47 @@ export async function POST(req: Request) {
       )
     }
 
+    // Audit cost — best-effort. Pakai snapshot harga supaya audit historis
+    // tetap akurat meski admin update harga model belakangan. Gagal di sini
+    // tidak boleh menggagalkan response (user sudah dapat HTML + sudah dipotong).
+    const pricing =
+      MODEL_PRICING_USD_PER_1M[DEFAULT_MODEL] ??
+      // Fallback ke Haiku — model kita dipakai sekarang. Cegah cost=0 kalau
+      // suatu hari DEFAULT_MODEL diganti tanpa update tabel di atas.
+      MODEL_PRICING_USD_PER_1M['claude-haiku-4-5']
+    const settings = await prisma.pricingSettings
+      .findFirst({ select: { usdRate: true } })
+      .catch(() => null)
+    const usdRate = settings?.usdRate ?? DEFAULT_USD_RATE
+    const providerCostUsd =
+      (inputTokens / 1_000_000) * pricing.input +
+      (outputTokens / 1_000_000) * pricing.output
+    const providerCostRp = providerCostUsd * usdRate
+    await prisma.lpGeneration
+      .create({
+        data: {
+          lpId,
+          userId: session.user.id,
+          model: DEFAULT_MODEL,
+          inputTokens,
+          outputTokens,
+          inputPricePer1MUsd: pricing.input,
+          outputPricePer1MUsd: pricing.output,
+          providerCostUsd,
+          providerCostRp,
+          platformTokensCharged: TOKENS_PER_GENERATION,
+        },
+      })
+      .catch((err) => {
+        console.error('[POST /api/lp/generate] audit insert gagal:', err)
+      })
+
     return jsonOk({
       html,
       tokensUsed: TOKENS_PER_GENERATION,
       // Token AI provider (untuk transparansi, bukan untuk billing).
       aiUsage: { inputTokens, outputTokens },
+      providerCost: { usd: providerCostUsd, rp: providerCostRp },
     })
   } catch (err) {
     console.error('[POST /api/lp/generate] gagal:', err)

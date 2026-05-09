@@ -108,11 +108,17 @@ export async function PATCH(req: Request, { params }: Params) {
         ...(data.paymentStatus !== undefined
           ? {
               paymentStatus: data.paymentStatus,
-              // Auto-stamp paidAt / cancelledAt saat status transisi.
-              ...(data.paymentStatus === 'PAID' && { paidAt: new Date() }),
-              ...(data.paymentStatus === 'CANCELLED' && {
-                cancelledAt: new Date(),
-              }),
+              // Auto-stamp timestamp HANYA saat transisi (status berubah),
+              // bukan setiap PATCH dgn status sama. Konsisten dgn gate
+              // pixel Purchase di bawah supaya paidAt + pixelPurchaseFiredAt
+              // bisa di-correlate (sebelumnya paidAt re-stamp tiap PATCH
+              // ubah field lain → terlihat lebih baru dari pixel timestamp).
+              ...(data.paymentStatus === 'PAID' &&
+                existing.paymentStatus !== 'PAID' && { paidAt: new Date() }),
+              ...(data.paymentStatus === 'CANCELLED' &&
+                existing.paymentStatus !== 'CANCELLED' && {
+                  cancelledAt: new Date(),
+                }),
             }
           : {}),
         ...(data.paymentProofUrl !== undefined
@@ -121,12 +127,14 @@ export async function PATCH(req: Request, { params }: Params) {
         ...(data.deliveryStatus !== undefined
           ? {
               deliveryStatus: data.deliveryStatus,
-              ...(data.deliveryStatus === 'SHIPPED' && {
-                shippedAt: new Date(),
-              }),
-              ...(data.deliveryStatus === 'DELIVERED' && {
-                deliveredAt: new Date(),
-              }),
+              ...(data.deliveryStatus === 'SHIPPED' &&
+                existing.deliveryStatus !== 'SHIPPED' && {
+                  shippedAt: new Date(),
+                }),
+              ...(data.deliveryStatus === 'DELIVERED' &&
+                existing.deliveryStatus !== 'DELIVERED' && {
+                  deliveredAt: new Date(),
+                }),
             }
           : {}),
         ...(data.trackingNumber !== undefined

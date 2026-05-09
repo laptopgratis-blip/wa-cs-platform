@@ -201,6 +201,7 @@ export async function GET(req: Request) {
   const toRaw = url.searchParams.get('to')
   const pmRaw = url.searchParams.get('pm')?.toUpperCase()
   const smart = parseSmart(url.searchParams.get('f'))
+  const productIdRaw = url.searchParams.get('productId')?.trim() || null
   const cursor = url.searchParams.get('cursor')
   const limit = Math.min(
     Math.max(Number(url.searchParams.get('limit') ?? 50), 1),
@@ -258,6 +259,17 @@ export async function GET(req: Request) {
     }
     if (pmRaw === 'COD' || pmRaw === 'TRANSFER') {
       baseWhere.paymentMethod = pmRaw
+    }
+    // Filter by productId di items JSON. Pakai PostgreSQL JSONB containment
+    // (`@>`) — items adalah array of objects { productId, qty, price?, ... },
+    // jadi `array_contains: [{productId}]` match item array yang punya minimal
+    // satu element dengan productId tsb. Property lain di element tidak harus
+    // exact (semantics @> di Postgres). Defensive: skip kalau productId palsu
+    // (mis. dari URL hack) — paling fail match alami.
+    if (productIdRaw) {
+      baseWhere.items = {
+        array_contains: [{ productId: productIdRaw }],
+      }
     }
 
     // Smart filter di-apply di atas baseWhere TAPI overrides tab kalau ada.

@@ -15,7 +15,7 @@ export async function GET() {
     return res as NextResponse
   }
   try {
-    const [personalities, styles, models] = await Promise.all([
+    const [personalities, styles, models, knowledge] = await Promise.all([
       prisma.soulPersonality.findMany({
         where: { isActive: true },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
@@ -38,8 +38,25 @@ export async function GET() {
           outputPricePer1M: true,
         },
       }),
+      // Knowledge entries semua user — admin pilih cherry-pick saat setup
+      // simulasi supaya bisa test seller dengan KB realistis. Hanya yg active.
+      // textContent/caption disertakan supaya admin bisa preview di list.
+      prisma.userKnowledge.findMany({
+        where: { isActive: true },
+        orderBy: [{ updatedAt: 'desc' }],
+        take: 500,
+        select: {
+          id: true,
+          title: true,
+          contentType: true,
+          textContent: true,
+          caption: true,
+          triggerKeywords: true,
+          user: { select: { id: true, name: true, email: true } },
+        },
+      }),
     ])
-    return jsonOk({ personalities, styles, models })
+    return jsonOk({ personalities, styles, models, knowledge })
   } catch (err) {
     console.error('[GET /api/admin/soul-lab/setup] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)

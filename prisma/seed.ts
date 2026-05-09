@@ -49,13 +49,13 @@ const models = [
   },
   // ─── GOOGLE ────────────────────────────────────────────────
   {
-    name: 'Gemini 2.0 Flash (Hemat)',
+    name: 'Gemini 2.5 Flash (Hemat)',
     provider: AiProvider.GOOGLE,
-    modelId: 'gemini-2.0-flash',
-    inputPricePer1M: 0.10,
-    outputPricePer1M: 0.40,
+    modelId: 'gemini-2.5-flash',
+    inputPricePer1M: 0.30,
+    outputPricePer1M: 2.50,
     avgTokensPerMessage: 500,
-    costPerMessage: 1,
+    costPerMessage: 3,
     isActive: true,
     description: 'Model Google paling hemat dan cepat.',
   },

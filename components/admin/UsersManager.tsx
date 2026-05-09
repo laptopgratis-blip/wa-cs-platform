@@ -424,7 +424,7 @@ export function UsersManager() {
           if (!o) setEditTarget(null)
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>

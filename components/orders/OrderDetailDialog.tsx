@@ -163,7 +163,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
   return (
     <Dialog open={orderId !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Detail Pesanan</DialogTitle>
           <DialogDescription>

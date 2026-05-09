@@ -52,6 +52,15 @@ export async function PATCH(
         ...(data.showShippingPromo !== undefined && {
           showShippingPromo: data.showShippingPromo,
         }),
+        ...(data.socialProofEnabled !== undefined && {
+          socialProofEnabled: data.socialProofEnabled,
+        }),
+        ...(data.socialProofPosition !== undefined && {
+          socialProofPosition: data.socialProofPosition,
+        }),
+        ...(data.socialProofIntervalSec !== undefined && {
+          socialProofIntervalSec: data.socialProofIntervalSec,
+        }),
         ...(data.enabledPixelIds !== undefined && {
           enabledPixelIds: data.enabledPixelIds,
         }),

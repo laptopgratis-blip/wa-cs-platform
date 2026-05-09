@@ -430,7 +430,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
 
       {/* Setup/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-md">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg lg:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Edit' : 'Setup'}{' '}

@@ -63,6 +63,12 @@ export function OrdersList() {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'TRANSFER' | null>(
     null,
   )
+  const [productId, setProductId] = useState<string | null>(null)
+  // List produk milik user untuk dropdown filter — load sekali saat mount.
+  // Limit 100 sesuai PRODUCT_LIMIT_PER_USER, jadi tidak butuh pagination.
+  const [productOptions, setProductOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([])
   // Lazy init dari localStorage — jalan sekali di client, hindari setState
   // di effect (react-hooks/set-state-in-effect rule).
   const [view, setView] = useState<ViewMode>(() => {
@@ -102,6 +108,31 @@ export function OrdersList() {
     window.localStorage.setItem(VIEW_KEY, view)
   }, [view])
 
+  // Load list produk user untuk dropdown filter — sekali saat mount.
+  // Kalau gagal, dropdown tetap usable (kosong) tanpa block UI.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/products', { cache: 'no-store' })
+        const json = await res.json()
+        if (!cancelled && json.success && Array.isArray(json.data?.items)) {
+          setProductOptions(
+            json.data.items.map((p: { id: string; name: string }) => ({
+              id: p.id,
+              name: p.name,
+            })),
+          )
+        }
+      } catch {
+        // Dropdown tetap usable (kosong) — bukan kritis.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   // Build query string dari filter.
   const queryString = useMemo(() => {
     const p = new URLSearchParams()
@@ -115,6 +146,7 @@ export function OrdersList() {
       p.set('to', end.toISOString())
     }
     if (paymentMethod) p.set('pm', paymentMethod)
+    if (productId) p.set('productId', productId)
     if (viewPref.sortColumn) p.set('sort', viewPref.sortColumn)
     if (viewPref.sortDirection) p.set('dir', viewPref.sortDirection)
     p.set('limit', String(PAGE_LIMIT))
@@ -126,6 +158,7 @@ export function OrdersList() {
     from,
     to,
     paymentMethod,
+    productId,
     viewPref.sortColumn,
     viewPref.sortDirection,
   ])
@@ -375,6 +408,7 @@ export function OrdersList() {
     setFrom('')
     setTo('')
     setPaymentMethod(null)
+    setProductId(null)
   }
 
   return (
@@ -424,6 +458,8 @@ export function OrdersList() {
         from={from}
         to={to}
         paymentMethod={paymentMethod}
+        productId={productId}
+        productOptions={productOptions}
         counts={counts}
         urgentCount={totals.urgentCount}
         view={view}
@@ -436,6 +472,7 @@ export function OrdersList() {
         onFromChange={setFrom}
         onToChange={setTo}
         onPaymentMethodChange={setPaymentMethod}
+        onProductChange={setProductId}
         onViewChange={setView}
         onClearAll={clearAllFilters}
       />

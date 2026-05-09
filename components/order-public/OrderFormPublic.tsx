@@ -38,6 +38,7 @@ import {
   type PickedDestination,
   DestinationPicker,
 } from '@/components/order-system/DestinationPicker'
+import { SocialProofPopup } from '@/components/order-public/SocialProofPopup'
 import { formatNumber } from '@/lib/format'
 
 interface PublicVariant {
@@ -86,6 +87,9 @@ interface FormProps {
   requireShipping: boolean
   showFlashSaleCounter: boolean
   showShippingPromo: boolean
+  socialProofEnabled: boolean
+  socialProofPosition: 'top' | 'bottom'
+  socialProofIntervalSec: number
   ownerName: string
 }
 
@@ -654,6 +658,13 @@ export function OrderFormPublic({
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 md:py-8">
       <PixelLoader pixels={pixels} />
+      {form.socialProofEnabled && (
+        <SocialProofPopup
+          slug={form.slug}
+          position={form.socialProofPosition}
+          intervalSec={form.socialProofIntervalSec}
+        />
+      )}
       {/* Header */}
       <div className="mb-4">
         <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">

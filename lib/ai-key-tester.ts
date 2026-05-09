@@ -88,8 +88,10 @@ async function testOpenAi(apiKey: string): Promise<TestResult> {
 }
 
 async function testGoogle(apiKey: string): Promise<TestResult> {
-  // Google pakai query param `key=` bukan header.
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`
+  // Google pakai query param `key=` bukan header. Pakai `gemini-2.5-flash` —
+  // `gemini-2.0-flash` sudah deprecated untuk user baru per akhir 2026
+  // (return 404 "no longer available to new users").
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`
   try {
     const res = await fetch(url, {
       method: 'POST',

@@ -343,7 +343,7 @@ export function MutationsClient() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl lg:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Resolve Mutasi Manual</DialogTitle>
             <DialogDescription>

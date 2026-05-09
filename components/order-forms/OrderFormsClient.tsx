@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Eye,
   FileText,
+  MessageSquare,
   Plus,
   ShoppingBag,
   Trash2,
@@ -47,6 +48,11 @@ interface OrderForm {
   requireShipping: boolean
   showFlashSaleCounter: boolean
   showShippingPromo: boolean
+  socialProofEnabled: boolean
+  // Disimpan di DB sebagai String free-form. UI normalize ke 'top'|'bottom'
+  // saat openEdit() — selain dua nilai itu jatuh ke 'bottom'.
+  socialProofPosition: string
+  socialProofIntervalSec: number
   enabledPixelIds: string[]
   isActive: boolean
   views: number
@@ -92,6 +98,9 @@ const EMPTY_FORM = {
   requireShipping: true,
   showFlashSaleCounter: true,
   showShippingPromo: true,
+  socialProofEnabled: false,
+  socialProofPosition: 'bottom' as 'top' | 'bottom',
+  socialProofIntervalSec: 8,
   enabledPixelIds: [] as string[],
   isActive: true,
 }
@@ -126,6 +135,9 @@ export function OrderFormsClient({
       requireShipping: f.requireShipping,
       showFlashSaleCounter: f.showFlashSaleCounter,
       showShippingPromo: f.showShippingPromo,
+      socialProofEnabled: f.socialProofEnabled,
+      socialProofPosition: f.socialProofPosition === 'top' ? 'top' : 'bottom',
+      socialProofIntervalSec: f.socialProofIntervalSec,
       enabledPixelIds: f.enabledPixelIds,
       isActive: f.isActive,
     })
@@ -180,6 +192,9 @@ export function OrderFormsClient({
         requireShipping: form.requireShipping,
         showFlashSaleCounter: form.showFlashSaleCounter,
         showShippingPromo: form.showShippingPromo,
+        socialProofEnabled: form.socialProofEnabled,
+        socialProofPosition: form.socialProofPosition,
+        socialProofIntervalSec: form.socialProofIntervalSec,
         enabledPixelIds: form.enabledPixelIds,
         isActive: form.isActive,
       }
@@ -368,7 +383,7 @@ export function OrderFormsClient({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl lg:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Edit Form Order' : 'Buat Form Order'}
@@ -543,6 +558,105 @@ export function OrderFormsClient({
                   }
                 />
               </div>
+            </div>
+
+            {/* Social Proof section */}
+            <div className="space-y-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                    <MessageSquare className="size-4" />
+                    Social Proof
+                  </Label>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Tampilkan popup pembeli sebelumnya untuk meyakinkan
+                    customer (mis. &ldquo;Budi - Surabaya - telah melakukan
+                    pembelian&rdquo;). Data otomatis dari order PAID.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.socialProofEnabled}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, socialProofEnabled: v }))
+                  }
+                />
+              </div>
+
+              {form.socialProofEnabled && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-emerald-900">
+                      Posisi Popup
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({ ...f, socialProofPosition: 'top' }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          form.socialProofPosition === 'top'
+                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
+                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                        }`}
+                      >
+                        Atas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            socialProofPosition: 'bottom',
+                          }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                          form.socialProofPosition === 'bottom'
+                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
+                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                        }`}
+                      >
+                        Bawah
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="of-sp-interval"
+                      className="text-xs text-emerald-900"
+                    >
+                      Kecepatan Tampil (detik antar popup)
+                    </Label>
+                    <Input
+                      id="of-sp-interval"
+                      type="number"
+                      min={3}
+                      max={30}
+                      step={1}
+                      value={form.socialProofIntervalSec}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          socialProofIntervalSec: Math.max(
+                            3,
+                            Math.min(30, Number(e.target.value) || 8),
+                          ),
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-emerald-800">
+                      Range 3-30 detik. Lebih kecil = lebih sering muncul.
+                      Recommended: 6-10 detik supaya tidak mengganggu.
+                    </p>
+                  </div>
+
+                  <p className="rounded border border-dashed border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-800">
+                    Privacy: hanya nama depan + nama kota yang ditampilkan.
+                    Order yang tampil: status PAID dari 60 hari terakhir.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Pixel Tracking section */}

@@ -20,7 +20,15 @@ export const soulCreateSchema = z.object({
   personality: optionalIdString,
   language: languageEnum,
   replyStyle: optionalIdString,
-  businessContext: z.string().max(8000, 'Konteks bisnis maksimal 8000 karakter').optional().nullable(),
+  // Sengaja dibatasi 1500 char (~375 token). Tujuan: cuma info produk inti
+  // (harga, fitur singkat) supaya tidak boros token tiap reply. FAQ, kebijakan
+  // return, jam buka, alamat, testimoni → simpan di /knowledge (di-retrieve
+  // by keyword saat butuh, jadi tidak ikut overhead di setiap pesan).
+  businessContext: z
+    .string()
+    .max(1500, 'Konteks bisnis maksimal 1500 karakter — pindahkan FAQ & info detail ke /knowledge supaya tidak boros token')
+    .optional()
+    .nullable(),
   isDefault: z.boolean().optional(),
 })
 

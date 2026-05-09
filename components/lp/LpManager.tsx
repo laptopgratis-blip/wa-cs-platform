@@ -3,6 +3,7 @@
 // Landing Page Manager — list LP user, info kuota, tombol create/edit/preview/delete.
 import type { LpTier } from '@prisma/client'
 import {
+  BarChart3,
   Copy,
   Edit3,
   ExternalLink,
@@ -58,9 +59,27 @@ const TIER_LABEL: Record<LpTier, string> = {
   POWER: 'Power',
 }
 
+interface AiStats {
+  totalGenerations: number
+  audited: {
+    count: number
+    inputTokens: number
+    outputTokens: number
+    providerCostUsd: number
+    providerCostRp: number
+    platformTokensCharged: number
+  }
+  legacy: {
+    count: number
+    estimatedProviderCostUsd: number
+    estimatedProviderCostRp: number
+  }
+}
+
 export function LpManager() {
   const [pages, setPages] = useState<LpRow[]>([])
   const [quota, setQuota] = useState<QuotaInfo | null>(null)
+  const [aiStats, setAiStats] = useState<AiStats | null>(null)
   const [isLoading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -83,6 +102,16 @@ export function LpManager() {
   }
   useEffect(() => {
     void load()
+    // Stats AI generation — fail-safe, kalau error UI tetap render tanpa stats card.
+    void (async () => {
+      try {
+        const res = await fetch('/api/lp/generate/stats', { cache: 'no-store' })
+        const json = await res.json()
+        if (json.success) setAiStats(json.data as AiStats)
+      } catch {
+        /* abaikan */
+      }
+    })()
   }, [])
 
   async function handleDelete(lp: LpRow) {
@@ -194,7 +223,13 @@ export function LpManager() {
 
       {/* Total views card — quick analytics glance, hanya tampil kalau ada LP */}
       {pages.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div
+          className={`grid gap-3 ${
+            aiStats && aiStats.totalGenerations > 0
+              ? 'sm:grid-cols-2 lg:grid-cols-4'
+              : 'sm:grid-cols-3'
+          }`}
+        >
           <Card className="rounded-xl border-warm-200">
             <CardContent className="flex items-center gap-3 p-4">
               <div className="flex size-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
@@ -234,7 +269,55 @@ export function LpManager() {
               </div>
             </CardContent>
           </Card>
+          {aiStats && aiStats.totalGenerations > 0 && (
+            <Card
+              className="rounded-xl border-purple-200 bg-purple-50/40"
+              title={
+                aiStats.legacy.count > 0
+                  ? `${aiStats.audited.count} kali tercatat akurat dari log + ${aiStats.legacy.count} kali estimasi (data sebelum 2026-05-09).`
+                  : 'Biaya provider AI (Claude). Token platform yg dipotong: ' +
+                    `${aiStats.audited.platformTokensCharged}/generate × Rp${(2).toLocaleString('id-ID')} (default).`
+              }
+            >
+              <CardContent className="flex items-center gap-3 p-4">
+                <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+                  <Sparkles className="size-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-warm-500">
+                    AI Generate · {aiStats.totalGenerations}×
+                  </div>
+                  <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+                    Rp{' '}
+                    {formatNumber(
+                      Math.round(
+                        aiStats.audited.providerCostRp +
+                          aiStats.legacy.estimatedProviderCostRp,
+                      ),
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-warm-500">
+                    biaya provider · ~$
+                    {(
+                      aiStats.audited.providerCostUsd +
+                      aiStats.legacy.estimatedProviderCostUsd
+                    ).toFixed(4)}
+                    {aiStats.legacy.count > 0 && (
+                      <span className="ml-0.5 text-amber-700">*</span>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
+      )}
+      {aiStats && aiStats.legacy.count > 0 && (
+        <p className="-mt-2 text-[11px] text-warm-500">
+          *{aiStats.legacy.count} dari {aiStats.totalGenerations} generasi adalah
+          data lama (sebelum 2026-05-09) — token tidak tercatat per-call, biaya
+          dihitung pakai estimasi rata-rata Haiku 4.5.
+        </p>
       )}
 
       {/* Info Quota */}
@@ -380,6 +463,18 @@ export function LpManager() {
                       <Link href={`/landing-pages/${lp.id}/edit`}>
                         <Edit3 className="mr-1.5 size-3.5" />
                         Edit
+                      </Link>
+                    </Button>
+                    {/* LP Lab — Phase 2 (Power only). Tombol selalu tampil
+                        supaya user lain tahu fitur exists; gating di page itu sendiri. */}
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      title="LP Lab — analytics & optimasi (POWER plan)"
+                    >
+                      <Link href={`/landing-pages/${lp.id}/lab`}>
+                        <BarChart3 className="size-3.5" />
                       </Link>
                     </Button>
                     {lp.isPublished && (

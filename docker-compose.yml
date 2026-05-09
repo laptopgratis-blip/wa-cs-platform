@@ -96,6 +96,11 @@ services:
       - "traefik.docker.network=traefik-public"
 
   uploads-server:
+    # Static file server untuk /uploads/* (foto produk, bukti transfer,
+    # gambar LP, file knowledge). Priority 200 di Traefik supaya menang dari
+    # router `hulao` (default priority ~50). Dipakai karena Next.js standalone
+    # punya bug serve file di /public yg ditambah runtime — return 404. Nginx
+    # serve langsung dari filesystem, tidak ada caching issue.
     image: nginx:alpine
     container_name: hulao-uploads
     volumes:
@@ -104,11 +109,23 @@ services:
       - traefik-public
       - internal
     restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hulao-uploads.rule=Host(`hulao.id`) && PathPrefix(`/uploads`)"
+      - "traefik.http.routers.hulao-uploads.entrypoints=websecure"
+      - "traefik.http.routers.hulao-uploads.tls=true"
+      - "traefik.http.routers.hulao-uploads.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hulao-uploads.priority=200"
+      - "traefik.http.services.hulao-uploads.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik-public"
 
   bank-scraper:
     # Puppeteer + Chromium service untuk Bank Mutation Auto-Reader (BETA,
     # 2026-05-08). Hanya akses dari Next.js via internal network, TIDAK
     # ekspos port public. Memori dibatasi 1G karena Chromium boros.
+    # Profile "beta" — service ini di-pause 2026-05-08 untuk hemat ~2GB disk
+    # (image Chromium). Hidupkan ulang dgn `docker compose --profile beta up -d --build bank-scraper`.
+    profiles: ["beta"]
     build:
       context: ./bank-scraper
       dockerfile: Dockerfile

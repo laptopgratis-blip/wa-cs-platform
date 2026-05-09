@@ -365,7 +365,7 @@ export function ShippingZonesClient({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl lg:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Edit Zona Ongkir' : 'Tambah Zona Ongkir'}
