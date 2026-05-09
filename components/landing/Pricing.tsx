@@ -100,13 +100,15 @@ export function Pricing({ packages }: PricingProps) {
               <Card
                 key={pkg.id}
                 className={cn(
-                  'relative flex flex-col rounded-xl border-warm-200 bg-card transition-all',
+                  // overflow-visible — base Card pakai overflow-hidden default;
+                  // tanpa override badge "Paling Populer" (-top-3.5) ke-clip.
+                  'relative flex flex-col overflow-visible rounded-xl border-warm-200 bg-card transition-all',
                   pkg.isPopular &&
                     'scale-[1.02] border-2 border-primary-400 shadow-orange',
                 )}
               >
                 {pkg.isPopular && (
-                  <span className="absolute -top-3.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+                  <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
                     <Sparkles className="size-3" />
                     Paling Populer
                   </span>

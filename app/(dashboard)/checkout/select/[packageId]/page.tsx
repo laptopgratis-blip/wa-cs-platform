@@ -57,9 +57,9 @@ export default async function SelectPaymentPage({
       </div>
 
       {/* Ringkasan paket */}
-      <Card className="relative rounded-xl border-warm-200 shadow-sm">
+      <Card className="relative overflow-visible rounded-xl border-warm-200 shadow-sm">
         {pkg.isPopular && (
-          <Badge className="absolute -top-2.5 right-4 bg-primary-500 text-white shadow-orange">
+          <Badge className="absolute -top-2.5 right-4 z-10 bg-primary-500 text-white shadow-orange">
             <Sparkles className="mr-1 size-3" />
             Paling Populer
           </Badge>

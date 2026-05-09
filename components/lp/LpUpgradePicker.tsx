@@ -128,20 +128,22 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
           <Card
             key={pkg.id}
             className={cn(
-              'relative flex flex-col rounded-xl border-warm-200 transition-all',
+              // overflow-visible — base Card pakai overflow-hidden default;
+              // tanpa override badge "Paling Populer" / "Paket Kamu" ke-clip.
+              'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
               pkg.isPopular &&
                 'scale-[1.02] border-2 border-primary-400 shadow-orange',
               isCurrent && 'ring-2 ring-emerald-300',
             )}
           >
             {pkg.isPopular && (
-              <span className="absolute -top-3.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+              <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
                 <Sparkles className="size-3" />
                 Paling Populer
               </span>
             )}
             {isCurrent && (
-              <Badge className="absolute -top-3 right-4 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+              <Badge className="absolute -top-3 right-4 z-10 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
                 Paket Kamu
               </Badge>
             )}

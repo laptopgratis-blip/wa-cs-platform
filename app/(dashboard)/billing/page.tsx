@@ -368,7 +368,7 @@ export default async function BillingPage({
                   )}
                 >
                   {pkg.isPopular && (
-                    <span className="absolute -top-3.5 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+                    <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
                       <Sparkles className="size-3" />
                       Paling Populer
                     </span>
