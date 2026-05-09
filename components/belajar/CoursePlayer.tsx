@@ -17,26 +17,33 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
-// Force minimalist embed: hilangkan progress bar, related, branding,
-// keyboard shortcut, fullscreen, annotations. User cuma bisa klik video
-// untuk play/pause.
+// Pertahankan controls native (slider, play/pause, volume, fullscreen)
+// tapi minimize branding & jalan keluar ke YouTube.com:
+//   - rel=0 → tidak suggest video lain di end-screen
+//   - modestbranding=1 → kurangi logo YouTube di control bar
+//   - iv_load_policy=3 → hide annotations
+//   - cc_load_policy=0 → captions default off
+//   - host swap ke youtube-nocookie.com → privacy mode + fewer overlays
+// Selain itu, parent div di template render overlay corner block area
+// "Watch on YouTube" link dan title bar share button.
 function toMinimalEmbedSrc(rawUrl: string): string {
   try {
     const u = new URL(rawUrl)
     const host = u.hostname
     if (host.includes('youtube.com') || host.includes('youtu.be')) {
-      u.searchParams.set('controls', '0')
+      // Swap ke youtube-nocookie.com — UI sama tapi tracking minimal & sebagian
+      // overlay (mis. Watch Later button) tidak muncul.
+      if (host !== 'www.youtube-nocookie.com') {
+        u.hostname = 'www.youtube-nocookie.com'
+      }
       u.searchParams.set('rel', '0')
       u.searchParams.set('modestbranding', '1')
       u.searchParams.set('iv_load_policy', '3')
-      u.searchParams.set('disablekb', '1')
-      u.searchParams.set('fs', '0')
-      u.searchParams.set('playsinline', '1')
       u.searchParams.set('cc_load_policy', '0')
+      u.searchParams.set('playsinline', '1')
       return u.toString()
     }
     if (host.includes('vimeo.com')) {
-      u.searchParams.set('controls', '0')
       u.searchParams.set('title', '0')
       u.searchParams.set('byline', '0')
       u.searchParams.set('portrait', '0')
@@ -47,6 +54,19 @@ function toMinimalEmbedSrc(rawUrl: string): string {
     return rawUrl
   } catch {
     return rawUrl
+  }
+}
+
+function isYouTubeUrl(rawUrl: string): boolean {
+  try {
+    const u = new URL(rawUrl)
+    return (
+      u.hostname.includes('youtube.com') ||
+      u.hostname.includes('youtu.be') ||
+      u.hostname.includes('youtube-nocookie.com')
+    )
+  } catch {
+    return false
   }
 }
 
@@ -231,7 +251,11 @@ export function CoursePlayer({
           </div>
 
           {activeLesson ? (
-            <LessonView lesson={activeLesson} onComplete={() => markCompleted(activeLesson.id)} />
+            <LessonView
+              lesson={activeLesson}
+              isEnrolled={isEnrolled}
+              onComplete={() => markCompleted(activeLesson.id)}
+            />
           ) : (
             <Card>
               <CardContent className="py-16 text-center text-sm text-warm-500">
@@ -312,9 +336,11 @@ export function CoursePlayer({
 
 function LessonView({
   lesson,
+  isEnrolled,
   onComplete,
 }: {
   lesson: Lesson
+  isEnrolled: boolean
   onComplete: () => void
 }) {
   // Drip lock — tampilkan info card alih-alih konten lesson.
@@ -364,14 +390,32 @@ function LessonView({
       </h2>
 
       {lesson.contentType === 'VIDEO_EMBED' && lesson.videoEmbedUrl && (
-        <div className="aspect-video overflow-hidden rounded-xl bg-warm-900">
+        <div className="relative aspect-video overflow-hidden rounded-xl bg-warm-900">
           <iframe
             src={toMinimalEmbedSrc(lesson.videoEmbedUrl)}
             title={lesson.title}
             className="h-full w-full"
-            allow="autoplay; encrypted-media"
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
           />
+          {/* YouTube-only — block area ke kanan-atas (share / watch later /
+              title bar) supaya user tidak bisa klik keluar ke YouTube.com.
+              pointer-events-auto + cursor default supaya feel transparent. */}
+          {isYouTubeUrl(lesson.videoEmbedUrl) && (
+            <>
+              <div
+                aria-hidden="true"
+                className="pointer-events-auto absolute right-0 top-0 h-12 w-32"
+              />
+              {/* Bottom-right corner area cover "Watch on YouTube" link tapi
+                  hindari fullscreen button — width sengaja kecil. */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-auto absolute bottom-10 right-0 h-8 w-28"
+              />
+            </>
+          )}
         </div>
       )}
 
@@ -398,16 +442,23 @@ function LessonView({
               Selesai pada{' '}
               {new Date(lesson.completedAt).toLocaleDateString('id-ID')}
             </span>
-          ) : (
+          ) : isEnrolled ? (
             <span>Tandai selesai kalau sudah paham materinya.</span>
+          ) : (
+            <span>Login dulu untuk catat progress kamu.</span>
           )}
         </div>
-        {!lesson.completedAt && (
-          <Button onClick={onComplete} size="sm" variant="outline">
-            <CheckCircle2 className="mr-1.5 size-4" />
-            Tandai Selesai
-          </Button>
-        )}
+        {!lesson.completedAt &&
+          (isEnrolled ? (
+            <Button onClick={onComplete} size="sm" variant="outline">
+              <CheckCircle2 className="mr-1.5 size-4" />
+              Tandai Selesai
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/belajar">Login</Link>
+            </Button>
+          ))}
       </div>
     </div>
   )
