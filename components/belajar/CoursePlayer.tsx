@@ -17,6 +17,39 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
+// Force minimalist embed: hilangkan progress bar, related, branding,
+// keyboard shortcut, fullscreen, annotations. User cuma bisa klik video
+// untuk play/pause.
+function toMinimalEmbedSrc(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl)
+    const host = u.hostname
+    if (host.includes('youtube.com') || host.includes('youtu.be')) {
+      u.searchParams.set('controls', '0')
+      u.searchParams.set('rel', '0')
+      u.searchParams.set('modestbranding', '1')
+      u.searchParams.set('iv_load_policy', '3')
+      u.searchParams.set('disablekb', '1')
+      u.searchParams.set('fs', '0')
+      u.searchParams.set('playsinline', '1')
+      u.searchParams.set('cc_load_policy', '0')
+      return u.toString()
+    }
+    if (host.includes('vimeo.com')) {
+      u.searchParams.set('controls', '0')
+      u.searchParams.set('title', '0')
+      u.searchParams.set('byline', '0')
+      u.searchParams.set('portrait', '0')
+      u.searchParams.set('badge', '0')
+      u.searchParams.set('dnt', '1')
+      return u.toString()
+    }
+    return rawUrl
+  } catch {
+    return rawUrl
+  }
+}
+
 interface Lesson {
   id: string
   title: string
@@ -108,17 +141,23 @@ export function CoursePlayer({
           completed: true,
         }),
       })
-      const json = await res.json()
-      if (!res.ok || !json.success) {
-        toast.error(json.message || 'Gagal mark selesai')
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        const msg =
+          json?.error ||
+          json?.message ||
+          `Gagal mark selesai (HTTP ${res.status})`
+        toast.error(msg)
+        console.error('[markCompleted] non-OK', res.status, json)
         return
       }
       const next = new Set(completedSet)
       next.add(lessonId)
       setCompletedSet(next)
       toast.success('Lesson ditandai selesai')
-    } catch {
-      toast.error('Gagal mark selesai')
+    } catch (err) {
+      console.error('[markCompleted] exception', err)
+      toast.error('Gagal mark selesai (network error)')
     }
   }
 
@@ -327,11 +366,10 @@ function LessonView({
       {lesson.contentType === 'VIDEO_EMBED' && lesson.videoEmbedUrl && (
         <div className="aspect-video overflow-hidden rounded-xl bg-warm-900">
           <iframe
-            src={lesson.videoEmbedUrl}
+            src={toMinimalEmbedSrc(lesson.videoEmbedUrl)}
             title={lesson.title}
             className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
+            allow="autoplay; encrypted-media"
             referrerPolicy="strict-origin-when-cross-origin"
           />
         </div>
