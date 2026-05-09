@@ -73,6 +73,15 @@ export async function POST(_req: Request, { params }: Params) {
     hasAnalytics: recentVisits > 0,
   })
 
+  // Tolak DI MUKA kalau LP ukurannya melebihi context window AI — supaya
+  // user dapat pesan jelas, bukan generic "AI service error 400" dari Anthropic.
+  if (estimate.exceedsContextLimit) {
+    return jsonError(
+      estimate.contextLimitMessage ?? 'LP terlalu besar untuk AI optimization.',
+      413,
+    )
+  }
+
   const balance = await prisma.tokenBalance
     .findUnique({
       where: { userId: session.user.id },

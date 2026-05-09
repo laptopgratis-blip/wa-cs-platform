@@ -37,12 +37,16 @@ import {
 
 interface CostEstimate {
   htmlChars: number
+  originalHtmlChars?: number
+  base64ImagesStripped?: number
   estimatedInputTokens: number
   estimatedOutputTokens: number
   providerCostUsd: number
   providerCostRp: number
   platformTokensCharge: number
   platformChargeRp: number
+  exceedsContextLimit?: boolean
+  contextLimitMessage?: string
 }
 
 interface EstimateData {
@@ -265,6 +269,17 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                     <strong>
                       {(estimate.estimate.htmlChars / 1000).toFixed(1)}K karakter
                     </strong>
+                    {(estimate.estimate.base64ImagesStripped ?? 0) > 0 && (
+                      <span className="text-warm-500">
+                        {' '}
+                        ({estimate.estimate.base64ImagesStripped} gambar base64
+                        di-skip dari{' '}
+                        {(
+                          (estimate.estimate.originalHtmlChars ?? 0) / 1000
+                        ).toFixed(0)}
+                        K char asli)
+                      </span>
+                    )}
                   </li>
                   <li>
                     • Customer signals:{' '}
@@ -282,6 +297,16 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                   </li>
                 </ul>
               </div>
+
+              {estimate.estimate.exceedsContextLimit && (
+                <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    {estimate.estimate.contextLimitMessage ??
+                      'LP terlalu besar untuk AI optimization.'}
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
                 <div className="text-sm font-semibold text-purple-900">
@@ -369,7 +394,10 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
               </Button>
               <Button
                 onClick={runOptimize}
-                disabled={!estimate?.sufficientBalance}
+                disabled={
+                  !estimate?.sufficientBalance ||
+                  estimate?.estimate.exceedsContextLimit
+                }
                 className="bg-purple-600 text-white hover:bg-purple-700"
               >
                 <Wand2 className="mr-1.5 size-4" />

@@ -30,17 +30,62 @@ const PLATFORM_MARGIN = 1.3
 const DEFAULT_USD_RATE = 16_000
 const DEFAULT_PRICE_PER_TOKEN_RP = 2
 
-// Haiku output cap 12K token — cukup untuk LP biasa (HTML 5-15K char).
-// Lebih kecil dari Sonnet (16K) supaya tidak inflated; output Haiku tetap
-// stop saat selesai walau cap besar, jadi cap rendah TIDAK speed up
-// legitimate output, hanya prevent runaway.
-const MAX_OUTPUT_TOKENS = 12_000
-// Haiku 4.5 untuk output 6-10K token realistic 25-60 detik. Cap 120s sebagai
-// safety — kalau lebih, biasanya provider issue.
-const AI_CALL_TIMEOUT_MS = 120_000
+// Haiku output dynamic cap — Haiku 4.5 support up to 64K output token.
+// Floor 32K supaya LP kecil/sedang tetap punya breathing room generous,
+// ceiling 60K (sisa 4K safety vs hard limit). Multiplier ×2.0 vs input HTML
+// untuk ruang ekspansi (AI sering tambah section testimoni/social-proof per
+// CRO advice). max_tokens hanya safety cap — TIDAK mempengaruhi cost karena
+// charged by actual usage; setting tinggi murni mencegah truncation.
+const MIN_OUTPUT_TOKENS = 32_000
+const MAX_OUTPUT_TOKENS = 60_000
+const OUTPUT_MULTIPLIER = 2.0
+// Output 30-50K token di Haiku ~150-250 detik. Cap 280s sebagai safety —
+// route maxDuration 300s.
+const AI_CALL_TIMEOUT_MS = 280_000
+
+// Anthropic context window untuk Haiku 4.5 = 200K token. Sisakan 20K headroom
+// untuk system prompt + analytics + signals. Kalau estimasi input > batas ini
+// tolak DI MUKA dengan pesan ramah supaya user tahu masalahnya (bukan generic
+// "AI service error 400").
+const MAX_INPUT_TOKENS_HARD_LIMIT = 180_000
+
+// ─────────────────────────────────────────
+// Base64 image stripping
+// LP user kadang punya <img src="data:image/...;base64,..."> inline yg
+// ukurannya ratusan KB per gambar. Untuk AI optimization, isi pixel base64
+// tidak relevan — yang penting struktur HTML + ada image di posisi tertentu.
+// Strategi: replace setiap data URI base64 dengan placeholder pendek sebelum
+// kirim ke AI; restore dari map setelah AI return. Placeholder format valid
+// data: URI supaya AI patuh aturan "TIDAK boleh ganti URL gambar".
+// ─────────────────────────────────────────
+
+const BASE64_IMG_RE = /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/g
+const PLACEHOLDER_RE = /data:image\/png;base64,LP_BASE64_PLACEHOLDER_(\d+)_END/g
+
+export function stripBase64ImagesForPrompt(html: string): {
+  stripped: string
+  map: string[]
+} {
+  const map: string[] = []
+  const stripped = html.replace(BASE64_IMG_RE, (m) => {
+    const idx = map.length
+    map.push(m)
+    return `data:image/png;base64,LP_BASE64_PLACEHOLDER_${idx}_END`
+  })
+  return { stripped, map }
+}
+
+export function restoreBase64Images(html: string, map: string[]): string {
+  return html.replace(PLACEHOLDER_RE, (full, idx) => {
+    const i = Number(idx)
+    return map[i] ?? full
+  })
+}
 
 export interface CostEstimate {
   htmlChars: number
+  originalHtmlChars: number
+  base64ImagesStripped: number
   contextChars: number
   estimatedInputTokens: number
   estimatedOutputTokens: number
@@ -50,6 +95,8 @@ export interface CostEstimate {
   platformChargeRp: number
   usdRate: number
   pricePerTokenRp: number
+  exceedsContextLimit: boolean
+  contextLimitMessage?: string
 }
 
 export async function estimateOptimizationCost(input: {
@@ -63,7 +110,10 @@ export async function estimateOptimizationCost(input: {
   const usdRate = settings?.usdRate ?? DEFAULT_USD_RATE
   const pricePerToken = settings?.pricePerToken ?? DEFAULT_PRICE_PER_TOKEN_RP
 
-  const htmlChars = input.htmlContent.length
+  // Strip base64 image dulu — itulah yang akan benar2 dikirim ke AI.
+  const originalHtmlChars = input.htmlContent.length
+  const { stripped, map } = stripBase64ImagesForPrompt(input.htmlContent)
+  const htmlChars = stripped.length
   // Context: signals (~150 char per signal) + analytics summary (~600 char)
   // + system prompt overhead (~1500 char).
   const contextChars =
@@ -72,9 +122,17 @@ export async function estimateOptimizationCost(input: {
     (input.hasAnalytics ? 600 : 0)
 
   const estimatedInputTokens = Math.ceil((htmlChars + contextChars) / CHARS_PER_TOKEN)
+  // Output expansion realistic ×1.5 (kompromi antara compact rewrite dan
+  // ambitious rewrite). Selaras dengan OUTPUT_MULTIPLIER di runOptimization
+  // tapi sedikit lebih konservatif supaya estimasi cost tidak over-quote.
   const estimatedOutputTokens = Math.ceil(
-    (htmlChars + OUTPUT_OVERHEAD_CHARS) / CHARS_PER_TOKEN,
+    (htmlChars * 1.5 + OUTPUT_OVERHEAD_CHARS) / CHARS_PER_TOKEN,
   )
+
+  const exceedsContextLimit = estimatedInputTokens > MAX_INPUT_TOKENS_HARD_LIMIT
+  const contextLimitMessage = exceedsContextLimit
+    ? `LP terlalu besar untuk AI optimization (~${estimatedInputTokens.toLocaleString('id-ID')} token, batas ${MAX_INPUT_TOKENS_HARD_LIMIT.toLocaleString('id-ID')}). Coba kurangi panjang HTML atau hapus konten yg tidak perlu.`
+    : undefined
 
   const providerCostUsd =
     (estimatedInputTokens / 1_000_000) * MODEL_INPUT_USD_PER_1M +
@@ -88,6 +146,8 @@ export async function estimateOptimizationCost(input: {
 
   return {
     htmlChars,
+    originalHtmlChars,
+    base64ImagesStripped: map.length,
     contextChars,
     estimatedInputTokens,
     estimatedOutputTokens,
@@ -97,6 +157,8 @@ export async function estimateOptimizationCost(input: {
     platformChargeRp: platformTokensCharge * pricePerToken,
     usdRate,
     pricePerTokenRp: pricePerToken,
+    exceedsContextLimit,
+    contextLimitMessage,
   }
 }
 
@@ -104,22 +166,44 @@ export async function estimateOptimizationCost(input: {
 // Prompt building
 // ─────────────────────────────────────────
 
+// Output marker — pakai pattern yang TIDAK akan muncul di HTML user (triple-
+// angle bracket + uppercase keyword). Format dua section supaya HTML TIDAK
+// perlu di-escape sebagai JSON string (hemat ~10-15% token + parsing lebih
+// reliable, tidak bisa gagal karena escape salah).
+const META_BEGIN = '<<<LP_META>>>'
+const META_END = '<<<LP_META_END>>>'
+const HTML_BEGIN = '<<<LP_HTML>>>'
+const HTML_END = '<<<LP_HTML_END>>>'
+
 const SYSTEM_PROMPT = `Kamu adalah expert Conversion Rate Optimization (CRO) + copywriter Indonesia. Tugasmu menganalisa landing page (HTML) berdasarkan data analytics + customer signals, lalu kasih perbaikan konkret.
 
-ATURAN OUTPUT (WAJIB):
-- Output HANYA JSON valid (mulai dari { sampai }), TIDAK ADA markdown, TIDAK ADA penjelasan di luar JSON.
-- Schema:
-  {
-    "suggestions": [
-      { "title": "...", "rationale": "...", "impact": "high|medium|low" }
-    ],
-    "focusAreas": ["pricing","social_proof","cta_clarity","value_prop","trust","urgency","mobile_ux"],
-    "scoreBefore": <0-100>,
-    "scoreAfter": <0-100>,
-    "rewrittenHtml": "<!DOCTYPE html>...</html>"
-  }
-- Field 'suggestions' WAJIB 5-8 item, urut dari impact terbesar.
-- Field 'rewrittenHtml' WAJIB lengkap dari <!DOCTYPE html> sampai </html>, semua perbaikan sudah di-apply.
+FORMAT OUTPUT (WAJIB DIIKUTI PERSIS):
+Output HARUS dalam DUA section dengan marker. TIDAK ADA penjelasan/markdown di luar marker. Format:
+
+${META_BEGIN}
+{
+  "suggestions": [
+    { "title": "...", "rationale": "...", "impact": "high|medium|low" }
+  ],
+  "focusAreas": ["pricing","social_proof","cta_clarity","value_prop","trust","urgency","mobile_ux"],
+  "scoreBefore": 50,
+  "scoreAfter": 70
+}
+${META_END}
+
+${HTML_BEGIN}
+<!DOCTYPE html>
+<html>
+... HTML rewrite LENGKAP, plain (TIDAK perlu escape \\n atau \\") ...
+</html>
+${HTML_END}
+
+ATURAN OUTPUT:
+- META section harus JSON valid (parse-able dengan JSON.parse).
+- HTML section LANGSUNG plain HTML — JANGAN bungkus quote, JANGAN escape newline atau quote.
+- 'suggestions' WAJIB 5-8 item, urut dari impact terbesar.
+- HTML WAJIB lengkap dari <!DOCTYPE html> sampai </html>.
+- TIDAK ADA teks tambahan sebelum ${META_BEGIN} atau setelah ${HTML_END}.
 
 ATURAN PERBAIKAN:
 - Pertahankan struktur LP saat ini (warna, layout, gambar URL) — fokus copy & UX kecil, BUKAN redesign total.
@@ -203,7 +287,7 @@ function buildUserPrompt(input: BuildPromptInput): string {
 
   lines.push('# TUGAS')
   lines.push(
-    'Analisa LP di atas berdasarkan data analytics + customer signals. Berikan 5-8 saran perbaikan konkret + HTML versi baru yang sudah apply semua perbaikan. Output JSON sesuai schema.',
+    `Analisa LP di atas berdasarkan data analytics + customer signals. Berikan 5-8 saran perbaikan konkret + HTML versi baru yang sudah apply semua perbaikan. Output dalam format dua section (${META_BEGIN}…${META_END} dan ${HTML_BEGIN}…${HTML_END}) sesuai instruksi system prompt.`,
   )
   return lines.join('\n')
 }
@@ -226,17 +310,43 @@ export interface OptimizationOutput {
 }
 
 export async function runOptimization(input: BuildPromptInput): Promise<OptimizationOutput> {
-  const userPrompt = buildUserPrompt(input)
+  // Strip base64 image inline supaya tidak boros context — AI tidak butuh
+  // pixel data untuk optimasi struktur LP.
+  const { stripped: strippedHtml, map: base64Map } = stripBase64ImagesForPrompt(
+    input.htmlContent,
+  )
+
+  // Pre-flight context check — kalau bahkan setelah strip masih melebihi
+  // batas, throw user-friendly error sebelum panggil API.
+  const approxInputTokens = Math.ceil(strippedHtml.length / CHARS_PER_TOKEN) + 500
+  if (approxInputTokens > MAX_INPUT_TOKENS_HARD_LIMIT) {
+    throw new Error(
+      `LP terlalu besar untuk AI optimization (~${approxInputTokens.toLocaleString('id-ID')} token, batas ${MAX_INPUT_TOKENS_HARD_LIMIT.toLocaleString('id-ID')}). Coba pecah jadi LP lebih kecil atau kurangi konten.`,
+    )
+  }
+
+  const userPrompt = buildUserPrompt({ ...input, htmlContent: strippedHtml })
   const client = getAnthropicClient()
+
+  // Dynamic output budget. AI sering ekspansi HTML 1.2-1.8x (tambah testimoni,
+  // social-proof per CRO advice). Multiplier ×2 + 5K marker/meta overhead +
+  // floor MIN_OUTPUT_TOKENS supaya LP kecil tetap aman. Clamp ke
+  // [MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS] (Haiku 4.5 hard cap 64K).
+  const expectedOutputChars =
+    strippedHtml.length * OUTPUT_MULTIPLIER + OUTPUT_OVERHEAD_CHARS + 5000
+  const dynamicMaxOutput = Math.min(
+    MAX_OUTPUT_TOKENS,
+    Math.max(MIN_OUTPUT_TOKENS, Math.ceil(expectedOutputChars / CHARS_PER_TOKEN)),
+  )
 
   const stream = client.messages.stream({
     model: OPTIMIZE_MODEL,
-    max_tokens: MAX_OUTPUT_TOKENS,
+    max_tokens: dynamicMaxOutput,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userPrompt }],
   })
 
-  // Promise.race timeout — Sonnet kadang lambat untuk output panjang.
+  // Promise.race timeout — output besar bisa lambat.
   const final = (await Promise.race([
     stream.finalMessage(),
     new Promise<never>((_, reject) =>
@@ -261,10 +371,24 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
   const inputTokens = final.usage.input_tokens
   const outputTokens = final.usage.output_tokens
 
-  const parsed = parseOptimizationJson(raw)
-  if (!parsed) {
-    throw new Error('AI tidak mengembalikan JSON valid. Coba lagi atau hubungi admin.')
+  // Detect output truncation — kalau model stop karena max_tokens, marker
+  // HTML_END belum sempat tercetak. Surface error spesifik daripada generic
+  // "format tidak valid".
+  if (final.stop_reason === 'max_tokens') {
+    throw new Error(
+      `Output AI terpotong (max_tokens=${dynamicMaxOutput.toLocaleString('id-ID')}). LP terlalu besar untuk single-pass rewrite. Coba pecah LP jadi lebih ringkas atau hubungi admin.`,
+    )
   }
+
+  const parsed = parseTwoSectionOutput(raw)
+  if (!parsed) {
+    throw new Error(
+      'AI tidak mengembalikan format yang valid (marker meta/html tidak lengkap). Coba lagi atau hubungi admin.',
+    )
+  }
+
+  // Restore base64 images yg di-strip sebelum kirim ke AI.
+  parsed.rewrittenHtml = restoreBase64Images(parsed.rewrittenHtml, base64Map)
 
   // Provider cost actual.
   const providerCostUsd =
@@ -303,8 +427,70 @@ interface ParsedOpt {
   rewrittenHtml: string
 }
 
-function parseOptimizationJson(raw: string): ParsedOpt | null {
-  // Strip markdown fence kalau ada.
+// Parser baru — extract dari format dua section. Robust:
+// - Tolerate whitespace/newline di sekitar marker
+// - Kalau HTML_END hilang (output kepotong tapi stop_reason bukan max_tokens
+//   karena bug provider), tetap coba ambil sampai akhir output asal HTML
+//   sudah punya </html> closing tag
+// - Fallback ke parseLegacyJsonOutput kalau AI bandel kembali ke format JSON
+function parseTwoSectionOutput(raw: string): ParsedOpt | null {
+  const metaMatch = raw.match(
+    new RegExp(
+      `${escapeRegex(META_BEGIN)}\\s*([\\s\\S]*?)\\s*${escapeRegex(META_END)}`,
+    ),
+  )
+  if (!metaMatch || !metaMatch[1]) {
+    return parseLegacyJsonOutput(raw)
+  }
+
+  let metaJson: Record<string, unknown>
+  try {
+    metaJson = JSON.parse(metaMatch[1].trim()) as Record<string, unknown>
+  } catch {
+    // Coba ekstrak first { ... } di dalam meta section.
+    const inner = metaMatch[1].match(/\{[\s\S]*\}/)
+    if (!inner) return null
+    try {
+      metaJson = JSON.parse(inner[0]) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  // HTML — coba marker pair dulu, fallback: dari HTML_BEGIN sampai akhir
+  // string (kalau HTML_END hilang tapi </html> ada di body).
+  let html = ''
+  const htmlPairMatch = raw.match(
+    new RegExp(
+      `${escapeRegex(HTML_BEGIN)}\\s*([\\s\\S]*?)\\s*${escapeRegex(HTML_END)}`,
+    ),
+  )
+  if (htmlPairMatch && htmlPairMatch[1]) {
+    html = htmlPairMatch[1].trim()
+  } else {
+    // Fallback: cari HTML_BEGIN ... </html>
+    const beginIdx = raw.indexOf(HTML_BEGIN)
+    if (beginIdx >= 0) {
+      const tail = raw.slice(beginIdx + HTML_BEGIN.length)
+      const closingIdx = tail.toLowerCase().lastIndexOf('</html>')
+      if (closingIdx >= 0) {
+        html = tail.slice(0, closingIdx + '</html>'.length).trim()
+      }
+    }
+  }
+
+  if (!html || !html.toLowerCase().includes('<html')) return null
+  // Strip markdown fence yang kadang dipakai AI bandel.
+  const fence = html.match(/^```(?:html|HTML)?\s*\n([\s\S]*?)\n```\s*$/)
+  if (fence && fence[1]) html = fence[1].trim()
+
+  return buildParsedOpt(metaJson, html)
+}
+
+// Fallback parser — kalau AI tetap balikin format JSON lama (rewrittenHtml
+// di dalam string). Toleran supaya migrasi format tidak ngebreak existing
+// in-flight requests.
+function parseLegacyJsonOutput(raw: string): ParsedOpt | null {
   let text = raw
   const fence = text.match(/^```(?:json|JSON)?\s*\n([\s\S]*?)\n```\s*$/)
   if (fence && fence[1]) text = fence[1].trim()
@@ -313,7 +499,6 @@ function parseOptimizationJson(raw: string): ParsedOpt | null {
   try {
     json = JSON.parse(text) as Record<string, unknown>
   } catch {
-    // Fallback: extract first { ... } block.
     const m = text.match(/\{[\s\S]*\}/)
     if (!m) return null
     try {
@@ -322,12 +507,14 @@ function parseOptimizationJson(raw: string): ParsedOpt | null {
       return null
     }
   }
-
-  const suggestions = Array.isArray(json.suggestions) ? json.suggestions : []
-  const focusAreas = Array.isArray(json.focusAreas) ? json.focusAreas : []
   const html = typeof json.rewrittenHtml === 'string' ? json.rewrittenHtml.trim() : ''
   if (!html || !html.toLowerCase().includes('<html')) return null
+  return buildParsedOpt(json, html)
+}
 
+function buildParsedOpt(meta: Record<string, unknown>, html: string): ParsedOpt {
+  const suggestions = Array.isArray(meta.suggestions) ? meta.suggestions : []
+  const focusAreas = Array.isArray(meta.focusAreas) ? meta.focusAreas : []
   return {
     suggestions: suggestions
       .filter((s) => s && typeof s === 'object')
@@ -348,10 +535,14 @@ function parseOptimizationJson(raw: string): ParsedOpt | null {
       .filter((f): f is string => typeof f === 'string')
       .map((f) => f.slice(0, 60))
       .slice(0, 10),
-    scoreBefore: clampScoreOrNull(json.scoreBefore),
-    scoreAfter: clampScoreOrNull(json.scoreAfter),
+    scoreBefore: clampScoreOrNull(meta.scoreBefore),
+    scoreAfter: clampScoreOrNull(meta.scoreAfter),
     rewrittenHtml: html,
   }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function clampScoreOrNull(v: unknown): number | null {
