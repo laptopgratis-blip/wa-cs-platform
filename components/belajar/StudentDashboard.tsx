@@ -1,6 +1,6 @@
 'use client'
 
-import { Clock, GraduationCap, LogOut, Play } from 'lucide-react'
+import { Award, Clock, GraduationCap, LogOut, Play } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -27,6 +27,14 @@ interface Enrollment {
   completedCount: number
 }
 
+interface Certificate {
+  number: string
+  courseTitle: string
+  courseSlug: string
+  issuerName: string
+  issuedAt: string
+}
+
 function formatDuration(sec: number): string {
   if (sec < 60) return `${sec}d`
   const m = Math.floor(sec / 60)
@@ -38,9 +46,11 @@ function formatDuration(sec: number): string {
 export function StudentDashboard({
   student,
   enrollments,
+  certificates,
 }: {
   student: { phone: string; name: string | null }
   enrollments: Enrollment[]
+  certificates: Certificate[]
 }) {
   const router = useRouter()
   const [loggingOut, setLoggingOut] = useState(false)
@@ -169,6 +179,52 @@ export function StudentDashboard({
             )
           })}
         </div>
+      )}
+
+      {/* Sertifikat — Phase 4. Hanya tampil kalau student punya cert. */}
+      {certificates.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-display text-lg font-bold text-warm-900">
+            Sertifikat Saya
+          </h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {certificates.map((c) => (
+              <Card key={c.number} className="overflow-visible rounded-xl border-amber-200 bg-amber-50">
+                <CardContent className="space-y-2 p-4">
+                  <div className="flex items-center gap-2 text-amber-900">
+                    <Award className="size-4" />
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      Certificate
+                    </span>
+                  </div>
+                  <h3 className="font-display text-base font-bold text-warm-900">
+                    {c.courseTitle}
+                  </h3>
+                  <p className="text-xs text-warm-600">
+                    Diterbitkan{' '}
+                    {new Date(c.issuedAt).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                    {' · '}
+                    <span className="font-mono text-[10px]">{c.number}</span>
+                  </p>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-amber-300"
+                  >
+                    <Link href={`/belajar/certificate/${c.number}`}>
+                      Lihat Sertifikat
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   )

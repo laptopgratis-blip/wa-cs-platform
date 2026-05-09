@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getCourseForOwner } from '@/lib/services/lms/course'
+import { getActiveLmsQuota } from '@/lib/services/lms/quota'
 
 interface Params {
   params: Promise<{ courseId: string }>
@@ -26,15 +27,18 @@ export default async function EditCoursePage({ params }: Params) {
 
   // Pre-fetch produk available untuk re-link (include current product
   // supaya tidak hilang dari dropdown).
-  const products = await prisma.product.findMany({
-    where: {
-      userId: session.user.id,
-      isActive: true,
-      OR: [{ courseId: null }, { courseId: courseId }],
-    },
-    select: { id: true, name: true, price: true, courseId: true },
-    orderBy: [{ order: 'asc' }, { name: 'asc' }],
-  })
+  const [products, quota] = await Promise.all([
+    prisma.product.findMany({
+      where: {
+        userId: session.user.id,
+        isActive: true,
+        OR: [{ courseId: null }, { courseId: courseId }],
+      },
+      select: { id: true, name: true, price: true, courseId: true },
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+    }),
+    getActiveLmsQuota(session.user.id),
+  ])
 
   return (
     <div className="mx-auto flex h-full max-w-4xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -68,11 +72,17 @@ export default async function EditCoursePage({ params }: Params) {
               richTextHtml: l.richTextHtml,
               durationSec: l.durationSec,
               isFreePreview: l.isFreePreview,
+              dripDays: l.dripDays,
               sortOrder: l.sortOrder,
             })),
           })),
         }}
         availableProducts={products}
+        quota={{
+          tier: quota.tier,
+          canUseDripSchedule: quota.canUseDripSchedule,
+          canIssueCertificate: quota.canIssueCertificate,
+        }}
       />
     </div>
   )

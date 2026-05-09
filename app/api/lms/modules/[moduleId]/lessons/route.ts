@@ -16,6 +16,7 @@ const schema = z.object({
   richTextHtml: z.string().max(50_000).optional().nullable(),
   durationSec: z.number().int().min(0).max(60 * 60 * 12).optional(),
   isFreePreview: z.boolean().optional(),
+  dripDays: z.number().int().min(0).max(365).optional().nullable(),
 })
 
 export async function POST(req: Request, { params }: Params) {
@@ -35,13 +36,13 @@ export async function POST(req: Request, { params }: Params) {
     return jsonOk({ lesson })
   } catch (err) {
     const code = (err as Error & { code?: string }).code
-    if (code === 'LMS_QUOTA_EXCEEDED' || code === 'LMS_LESSON_QUOTA') {
+    if (
+      code === 'LMS_QUOTA_EXCEEDED' ||
+      code === 'LMS_LESSON_QUOTA' ||
+      code === 'LMS_PLAN_FEATURE_LOCKED'
+    ) {
       return Response.json(
-        {
-          success: false,
-          error: 'LMS_QUOTA_EXCEEDED',
-          message: (err as Error).message,
-        },
+        { success: false, error: code, message: (err as Error).message },
         { status: 402 },
       )
     }

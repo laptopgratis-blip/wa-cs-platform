@@ -2,6 +2,7 @@
 
 import {
   ArrowLeft,
+  Award,
   CheckCircle2,
   Circle,
   Lock,
@@ -22,10 +23,16 @@ interface Lesson {
   contentType: 'VIDEO_EMBED' | 'TEXT' | 'FILE'
   durationSec: number
   isFreePreview: boolean
+  dripDays: number | null
   sortOrder: number
   videoEmbedUrl: string | null
   richTextHtml: string | null
   locked: boolean
+  // Phase 4 — kenapa locked: 'DRIP' = belum unlock berdasarkan dripDays;
+  // 'NOT_ENROLLED' = anon visitor / belum beli; null = unlocked.
+  lockedReason: 'DRIP' | 'NOT_ENROLLED' | null
+  unlocksAt: string | null
+  daysRemaining: number
   watchedSec: number
   completedAt: string | null
 }
@@ -49,18 +56,24 @@ interface Course {
 export function CoursePlayer({
   course,
   isEnrolled,
+  certificateNumber,
+  ownerCanIssueCertificate,
   modules,
 }: {
   course: Course
   isEnrolled: boolean
+  certificateNumber: string | null
+  ownerCanIssueCertificate: boolean
   modules: ModuleNode[]
 }) {
-  // Lesson aktif — default: lesson pertama yg accessible.
+  // Lesson "viewable" = accessible (unlocked) ATAU locked karena drip
+  // (kita tampil drip info card di main panel). Locked-by-not-enrolled
+  // tetap not-clickable.
   const allAccessibleLessons = useMemo(
     () =>
       modules
         .flatMap((m) => m.lessons)
-        .filter((l) => !l.locked),
+        .filter((l) => !l.locked || l.lockedReason === 'DRIP'),
     [modules],
   )
   const [activeLessonId, setActiveLessonId] = useState<string | null>(
@@ -158,6 +171,24 @@ export function CoursePlayer({
                 hubungi penjual untuk beli.
               </div>
             )}
+            {/* Phase 4 — sertifikat completion. allCompleted = SEMUA lesson
+                completed (drip-locked otomatis return false karena belum
+                bisa di-mark). */}
+            {isEnrolled &&
+              (() => {
+                const allLessons = modules.flatMap((m) => m.lessons)
+                const allCompleted =
+                  allLessons.length > 0 &&
+                  allLessons.every((l) => completedSet.has(l.id))
+                return (
+                  <CertificateBanner
+                    courseSlug={course.slug}
+                    certificateNumber={certificateNumber}
+                    ownerCanIssueCertificate={ownerCanIssueCertificate}
+                    allCompleted={allCompleted}
+                  />
+                )
+              })()}
           </div>
 
           {activeLesson ? (
@@ -186,22 +217,28 @@ export function CoursePlayer({
                   {m.lessons.map((l) => {
                     const isActive = l.id === activeLessonId
                     const isComplete = completedSet.has(l.id)
+                    const isDripLocked = l.lockedReason === 'DRIP'
+                    const isHardLocked =
+                      l.locked && l.lockedReason !== 'DRIP'
                     return (
                       <li key={l.id}>
                         <button
                           type="button"
-                          disabled={l.locked}
+                          disabled={isHardLocked}
                           onClick={() => setActiveLessonId(l.id)}
                           className={cn(
                             'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition',
                             isActive && 'bg-primary-50 text-primary-700',
-                            !isActive && !l.locked && 'hover:bg-warm-50',
-                            l.locked &&
+                            !isActive && !isHardLocked && 'hover:bg-warm-50',
+                            isHardLocked &&
                               'cursor-not-allowed text-warm-400 opacity-70',
+                            isDripLocked && !isActive && 'text-warm-500',
                           )}
                         >
-                          {l.locked ? (
+                          {isHardLocked ? (
                             <Lock className="size-3.5 shrink-0" />
+                          ) : isDripLocked ? (
+                            <Lock className="size-3.5 shrink-0 text-amber-500" />
                           ) : isComplete ? (
                             <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
                           ) : isActive ? (
@@ -210,6 +247,11 @@ export function CoursePlayer({
                             <Circle className="size-3.5 shrink-0 text-warm-400" />
                           )}
                           <span className="flex-1 truncate">{l.title}</span>
+                          {isDripLocked && (
+                            <Badge className="bg-amber-100 text-[9px] text-amber-700">
+                              {l.daysRemaining}d
+                            </Badge>
+                          )}
                           {l.isFreePreview && !isEnrolled && (
                             <Badge className="bg-emerald-100 text-[9px] text-emerald-700">
                               Free
@@ -236,6 +278,46 @@ function LessonView({
   lesson: Lesson
   onComplete: () => void
 }) {
+  // Drip lock — tampilkan info card alih-alih konten lesson.
+  if (lesson.locked && lesson.lockedReason === 'DRIP') {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-display text-xl font-bold text-warm-900">
+          {lesson.title}
+        </h2>
+        <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-amber-200 bg-amber-50 p-10 text-center">
+          <div className="flex size-14 items-center justify-center rounded-full bg-amber-200">
+            <Lock className="size-6 text-amber-700" />
+          </div>
+          <div>
+            <p className="font-display text-lg font-bold text-amber-900">
+              Lesson belum unlock
+            </p>
+            <p className="mt-1 text-sm text-amber-800">
+              Akan unlock dalam{' '}
+              <strong>{lesson.daysRemaining} hari</strong>
+              {lesson.unlocksAt && (
+                <>
+                  {' '}— pada{' '}
+                  {new Date(lesson.unlocksAt).toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </>
+              )}
+              .
+            </p>
+            <p className="mt-2 text-xs text-amber-700">
+              Konten ini di-drip schedule oleh creator — selesai dulu lesson
+              sebelumnya.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <h2 className="font-display text-xl font-bold text-warm-900">
@@ -289,6 +371,98 @@ function LessonView({
           </Button>
         )}
       </div>
+    </div>
+  )
+}
+
+function CertificateBanner({
+  courseSlug,
+  certificateNumber,
+  ownerCanIssueCertificate,
+  allCompleted,
+}: {
+  courseSlug: string
+  certificateNumber: string | null
+  ownerCanIssueCertificate: boolean
+  allCompleted: boolean
+}) {
+  const [claiming, setClaiming] = useState(false)
+  const [issuedNumber, setIssuedNumber] = useState<string | null>(
+    certificateNumber,
+  )
+
+  // Sudah issued — tampilkan link lihat
+  if (issuedNumber) {
+    return (
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
+        <div className="flex items-center gap-2 text-amber-900">
+          <Award className="size-5" />
+          <span className="font-semibold">Sertifikat sudah terbit!</span>
+        </div>
+        <Button
+          asChild
+          size="sm"
+          className="bg-amber-600 text-white hover:bg-amber-700"
+        >
+          <Link href={`/belajar/certificate/${issuedNumber}`}>
+            Lihat Sertifikat
+          </Link>
+        </Button>
+      </div>
+    )
+  }
+
+  // Belum complete semua lesson — sembunyikan
+  if (!allCompleted) return null
+
+  // Plan owner tidak support certificate
+  if (!ownerCanIssueCertificate) {
+    return (
+      <div className="mt-3 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs text-warm-600">
+        🎉 Selamat! Kamu sudah selesaikan semua lesson. Penjual belum
+        upgrade plan untuk fitur sertifikat.
+      </div>
+    )
+  }
+
+  async function claim() {
+    setClaiming(true)
+    try {
+      const res = await fetch(
+        `/api/lms/courses-public/${encodeURIComponent(courseSlug)}/certificate`,
+        { method: 'POST' },
+      )
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.message || 'Gagal klaim sertifikat')
+        return
+      }
+      const num = json.data?.certificate?.number as string | undefined
+      if (num) {
+        setIssuedNumber(num)
+        toast.success('Sertifikat berhasil di-klaim!')
+      }
+    } finally {
+      setClaiming(false)
+    }
+  }
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
+      <div className="flex items-center gap-2 text-emerald-900">
+        <Award className="size-5" />
+        <span className="font-semibold">
+          Selesaikan semua lesson — klaim sertifikat sekarang!
+        </span>
+      </div>
+      <Button
+        onClick={claim}
+        disabled={claiming}
+        size="sm"
+        className="bg-emerald-600 text-white hover:bg-emerald-700"
+      >
+        {claiming ? 'Memproses...' : 'Klaim Sertifikat'}
+      </Button>
     </div>
   )
 }

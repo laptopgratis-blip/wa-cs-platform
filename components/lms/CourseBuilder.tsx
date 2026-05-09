@@ -52,6 +52,8 @@ interface Lesson {
   richTextHtml: string | null
   durationSec: number
   isFreePreview: boolean
+  // Phase 4 — drip days. null = unlock immediate.
+  dripDays: number | null
   sortOrder: number
 }
 
@@ -82,12 +84,20 @@ interface Pkg {
 
 const NONE = '__none__'
 
+interface BuilderQuota {
+  tier: string
+  canUseDripSchedule: boolean
+  canIssueCertificate: boolean
+}
+
 export function CourseBuilder({
   course: initial,
   availableProducts,
+  quota,
 }: {
   course: Course
   availableProducts: Pkg[]
+  quota: BuilderQuota
 }) {
   const router = useRouter()
   const [course, setCourse] = useState<Course>(initial)
@@ -399,6 +409,7 @@ export function CourseBuilder({
         <LessonDialog
           moduleId={lessonDialog.moduleId}
           lesson={lessonDialog.lesson}
+          quota={quota}
           onClose={() => setLessonDialog(null)}
           onSaved={(l) => lessonSaved(lessonDialog.moduleId, l)}
         />
@@ -466,6 +477,11 @@ function ModuleBlock({
                       Free
                     </Badge>
                   )}
+                  {l.dripDays && l.dripDays > 0 ? (
+                    <Badge className="bg-amber-100 text-amber-700">
+                      Drip {l.dripDays}d
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="flex gap-1">
                   <Button
@@ -505,11 +521,13 @@ function ModuleBlock({
 function LessonDialog({
   moduleId,
   lesson,
+  quota,
   onClose,
   onSaved,
 }: {
   moduleId: string
   lesson: Lesson | null
+  quota: BuilderQuota
   onClose: () => void
   onSaved: (l: Lesson) => void
 }) {
@@ -525,6 +543,8 @@ function LessonDialog({
   const [isFreePreview, setIsFreePreview] = useState(
     lesson?.isFreePreview ?? false,
   )
+  // Phase 4 — drip days. 0 atau null = unlock immediate.
+  const [dripDays, setDripDays] = useState(lesson?.dripDays ?? 0)
   const [submitting, setSubmitting] = useState(false)
 
   async function save() {
@@ -550,6 +570,9 @@ function LessonDialog({
         richTextHtml: contentType === 'TEXT' ? richTextHtml.trim() : null,
         durationSec,
         isFreePreview,
+        // Hanya kirim dripDays kalau plan support — kalau tidak, biarkan
+        // default 0 (immediate). Backend juga validate.
+        dripDays: quota.canUseDripSchedule ? dripDays : 0,
       }
       const url = lesson
         ? `/api/lms/lessons/${lesson.id}`
@@ -656,6 +679,41 @@ function LessonDialog({
                 Free preview
               </Label>
             </div>
+          </div>
+
+          {/* Drip schedule — Phase 4. Plan PRO/UNLIMITED only. */}
+          <div className="space-y-1.5 rounded-lg border border-warm-200 bg-warm-50 p-3">
+            <Label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-warm-700">
+              Drip Schedule
+              {!quota.canUseDripSchedule && (
+                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                  Plan PRO+
+                </span>
+              )}
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={dripDays}
+                disabled={!quota.canUseDripSchedule}
+                onChange={(e) =>
+                  setDripDays(Math.max(0, Number(e.target.value) || 0))
+                }
+                className="w-24"
+              />
+              <span className="text-xs text-warm-600">
+                hari sejak student enroll
+              </span>
+            </div>
+            <p className="text-[11px] text-warm-500">
+              {!quota.canUseDripSchedule
+                ? `Tier ${quota.tier} tidak support drip schedule. Upgrade ke PRO/UNLIMITED di /pricing-lms.`
+                : dripDays > 0
+                  ? `Lesson akan unlock ${dripDays} hari setelah student enroll.`
+                  : '0 = unlock langsung saat enroll (default).'}
+            </p>
           </div>
         </div>
 

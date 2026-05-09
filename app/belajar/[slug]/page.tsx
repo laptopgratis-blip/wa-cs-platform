@@ -65,6 +65,8 @@ export default async function BelajarCoursePage({ params }: Params) {
     <CoursePlayer
       course={data.course}
       isEnrolled={data.isEnrolled}
+      certificateNumber={data.certificateNumber}
+      ownerCanIssueCertificate={data.ownerCanIssueCertificate}
       modules={data.modules.map((m) => ({
         ...m,
         lessons: m.lessons.map((l) => ({

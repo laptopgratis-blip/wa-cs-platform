@@ -2328,6 +2328,10 @@ model Lesson {
   // Free preview = bisa di-tonton tanpa enrollment. Maks 1-2 per course
   // untuk demo public. Di-enforce di portal Phase 2.
   isFreePreview Boolean @default(false)
+  // Drip schedule (Phase 4): null = unlock immediate. Int = unlock setelah
+  // N hari sejak enrolledAt. Plan PRO/UNLIMITED only — di-enforce di service
+  // saat lesson PATCH. Phase 5 bisa upgrade ke absolute date.
+  dripDays      Int?
   sortOrder     Int     @default(0)
 
   progress LessonProgress[]
@@ -2366,7 +2370,9 @@ model Enrollment {
   revokedAt   DateTime?
   revokeReason String?
 
-  progress LessonProgress[]
+  progress    LessonProgress[]
+  // Phase 4 — sertifikat completion. 1:1 (issued sekali per enrollment).
+  certificate Certificate?
 
   // 1 student (phone) tidak bisa enrolled 2x ke course yg sama. Kalau order
   // ulang, upsert ke ACTIVE (bukan create baru).
@@ -2540,4 +2546,33 @@ model LmsSubscriptionInvoice {
   status          String  @default("PAID")
   paidAt          DateTime
   createdAt       DateTime @default(now())
+}
+
+// LMS Phase 4 — Sertifikat completion. Di-issue saat student selesai
+// semua lesson di course (filter via LessonProgress.completedAt).
+// Plan canIssueCertificate gating di-enforce di service (BASIC: false,
+// PRO/UNLIMITED: true).
+//
+// Snapshot studentName + courseTitle + courseSlug supaya sertifikat
+// tetap valid display walau course title diubah atau di-archive nanti.
+model Certificate {
+  id            String  @id @default(cuid())
+  // Number unik public-shareable (mis. "HULAO-LMS-2026-XXXXXX"). Dipakai
+  // di URL verify /belajar/certificate/{number}. Indexed unique.
+  number        String  @unique
+  enrollmentId  String  @unique
+  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // Snapshot supaya rendering certificate page tidak butuh join saat
+  // course title berubah / archive di kemudian hari.
+  studentName   String
+  studentPhone  String
+  courseTitle   String
+  courseSlug    String
+  // Snapshot creator (penjual) name + ID — untuk credit di certificate.
+  issuerUserId  String
+  issuerName    String
+  issuedAt      DateTime @default(now())
+
+  @@index([studentPhone])
+  @@index([issuerUserId])
 }

@@ -5,6 +5,8 @@
 // tampil sebagai EXPIRED — Phase 4 cron akan flip status secara berkala).
 import { prisma } from '@/lib/prisma'
 
+import { resolveDripStatus } from './drip'
+
 export interface StudentEnrollmentSummary {
   enrollmentId: string
   enrolledAt: Date
@@ -140,6 +142,7 @@ export async function getCourseForStudent(input: {
     expiresAt: Date | null
   } | null = null
   let isEnrolled = false
+  let certificateNumber: string | null = null
   if (input.studentPhone) {
     const e = await prisma.enrollment.findUnique({
       where: {
@@ -153,6 +156,7 @@ export async function getCourseForStudent(input: {
         status: true,
         enrolledAt: true,
         expiresAt: true,
+        certificate: { select: { number: true } },
       },
     })
     if (e?.status === 'ACTIVE') {
@@ -162,6 +166,7 @@ export async function getCourseForStudent(input: {
         expiresAt: e.expiresAt,
       }
       isEnrolled = true
+      certificateNumber = e.certificate?.number ?? null
     }
   }
 
@@ -180,6 +185,15 @@ export async function getCourseForStudent(input: {
     )
   }
 
+  // Cek apakah owner punya plan canIssueCertificate (untuk tombol klaim).
+  // Phase 4: dynamic import supaya circular dep tidak bermasalah.
+  let ownerCanIssueCertificate = false
+  if (isEnrolled) {
+    const { getActiveLmsQuota } = await import('./quota')
+    const ownerQuota = await getActiveLmsQuota(course.userId)
+    ownerCanIssueCertificate = ownerQuota.canIssueCertificate
+  }
+
   return {
     course: {
       id: course.id,
@@ -191,12 +205,30 @@ export async function getCourseForStudent(input: {
     },
     isEnrolled,
     enrollment,
+    certificateNumber,
+    ownerCanIssueCertificate,
     modules: course.modules.map((m) => ({
       id: m.id,
       title: m.title,
       sortOrder: m.sortOrder,
       lessons: m.lessons.map((l) => {
-        const accessible = isEnrolled || l.isFreePreview
+        // Drip status — null kalau dripDays not set atau anon visitor
+        // (no enrollment). Free preview bypass drip (selalu accessible).
+        const drip =
+          enrollment && !l.isFreePreview
+            ? resolveDripStatus({
+                enrolledAt: enrollment.enrolledAt,
+                dripDays: l.dripDays,
+              })
+            : null
+        const dripLocked = drip ? !drip.unlocked : false
+        const accessible = (isEnrolled && !dripLocked) || l.isFreePreview
+        // Reason untuk UI: tampil "Belum beli" vs "Tunggu N hari"
+        const lockedReason = !accessible
+          ? dripLocked
+            ? ('DRIP' as const)
+            : ('NOT_ENROLLED' as const)
+          : null
         const prog = progressMap[l.id] ?? null
         return {
           id: l.id,
@@ -204,12 +236,16 @@ export async function getCourseForStudent(input: {
           contentType: l.contentType,
           durationSec: l.durationSec,
           isFreePreview: l.isFreePreview,
+          dripDays: l.dripDays,
           sortOrder: l.sortOrder,
           // Konten asli hanya kalau accessible. Kalau locked, return
           // metadata saja supaya UI tampil daftar lesson dgn padlock.
           videoEmbedUrl: accessible ? l.videoEmbedUrl : null,
           richTextHtml: accessible ? l.richTextHtml : null,
           locked: !accessible,
+          lockedReason,
+          unlocksAt: drip?.unlocksAt?.toISOString() ?? null,
+          daysRemaining: drip?.daysRemaining ?? 0,
           watchedSec: prog?.watchedSec ?? 0,
           completedAt: prog?.completedAt ?? null,
         }
@@ -218,17 +254,20 @@ export async function getCourseForStudent(input: {
   }
 }
 
-// Update progress lesson. Cek enrollment ACTIVE — kalau tidak, throw.
+// Update progress lesson. Cek enrollment ACTIVE + drip unlocked.
 export async function updateLessonProgress(input: {
   studentPhone: string
   lessonId: string
   watchedSec: number
   completed?: boolean
 }) {
-  // Resolve lesson → course → enrollment dlm 1 query.
   const lesson = await prisma.lesson.findUnique({
     where: { id: input.lessonId },
-    select: { id: true, module: { select: { courseId: true } } },
+    select: {
+      id: true,
+      dripDays: true,
+      module: { select: { courseId: true } },
+    },
   })
   if (!lesson) throw new Error('Lesson tidak ditemukan')
 
@@ -239,10 +278,21 @@ export async function updateLessonProgress(input: {
         studentPhone: input.studentPhone,
       },
     },
-    select: { id: true, status: true },
+    select: { id: true, status: true, enrolledAt: true },
   })
   if (!enrollment || enrollment.status !== 'ACTIVE') {
     throw new Error('Tidak punya akses ke lesson ini')
+  }
+  // Drip lock — student tidak boleh mark progress sebelum unlock
+  // (kalau di-bypass dari client).
+  const drip = resolveDripStatus({
+    enrolledAt: enrollment.enrolledAt,
+    dripDays: lesson.dripDays,
+  })
+  if (!drip.unlocked) {
+    throw new Error(
+      `Lesson belum unlock (${drip.daysRemaining} hari lagi)`,
+    )
   }
 
   const watchedSec = Math.max(0, Math.min(input.watchedSec, 60 * 60 * 24))

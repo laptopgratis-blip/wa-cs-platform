@@ -17,6 +17,7 @@ const schema = z.object({
   richTextHtml: z.string().max(50_000).optional().nullable(),
   durationSec: z.number().int().min(0).max(60 * 60 * 12).optional(),
   isFreePreview: z.boolean().optional(),
+  dripDays: z.number().int().min(0).max(365).optional().nullable(),
   sortOrder: z.number().int().min(0).optional(),
 })
 
@@ -36,6 +37,13 @@ export async function PATCH(req: Request, { params }: Params) {
     const lesson = await updateLesson(session.user.id, lessonId, parsed.data)
     return jsonOk({ lesson })
   } catch (err) {
+    const code = (err as Error & { code?: string }).code
+    if (code === 'LMS_PLAN_FEATURE_LOCKED') {
+      return Response.json(
+        { success: false, error: code, message: (err as Error).message },
+        { status: 402 },
+      )
+    }
     return jsonError(err instanceof Error ? err.message : 'Gagal', 400)
   }
 }

@@ -299,6 +299,9 @@ export interface CreateLessonInput {
   richTextHtml?: string | null
   durationSec?: number
   isFreePreview?: boolean
+  // Phase 4 — drip schedule. Plan PRO/UNLIMITED only; service throw
+  // kalau plan user tidak support.
+  dripDays?: number | null
 }
 
 export async function createLesson(
@@ -326,6 +329,18 @@ export async function createLesson(
     )
   }
 
+  // Phase 4 — drip validation: kalau dripDays > 0 (set explicit), cek plan
+  // canUseDripSchedule. quota sudah di-resolve di atas untuk maxLessons.
+  if (input.dripDays && input.dripDays > 0) {
+    if (!quota.canUseDripSchedule) {
+      const err = new Error(
+        `Drip schedule butuh plan PRO/UNLIMITED. Tier kamu: ${quota.tier}.`,
+      )
+      ;(err as Error & { code?: string }).code = 'LMS_PLAN_FEATURE_LOCKED'
+      throw err
+    }
+  }
+
   const last = await prisma.lesson.findFirst({
     where: { moduleId },
     orderBy: { sortOrder: 'desc' },
@@ -340,6 +355,7 @@ export async function createLesson(
       richTextHtml: input.richTextHtml ?? null,
       durationSec: input.durationSec ?? 0,
       isFreePreview: input.isFreePreview ?? false,
+      dripDays: input.dripDays ?? null,
       sortOrder: (last?.sortOrder ?? -1) + 1,
     },
   })
@@ -357,6 +373,19 @@ export async function updateLesson(
     include: { module: { select: { courseId: true } } },
   })
   if (!lesson) throw new Error('Lesson tidak ditemukan')
+
+  // Phase 4 — drip validation kalau user set dripDays > 0.
+  if (input.dripDays && input.dripDays > 0) {
+    const quota = await getActiveLmsQuota(userId)
+    if (!quota.canUseDripSchedule) {
+      const err = new Error(
+        `Drip schedule butuh plan PRO/UNLIMITED. Tier kamu: ${quota.tier}.`,
+      )
+      ;(err as Error & { code?: string }).code = 'LMS_PLAN_FEATURE_LOCKED'
+      throw err
+    }
+  }
+
   const updated = await prisma.lesson.update({
     where: { id: lessonId },
     data: {
@@ -366,6 +395,7 @@ export async function updateLesson(
       richTextHtml: input.richTextHtml,
       durationSec: input.durationSec,
       isFreePreview: input.isFreePreview,
+      dripDays: input.dripDays,
       sortOrder: input.sortOrder,
     },
   })

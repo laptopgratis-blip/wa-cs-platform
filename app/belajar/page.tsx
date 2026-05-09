@@ -8,6 +8,7 @@ import { cookies } from 'next/headers'
 
 import { LoginForm } from '@/components/belajar/LoginForm'
 import { StudentDashboard } from '@/components/belajar/StudentDashboard'
+import { getStudentCertificates } from '@/lib/services/lms/certificate'
 import {
   STUDENT_COOKIE_NAME,
   getStudentFromSessionToken,
@@ -37,7 +38,10 @@ export default async function BelajarHomePage() {
     )
   }
 
-  const enrollments = await getStudentEnrollments(ctx.studentPhone)
+  const [enrollments, certificates] = await Promise.all([
+    getStudentEnrollments(ctx.studentPhone),
+    getStudentCertificates(ctx.studentPhone),
+  ])
   return (
     <StudentDashboard
       student={{
@@ -48,6 +52,10 @@ export default async function BelajarHomePage() {
         ...e,
         enrolledAt: e.enrolledAt.toISOString(),
         expiresAt: e.expiresAt?.toISOString() ?? null,
+      }))}
+      certificates={certificates.map((c) => ({
+        ...c,
+        issuedAt: c.issuedAt.toISOString(),
       }))}
     />
   )
