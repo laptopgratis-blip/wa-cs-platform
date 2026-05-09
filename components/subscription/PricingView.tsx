@@ -319,13 +319,17 @@ function PlanCard({
   return (
     <Card
       className={cn(
-        'relative flex flex-col',
+        // overflow-visible — base Card pakai overflow-hidden yg memotong badge
+        // "Paling Populer" (positioning -top-3 keluar dari card border).
+        'relative flex flex-col overflow-visible',
         highlight && 'border-primary-500 shadow-orange ring-2 ring-primary-500/30',
       )}
     >
       {highlight && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <Badge className="bg-primary-500 text-white">Paling Populer</Badge>
+        <div className="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
+          <Badge className="bg-primary-500 text-white shadow-sm">
+            Paling Populer
+          </Badge>
         </div>
       )}
       <CardHeader>
