@@ -59,20 +59,72 @@ export interface NavGroup {
 }
 
 // ─── USER (dashboard) ─────────────────────────────────────────────────
+// Reorganisasi 2026-05-09:
+// - Group "PRODUKTIVITAS" lama dipecah → "CHAT & CS" + "LANDING PAGE"
+// - "Pesanan" pindah dari Produktivitas ke ORDER SYSTEM (kontekstual cocok)
+// - "Rekening" → "Pengaturan" (label, route tetap /bank-accounts) karena
+//   page itu juga berisi pengaturan pengiriman (origin city, kurir aktif)
+// - Pixel Tracking + Auto Confirm Bank pindah ke group "INTEGRASI" terpisah
+//   supaya ORDER SYSTEM fokus ke operasional jualan
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
-    label: 'PRODUKTIVITAS',
+    label: 'CHAT & CS',
     items: [
       { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
       { label: 'Inbox', href: '/inbox', icon: Inbox },
       { label: 'Soul', href: '/soul', icon: Sparkles },
       { label: 'Pengetahuan', href: '/knowledge', icon: BookOpen },
       { label: 'Cara Jualan', href: '/cara-jualan', icon: ShoppingBag },
-      { label: 'Pesanan', href: '/pesanan', icon: Package },
       { label: 'Kontak', href: '/contacts', icon: Users },
       { label: 'Broadcast', href: '/broadcast', icon: Send },
+    ],
+  },
+  // Order System — hanya tampil untuk user paket POWER. Filter di komponen
+  // konsumer berdasarkan flag hasOrderSystemAccess (lib/order-system-gate).
+  // Pesanan & Pengaturan(rekening+shipping) masuk di sini supaya satu konteks.
+  {
+    label: 'ORDER SYSTEM',
+    requiresOrderSystem: true,
+    items: [
+      { label: 'Pesanan', href: '/pesanan', icon: Package },
+      { label: 'Produk', href: '/products', icon: ShoppingCart },
+      { label: 'Form Order', href: '/order-forms', icon: FileText },
+      { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
+      // Follow-Up Order System (2026-05-08) — pesan otomatis ke customer
+      // berdasarkan event order + delay hari.
+      { label: 'Follow-Up', href: '/pesanan/follow-up', icon: BellRing },
+      {
+        label: 'Template Follow-Up',
+        href: '/pesanan/templates',
+        icon: FileText,
+      },
+      // Page /bank-accounts berisi rekening transfer + shipping profile —
+      // label "Pengaturan" lebih representatif. Route tetap supaya tidak
+      // breaking existing bookmark.
+      { label: 'Pengaturan', href: '/bank-accounts', icon: Settings },
+    ],
+  },
+  {
+    label: 'LANDING PAGE',
+    items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
       { label: 'Upgrade LP', href: '/landing-pages/upgrade', icon: TrendingUp },
+    ],
+  },
+  // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
+  // supaya scope grup itu fokus ke operasional jualan harian.
+  {
+    label: 'INTEGRASI',
+    requiresOrderSystem: true,
+    items: [
+      { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
+      // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
+      // scraping mutasi BCA. Disclaimer & risk handling di halaman tujuan.
+      {
+        label: 'Auto Confirm (BETA)',
+        href: '/integrations/bank-mutation',
+        icon: Banknote,
+      },
     ],
   },
   {
@@ -84,34 +136,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Billing', href: '/billing', icon: CreditCard },
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
-    ],
-  },
-  // Order System — hanya tampil untuk user paket POWER. Filter di komponen
-  // konsumer berdasarkan flag hasOrderSystemAccess (lib/order-system-gate).
-  {
-    label: 'ORDER SYSTEM',
-    requiresOrderSystem: true,
-    items: [
-      { label: 'Produk', href: '/products', icon: ShoppingCart },
-      { label: 'Form Order', href: '/order-forms', icon: FileText },
-      { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
-      { label: 'Rekening', href: '/bank-accounts', icon: Building2 },
-      { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
-      // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
-      // scraping mutasi BCA. Disclaimer & risk handling di halaman tujuan.
-      {
-        label: 'Auto Confirm (BETA)',
-        href: '/integrations/bank-mutation',
-        icon: Banknote,
-      },
-      // Follow-Up Order System (2026-05-08) — pesan otomatis ke customer
-      // berdasarkan event order + delay hari.
-      { label: 'Follow-Up', href: '/pesanan/follow-up', icon: BellRing },
-      {
-        label: 'Template Follow-Up',
-        href: '/pesanan/templates',
-        icon: FileText,
-      },
     ],
   },
 ]

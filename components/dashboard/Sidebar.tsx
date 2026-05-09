@@ -1,13 +1,15 @@
 'use client'
 
 // Sidebar utama dashboard — light theme.
-// Menu di-grup berdasarkan kategori (PRODUKTIVITAS, LAPORAN, AKUN). Section
-// header tipis di atas tiap grup biar mudah dipindai. Sumber data dari
-// lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
+// Menu di-grup berdasarkan kategori (CHAT & CS, ORDER SYSTEM, LANDING PAGE,
+// INTEGRASI, LAPORAN, AKUN). Section header tipis di atas tiap grup. Group
+// bisa di-collapse via chevron — state persist di localStorage. Sumber data
+// dari lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
 // dengan Drawer mobile.
-import { MessageCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, MessageCircle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
 import {
@@ -16,6 +18,8 @@ import {
   filterGroupsByOrderSystem,
 } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
+
+const COLLAPSED_GROUPS_KEY = 'hulao.sidebar.collapsed'
 
 interface SidebarProps {
   className?: string
@@ -38,9 +42,47 @@ export function Sidebar({
     hasOrderSystemAccess,
   )
 
+  // Collapsed state per group label, persist ke localStorage. Default semua
+  // expanded. Group yang punya item active otomatis di-force expand supaya
+  // user tidak bingung kenapa link aktif tidak terlihat.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(COLLAPSED_GROUPS_KEY)
+      if (raw) {
+        const arr = JSON.parse(raw)
+        if (Array.isArray(arr)) setCollapsed(new Set(arr))
+      }
+    } catch {
+      /* abaikan corrupt state */
+    }
+  }, [])
+
+  function toggleGroup(label: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(label)) next.delete(label)
+      else next.add(label)
+      try {
+        window.localStorage.setItem(
+          COLLAPSED_GROUPS_KEY,
+          JSON.stringify([...next]),
+        )
+      } catch {
+        /* abaikan */
+      }
+      return next
+    })
+  }
+
   function isActive(href: string): boolean {
     if (!pathname) return false
     return pathname === href || pathname.startsWith(href + '/')
+  }
+
+  function groupHasActive(items: { href: string }[]): boolean {
+    return items.some((it) => isActive(it.href))
   }
 
   return (
@@ -76,27 +118,43 @@ export function Sidebar({
           </li>
         </ul>
 
-        {/* Grup */}
-        {groups.map((group) => (
-          <div key={group.label} className="mt-4">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-warm-400">
-              {group.label}
-            </p>
-            <ul className="space-y-1">
-              {group.items.map((it) => (
-                <li key={it.href}>
-                  <SidebarLink
-                    href={it.href}
-                    label={it.label}
-                    Icon={it.icon}
-                    active={isActive(it.href)}
-                    onClick={onNavigate}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        {/* Grup — collapsible via chevron. Force-expand kalau ada item active. */}
+        {groups.map((group) => {
+          const hasActive = groupHasActive(group.items)
+          const isCollapsed = collapsed.has(group.label) && !hasActive
+          return (
+            <div key={group.label} className="mt-4">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                className="group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider text-warm-400 transition-colors hover:text-warm-600"
+                title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
+              >
+                <span>{group.label}</span>
+                {isCollapsed ? (
+                  <ChevronRight className="size-3 opacity-60 group-hover:opacity-100" />
+                ) : (
+                  <ChevronDown className="size-3 opacity-60 group-hover:opacity-100" />
+                )}
+              </button>
+              {!isCollapsed && (
+                <ul className="space-y-1">
+                  {group.items.map((it) => (
+                    <li key={it.href}>
+                      <SidebarLink
+                        href={it.href}
+                        label={it.label}
+                        Icon={it.icon}
+                        active={isActive(it.href)}
+                        onClick={onNavigate}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })}
       </nav>
 
       {/* Saldo Token — warna & label adaptif sesuai level saldo */}
