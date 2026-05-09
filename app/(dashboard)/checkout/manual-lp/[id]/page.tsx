@@ -45,7 +45,7 @@ export default async function ManualLpCheckoutPage({
     <div className="mx-auto flex h-full max-w-3xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-          <Link href="/landing-pages/upgrade">
+          <Link href="/pricing">
             <ArrowLeft className="mr-2 size-4" />
             Kembali ke Pilih Paket
           </Link>

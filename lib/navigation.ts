@@ -108,7 +108,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
     label: 'LANDING PAGE',
     items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
-      { label: 'Upgrade LP', href: '/landing-pages/upgrade', icon: TrendingUp },
+      { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
     ],
   },
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System

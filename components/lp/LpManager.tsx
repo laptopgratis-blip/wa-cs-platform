@@ -175,7 +175,7 @@ export function LpManager() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/landing-pages/upgrade">
+            <Link href="/pricing">
               <Sparkles className="mr-2 size-4 text-primary-500" />
               Upgrade Paket
             </Link>
@@ -215,7 +215,7 @@ export function LpManager() {
               size="sm"
               className="bg-amber-600 text-white hover:bg-amber-700"
             >
-              <Link href="/landing-pages/upgrade">Upgrade Sekarang</Link>
+              <Link href="/pricing">Upgrade Sekarang</Link>
             </Button>
           </CardContent>
         </Card>

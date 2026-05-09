@@ -289,7 +289,7 @@ export function LpPackagesManager() {
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Paket LP' : 'Tambah Paket LP'}</SheetTitle>
             <SheetDescription>
-              Paket ini muncul di halaman /landing-pages/upgrade.
+              Paket ini muncul di halaman /pricing (subscription LP via token).
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 py-3">

@@ -48,7 +48,7 @@ export async function GET(req: Request, { params }: Params) {
   const tier = lp.user.lpQuota?.tier ?? 'FREE'
   if (tier !== 'POWER') {
     return jsonError(
-      'LP Lab hanya tersedia untuk paket POWER. Upgrade dulu di /landing-pages/upgrade',
+      'LP Lab hanya tersedia untuk paket POWER. Upgrade dulu di /pricing',
       403,
     )
   }

@@ -168,7 +168,7 @@ export function LpLabClient({ lp, tier }: Props) {
                 asChild
                 className="bg-amber-600 text-white hover:bg-amber-700"
               >
-                <Link href="/landing-pages/upgrade">
+                <Link href="/pricing">
                   Upgrade ke POWER
                 </Link>
               </Button>
