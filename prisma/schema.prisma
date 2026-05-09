@@ -2426,6 +2426,38 @@ model StudentSession {
   @@index([expiresAt]) // cron cleanup expired
 }
 
+// Magic link login — alternatif ke OTP. Token persistent multi-use TTL 90
+// hari. Digunakan saat enrollment auto-flow on-PAID atau resend manual oleh
+// student. Tiap klik = create StudentSession baru. Aman karena (a) token
+// random 32 byte, (b) auto-revoke saat issue baru utk phone yg sama.
+//
+// Why: Baileys WA session admin bisa disconnect → OTP gagal sampai. Magic
+// link 1x kirim → student simpan/bookmark → bisa re-login tanpa OTP berulang.
+model StudentMagicLink {
+  id            String    @id @default(cuid())
+  studentPhone  String
+  // Token random 32-byte hex — value di URL ?t=...
+  token         String    @unique
+  // Hard expiry. Setelah lewat, klik link dapat error "expired".
+  expiresAt     DateTime
+  // Pertama kali link di-klik. Null = belum pernah dipakai.
+  consumedAt    DateTime?
+  // Counter total klik untuk audit. Dipakai juga utk monitoring kalau token
+  // bocor (akses dari banyak IP/device beda dlm waktu pendek).
+  useCount      Int       @default(0)
+  // "WA" | "EMAIL" — channel pengiriman primary saat issue (audit only,
+  // bukan enforcement). WA bisa fallback ke EMAIL.
+  channel       String
+  // "ENROLLMENT" (auto saat order PAID) | "RESEND" (request manual student)
+  trigger       String
+  // Saat token lebih baru di-issue utk phone yg sama, mark old revoked.
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([studentPhone, revokedAt])
+  @@index([expiresAt])
+}
+
 // OTP request — temporary record untuk phone yg request OTP. 6-digit kode
 // di-hash supaya tidak bocor walau DB dump. Verify dgn timingSafeEqual.
 // Throttle: max 3 OTP per phone per 60 menit (di-enforce di service).

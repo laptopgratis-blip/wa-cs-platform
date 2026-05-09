@@ -119,6 +119,56 @@ export async function sendManualPaymentConfirmedEmail(ctx: ManualPaymentEmailCon
   })
 }
 
+interface StudentMagicLinkEmailContext {
+  email: string
+  magicUrl: string
+  studentName?: string | null
+  courseTitle?: string
+}
+
+// Magic link login portal student — alternatif OTP WA. Subject ringkas
+// supaya tidak masuk spam. Body include link big-button + plain URL fallback.
+export async function sendStudentMagicLinkEmail(
+  ctx: StudentMagicLinkEmailContext,
+): Promise<void> {
+  const transporter = getTransporter()
+  const greet = ctx.studentName ? `Halo ${ctx.studentName},` : 'Halo,'
+  const courseLine = ctx.courseTitle
+    ? `Akses untuk <strong>${ctx.courseTitle}</strong> sudah aktif.`
+    : `Akses portal belajar Hulao kamu sudah siap.`
+  const subject = ctx.courseTitle
+    ? `Akses kelas: ${ctx.courseTitle} — Hulao`
+    : 'Akses portal belajar — Hulao'
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f1f1f;">
+      <h2 style="color: #ea580c; margin-bottom: 16px;">Login Portal Belajar</h2>
+      <p>${greet}</p>
+      <p>${courseLine}</p>
+      <p>Klik tombol di bawah untuk langsung masuk ke portal — tidak perlu OTP:</p>
+      <p style="margin: 24px 0;">
+        <a href="${ctx.magicUrl}"
+           style="display: inline-block; background: #ea580c; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Masuk Sekarang
+        </a>
+      </p>
+      <p style="font-size: 14px; color: #666;">Atau copy URL ini ke browser:<br/><span style="word-break: break-all;">${ctx.magicUrl}</span></p>
+      <p style="font-size: 14px; color: #666;">Link berlaku 90 hari, simpan supaya bisa dipakai lagi nanti tanpa OTP.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="font-size: 12px; color: #999;">Hulao Belajar — Email otomatis, jangan dibalas. Kalau bukan kamu yang request, abaikan email ini.</p>
+    </div>
+  `
+  await transporter.sendMail({
+    from: defaultFrom(),
+    to: ctx.email,
+    subject,
+    html,
+    text:
+      `${greet}\n\n${ctx.courseTitle ? `Akses untuk ${ctx.courseTitle} sudah aktif.` : 'Akses portal belajar Hulao kamu sudah siap.'}\n\n` +
+      `Klik link ini untuk langsung masuk (berlaku 90 hari):\n${ctx.magicUrl}\n\n` +
+      `Kalau bukan kamu yang request, abaikan email ini.`,
+  })
+}
+
 interface ManualPaymentRejectedContext extends ManualPaymentEmailContext {
   reason: string
 }

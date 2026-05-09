@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2, MessageCircle, ShieldCheck } from 'lucide-react'
+import { Loader2, Mail, MessageCircle, ShieldCheck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -19,6 +19,10 @@ export function LoginForm() {
   const [otp, setOtp] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [info, setInfo] = useState<string | null>(null)
+  // Magic-link via email — input muncul kalau backend return "email tidak ditemukan".
+  const [showEmailInput, setShowEmailInput] = useState(false)
+  const [email, setEmail] = useState('')
+  const [magicLoading, setMagicLoading] = useState(false)
 
   async function requestOtp(e: React.FormEvent) {
     e.preventDefault()
@@ -65,14 +69,50 @@ export function LoginForm() {
         return
       }
       toast.success('Login berhasil')
-      // Reload halaman supaya server component re-fetch dgn cookie baru.
       router.refresh()
-      // Fallback hard reload kalau refresh tidak trigger.
       setTimeout(() => {
         window.location.reload()
       }, 300)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function sendMagicViaEmail() {
+    if (!phone.trim()) {
+      toast.error('Isi nomor WA dulu')
+      return
+    }
+    setMagicLoading(true)
+    try {
+      const body: { phone: string; channel: 'EMAIL'; email?: string } = {
+        phone: phone.trim(),
+        channel: 'EMAIL',
+      }
+      if (email.trim()) body.email = email.trim()
+
+      const res = await fetch('/api/lms/auth/magic/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        const msg = json.error || json.message || 'Gagal kirim email'
+        // Trigger input email manual kalau backend bilang email belum diketahui.
+        if (msg.toLowerCase().includes('email tidak ditemukan')) {
+          setShowEmailInput(true)
+          toast.error('Masukkan email yang dipakai saat order')
+          return
+        }
+        toast.error(msg)
+        return
+      }
+      toast.success(json.data?.message ?? 'Link login dikirim ke email')
+      setInfo(json.data?.message ?? 'Cek email kamu — link login sudah dikirim.')
+      setShowEmailInput(false)
+    } finally {
+      setMagicLoading(false)
     }
   }
 
@@ -108,6 +148,14 @@ export function LoginForm() {
               )}
               Kirim OTP via WhatsApp
             </Button>
+
+            <EmailMagicSection
+              show={showEmailInput}
+              email={email}
+              onEmail={setEmail}
+              loading={magicLoading}
+              onSend={sendMagicViaEmail}
+            />
           </form>
         ) : (
           <form className="space-y-4" onSubmit={verifyOtp}>
@@ -159,9 +207,69 @@ export function LoginForm() {
                 Verifikasi &amp; Masuk
               </Button>
             </div>
+
+            <EmailMagicSection
+              show={showEmailInput}
+              email={email}
+              onEmail={setEmail}
+              loading={magicLoading}
+              onSend={sendMagicViaEmail}
+            />
           </form>
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function EmailMagicSection({
+  show,
+  email,
+  onEmail,
+  loading,
+  onSend,
+}: {
+  show: boolean
+  email: string
+  onEmail: (v: string) => void
+  loading: boolean
+  onSend: () => void
+}) {
+  return (
+    <div className="border-t border-warm-200 pt-4">
+      <div className="mb-2 text-center text-[11px] uppercase tracking-wide text-warm-400">
+        atau
+      </div>
+      {show && (
+        <div className="mb-2 space-y-1.5">
+          <Label htmlFor="email">Email saat order</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => onEmail(e.target.value)}
+            placeholder="kamu@email.com"
+          />
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={loading}
+        onClick={onSend}
+        className="w-full"
+      >
+        {loading ? (
+          <Loader2 className="mr-2 size-4 animate-spin" />
+        ) : (
+          <Mail className="mr-2 size-4" />
+        )}
+        Kirim link login ke Email
+      </Button>
+      <p className="mt-1.5 text-[11px] text-warm-500">
+        Klik link di email = langsung masuk, tanpa OTP. Cocok kalau WhatsApp
+        sedang error.
+      </p>
+    </div>
   )
 }

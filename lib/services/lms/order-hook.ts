@@ -9,10 +9,13 @@
 // Idempotent: aman kalau dipanggil 2x untuk order yg sama (upsert ke
 // (courseId, studentPhone) unique). Kegagalan tidak boleh blok flow utama
 // — wrap caller dgn try/catch + log, jangan throw.
+import { sendStudentMagicLinkEmail } from '@/lib/email'
 import { prisma } from '@/lib/prisma'
 import { waService } from '@/lib/wa-service'
 
 import { upsertEnrollment } from './enrollment'
+import { issueMagicLink } from './student-magic'
+import { sendMagicLinkViaWa } from './wa-magic-sender'
 
 const PORTAL_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? 'https://hulao.id'
@@ -29,39 +32,81 @@ async function findAdminWaSessionId(): Promise<string | null> {
 async function sendCourseAccessNotif(input: {
   studentPhone: string
   studentName: string | null
+  studentEmail: string | null
   courseTitle: string
   courseSlug: string
 }): Promise<void> {
-  const adminSessionId = await findAdminWaSessionId()
-  if (!adminSessionId) {
-    console.warn(
-      `[lms-hook] WA admin session tidak CONNECTED — skip notif akses untuk ${input.studentPhone} (${input.courseTitle})`,
-    )
-    return
+  // Issue magic link sekali — dipakai untuk WA & Email body. skipThrottle
+  // karena trigger=ENROLLMENT (sistem-issued, bukan user-driven). Token
+  // multi-use 90 hari, jadi student bisa simpan/bookmark.
+  let magicUrl: string | null = null
+  try {
+    const link = await issueMagicLink({
+      phoneRaw: input.studentPhone,
+      channel: 'WA',
+      trigger: 'ENROLLMENT',
+      skipThrottle: true,
+    })
+    magicUrl = link.url
+  } catch (err) {
+    console.error(`[lms-hook] gagal issue magic link:`, err)
   }
-  const greeting = input.studentName ? `Halo ${input.studentName}!` : 'Halo!'
-  const text = [
-    `*Akses Course Aktif 🎓*`,
-    '',
-    greeting,
-    `Pembayaran kamu untuk *${input.courseTitle}* sudah dikonfirmasi.`,
-    '',
-    `Buka akses sekarang:`,
-    `${PORTAL_URL}/belajar`,
-    '',
-    `Login pakai nomor WA ini lewat OTP — kamu akan langsung lihat course-nya.`,
-    '',
-    `_— Hulao Belajar_`,
-  ].join('\n')
-  const send = await waService.sendMessage(
-    adminSessionId,
-    input.studentPhone,
-    text,
-  )
-  if (!send.success) {
+
+  // Primary channel: WA. Pakai sender khusus magic supaya body include link
+  // auto-login (bukan link manual ke /belajar yg butuh OTP).
+  let waDelivered = false
+  if (magicUrl) {
+    const sendWa = await sendMagicLinkViaWa({
+      studentPhone: input.studentPhone,
+      magicUrl,
+      courseTitle: input.courseTitle,
+      studentName: input.studentName,
+    })
+    waDelivered = sendWa.delivered
+  } else {
+    // Fallback ke notif lama (no magic link) kalau token gagal di-issue —
+    // student bisa login manual lewat OTP.
+    const adminSessionId = await findAdminWaSessionId()
+    if (adminSessionId) {
+      const greeting = input.studentName ? `Halo ${input.studentName}!` : 'Halo!'
+      const text = [
+        `*Akses Course Aktif 🎓*`,
+        '',
+        greeting,
+        `Pembayaran kamu untuk *${input.courseTitle}* sudah dikonfirmasi.`,
+        '',
+        `Buka akses di ${PORTAL_URL}/belajar — login pakai nomor WA ini lewat OTP.`,
+        '',
+        `_— Hulao Belajar_`,
+      ].join('\n')
+      const send = await waService.sendMessage(
+        adminSessionId,
+        input.studentPhone,
+        text,
+      )
+      waDelivered = send.success
+    }
+  }
+
+  // Email fallback: kirim kalau (a) WA gagal sampai DAN (b) email tersedia.
+  // Bukan dual-send untuk hemat SMTP — hanya recovery channel.
+  if (!waDelivered && input.studentEmail && magicUrl) {
+    try {
+      await sendStudentMagicLinkEmail({
+        email: input.studentEmail,
+        studentName: input.studentName,
+        magicUrl,
+        courseTitle: input.courseTitle,
+      })
+      console.warn(
+        `[lms-hook] WA gagal — magic link dikirim via email ke ${input.studentEmail} (${input.studentPhone})`,
+      )
+    } catch (err) {
+      console.error(`[lms-hook] email fallback gagal:`, err)
+    }
+  } else if (!waDelivered) {
     console.warn(
-      `[lms-hook] gagal kirim notif akses ke ${input.studentPhone}:`,
-      send.error,
+      `[lms-hook] WA gagal & tidak ada email fallback untuk ${input.studentPhone} — student perlu login manual via OTP saat WA pulih`,
     )
   }
 }
@@ -178,6 +223,7 @@ export async function triggerEnrollmentForOrder(
         void sendCourseAccessNotif({
           studentPhone: phone,
           studentName: order.customerName,
+          studentEmail: order.customerEmail,
           courseTitle: p.course.title,
           courseSlug: p.course.slug,
         }).catch((err) =>
