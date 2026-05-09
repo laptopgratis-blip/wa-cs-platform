@@ -214,6 +214,237 @@ export async function activateSubscription(subscriptionId: string): Promise<void
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// checkoutSubscriptionWithTokens — atomic checkout pakai saldo token.
+// Flow:
+//   1. Validate package + user + saldo cukup
+//   2. Hitung priceFinal IDR + token equivalent (snapshot pricePerToken)
+//   3. Resolve startDate (extend dari ACTIVE existing kalau plan sama)
+//   4. Atomic transaction:
+//      a. UPDATE TokenBalance balance >= cost (race-safe via WHERE clause)
+//      b. INSERT TokenTransaction (USAGE)
+//      c. INSERT Subscription ACTIVE (langsung, no PENDING)
+//      d. INSERT SubscriptionInvoice PAID (paymentMethod=TOKEN_BALANCE)
+//      e. UPDATE User.currentSubscriptionId/currentPlanExpiresAt
+//      f. UPSERT UserQuota tier+maxLp+maxStorageMB
+//   5. Trigger notifikasi (out of tx, best-effort)
+//
+// Kembalikan semua info yg dibutuhkan endpoint untuk respond ke client.
+// Throw error spesifik kalau:
+//   - Package tidak ada / inactive / priceMonthly=0
+//   - Saldo token tidak cukup (race-safe — kalau saldo turun di tengah, tx
+//     update count=0 dan kita rollback)
+// ─────────────────────────────────────────────────────────────────────────
+
+import {
+  calculateSubscriptionPriceFull,
+  generateInvoiceNumber,
+} from '@/lib/subscription-pricing'
+
+const DEFAULT_PRICE_PER_TOKEN_RP = 2
+
+export interface CheckoutWithTokensResult {
+  subscriptionId: string
+  invoiceId: string
+  invoiceNumber: string
+  packageName: string
+  durationMonths: number
+  priceIdr: number
+  tokenAmount: number
+  pricePerToken: number
+  startDate: Date
+  endDate: Date
+  remainingBalance: number
+}
+
+export async function checkoutSubscriptionWithTokens(input: {
+  userId: string
+  lpPackageId: string
+  durationMonths: number
+}): Promise<CheckoutWithTokensResult> {
+  const pkg = await prisma.lpUpgradePackage.findUnique({
+    where: { id: input.lpPackageId },
+  })
+  if (!pkg || !pkg.isActive) {
+    throw new Error('Paket tidak ditemukan atau tidak aktif')
+  }
+  if (pkg.priceMonthly <= 0) {
+    throw new Error('Paket ini belum bisa di-subscribe (harga belum disetel admin)')
+  }
+
+  // Pricing snapshot — pakai pricePerToken aktif saat checkout. Kalau setting
+  // belum ada (shouldn't happen di prod), pakai default 2.
+  const settings = await prisma.pricingSettings
+    .findFirst({ select: { pricePerToken: true } })
+    .catch(() => null)
+  const pricePerToken = settings?.pricePerToken ?? DEFAULT_PRICE_PER_TOKEN_RP
+
+  const calc = calculateSubscriptionPriceFull(
+    pkg.priceMonthly,
+    input.durationMonths,
+    pricePerToken,
+  )
+  const tokenCost = calc.priceFinalTokens
+
+  // Resolve startDate — kalau user punya subscription ACTIVE dgn plan sama,
+  // extend dari endDate existing. Kalau plan beda (upgrade) atau belum ada,
+  // mulai dari sekarang. Logic mirror activateSubscription supaya konsisten.
+  const existingActive = await prisma.subscription.findFirst({
+    where: {
+      userId: input.userId,
+      status: 'ACTIVE',
+      endDate: { gt: new Date() },
+    },
+    orderBy: { endDate: 'desc' },
+  })
+  const startDate =
+    existingActive && existingActive.lpPackageId === input.lpPackageId
+      ? existingActive.endDate
+      : new Date()
+  const endDate = addMonths(startDate, input.durationMonths)
+
+  const invoiceNumber = generateInvoiceNumber()
+  const description = `Subscription ${pkg.name} (${input.durationMonths} bulan)`
+
+  // Atomic — saldo cek + deduct + create subscription + invoice + activate quota.
+  // Pakai $transaction supaya kalau salah satu step gagal, semuanya rollback.
+  const result = await prisma.$transaction(async (tx) => {
+    // 1. Atomic deduct via WHERE balance >= cost. Kalau saldo turun di antara
+    //    preview dan checkout (user pakai token di tab lain), updateMany count=0.
+    const deduct = await tx.tokenBalance.updateMany({
+      where: {
+        userId: input.userId,
+        balance: { gte: tokenCost },
+      },
+      data: {
+        balance: { decrement: tokenCost },
+        totalUsed: { increment: tokenCost },
+      },
+    })
+    if (deduct.count === 0) {
+      // Throw special marker — caller convert ke error 402 dgn pesan ramah.
+      const err = new Error('INSUFFICIENT_TOKEN')
+      ;(err as Error & { code?: string }).code = 'INSUFFICIENT_TOKEN'
+      throw err
+    }
+
+    // 2. Create Subscription ACTIVE (langsung, no PENDING).
+    const sub = await tx.subscription.create({
+      data: {
+        userId: input.userId,
+        lpPackageId: pkg.id,
+        durationMonths: input.durationMonths,
+        startDate,
+        endDate,
+        status: 'ACTIVE',
+        priceBase: calc.priceBase,
+        discountPct: calc.discountPct,
+        priceFinal: calc.priceFinal,
+      },
+      select: { id: true },
+    })
+
+    // 3. Create SubscriptionInvoice PAID (paymentMethod=TOKEN_BALANCE).
+    const inv = await tx.subscriptionInvoice.create({
+      data: {
+        subscriptionId: sub.id,
+        invoiceNumber,
+        amount: calc.priceFinal,
+        uniqueCode: 0,
+        description,
+        status: 'PAID',
+        paidAt: new Date(),
+        paymentMethod: 'TOKEN_BALANCE',
+        tokenAmount: tokenCost,
+        // expiresAt — tidak relevan untuk TOKEN_BALANCE (langsung paid),
+        // tapi field NOT NULL di schema. Pakai endDate sebagai placeholder
+        // logis (invoice valid sampai subscription berakhir).
+        expiresAt: endDate,
+      },
+      select: { id: true },
+    })
+
+    // 4. Log TokenTransaction USAGE — reference invoice untuk audit trail.
+    await tx.tokenTransaction.create({
+      data: {
+        userId: input.userId,
+        amount: -tokenCost,
+        type: 'USAGE',
+        description: `LP Subscription: ${pkg.name} (${input.durationMonths} bln)`,
+        reference: inv.id,
+      },
+    })
+
+    // 5. Update User pointer ke subscription baru.
+    await tx.user.update({
+      where: { id: input.userId },
+      data: {
+        currentSubscriptionId: sub.id,
+        currentPlanExpiresAt: endDate,
+      },
+    })
+
+    // 6. Upgrade UserQuota tier+maxLp+maxStorageMB.
+    await tx.userQuota.upsert({
+      where: { userId: input.userId },
+      create: {
+        userId: input.userId,
+        tier: pkg.tier,
+        maxLp: pkg.maxLp,
+        maxStorageMB: pkg.maxStorageMB,
+      },
+      update: {
+        tier: pkg.tier,
+        maxLp: pkg.maxLp,
+        maxStorageMB: pkg.maxStorageMB,
+      },
+    })
+
+    // Read remaining balance untuk return ke caller.
+    const balanceRow = await tx.tokenBalance.findUnique({
+      where: { userId: input.userId },
+      select: { balance: true },
+    })
+
+    return {
+      subscriptionId: sub.id,
+      invoiceId: inv.id,
+      remainingBalance: balanceRow?.balance ?? 0,
+    }
+  })
+
+  // Notifikasi out of transaction — best-effort, jangan blokir aktivasi.
+  void createNotification({
+    userId: input.userId,
+    subscriptionId: result.subscriptionId,
+    type: 'PAYMENT_SUCCESS',
+    channel: 'IN_APP',
+    title: '✅ Subscription Aktif!',
+    message: `Plan ${pkg.name} (${input.durationMonths} bulan) sudah aktif sampai ${formatDateId(endDate)}. Dipotong ${tokenCost.toLocaleString('id-ID')} token dari saldo.`,
+    link: '/billing/subscription',
+  }).catch((err) => console.error('[subscription] notif gagal:', err))
+
+  void sendWaNotificationToUser(input.userId, {
+    title: 'Subscription Aktif',
+    message: `Plan ${pkg.name} aktif sampai ${formatDateId(endDate)}. Terima kasih sudah subscribe Hulao 🚀`,
+    subscriptionId: result.subscriptionId,
+  })
+
+  return {
+    subscriptionId: result.subscriptionId,
+    invoiceId: result.invoiceId,
+    invoiceNumber,
+    packageName: pkg.name,
+    durationMonths: input.durationMonths,
+    priceIdr: calc.priceFinal,
+    tokenAmount: tokenCost,
+    pricePerToken,
+    startDate,
+    endDate,
+    remainingBalance: result.remainingBalance,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // expireSubscription — endDate lewat → status EXPIRED, downgrade ke FREE.
 // Dipanggil cron daily /api/cron/subscription-expire.
 // ─────────────────────────────────────────────────────────────────────────

@@ -74,3 +74,46 @@ export function generateInvoiceNumber(): string {
 export function generateUniqueCode(): number {
   return 100 + Math.floor(Math.random() * 900)
 }
+
+// ─────────────────────────────────────────
+// TOKEN CONVERSION (subscription bayar pakai saldo token)
+// ─────────────────────────────────────────
+
+// Konversi IDR → token. Pakai pricePerToken aktif dari PricingSettings.
+// Ceil supaya platform tidak kehilangan margin akibat pembulatan ke bawah.
+// Contoh: priceFinal=200000, pricePerToken=2 → tokens=100000.
+export function convertIdrToTokens(
+  idr: number,
+  pricePerToken: number,
+): number {
+  if (!Number.isFinite(idr) || idr < 0) {
+    throw new Error('idr harus angka non-negatif')
+  }
+  if (!Number.isFinite(pricePerToken) || pricePerToken <= 0) {
+    throw new Error('pricePerToken harus angka positif')
+  }
+  return Math.ceil(idr / pricePerToken)
+}
+
+export interface PriceCalculationFull extends PriceCalculation {
+  // Token equivalent dari priceFinal pakai pricePerToken aktif. Snapshot ke
+  // SubscriptionInvoice.tokenAmount supaya audit historis akurat kalau
+  // pricePerToken berubah di kemudian hari.
+  priceFinalTokens: number
+  pricePerToken: number
+}
+
+// Variant yang sertakan token equivalent. Dipakai checkout + preview endpoint
+// + UI pricing supaya konsisten antara tampilan dan transaksi.
+export function calculateSubscriptionPriceFull(
+  priceMonthly: number,
+  durationMonths: number,
+  pricePerToken: number,
+): PriceCalculationFull {
+  const base = calculateSubscriptionPrice(priceMonthly, durationMonths)
+  return {
+    ...base,
+    pricePerToken,
+    priceFinalTokens: convertIdrToTokens(base.priceFinal, pricePerToken),
+  }
+}

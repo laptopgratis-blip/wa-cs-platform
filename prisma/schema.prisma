@@ -1094,15 +1094,21 @@ model SubscriptionInvoice {
   // PENDING | WAITING_CONFIRMATION | PAID | EXPIRED | CANCELLED
   paidAt DateTime?
 
-  paymentMethod String // TRIPAY | MANUAL_TRANSFER
+  paymentMethod String // TOKEN_BALANCE (current default) | TRIPAY | MANUAL_TRANSFER (legacy, grandfathered)
 
-  // Tripay fields (kalau paymentMethod=TRIPAY)
+  // Token payment (paymentMethod=TOKEN_BALANCE) — jumlah token yg dipotong
+  // dari saldo user saat checkout. Konversi dari amount IDR pakai
+  // PricingSettings.pricePerToken aktif saat checkout (di-snapshot supaya
+  // audit historis akurat kalau pricePerToken berubah).
+  tokenAmount Int?
+
+  // Tripay fields (paymentMethod=TRIPAY) — legacy, grandfathered.
   tripayReference   String?
   tripayMerchantRef String? @unique
   paymentUrl        String? @db.Text
   paymentChannel    String? // BCA_VA, BNI_VA, QRIS, OVO, etc
 
-  // Manual transfer fields (kalau paymentMethod=MANUAL_TRANSFER)
+  // Manual transfer fields (paymentMethod=MANUAL_TRANSFER) — legacy, grandfathered.
   manualProofUrl String? // /uploads/payment-proofs/<filename>
   manualNote     String?   @db.Text
   approvedBy     String? // userId admin yg approve

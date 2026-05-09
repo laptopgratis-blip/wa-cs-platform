@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/card'
 import {
   DURATION_DISCOUNTS,
-  calculateSubscriptionPrice,
+  calculateSubscriptionPriceFull,
+  convertIdrToTokens,
 } from '@/lib/subscription-pricing'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +39,12 @@ interface Props {
   packages: Pkg[]
   isLoggedIn: boolean
   currentTier: string | null
+  // Saldo token user — null kalau belum login. Dipakai untuk badge "saldo
+  // cukup" / "kurang X token" di tiap kartu.
+  currentBalance: number | null
+  // Konversi IDR → token. Snapshot dari PricingSettings.pricePerToken aktif
+  // saat page render. Default 2 (Rp 2/token).
+  pricePerToken: number
 }
 
 const TIER_ICON: Record<string, typeof Sparkles> = {
@@ -50,7 +57,11 @@ const TIER_ICON: Record<string, typeof Sparkles> = {
 const FAQ = [
   {
     q: 'Bagaimana cara berlangganan?',
-    a: 'Pilih plan yang cocok, pilih durasi (1/3/6/12 bulan), bayar via Tripay (BCA/QRIS/dll) atau transfer manual. Akun langsung aktif setelah pembayaran terkonfirmasi.',
+    a: 'Subscription LP dibayar pakai saldo token. Top-up token dulu di /billing (lewat Tripay BCA/QRIS/dll atau transfer manual), lalu pilih plan + durasi di /pricing. Token otomatis dipotong saat checkout dan akun langsung aktif — tidak perlu konfirmasi manual atau upload bukti transfer.',
+  },
+  {
+    q: 'Kenapa pakai token, bukan langsung transfer?',
+    a: 'Dengan token, user bisa upgrade/perpanjang LP kapan saja tanpa ribet input bukti transfer setiap kali. Token sama yang dipakai untuk AI reply, AI generate LP, dan optimasi LP — satu saldo untuk semua.',
   },
   {
     q: 'Apakah ada gratis trial?',
@@ -74,7 +85,13 @@ const FAQ = [
   },
 ]
 
-export function PricingView({ packages, isLoggedIn, currentTier }: Props) {
+export function PricingView({
+  packages,
+  isLoggedIn,
+  currentTier,
+  currentBalance,
+  pricePerToken,
+}: Props) {
   const router = useRouter()
   const [duration, setDuration] = useState<number>(1)
 
@@ -165,9 +182,23 @@ export function PricingView({ packages, isLoggedIn, currentTier }: Props) {
         />
 
         {packages.map((pkg) => {
-          const calc = calculateSubscriptionPrice(pkg.priceMonthly, duration)
+          const calc = calculateSubscriptionPriceFull(
+            pkg.priceMonthly,
+            duration,
+            pricePerToken,
+          )
           const monthly = Math.round(calc.priceFinal / duration)
+          const monthlyTokens = convertIdrToTokens(monthly, pricePerToken)
           const isCurrent = currentTier === pkg.tier
+          // Untuk badge "saldo cukup / kurang X" — hanya tampil kalau user
+          // sudah login (currentBalance != null). Public visitor lihat info
+          // token saja tanpa badge saldo.
+          const balanceStatus =
+            currentBalance != null
+              ? currentBalance >= calc.priceFinalTokens
+                ? ('sufficient' as const)
+                : ('insufficient' as const)
+              : null
           return (
             <PlanCard
               key={pkg.id}
@@ -189,20 +220,34 @@ export function PricingView({ packages, isLoggedIn, currentTier }: Props) {
                 'Custom Domain': pkg.tier !== 'STARTER',
                 'Hulao Branding': false,
               }}
-              priceLabel={`Rp ${calc.priceFinal.toLocaleString('id-ID')}`}
-              priceSubLabel={`≈ Rp ${monthly.toLocaleString('id-ID')}/bulan · ${duration} bulan`}
+              priceLabel={`${calc.priceFinalTokens.toLocaleString('id-ID')} token`}
+              priceSubLabel={`≈ ${monthlyTokens.toLocaleString('id-ID')} token/bulan · setara Rp ${calc.priceFinal.toLocaleString('id-ID')} (Rp ${monthly.toLocaleString('id-ID')}/bln)`}
               discountLabel={
                 durationConfig && durationConfig.discountPct > 0
                   ? `Hemat ${durationConfig.discountPct}%`
                   : undefined
               }
+              balanceStatus={balanceStatus}
+              shortageTokens={
+                balanceStatus === 'insufficient' && currentBalance != null
+                  ? calc.priceFinalTokens - currentBalance
+                  : undefined
+              }
               ctaLabel={
                 isCurrent
                   ? 'Plan Saat Ini'
-                  : `Pilih ${pkg.name}`
+                  : balanceStatus === 'insufficient'
+                    ? 'Top-up dulu'
+                    : `Pilih ${pkg.name}`
               }
               ctaDisabled={isCurrent}
-              onClick={() => handleSelect(pkg)}
+              onClick={() => {
+                if (balanceStatus === 'insufficient') {
+                  router.push('/billing')
+                  return
+                }
+                handleSelect(pkg)
+              }}
               highlight={pkg.isPopular}
             />
           )
@@ -244,6 +289,10 @@ interface PlanCardProps {
   priceLabel: string
   priceSubLabel?: string
   discountLabel?: string
+  // Saldo status — null kalau user belum login (no badge), 'sufficient' kalau
+  // saldo cukup, 'insufficient' kalau kurang (tampil shortageTokens).
+  balanceStatus?: 'sufficient' | 'insufficient' | null
+  shortageTokens?: number
   ctaLabel: string
   ctaDisabled?: boolean
   ctaHref?: string
@@ -259,6 +308,8 @@ function PlanCard({
   priceLabel,
   priceSubLabel,
   discountLabel,
+  balanceStatus,
+  shortageTokens,
   ctaLabel,
   ctaDisabled,
   ctaHref,
@@ -298,6 +349,22 @@ function PlanCard({
               className="mt-1 bg-amber-100 text-amber-700"
             >
               {discountLabel}
+            </Badge>
+          )}
+          {balanceStatus === 'sufficient' && (
+            <Badge
+              variant="secondary"
+              className="ml-2 mt-1 bg-emerald-100 text-emerald-700"
+            >
+              Saldo cukup
+            </Badge>
+          )}
+          {balanceStatus === 'insufficient' && shortageTokens != null && (
+            <Badge
+              variant="secondary"
+              className="ml-2 mt-1 bg-rose-100 text-rose-700"
+            >
+              Kurang {shortageTokens.toLocaleString('id-ID')} token
             </Badge>
           )}
         </div>

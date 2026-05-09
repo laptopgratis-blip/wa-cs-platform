@@ -30,19 +30,36 @@ export default async function PricingPage() {
 
   // Plan badge utk current user — supaya CTA bisa beda kalau sudah subscribe.
   let currentTier: string | null = null
+  let currentBalance: number | null = null
   if (session) {
-    const quota = await prisma.userQuota.findUnique({
-      where: { userId: session.user.id },
-      select: { tier: true },
-    })
+    const [quota, balance] = await Promise.all([
+      prisma.userQuota.findUnique({
+        where: { userId: session.user.id },
+        select: { tier: true },
+      }),
+      prisma.tokenBalance.findUnique({
+        where: { userId: session.user.id },
+        select: { balance: true },
+      }),
+    ])
     currentTier = quota?.tier ?? 'FREE'
+    currentBalance = balance?.balance ?? 0
   }
+
+  // pricePerToken aktif — dipakai PricingView untuk hitung token equivalent
+  // di tiap kartu plan. Default Rp 2/token kalau setting belum ada.
+  const settings = await prisma.pricingSettings
+    .findFirst({ select: { pricePerToken: true } })
+    .catch(() => null)
+  const pricePerToken = settings?.pricePerToken ?? 2
 
   return (
     <PricingView
       packages={packages}
       isLoggedIn={Boolean(session)}
       currentTier={currentTier}
+      currentBalance={currentBalance}
+      pricePerToken={pricePerToken}
     />
   )
 }

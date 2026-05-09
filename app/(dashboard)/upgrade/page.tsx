@@ -33,10 +33,8 @@ export default async function UpgradePage({ searchParams }: SearchParams) {
     ? initialDuration
     : 1
 
-  const bankAccount = await prisma.bankAccount.findFirst({
-    where: { isActive: true },
-  })
-
+  // Subscription DI-BAYAR DENGAN TOKEN — bank account tidak relevan lagi
+  // di flow checkout. (Bank account tetap ada di /billing untuk top-up token.)
   return (
     <UpgradeView
       pkg={{
@@ -49,15 +47,6 @@ export default async function UpgradePage({ searchParams }: SearchParams) {
         priceMonthly: pkg.priceMonthly,
       }}
       initialDuration={validDuration}
-      bankAccount={
-        bankAccount
-          ? {
-              bankName: bankAccount.bankName,
-              accountNumber: bankAccount.accountNumber,
-              accountName: bankAccount.accountName,
-            }
-          : null
-      }
     />
   )
 }

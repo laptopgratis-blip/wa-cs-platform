@@ -1,35 +1,34 @@
 'use client'
 
-// /upgrade — checkout flow 3 step:
-// Step 1: Konfirmasi pilihan (durasi, breakdown harga)
-// Step 2: Pilih payment method (Tripay / Manual Transfer)
-// Step 3: Instruksi pembayaran
+// /upgrade?plan=<lpPackageId>&duration=<months>
+// Single-step token checkout. Subscription LP DI-BAYAR DENGAN TOKEN saldo
+// (top-up token sendiri tetap pakai Tripay/Manual Transfer di /billing).
 //
-// Polling Tripay status setiap 5 detik. Manual transfer: form upload bukti.
+// Flow:
+//   1. Pilih durasi (1/3/6/12 bulan, badge diskon)
+//   2. Tampil cost breakdown: priceFinal IDR ↔ token equivalent + saldo
+//   3. Insufficient → CTA top-up. Sufficient → tombol "Bayar dengan Token"
+//   4. POST /api/subscription/checkout → instant ACTIVE → redirect ke billing
+//
+// Tidak ada step pembayaran/instruksi/upload bukti — semua atomic.
 import type { LpTier } from '@prisma/client'
 import {
-  ArrowRight,
-  Building2,
+  AlertCircle,
   CheckCircle2,
-  Copy,
-  CreditCard,
+  Coins,
   Loader2,
-  Upload,
+  ShieldCheck,
+  Sparkles,
+  Wallet,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  DURATION_DISCOUNTS,
-  calculateSubscriptionPrice,
-} from '@/lib/subscription-pricing'
+import { DURATION_DISCOUNTS } from '@/lib/subscription-pricing'
 import { cn } from '@/lib/utils'
 
 interface Pkg {
@@ -42,62 +41,76 @@ interface Pkg {
   priceMonthly: number
 }
 
-interface BankAccount {
-  bankName: string
-  accountNumber: string
-  accountName: string
+interface PreviewData {
+  package: {
+    id: string
+    name: string
+    tier: LpTier
+    maxLp: number
+    maxStorageMB: number
+    priceMonthly: number
+  }
+  durationMonths: number
+  discountPct: number
+  priceBase: number
+  discountAmount: number
+  priceIdr: number
+  tokenAmount: number
+  pricePerToken: number
+  currentBalance: number
+  sufficientBalance: boolean
+  shortageTokens: number
+}
+
+interface CheckoutResult {
+  subscriptionId: string
+  invoiceNumber: string
+  packageName: string
+  durationMonths: number
+  priceIdr: number
+  tokenAmount: number
+  endDate: string
+  remainingBalance: number
 }
 
 interface Props {
   pkg: Pkg
   initialDuration: number
-  bankAccount: BankAccount | null
 }
 
-// Tripay channels yg umum dipakai customer Indonesia. Subset dari list lengkap
-// supaya UI tidak overwhelming.
-const POPULAR_CHANNELS = [
-  { code: 'BCAVA', name: 'BCA Virtual Account' },
-  { code: 'BNIVA', name: 'BNI Virtual Account' },
-  { code: 'BRIVA', name: 'BRI Virtual Account' },
-  { code: 'MANDIRIVA', name: 'Mandiri Virtual Account' },
-  { code: 'QRIS', name: 'QRIS' },
-  { code: 'OVO', name: 'OVO' },
-  { code: 'DANA', name: 'DANA' },
-  { code: 'SHOPEEPAY', name: 'ShopeePay' },
-]
-
-interface CheckoutResult {
-  subscriptionId: string
-  invoiceId: string
-  invoiceNumber: string
-  paymentMethod: 'TRIPAY' | 'MANUAL_TRANSFER'
-  paymentUrl?: string
-  payCode?: string | null
-  paymentName?: string
-  amount: number
-  uniqueCode?: number
-  bank?: BankAccount | null
-  expiresAt: string
-  instructions?: string
-}
-
-type Step = 'confirm' | 'payment' | 'instructions'
-
-export function UpgradeView({ pkg, initialDuration, bankAccount }: Props) {
+export function UpgradeView({ pkg, initialDuration }: Props) {
   const router = useRouter()
-  const [step, setStep] = useState<Step>('confirm')
   const [duration, setDuration] = useState(initialDuration)
-  const [paymentMethod, setPaymentMethod] =
-    useState<'TRIPAY' | 'MANUAL_TRANSFER'>('TRIPAY')
-  const [tripayChannel, setTripayChannel] = useState('QRIS')
-  const [isSubmitting, setSubmitting] = useState(false)
-  const [checkout, setCheckout] = useState<CheckoutResult | null>(null)
+  const [preview, setPreview] = useState<PreviewData | null>(null)
+  const [loadingPreview, setLoadingPreview] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const calc = calculateSubscriptionPrice(pkg.priceMonthly, duration)
-  const durationConfig = DURATION_DISCOUNTS.find((d) => d.months === duration)
+  // Re-fetch preview tiap kali durasi berubah supaya cost breakdown akurat.
+  useEffect(() => {
+    let cancelled = false
+    setLoadingPreview(true)
+    fetch(
+      `/api/subscription/preview?lpPackageId=${encodeURIComponent(pkg.id)}&durationMonths=${duration}`,
+    )
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return
+        if (j.success && j.data) setPreview(j.data as PreviewData)
+        else toast.error(j.error || 'Gagal load preview harga')
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error(`Gagal load: ${(err as Error).message}`)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pkg.id, duration])
 
-  async function startCheckout() {
+  async function handleCheckout() {
+    if (!preview || !preview.sufficientBalance) return
     setSubmitting(true)
     try {
       const res = await fetch('/api/subscription/checkout', {
@@ -106,22 +119,23 @@ export function UpgradeView({ pkg, initialDuration, bankAccount }: Props) {
         body: JSON.stringify({
           lpPackageId: pkg.id,
           durationMonths: duration,
-          paymentMethod,
-          tripayChannel:
-            paymentMethod === 'TRIPAY' ? tripayChannel : undefined,
         }),
       })
       const json = (await res.json()) as {
         success: boolean
         data?: CheckoutResult
         error?: string
+        message?: string
       }
       if (!res.ok || !json.success || !json.data) {
-        toast.error(json.error || 'Gagal membuat invoice')
+        toast.error(json.message || json.error || 'Gagal aktivasi subscription')
         return
       }
-      setCheckout(json.data)
-      setStep('instructions')
+      const r = json.data
+      toast.success(
+        `${r.packageName} aktif! ${r.tokenAmount.toLocaleString('id-ID')} token dipotong, saldo ${r.remainingBalance.toLocaleString('id-ID')}.`,
+      )
+      router.push('/billing/subscription')
     } finally {
       setSubmitting(false)
     }
@@ -129,553 +143,228 @@ export function UpgradeView({ pkg, initialDuration, bankAccount }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
-      <header className="flex items-center justify-between">
+      <header className="space-y-1">
         <h1 className="font-display text-2xl font-extrabold">
           Upgrade ke {pkg.name}
         </h1>
-        <StepIndicator current={step} />
+        <p className="text-sm text-warm-600">
+          Bayar pakai saldo token. Aktivasi instan, tidak ada konfirmasi
+          manual atau upload bukti transfer.
+        </p>
       </header>
 
-      {step === 'confirm' && (
-        <ConfirmStep
-          pkg={pkg}
-          duration={duration}
-          setDuration={setDuration}
-          calc={calc}
-          discountPct={durationConfig?.discountPct ?? 0}
-          onNext={() => setStep('payment')}
-        />
-      )}
-
-      {step === 'payment' && (
-        <PaymentStep
-          paymentMethod={paymentMethod}
-          setPaymentMethod={setPaymentMethod}
-          tripayChannel={tripayChannel}
-          setTripayChannel={setTripayChannel}
-          bankAccount={bankAccount}
-          isSubmitting={isSubmitting}
-          onBack={() => setStep('confirm')}
-          onSubmit={startCheckout}
-        />
-      )}
-
-      {step === 'instructions' && checkout && (
-        <InstructionsStep
-          checkout={checkout}
-          onPaid={() => router.push('/billing/subscription')}
-        />
-      )}
-    </div>
-  )
-}
-
-function StepIndicator({ current }: { current: Step }) {
-  const steps: { id: Step; label: string }[] = [
-    { id: 'confirm', label: 'Konfirmasi' },
-    { id: 'payment', label: 'Pembayaran' },
-    { id: 'instructions', label: 'Bayar' },
-  ]
-  return (
-    <div className="flex items-center gap-1 text-xs">
-      {steps.map((s, i) => (
-        <div key={s.id} className="flex items-center gap-1">
-          <span
-            className={cn(
-              'rounded-full px-2 py-1 font-medium',
-              current === s.id
-                ? 'bg-primary-500 text-white'
-                : 'bg-muted text-muted-foreground',
+      <Card>
+        <CardContent className="space-y-5 p-6">
+          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+            <div className="flex items-center gap-2 text-purple-900">
+              <Sparkles className="size-4" />
+              <span className="font-semibold">Paket {pkg.name}</span>
+              <span className="rounded bg-purple-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-900">
+                {pkg.tier}
+              </span>
+            </div>
+            {pkg.description && (
+              <p className="mt-1 text-sm text-purple-800">{pkg.description}</p>
             )}
-          >
-            {i + 1}. {s.label}
-          </span>
-          {i < steps.length - 1 && (
-            <ArrowRight className="size-3 text-muted-foreground" />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ConfirmStep({
-  pkg,
-  duration,
-  setDuration,
-  calc,
-  discountPct,
-  onNext,
-}: {
-  pkg: Pkg
-  duration: number
-  setDuration: (n: number) => void
-  calc: ReturnType<typeof calculateSubscriptionPrice>
-  discountPct: number
-  onNext: () => void
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-5 p-6">
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">Plan dipilih</p>
-          <p className="font-display text-xl font-bold">
-            {pkg.name}{' '}
-            <span className="text-sm font-normal text-muted-foreground">
-              ({pkg.maxLp >= 999 ? 'Unlimited' : pkg.maxLp} LP ·{' '}
-              {pkg.maxStorageMB} MB storage)
-            </span>
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Durasi</Label>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {DURATION_DISCOUNTS.map((d) => (
-              <button
-                key={d.months}
-                type="button"
-                onClick={() => setDuration(d.months)}
-                className={cn(
-                  'rounded-lg border p-3 text-center text-sm transition-colors',
-                  duration === d.months
-                    ? 'border-primary-500 bg-primary-500/10'
-                    : 'border-border hover:border-primary-500/50',
-                )}
-              >
-                <div className="font-medium">{d.label}</div>
-                {d.discountPct > 0 && (
-                  <div className="text-[10px] text-amber-600">
-                    Hemat {d.discountPct}%
-                  </div>
-                )}
-              </button>
-            ))}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div className="flex items-center gap-1.5 text-purple-900">
+                <CheckCircle2 className="size-3.5" />
+                {pkg.maxLp} landing page
+              </div>
+              <div className="flex items-center gap-1.5 text-purple-900">
+                <CheckCircle2 className="size-3.5" />
+                {pkg.maxStorageMB} MB storage
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-2 rounded-lg border bg-muted/30 p-4 font-mono text-sm">
-          <Row
-            label={`Plan ${pkg.name} × ${duration} bulan`}
-            value={`Rp ${calc.priceBase.toLocaleString('id-ID')}`}
-          />
-          {discountPct > 0 && (
-            <Row
-              label={`Diskon ${discountPct}%`}
-              value={`-Rp ${calc.discountAmount.toLocaleString('id-ID')}`}
-              negative
-            />
-          )}
-          <hr className="my-2 border-border" />
-          <Row
-            label="Total"
-            value={`Rp ${calc.priceFinal.toLocaleString('id-ID')}`}
-            bold
-          />
-        </div>
-
-        <Button onClick={onNext} className="w-full">
-          Lanjut ke Pembayaran
-          <ArrowRight className="ml-2 size-4" />
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-function Row({
-  label,
-  value,
-  bold,
-  negative,
-}: {
-  label: string
-  value: string
-  bold?: boolean
-  negative?: boolean
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className={cn(bold && 'font-bold')}>{label}</span>
-      <span
-        className={cn(
-          bold && 'font-bold',
-          negative && 'text-emerald-600',
-        )}
-      >
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function PaymentStep({
-  paymentMethod,
-  setPaymentMethod,
-  tripayChannel,
-  setTripayChannel,
-  bankAccount,
-  isSubmitting,
-  onBack,
-  onSubmit,
-}: {
-  paymentMethod: 'TRIPAY' | 'MANUAL_TRANSFER'
-  setPaymentMethod: (m: 'TRIPAY' | 'MANUAL_TRANSFER') => void
-  tripayChannel: string
-  setTripayChannel: (c: string) => void
-  bankAccount: BankAccount | null
-  isSubmitting: boolean
-  onBack: () => void
-  onSubmit: () => void
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-5 p-6">
-        <Tabs
-          value={paymentMethod}
-          onValueChange={(v) => setPaymentMethod(v as typeof paymentMethod)}
-        >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="TRIPAY">
-              <CreditCard className="mr-2 size-4" />
-              Online (Tripay)
-            </TabsTrigger>
-            <TabsTrigger value="MANUAL_TRANSFER">
-              <Building2 className="mr-2 size-4" />
-              Transfer Manual
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="TRIPAY" className="space-y-3 pt-4">
-            <p className="text-sm text-muted-foreground">
-              Bayar otomatis via VA bank, QRIS, atau e-wallet. Status
-              langsung ter-update di akun setelah bayar.
-            </p>
-            <Label>Pilih channel</Label>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {POPULAR_CHANNELS.map((ch) => (
+          {/* Pilih durasi */}
+          <div>
+            <label className="mb-2 block text-sm font-semibold">
+              Durasi subscription
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {DURATION_DISCOUNTS.map((d) => (
                 <button
-                  key={ch.code}
+                  key={d.months}
                   type="button"
-                  onClick={() => setTripayChannel(ch.code)}
+                  onClick={() => setDuration(d.months)}
                   className={cn(
-                    'rounded-lg border p-3 text-left text-sm transition-colors',
-                    tripayChannel === ch.code
-                      ? 'border-primary-500 bg-primary-500/10'
-                      : 'border-border hover:border-primary-500/50',
+                    'rounded-lg border-2 p-3 text-left transition',
+                    duration === d.months
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-warm-200 bg-white hover:border-warm-300',
                   )}
                 >
-                  {ch.name}
+                  <div className="text-sm font-bold">{d.label}</div>
+                  {d.badge && (
+                    <div className="mt-0.5 text-[10px] font-medium text-emerald-700">
+                      {d.badge}
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
-          </TabsContent>
+          </div>
 
-          <TabsContent value="MANUAL_TRANSFER" className="space-y-3 pt-4">
-            <p className="text-sm text-muted-foreground">
-              Transfer ke rekening Hulao, lalu upload bukti transfer. Admin
-              akan konfirmasi maksimal 1×24 jam.
-            </p>
-            {bankAccount ? (
-              <div className="rounded-lg border bg-muted/30 p-4 text-sm">
-                <div>
-                  <strong>{bankAccount.bankName}</strong>
+          {/* Cost breakdown */}
+          {loadingPreview && !preview ? (
+            <div className="flex items-center justify-center gap-2 rounded-lg border border-warm-200 bg-white p-6 text-sm text-warm-500">
+              <Loader2 className="size-4 animate-spin" />
+              Memuat estimasi...
+            </div>
+          ) : preview ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm">
+                <div className="font-semibold text-warm-900">
+                  Rincian biaya
                 </div>
-                <div className="mt-1 font-mono">
-                  {bankAccount.accountNumber}
-                </div>
-                <div className="text-muted-foreground">
-                  a/n {bankAccount.accountName}
+                <ul className="mt-2 space-y-1 text-xs text-warm-700">
+                  <li className="flex justify-between">
+                    <span>
+                      {pkg.priceMonthly.toLocaleString('id-ID')} × {duration}{' '}
+                      bulan
+                    </span>
+                    <span className="tabular-nums">
+                      Rp {preview.priceBase.toLocaleString('id-ID')}
+                    </span>
+                  </li>
+                  {preview.discountPct > 0 && (
+                    <li className="flex justify-between text-emerald-700">
+                      <span>Diskon durasi {preview.discountPct}%</span>
+                      <span className="tabular-nums">
+                        − Rp {preview.discountAmount.toLocaleString('id-ID')}
+                      </span>
+                    </li>
+                  )}
+                  <li className="flex justify-between border-t border-warm-200 pt-1 font-semibold text-warm-900">
+                    <span>Total IDR</span>
+                    <span className="tabular-nums">
+                      Rp {preview.priceIdr.toLocaleString('id-ID')}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <div
+                className={cn(
+                  'rounded-lg border-2 p-4',
+                  preview.sufficientBalance
+                    ? 'border-emerald-300 bg-emerald-50'
+                    : 'border-rose-300 bg-rose-50',
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      'mt-0.5 rounded-lg p-2',
+                      preview.sufficientBalance
+                        ? 'bg-emerald-200 text-emerald-900'
+                        : 'bg-rose-200 text-rose-900',
+                    )}
+                  >
+                    <Coins className="size-4" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xs font-medium uppercase tracking-wide text-warm-600">
+                      Akan dipotong dari saldo
+                    </div>
+                    <div className="font-mono text-2xl font-bold tabular-nums text-warm-900">
+                      {preview.tokenAmount.toLocaleString('id-ID')} token
+                    </div>
+                    <div className="mt-1 text-xs text-warm-600">
+                      Konversi 1 token = Rp{' '}
+                      {preview.pricePerToken.toLocaleString('id-ID')} (kurs
+                      platform)
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2 text-sm">
+                      <Wallet className="size-3.5" />
+                      <span className="text-warm-700">Saldo kamu:</span>
+                      <span className="font-mono font-bold tabular-nums">
+                        {preview.currentBalance.toLocaleString('id-ID')} token
+                      </span>
+                    </div>
+
+                    {preview.sufficientBalance ? (
+                      <div className="mt-1 text-xs text-emerald-700">
+                        Setelah aktivasi:{' '}
+                        <span className="font-mono font-semibold tabular-nums">
+                          {(
+                            preview.currentBalance - preview.tokenAmount
+                          ).toLocaleString('id-ID')}{' '}
+                          token
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex items-start gap-2 text-xs text-rose-900">
+                        <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                        <span>
+                          Kurang{' '}
+                          <strong>
+                            {preview.shortageTokens.toLocaleString('id-ID')}{' '}
+                            token
+                          </strong>{' '}
+                          (~Rp{' '}
+                          {(
+                            preview.shortageTokens * preview.pricePerToken
+                          ).toLocaleString('id-ID')}
+                          ).{' '}
+                          <Link
+                            href="/billing"
+                            className="font-semibold underline"
+                          >
+                            Top-up token sekarang →
+                          </Link>
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            ) : (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Belum ada rekening bank aktif. Hubungi admin atau pilih
-                Tripay.
-              </p>
-            )}
-          </TabsContent>
-        </Tabs>
 
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>
-            Kembali
-          </Button>
-          <Button
-            onClick={onSubmit}
-            disabled={
-              isSubmitting ||
-              (paymentMethod === 'MANUAL_TRANSFER' && !bankAccount)
-            }
-            className="flex-1"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Memproses...
-              </>
-            ) : (
-              'Lanjut ke Pembayaran'
-            )}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function InstructionsStep({
-  checkout,
-  onPaid,
-}: {
-  checkout: CheckoutResult
-  onPaid: () => void
-}) {
-  if (checkout.paymentMethod === 'TRIPAY') {
-    return <TripayInstructions checkout={checkout} onPaid={onPaid} />
-  }
-  return <ManualInstructions checkout={checkout} onPaid={onPaid} />
-}
-
-function TripayInstructions({
-  checkout,
-  onPaid,
-}: {
-  checkout: CheckoutResult
-  onPaid: () => void
-}) {
-  const [status, setStatus] = useState<'PENDING' | 'PAID' | 'EXPIRED'>(
-    'PENDING',
-  )
-  const pollerRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Poll status invoice setiap 5 detik. Stop saat PAID/EXPIRED.
-  useEffect(() => {
-    let aborted = false
-    async function check() {
-      try {
-        const res = await fetch('/api/subscription/current')
-        const json = (await res.json()) as {
-          success: boolean
-          data?: { subscription: { id: string; status: string } | null }
-        }
-        if (
-          !aborted &&
-          json.success &&
-          json.data?.subscription?.id === checkout.subscriptionId &&
-          json.data.subscription.status === 'ACTIVE'
-        ) {
-          setStatus('PAID')
-          if (pollerRef.current) clearInterval(pollerRef.current)
-          toast.success('Pembayaran sukses!')
-          setTimeout(onPaid, 1500)
-        }
-      } catch {
-        /* ignore network blip */
-      }
-    }
-    pollerRef.current = setInterval(check, 5000)
-    return () => {
-      aborted = true
-      if (pollerRef.current) clearInterval(pollerRef.current)
-    }
-  }, [checkout.subscriptionId, onPaid])
-
-  function copyPayCode() {
-    if (!checkout.payCode) return
-    void navigator.clipboard.writeText(checkout.payCode)
-    toast.success('Kode bayar disalin')
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-4 p-6">
-        <div className="flex items-center gap-2">
-          {status === 'PAID' ? (
-            <CheckCircle2 className="size-5 text-emerald-500" />
-          ) : (
-            <Loader2 className="size-5 animate-spin text-primary-500" />
-          )}
-          <span className="font-medium">
-            {status === 'PAID'
-              ? 'Pembayaran Diterima!'
-              : 'Menunggu Pembayaran...'}
-          </span>
-        </div>
-
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="text-sm text-muted-foreground">Total Bayar</div>
-          <div className="font-display text-2xl font-extrabold">
-            Rp {checkout.amount.toLocaleString('id-ID')}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Invoice {checkout.invoiceNumber} · {checkout.paymentName}
-          </div>
-        </div>
-
-        {checkout.payCode && (
-          <div className="space-y-2">
-            <Label>Kode Bayar / Virtual Account</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                readOnly
-                value={checkout.payCode}
-                className="font-mono"
-              />
-              <Button variant="outline" size="icon" onClick={copyPayCode}>
-                <Copy className="size-4" />
-              </Button>
+              <div className="flex items-start gap-2 rounded-lg border border-warm-200 bg-white p-3 text-xs text-warm-600">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+                <span>
+                  Aktivasi instan setelah konfirmasi. Akses fitur premium aktif{' '}
+                  {duration === 1
+                    ? '1 bulan'
+                    : duration === 12
+                      ? '1 tahun'
+                      : `${duration} bulan`}{' '}
+                  sejak sekarang. Sesuai policy SaaS, token tidak di-refund
+                  kalau cancel di tengah periode.
+                </span>
+              </div>
             </div>
-          </div>
-        )}
+          ) : null}
 
-        {checkout.paymentUrl && (
-          <Button asChild className="w-full">
-            <a
-              href={checkout.paymentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Buka Halaman Pembayaran
-            </a>
-          </Button>
-        )}
-
-        <p className="text-xs text-muted-foreground">
-          Halaman ini akan auto-update saat pembayaran diterima. Tidak perlu
-          refresh manual. Invoice expire dalam 24 jam.
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
-
-function ManualInstructions({
-  checkout,
-  onPaid,
-}: {
-  checkout: CheckoutResult
-  onPaid: () => void
-}) {
-  const [proofFile, setProofFile] = useState<File | null>(null)
-  const [note, setNote] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [uploaded, setUploaded] = useState(false)
-
-  async function handleUpload() {
-    if (!proofFile) {
-      toast.error('Pilih file bukti transfer')
-      return
-    }
-    setUploading(true)
-    try {
-      const form = new FormData()
-      form.append('file', proofFile)
-      form.append('invoiceId', checkout.invoiceId)
-      if (note) form.append('note', note)
-      const res = await fetch('/api/subscription/upload-proof', {
-        method: 'POST',
-        body: form,
-      })
-      const json = (await res.json()) as {
-        success: boolean
-        error?: string
-      }
-      if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal upload bukti')
-        return
-      }
-      setUploaded(true)
-      toast.success('Bukti transfer ter-upload, menunggu konfirmasi admin.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="space-y-4 p-6">
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <div className="text-sm text-muted-foreground">
-            Total Bayar (PERSIS)
-          </div>
-          <div className="font-display text-2xl font-extrabold">
-            Rp {checkout.amount.toLocaleString('id-ID')}
-          </div>
-          <div className="mt-1 text-xs text-amber-700">
-            Termasuk kode unik {checkout.uniqueCode} di akhir — penting untuk
-            identifikasi transfer.
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Invoice {checkout.invoiceNumber}
-          </div>
-        </div>
-
-        {checkout.bank && (
-          <div className="rounded-lg border p-4">
-            <div className="text-sm font-medium">{checkout.bank.bankName}</div>
-            <div className="mt-1 font-mono text-lg">
-              {checkout.bank.accountNumber}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              a/n {checkout.bank.accountName}
-            </div>
-          </div>
-        )}
-
-        {!uploaded ? (
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="proof-file">Bukti Transfer (max 2 MB)</Label>
-              <Input
-                id="proof-file"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="proof-note">Catatan (opsional)</Label>
-              <Textarea
-                id="proof-note"
-                rows={2}
-                placeholder="Mis. nama pengirim, jam transfer..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-            </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/pricing">Kembali ke Pricing</Link>
+            </Button>
             <Button
-              onClick={handleUpload}
-              disabled={!proofFile || uploading}
-              className="w-full"
+              onClick={handleCheckout}
+              disabled={
+                !preview || !preview.sufficientBalance || submitting
+              }
+              className="bg-primary-500 text-white hover:bg-primary-600"
             >
-              {uploading ? (
+              {submitting ? (
                 <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Mengupload...
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Memproses...
                 </>
               ) : (
                 <>
-                  <Upload className="mr-2 size-4" />
-                  Saya Sudah Transfer & Upload Bukti
+                  <Coins className="mr-1.5 size-4" />
+                  Bayar dengan Token
                 </>
               )}
             </Button>
           </div>
-        ) : (
-          <div className="space-y-3 text-center">
-            <CheckCircle2 className="mx-auto size-12 text-emerald-500" />
-            <p className="font-medium">Bukti ter-upload!</p>
-            <p className="text-sm text-muted-foreground">
-              Admin akan konfirmasi pembayaranmu maksimal 1×24 jam. Kamu akan
-              dapat notifikasi saat akun aktif.
-            </p>
-            <Button onClick={onPaid} variant="outline" className="w-full">
-              Kembali ke Billing
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
