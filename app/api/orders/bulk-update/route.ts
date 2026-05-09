@@ -16,6 +16,7 @@ import {
   generateQueueForOrder,
   type FollowupEvent,
 } from '@/lib/services/followup-engine'
+import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 
@@ -124,6 +125,12 @@ export async function POST(req: Request) {
           orderId: order.id,
           eventName: 'Purchase',
         }).catch(() => {})
+      }
+
+      // LMS auto-enrollment — saat bulk transisi PAID, upsert Enrollment
+      // untuk product yg punya courseId. Best-effort, tidak block loop.
+      if (action === 'mark_paid') {
+        triggerEnrollmentForOrderSafe(order.id)
       }
 
       // Kalau reject, cancel pending queue dulu sebelum generate event CANCELLED.

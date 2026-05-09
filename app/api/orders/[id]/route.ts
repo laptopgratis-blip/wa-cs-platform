@@ -9,6 +9,7 @@ import {
   generateQueueForOrder,
   type FollowupEvent,
 } from '@/lib/services/followup-engine'
+import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { orderUpdateSchema } from '@/lib/validations/order'
@@ -159,6 +160,15 @@ export async function PATCH(req: Request, { params }: Params) {
         orderId: updated.id,
         eventName: 'Purchase',
       }).catch(() => {})
+    }
+
+    // LMS auto-enrollment — saat transisi ke PAID, cek items dan upsert
+    // Enrollment untuk product yg punya courseId. Best-effort, tidak block.
+    if (
+      data.paymentStatus === 'PAID' &&
+      existing.paymentStatus !== 'PAID'
+    ) {
+      triggerEnrollmentForOrderSafe(updated.id)
     }
 
     // Follow-Up Order System hooks — detect transition & trigger event.

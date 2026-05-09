@@ -20,6 +20,7 @@ import {
   FileText,
   FlaskConical,
   Globe,
+  GraduationCap,
   Home,
   Inbox,
   Key,
@@ -111,6 +112,15 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
     ],
   },
+  // LMS — Phase 1 BETA, 2026-05-09. Course saya = builder produk digital +
+  // e-course. Customer beli produk linked → otomatis enroll. Phase 3 plan
+  // upgrade LMS via token akan tambah item "Upgrade LMS" di sini.
+  {
+    label: 'LMS',
+    items: [
+      { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
+    ],
+  },
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
   // supaya scope grup itu fokus ke operasional jualan harian.
   {
@@ -183,6 +193,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         href: '/admin/lp-upgrades',
         icon: TrendingUp,
         roles: ['ADMIN', 'FINANCE'],
+      },
+      // LMS Phase 1 — admin manual add/revoke enrollment student per course.
+      {
+        label: 'Enrollment LMS',
+        href: '/admin/lms-enrollments',
+        icon: GraduationCap,
+        roles: ['ADMIN'],
       },
       {
         label: 'Rekening Bank',

@@ -80,6 +80,8 @@ model User {
   followUpTemplates            FollowUpTemplate[]
   followUpQueueItems           FollowUpQueue[]
   followUpBlacklist            FollowUpBlacklist[]
+  // LMS — Phase 1 (2026-05-09). Course = creator-owned, multi-tenant per user.
+  courses                      Course[]
 }
 
 // NextAuth models
@@ -1548,6 +1550,9 @@ model UserOrder {
   orderSession   OrderSession?   @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
   pixelEventLogs PixelEventLog[]
   followUpQueue  FollowUpQueue[]
+  // LMS Phase 1 — kalau item ada productId.courseId, hook on-PAID upsert
+  // Enrollment dgn orderId=this.id supaya admin bisa trace order → akses.
+  enrollments    Enrollment[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, paymentStatus])
@@ -1695,6 +1700,13 @@ model Product {
   // (pakai harga/stok/berat di field utama). Kalau ≥1 varian → customer
   // wajib pilih varian di form order, dan harga/stok/berat dipakai dari varian.
   variants ProductVariant[]
+
+  // LMS link (Phase 1 LMS, 2026-05-09). Kalau set → produk ini = course.
+  // Saat order PAID, hook auto-enrollment cek field ini dan upsert Enrollment
+  // untuk customerPhone. 1:1 unique supaya 1 course = 1 product (per
+  // arsitektur Phase 1; bundle pakai varian product).
+  courseId String? @unique
+  course   Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2216,4 +2228,162 @@ model FollowUpBlacklist {
   blockedAt     DateTime @default(now())
 
   @@unique([userId, customerPhone])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LMS — Phase 1 MVP (2026-05-09)
+// Course/Module/Lesson untuk produk digital + e-course. Course dilink 1:1
+// ke Product (Product.courseId @unique). Saat order Product PAID, hook
+// auto-enrollment upsert Enrollment untuk customerPhone.
+//
+// Phase 1 scope: VIDEO_EMBED + TEXT lesson saja (no file upload, no portal
+// student, no plan upgrade). Quota soft-hardcoded: 1 course / 5 lesson per
+// user FREE — di-replace dgn LmsQuota di Phase 3 (token billing).
+// ─────────────────────────────────────────────────────────────────────────
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LessonContentType {
+  VIDEO_EMBED // YouTube/Vimeo embed URL — Phase 1 default
+  TEXT // Markdown / rich text — catatan, transkrip, list link
+  FILE // PDF / audio / video upload — Phase 2 (field disiapkan)
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  REVOKED // admin revoke (refund, fraud)
+  EXPIRED // expiresAt lewat (kalau set di Course)
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  userId      String // Penjual (creator) — multi-tenant per user
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Slug per-user unique. Dipakai di URL portal student Phase 2:
+  // /belajar/{slug}. Generated dari title saat create, editable.
+  slug        String
+  title       String
+  description String?      @db.Text
+  // Cover image — reuse pola Product.imageUrl (path /uploads/lms-covers/...).
+  coverUrl    String?
+  status      CourseStatus @default(DRAFT)
+  // Total durasi semua lesson dalam detik — denormalisasi supaya list course
+  // tidak perlu sum lessons. Update saat add/edit/delete lesson.
+  totalDurationSec Int @default(0)
+
+  // Reverse 1:1 ke Product. Set via Product.courseId. Optional di sisi
+  // Course supaya creator bisa bikin draft course dulu sebelum link product.
+  product Product?
+
+  modules     CourseModule[]
+  enrollments Enrollment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, slug])
+  @@index([userId, status])
+}
+
+// Module = chapter / bab. Container untuk grouping Lessons.
+model CourseModule {
+  id        String  @id @default(cuid())
+  courseId  String
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title     String
+  // Urutan tampil di builder + portal student. Manual int supaya gampang
+  // re-order via drag (frontend kirim array urut, backend bulk-update).
+  sortOrder Int     @default(0)
+
+  lessons Lesson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId, sortOrder])
+}
+
+model Lesson {
+  id          String            @id @default(cuid())
+  moduleId    String
+  module      CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title       String
+  contentType LessonContentType @default(VIDEO_EMBED)
+  // Phase 1: pakai videoEmbedUrl (YT/Vimeo) atau richTextHtml.
+  // Phase 2: fileUrl + fileSizeMB diisi saat user upload file.
+  videoEmbedUrl String? // YT/Vimeo embed-able URL
+  richTextHtml  String? @db.Text
+  fileUrl       String? // Phase 2
+  fileSizeMB    Int? // Phase 2 — untuk quota storage check
+  // Durasi manual (detik) — penjual input atau auto-detect via embed oEmbed
+  // di Phase 2. Dipakai untuk progress tracking + total durasi course.
+  durationSec   Int     @default(0)
+  // Free preview = bisa di-tonton tanpa enrollment. Maks 1-2 per course
+  // untuk demo public. Di-enforce di portal Phase 2.
+  isFreePreview Boolean @default(false)
+  sortOrder     Int     @default(0)
+
+  progress LessonProgress[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([moduleId, sortOrder])
+}
+
+// Enrollment = akses student ke 1 course. Phase 1: di-trigger oleh hook
+// on-order-PAID atau admin manual. Phase 2: portal student verify via
+// (courseId, studentPhone) match.
+model Enrollment {
+  id           String           @id @default(cuid())
+  courseId     String
+  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  // Identitas student — phone E.164 (sumber: UserOrder.customerPhone). Email
+  // optional (Phase 2 fallback OTP). Name snapshot supaya tampil di admin
+  // tanpa lookup contact.
+  studentPhone String
+  studentName  String?
+  studentEmail String?
+  // Order yg trigger enrollment (auto-flow). Null = manual oleh admin.
+  // SetNull supaya enrollment tidak ikut hilang saat order soft-delete.
+  orderId       String?
+  order         UserOrder?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  // Snapshot invoiceNumber untuk display di admin tanpa join order.
+  invoiceNumber String?
+
+  status      EnrollmentStatus @default(ACTIVE)
+  enrolledAt  DateTime         @default(now())
+  // null = lifetime access. Phase 4: kalau course punya periodAccess (mis.
+  // 90 hari), auto-set saat enroll.
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokeReason String?
+
+  progress LessonProgress[]
+
+  // 1 student (phone) tidak bisa enrolled 2x ke course yg sama. Kalau order
+  // ulang, upsert ke ACTIVE (bukan create baru).
+  @@unique([courseId, studentPhone])
+  @@index([courseId, status])
+  @@index([studentPhone])
+  @@index([orderId])
+}
+
+model LessonProgress {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lessonId     String
+  lesson       Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  watchedSec  Int       @default(0)
+  completedAt DateTime?
+  lastSeenAt  DateTime  @updatedAt
+
+  @@unique([enrollmentId, lessonId])
+  @@index([lessonId])
 }
