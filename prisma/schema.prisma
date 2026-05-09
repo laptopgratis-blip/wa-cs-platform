@@ -82,6 +82,9 @@ model User {
   followUpBlacklist            FollowUpBlacklist[]
   // LMS — Phase 1 (2026-05-09). Course = creator-owned, multi-tenant per user.
   courses                      Course[]
+  // LMS — Phase 3 (2026-05-09). Plan upgrade LMS via token.
+  lmsQuota                     LmsQuota?
+  lmsSubscriptions             LmsSubscription[]
 }
 
 // NextAuth models
@@ -2436,4 +2439,105 @@ model StudentOtp {
 
   @@index([studentPhone, createdAt(sort: Desc)])
   @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LMS Phase 3 — Plan upgrade via token (mirror flow LP).
+// LmsUpgradePackage di-CRUD admin di /admin/lms-packages, harga di-bayar
+// pakai saldo token (TOKEN_BALANCE only — tidak ada legacy Tripay/Manual
+// path supaya simpler). Quota aktif di LmsQuota di-enforce di service
+// course.ts saat create course/lesson.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum LmsTier {
+  FREE
+  BASIC
+  PRO
+  UNLIMITED
+}
+
+model LmsUpgradePackage {
+  id          String  @id @default(cuid())
+  name        String // "Basic", "Pro", "Unlimited"
+  description String?
+  tier        LmsTier @unique // FREE row di-seed sekali, tidak di-bayar
+  // Limit per plan. -1 = unlimited (di-enforce di service: -1 → bypass).
+  maxCourses              Int
+  maxLessonsPerCourse     Int
+  maxStudentsPerCourse    Int
+  maxFileStorageMB        Int     @default(0) // Phase 2 file upload, Phase 4 enforce
+  canUseDripSchedule      Boolean @default(false) // Phase 4
+  canIssueCertificate     Boolean @default(false) // Phase 4
+  // Harga subscription per bulan (Rupiah). Default 0 → FREE (tidak bisa
+  // checkout). priceMonthly > 0 wajib supaya muncul di /pricing-lms.
+  priceMonthly            Int     @default(0)
+  isPopular               Boolean @default(false)
+  isActive                Boolean @default(true)
+  sortOrder               Int     @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  subscriptions LmsSubscription[]
+
+  @@index([isActive, sortOrder])
+}
+
+// Quota LMS per-user (penjual). 1:1, di-upsert saat:
+//   - Bayar plan (LmsSubscription ACTIVE)
+//   - Subscription EXPIRED → downgrade ke FREE
+//   - Manual admin adjust
+// Default FREE row di-create lazily saat user pertama kali butuh quota.
+model LmsQuota {
+  id                    String  @id @default(cuid())
+  userId                String  @unique
+  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier                  LmsTier @default(FREE)
+  maxCourses            Int     @default(1)
+  maxLessonsPerCourse   Int     @default(5)
+  maxStudentsPerCourse  Int     @default(50)
+  maxFileStorageMB      Int     @default(0)
+  canUseDripSchedule    Boolean @default(false)
+  canIssueCertificate   Boolean @default(false)
+  updatedAt             DateTime @updatedAt
+}
+
+model LmsSubscription {
+  id              String  @id @default(cuid())
+  userId          String
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lmsPackageId    String
+  lmsPackage      LmsUpgradePackage @relation(fields: [lmsPackageId], references: [id])
+  durationMonths  Int     // 1 | 3 | 6 | 12 (mirror DURATION_DISCOUNTS LP)
+  startDate       DateTime
+  endDate         DateTime
+  // ACTIVE | EXPIRED | CANCELLED
+  status          String  @default("ACTIVE")
+  // Pricing snapshot (IDR) supaya audit historis akurat walau plan
+  // priceMonthly berubah.
+  priceBase       Int
+  discountPct     Int     @default(0)
+  priceFinal      Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invoices LmsSubscriptionInvoice[]
+
+  @@index([userId, status])
+  @@index([endDate]) // cron expire scan
+}
+
+model LmsSubscriptionInvoice {
+  id              String  @id @default(cuid())
+  subscriptionId  String
+  subscription    LmsSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoiceNumber   String  @unique
+  amount          Int     // IDR
+  // Token equivalent yg dipotong (snapshot pricePerToken aktif saat checkout).
+  tokenAmount     Int
+  description     String  @db.Text
+  // PAID — Phase 3 tidak ada PENDING karena atomic deduct token.
+  status          String  @default("PAID")
+  paidAt          DateTime
+  createdAt       DateTime @default(now())
 }

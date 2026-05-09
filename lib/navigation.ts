@@ -112,13 +112,14 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
     ],
   },
-  // LMS — Phase 1 BETA, 2026-05-09. Course saya = builder produk digital +
-  // e-course. Customer beli produk linked → otomatis enroll. Phase 3 plan
-  // upgrade LMS via token akan tambah item "Upgrade LMS" di sini.
+  // LMS — Phase 1-3, 2026-05-09. Course saya = builder produk digital + e-course.
+  // Customer beli produk linked → otomatis enroll. Phase 3 plan upgrade LMS
+  // via token (sama pattern dgn Upgrade LP).
   {
     label: 'LMS',
     items: [
       { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
+      { label: 'Upgrade LMS', href: '/pricing-lms', icon: TrendingUp },
     ],
   },
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
@@ -198,6 +199,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
       {
         label: 'Enrollment LMS',
         href: '/admin/lms-enrollments',
+        icon: GraduationCap,
+        roles: ['ADMIN'],
+      },
+      // LMS Phase 3 — CRUD plan upgrade LMS (mirror /admin/lp-packages).
+      {
+        label: 'Paket LMS',
+        href: '/admin/lms-packages',
         icon: GraduationCap,
         roles: ['ADMIN'],
       },

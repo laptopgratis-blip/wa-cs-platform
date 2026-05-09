@@ -35,11 +35,11 @@ export async function POST(req: Request, { params }: Params) {
     return jsonOk({ lesson })
   } catch (err) {
     const code = (err as Error & { code?: string }).code
-    if (code === 'LMS_LESSON_QUOTA') {
+    if (code === 'LMS_QUOTA_EXCEEDED' || code === 'LMS_LESSON_QUOTA') {
       return Response.json(
         {
           success: false,
-          error: 'LMS_LESSON_QUOTA',
+          error: 'LMS_QUOTA_EXCEEDED',
           message: (err as Error).message,
         },
         { status: 402 },

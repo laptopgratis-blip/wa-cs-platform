@@ -1,8 +1,8 @@
 // LMS Course service — CRUD course/module/lesson + slug generation +
-// soft quota check.
+// quota check.
 //
-// Phase 1 quota: hardcoded soft limit (FREE: 1 course aktif, 5 lesson per
-// course). Phase 3: ganti dgn LmsQuota berbasis tier+priceMonthly.
+// Phase 3: quota dari LmsQuota (tier-based). Default FREE = 1 course /
+// 5 lesson. Upgrade plan via /pricing-lms (token billing).
 //
 // Slug: per-user unique (Course_userId_slug_key di schema). Generated dari
 // title saat create; di-fallback ke `course-<short id>` kalau title kosong
@@ -11,6 +11,14 @@ import type { CourseStatus, LessonContentType } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
+import {
+  checkLimitOrThrow,
+  getActiveLmsQuota,
+  isUnlimited,
+} from './quota'
+
+// Backward-compat constants (dipakai di UI page utk display badge limit).
+// Real enforcement pakai LmsQuota live.
 export const PHASE1_FREE_MAX_COURSES = 1
 export const PHASE1_FREE_MAX_LESSONS_PER_COURSE = 5
 
@@ -61,20 +69,23 @@ export interface CreateCourseInput {
 }
 
 export async function createCourse(input: CreateCourseInput) {
-  // Soft quota Phase 1 — hitung course aktif (DRAFT | PUBLISHED). Archived
-  // tidak hitung supaya user bisa archive yg lama lalu bikin baru.
-  const activeCount = await prisma.course.count({
-    where: {
-      userId: input.userId,
-      status: { in: ['DRAFT', 'PUBLISHED'] },
-    },
-  })
-  if (activeCount >= PHASE1_FREE_MAX_COURSES) {
-    const err = new Error(
-      `Limit Phase 1: maksimal ${PHASE1_FREE_MAX_COURSES} course aktif per user. Archive course lama atau tunggu Phase 3 untuk plan upgrade.`,
-    )
-    ;(err as Error & { code?: string }).code = 'LMS_COURSE_QUOTA'
-    throw err
+  // Quota check via LmsQuota — count course aktif (DRAFT | PUBLISHED).
+  // Archived tidak hitung supaya user bisa archive yg lama lalu bikin baru.
+  const quota = await getActiveLmsQuota(input.userId)
+  if (!isUnlimited(quota.maxCourses)) {
+    const activeCount = await prisma.course.count({
+      where: {
+        userId: input.userId,
+        status: { in: ['DRAFT', 'PUBLISHED'] },
+      },
+    })
+    if (activeCount >= quota.maxCourses) {
+      const err = new Error(
+        `Limit ${quota.tier}: max ${quota.maxCourses} course aktif. Upgrade plan LMS atau archive course lama.`,
+      )
+      ;(err as Error & { code?: string }).code = 'LMS_QUOTA_EXCEEDED'
+      throw err
+    }
   }
 
   const slug = await ensureUniqueSlug(input.userId, slugifyTitle(input.title))
@@ -302,16 +313,17 @@ export async function createLesson(
   })
   if (!mod) throw new Error('Module tidak ditemukan')
 
-  // Soft quota: max lesson per course (Phase 1)
-  const lessonCount = await prisma.lesson.count({
-    where: { module: { courseId: mod.courseId } },
-  })
-  if (lessonCount >= PHASE1_FREE_MAX_LESSONS_PER_COURSE) {
-    const err = new Error(
-      `Limit Phase 1: maksimal ${PHASE1_FREE_MAX_LESSONS_PER_COURSE} lesson per course. Phase 3 unlock dgn plan upgrade.`,
+  // Quota check via LmsQuota — max lesson per course.
+  const quota = await getActiveLmsQuota(userId)
+  if (!isUnlimited(quota.maxLessonsPerCourse)) {
+    const lessonCount = await prisma.lesson.count({
+      where: { module: { courseId: mod.courseId } },
+    })
+    checkLimitOrThrow(
+      lessonCount,
+      quota.maxLessonsPerCourse,
+      `lesson per course (${quota.tier})`,
     )
-    ;(err as Error & { code?: string }).code = 'LMS_LESSON_QUOTA'
-    throw err
   }
 
   const last = await prisma.lesson.findFirst({
