@@ -42,6 +42,9 @@ export default async function PieceDetailPage({ params }: Params) {
           status: piece.status,
           tokensCharged: piece.tokensCharged,
           scheduledFor: piece.scheduledFor?.toISOString() ?? null,
+          pieceType: piece.pieceType,
+          adsPlatform: piece.adsPlatform,
+          adsFormat: piece.adsFormat,
           metrics: {
             reach: piece.reach,
             impressions: piece.impressions,
@@ -58,6 +61,17 @@ export default async function PieceDetailPage({ params }: Params) {
             slideIndex: s.slideIndex,
             headline: s.headline,
             body: s.body,
+          })),
+          variants: piece.variants.map((v) => ({
+            id: v.id,
+            variantType: v.variantType,
+            value: v.value,
+            order: v.order,
+            impressions: v.impressions,
+            clicks: v.clicks,
+            ctr: v.ctr,
+            conversions: v.conversions,
+            spendRp: v.spendRp,
           })),
           sourceIdea: piece.sourceIdea
             ? {

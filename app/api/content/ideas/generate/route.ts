@@ -24,6 +24,8 @@ const CHANNEL_ENUM = z.enum([
   'IG_CAROUSEL',
   'IG_REELS',
   'TIKTOK',
+  'META_ADS',
+  'TIKTOK_ADS',
 ])
 const FUNNEL_ENUM = z.enum(['TOFU', 'MOFU', 'BOFU'])
 
@@ -34,7 +36,8 @@ const schema = z.object({
   manualOffer: z.string().max(2000).optional(),
   includeTrends: z.boolean().optional(),
   includeWinner: z.boolean().optional(),
-  targetChannels: z.array(CHANNEL_ENUM).min(1).max(6).optional(),
+  includeAdsFramework: z.boolean().optional(),
+  targetChannels: z.array(CHANNEL_ENUM).min(1).max(8).optional(),
   targetFunnels: z.array(FUNNEL_ENUM).min(1).max(3).optional(),
 })
 
@@ -64,6 +67,7 @@ export async function POST(req: Request) {
       manualOffer: parsed.data.manualOffer,
       includeTrends: parsed.data.includeTrends,
       includeWinner: parsed.data.includeWinner,
+      includeAdsFramework: parsed.data.includeAdsFramework,
       targetChannels: parsed.data.targetChannels,
       targetFunnels: parsed.data.targetFunnels,
     })

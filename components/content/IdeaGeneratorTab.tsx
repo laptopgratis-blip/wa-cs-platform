@@ -12,6 +12,7 @@
 import {
   AlertCircle,
   Loader2,
+  Megaphone,
   Sparkles,
   Star,
   TrendingUp,
@@ -38,7 +39,7 @@ interface LandingPage {
 
 interface Idea {
   id: string
-  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER'
+  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER' | 'ADS_FRAMEWORK'
   hook: string
   angle: string
   channelFit: string[]
@@ -64,6 +65,7 @@ const METHOD_LABEL: Record<string, { label: string; cls: string }> = {
   PERSONA: { label: 'Persona POV', cls: 'bg-purple-100 text-purple-700' },
   TRENDS: { label: '🔥 Trending Search', cls: 'bg-amber-100 text-amber-700' },
   WINNER: { label: '🏆 Pola Viral', cls: 'bg-emerald-100 text-emerald-700' },
+  ADS_FRAMEWORK: { label: '🎯 Iklan Berbayar', cls: 'bg-fuchsia-100 text-fuchsia-700' },
 }
 
 const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
@@ -79,7 +81,11 @@ const CHANNEL_LABEL: Record<string, string> = {
   IG_CAROUSEL: 'IG Carousel',
   IG_REELS: 'IG Reels',
   TIKTOK: 'TikTok',
+  META_ADS: 'Meta Ads',
+  TIKTOK_ADS: 'TikTok Ads',
 }
+
+const ADS_CHANNELS = new Set(['META_ADS', 'TIKTOK_ADS'])
 
 const ALL_CHANNELS = [
   'WA_STATUS',
@@ -88,6 +94,8 @@ const ALL_CHANNELS = [
   'IG_CAROUSEL',
   'IG_REELS',
   'TIKTOK',
+  'META_ADS',
+  'TIKTOK_ADS',
 ] as const
 
 const ALL_FUNNELS = ['TOFU', 'MOFU', 'BOFU'] as const
@@ -120,6 +128,10 @@ export function IdeaGeneratorTab({
   const [generating, setGenerating] = useState(false)
   const [includeTrends, setIncludeTrends] = useState(false)
   const [includeWinner, setIncludeWinner] = useState(false)
+  const [includeAdsFramework, setIncludeAdsFramework] = useState(false)
+  // Phase 6 — saat user select ide ADS, butuh format (IMAGE/VIDEO/CAROUSEL).
+  // Map: ideaId → 'IMAGE' | 'VIDEO' | 'CAROUSEL'. Fallback inferred dari format ide.
+  const [adsFormatChoice, setAdsFormatChoice] = useState<Map<string, string>>(new Map())
   // Filter target — default semua. Persist di localStorage supaya next time
   // auto-restore.
   const [targetChannels, setTargetChannels] = useState<string[]>(
@@ -217,6 +229,7 @@ export function IdeaGeneratorTab({
       const baseBody = {
         includeTrends,
         includeWinner,
+        includeAdsFramework,
         targetChannels,
         targetFunnels,
       }
@@ -270,6 +283,13 @@ export function IdeaGeneratorTab({
     setSelected(next)
   }
 
+  function inferAdsFormat(idea: Idea | undefined): 'IMAGE' | 'VIDEO' | 'CAROUSEL' {
+    if (!idea) return 'IMAGE'
+    if (idea.format === 'ADS_VIDEO') return 'VIDEO'
+    if (idea.format === 'ADS_CAROUSEL') return 'CAROUSEL'
+    return 'IMAGE'
+  }
+
   async function handleGeneratePieces() {
     if (selected.size === 0) {
       toast.error('Pilih minimal 1 ide')
@@ -298,28 +318,52 @@ export function IdeaGeneratorTab({
       }
       const briefId = briefJson.data.brief.id
 
-      // 2. Generate pieces.
-      const items = Array.from(selected.entries()).map(([ideaId, channel]) => ({
-        ideaId,
-        channel,
-      }))
-      const genRes = await fetch('/api/content/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ briefId, items }),
+      // 2. Split ke organic vs ads.
+      const organicItems: { ideaId: string; channel: string }[] = []
+      const adsItems: { ideaId: string; platform: string; format: string }[] = []
+      selected.forEach((channel, ideaId) => {
+        if (ADS_CHANNELS.has(channel)) {
+          const format =
+            adsFormatChoice.get(ideaId) ??
+            inferAdsFormat(ideas.find((it) => it.id === ideaId))
+          adsItems.push({ ideaId, platform: channel, format })
+        } else {
+          organicItems.push({ ideaId, channel })
+        }
       })
-      const genJson = await genRes.json()
-      if (!genRes.ok || !genJson.success) {
-        toast.error(genJson.error || 'Gagal generate konten')
-        return
+
+      const allResults: { status: string; title?: string }[] = []
+
+      if (organicItems.length > 0) {
+        const genRes = await fetch('/api/content/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ briefId, items: organicItems }),
+        })
+        const genJson = await genRes.json()
+        if (!genRes.ok || !genJson.success) {
+          toast.error(genJson.error || 'Gagal generate konten organik')
+          return
+        }
+        allResults.push(...(genJson.data.results as { status: string; title?: string }[]))
       }
 
-      const results = genJson.data.results as {
-        status: string
-        title?: string
-      }[]
-      const ok = results.filter((r) => r.status === 'OK').length
-      const failed = results.length - ok
+      if (adsItems.length > 0) {
+        const adsRes = await fetch('/api/content/ads/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ briefId, items: adsItems }),
+        })
+        const adsJson = await adsRes.json()
+        if (!adsRes.ok || !adsJson.success) {
+          toast.error(adsJson.error || 'Gagal generate iklan')
+          return
+        }
+        allResults.push(...(adsJson.data.results as { status: string; title?: string }[]))
+      }
+
+      const ok = allResults.filter((r) => r.status === 'OK').length
+      const failed = allResults.length - ok
       if (ok > 0) {
         toast.success(
           `${ok} konten siap di Library${failed > 0 ? ` (${failed} gagal)` : ''}`,
@@ -455,7 +499,7 @@ export function IdeaGeneratorTab({
           <div className="space-y-2 rounded-md border border-warm-200 bg-white p-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-semibold text-warm-900">
-                Mau bikin konten apa? ({targetChannels.length}/6)
+                Mau bikin konten apa? ({targetChannels.length}/8)
               </Label>
               <div className="flex gap-1.5 text-[11px]">
                 <button
@@ -594,6 +638,27 @@ export function IdeaGeneratorTab({
             </div>
           </label>
 
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+            <input
+              type="checkbox"
+              checked={includeAdsFramework}
+              onChange={(e) => setIncludeAdsFramework(e.target.checked)}
+              className="mt-0.5 size-4 cursor-pointer accent-fuchsia-500"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-1 font-semibold text-warm-900">
+                <Megaphone className="size-3.5 text-fuchsia-600" />
+                Tambahkan ide iklan berbayar (+5 ide)
+              </div>
+              <p className="mt-0.5 text-[11px] text-warm-500">
+                5 framework direct response untuk Meta Ads & TikTok Ads
+                (Hormozi/PAS/BAB/Social Proof/Scarcity). Output siap jadi ad
+                creative full — 5 headline variant + 3 primary text + visual
+                brief + storyboard video.
+              </p>
+            </div>
+          </label>
+
           <Button
             onClick={handleGenerate}
             disabled={generating}
@@ -608,7 +673,7 @@ export function IdeaGeneratorTab({
             ) : (
               <>
                 <Wand2 className="mr-2 size-4" />
-                Generate {15 + (includeTrends ? 5 : 0) + (includeWinner ? 5 : 0)} ide konten
+                Generate {15 + (includeTrends ? 5 : 0) + (includeWinner ? 5 : 0) + (includeAdsFramework ? 5 : 0)} ide konten
               </>
             )}
           </Button>
@@ -686,25 +751,51 @@ export function IdeaGeneratorTab({
 
                     {isSelected && (
                       <div
-                        className="rounded-md border border-primary-200 bg-primary-50 p-2"
+                        className="space-y-2 rounded-md border border-primary-200 bg-primary-50 p-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Label className="mb-1 block text-[11px] font-medium text-primary-900">
-                          Posting di channel:
-                        </Label>
-                        <select
-                          value={channelChosen}
-                          onChange={(e) =>
-                            setIdeaChannel(idea.id, e.target.value)
-                          }
-                          className="w-full rounded border border-primary-300 bg-white px-2 py-1 text-xs"
-                        >
-                          {idea.channelFit.map((c) => (
-                            <option key={c} value={c}>
-                              {CHANNEL_LABEL[c] ?? c}
-                            </option>
-                          ))}
-                        </select>
+                        <div>
+                          <Label className="mb-1 block text-[11px] font-medium text-primary-900">
+                            {channelChosen && ADS_CHANNELS.has(channelChosen)
+                              ? 'Iklan di platform:'
+                              : 'Posting di channel:'}
+                          </Label>
+                          <select
+                            value={channelChosen}
+                            onChange={(e) =>
+                              setIdeaChannel(idea.id, e.target.value)
+                            }
+                            className="w-full rounded border border-primary-300 bg-white px-2 py-1 text-xs"
+                          >
+                            {idea.channelFit.map((c) => (
+                              <option key={c} value={c}>
+                                {CHANNEL_LABEL[c] ?? c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {channelChosen && ADS_CHANNELS.has(channelChosen) && (
+                          <div>
+                            <Label className="mb-1 block text-[11px] font-medium text-fuchsia-900">
+                              Format iklan:
+                            </Label>
+                            <select
+                              value={
+                                adsFormatChoice.get(idea.id) ?? inferAdsFormat(idea)
+                              }
+                              onChange={(e) => {
+                                const next = new Map(adsFormatChoice)
+                                next.set(idea.id, e.target.value)
+                                setAdsFormatChoice(next)
+                              }}
+                              className="w-full rounded border border-fuchsia-300 bg-white px-2 py-1 text-xs"
+                            >
+                              <option value="IMAGE">Static Image</option>
+                              <option value="VIDEO">Video Ad (storyboard)</option>
+                              <option value="CAROUSEL">Carousel</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                     )}
                   </CardContent>

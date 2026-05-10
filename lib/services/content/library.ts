@@ -6,6 +6,8 @@ export interface LibraryFilter {
   funnelStage?: string
   status?: string
   briefId?: string
+  // Phase 6 — filter ORGANIC | ADS (default: tidak di-filter, tampil semua).
+  pieceType?: string
 }
 
 export async function listPiecesForOwner(
@@ -19,10 +21,11 @@ export async function listPiecesForOwner(
       ...(filter.funnelStage && { funnelStage: filter.funnelStage }),
       ...(filter.status && { status: filter.status }),
       ...(filter.briefId && { briefId: filter.briefId }),
+      ...(filter.pieceType && { pieceType: filter.pieceType }),
     },
     include: {
       brief: { select: { id: true, lpId: true, manualTitle: true } },
-      _count: { select: { slides: true } },
+      _count: { select: { slides: true, variants: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 100,
@@ -34,6 +37,8 @@ export async function getPieceForOwner(userId: string, pieceId: string) {
     where: { id: pieceId, userId },
     include: {
       slides: { orderBy: { slideIndex: 'asc' } },
+      // Phase 6 — load variants untuk ads piece. Sorted by type then order.
+      variants: { orderBy: [{ variantType: 'asc' }, { order: 'asc' }] },
       brief: {
         select: {
           id: true,

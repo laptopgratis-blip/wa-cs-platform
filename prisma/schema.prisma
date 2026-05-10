@@ -2770,11 +2770,11 @@ model ContentPiece {
   // Source idea kalau di-promote dari Idea Generator.
   sourceIdeaId    String?   @unique
   sourceIdea      ContentIdea?
-  // Channel: 'WA_STATUS' | 'IG_STORY' | 'IG_POST' | 'IG_CAROUSEL' | 'IG_REELS' | 'TIKTOK'
+  // Channel: 'WA_STATUS' | 'IG_STORY' | 'IG_POST' | 'IG_CAROUSEL' | 'IG_REELS' | 'TIKTOK' | 'META_ADS' | 'TIKTOK_ADS'
   channel         String
   // Funnel: 'TOFU' | 'MOFU' | 'BOFU'
   funnelStage     String
-  // Format detail: 'TEXT' | 'CAROUSEL' | 'VIDEO_SCRIPT' | 'SINGLE_IMAGE'
+  // Format detail: 'TEXT' | 'CAROUSEL' | 'VIDEO_SCRIPT' | 'SINGLE_IMAGE' | 'ADS_IMAGE' | 'ADS_VIDEO' | 'ADS_CAROUSEL'
   format          String
   // Title untuk display di library.
   title           String
@@ -2782,6 +2782,7 @@ model ContentPiece {
   //   WA_STATUS / IG_STORY / IG_POST: { caption, hook, cta, hashtags[] }
   //   IG_CAROUSEL: { slides: [{headline, body}], caption, cta, hashtags[] }
   //   IG_REELS / TIKTOK: { hook, scenes: [{seconds, narration, visual, broll}], caption, cta, soundSuggest }
+  //   META_ADS/TIKTOK_ADS: { primaryTexts[], headlines[], description, ctaButton, visualBrief, storyboard? }
   bodyJson        Json
   // Status: 'DRAFT' | 'READY' | 'POSTED' | 'ARCHIVED'
   status          String    @default("DRAFT")
@@ -2802,15 +2803,49 @@ model ContentPiece {
   dms             Int?
   linkClicks      Int?
   metricUpdatedAt DateTime?
+  // Phase 6 — Ads creative discriminator
+  // 'ORGANIC' (default) | 'ADS'. Field-level filter di Library.
+  pieceType       String    @default("ORGANIC")
+  // 'META_ADS' | 'TIKTOK_ADS' | null. Null untuk organic.
+  adsPlatform     String?
+  // 'IMAGE' | 'VIDEO' | 'CAROUSEL' | null. Null untuk organic.
+  adsFormat       String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   slides          ContentSlide[]
+  variants        AdVariant[]
 
   @@index([userId, status, createdAt])
   @@index([briefId, createdAt])
   @@index([channel, status])
   @@index([userId, scheduledFor])
+  @@index([userId, pieceType, status])
+}
+
+// Phase 6 — variant headline/primary/description/CTA per ad piece. User
+// boleh A/B test multi variant per piece. Performance metric per variant
+// di-record manual (impressions/clicks/CTR/conversions/spendRp).
+model AdVariant {
+  id              String    @id @default(cuid())
+  pieceId         String
+  piece           ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  // 'HEADLINE' | 'PRIMARY_TEXT' | 'DESCRIPTION' | 'CTA'
+  variantType     String
+  value           String    @db.Text
+  // Order untuk display 0..N (A, B, C, ...)
+  order           Int       @default(0)
+  // Performance per variant — user input manual setelah jalan ads.
+  impressions     Int?
+  clicks          Int?
+  ctr             Float?
+  conversions     Int?
+  spendRp         Int?
+  metricUpdatedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([pieceId, variantType, order])
 }
 
 // Stub Phase 2 — saat visual generator implement. Phase 1 sudah create row

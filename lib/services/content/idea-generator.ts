@@ -24,6 +24,7 @@ import {
   logGeneration,
 } from '../ai-generation-log'
 
+import { type AdsFramework, getAllAdsFrameworks } from './ads-frameworks'
 import { extractSeeds, fetchSuggestionsBatch } from './external-signals'
 import { HOOK_FRAMEWORKS, sampleHookFrameworks } from './hook-frameworks'
 import { getInsightsForUser } from './insights'
@@ -32,7 +33,7 @@ const FEATURE_KEY = 'CONTENT_IDEA'
 const AI_TIMEOUT_MS = 60_000
 const MAX_OUTPUT_TOKENS = 2_500 // per metode
 
-export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER'
+export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER' | 'ADS_FRAMEWORK'
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU'
 
 export type TargetChannel =
@@ -42,6 +43,8 @@ export type TargetChannel =
   | 'IG_CAROUSEL'
   | 'IG_REELS'
   | 'TIKTOK'
+  | 'META_ADS'
+  | 'TIKTOK_ADS'
 
 export const ALL_CHANNELS: TargetChannel[] = [
   'WA_STATUS',
@@ -50,6 +53,8 @@ export const ALL_CHANNELS: TargetChannel[] = [
   'IG_CAROUSEL',
   'IG_REELS',
   'TIKTOK',
+  'META_ADS',
+  'TIKTOK_ADS',
 ]
 export const ALL_FUNNELS: FunnelStage[] = ['TOFU', 'MOFU', 'BOFU']
 
@@ -176,7 +181,7 @@ function buildCommonSystem(
 ): string {
   const channelList = targetChannels.join(', ')
   const funnelList = targetFunnels.join(', ')
-  return `Kamu adalah AI content strategist yg bantu seller Indonesia bikin konten organik di sosmed (IG, TikTok, WA Status). Output bahasa Indonesia, casual conversational. JANGAN gunakan emoji berlebihan (max 1-2 per ide). JANGAN repetitive. Tiap ide harus actionable dan bisa direkam/diposting hari itu juga.
+  return `Kamu adalah AI content strategist yg bantu seller Indonesia bikin konten di sosmed (IG, TikTok, WA Status) DAN paid ads (Meta Ads, TikTok Ads). Output bahasa Indonesia, casual conversational. JANGAN gunakan emoji berlebihan (max 1-2 per ide). JANGAN repetitive. Tiap ide harus actionable dan bisa direkam/diposting hari itu juga.
 
 Output FORMAT WAJIB JSON array dari 5 object dengan struktur:
 [
@@ -184,7 +189,7 @@ Output FORMAT WAJIB JSON array dari 5 object dengan struktur:
     "hook": "tagline pembuka 1 baris pendek (max 80 karakter)",
     "angle": "sudut pendekatan, 1-2 kalimat penjelasan kenapa angle ini",
     "channelFit": ["IG_REELS", "TIKTOK"],
-    "format": "VIDEO_SCRIPT|CAROUSEL|SINGLE_IMAGE|TEXT_POST",
+    "format": "VIDEO_SCRIPT|CAROUSEL|SINGLE_IMAGE|TEXT_POST|ADS_VIDEO|ADS_IMAGE|ADS_CAROUSEL",
     "whyItWorks": "1 kalimat alasan psikologis kenapa hook ini bekerja",
     "predictedVirality": 4,
     "funnelStage": "TOFU|MOFU|BOFU",
@@ -285,6 +290,35 @@ Tugas: hasilkan 5 ide konten BARU yg replicate pola sukses dari konten viral di 
 
 Funnel mix: variatif sesuai pemenang.
 Channel fit: prioritas channel yg ada di winner. Tetap kasih opsi alternatif kalau format support.
+
+Keluarkan JSON array 5 object sesuai schema.`
+}
+
+function buildAdsFrameworkPrompt(
+  context: string,
+  frameworks: AdsFramework[],
+): string {
+  const fwList = frameworks
+    .map(
+      (f, i) =>
+        `${i + 1}. ${f.name}\n   Struktur: ${f.structure}\n   Contoh: ${f.example}\n   Best for: ${f.bestFor.join(', ')}\n   Funnel: ${f.funnelFit.join('/')}\n   Platform: ${f.platformFit.join(', ')}`,
+    )
+    .join('\n\n')
+  return `KONTEKS PRODUK/LP:
+${context}
+
+5 FRAMEWORK PAID ADS (DIRECT RESPONSE) — wajib dipakai (1 framework = 1 ide, urut sesuai list):
+${fwList}
+
+Hasilkan 5 ide ad creative dengan menerapkan masing-masing framework. Tiap ide harus:
+- Konkret produk-spesifik (bukan generic)
+- Hook 1 baris yg langsung pull attention dalam 3 detik pertama
+- channelFit array isi: HANYA "META_ADS" dan/atau "TIKTOK_ADS" (TIDAK boleh channel organik lain)
+- format: salah satu dari "ADS_VIDEO", "ADS_IMAGE", "ADS_CAROUSEL" sesuai best fit framework
+- funnelStage prioritas BOFU > MOFU (paid ads jarang TOFU murni)
+- predictedVirality 3-5 (paid = paid traffic, virality definisi beda)
+
+PENTING: ide ini akan di-generate jadi paid ads creative full (5 headlines + 3 primary text + visual brief + storyboard). Hook + angle harus kuat enough untuk jadi seed copy variation.
 
 Keluarkan JSON array 5 object sesuai schema.`
 }
@@ -391,15 +425,27 @@ const VALID_CHANNELS = new Set([
   'IG_CAROUSEL',
   'IG_REELS',
   'TIKTOK',
+  'META_ADS',
+  'TIKTOK_ADS',
 ])
 const VALID_FORMATS = new Set([
   'VIDEO_SCRIPT',
   'CAROUSEL',
   'SINGLE_IMAGE',
   'TEXT_POST',
+  'ADS_VIDEO',
+  'ADS_IMAGE',
+  'ADS_CAROUSEL',
 ])
 const VALID_FUNNELS = new Set(['TOFU', 'MOFU', 'BOFU'])
-const VALID_METHODS = new Set<IdeaMethod>(['HOOK', 'PAIN', 'PERSONA', 'TRENDS'])
+const VALID_METHODS = new Set<IdeaMethod>([
+  'HOOK',
+  'PAIN',
+  'PERSONA',
+  'TRENDS',
+  'WINNER',
+  'ADS_FRAMEWORK',
+])
 
 export { VALID_METHODS }
 
@@ -459,6 +505,11 @@ export async function generateIdeas(input: {
   // POSTED+metric piece sebagai pattern reference. Hanya bekerja kalau
   // user punya >=3 piece dgn metric tercatat.
   includeWinner?: boolean
+  // includeAdsFramework=true → tambah method ADS_FRAMEWORK (6th metode),
+  // hasilkan 5 ide khusus paid ads dgn 5 direct-response framework
+  // (Hormozi/PAS/BAB/SocialProof/Scarcity). channelFit always META_ADS/
+  // TIKTOK_ADS. format always ADS_*. Phase 6.
+  includeAdsFramework?: boolean
   // Filter channel & funnel — kalau user gak mau Reels/TikTok atau cuma
   // mau BOFU, set di sini. Default = semua. Constraint masuk ke prompt
   // + post-filter defensif.
@@ -487,6 +538,10 @@ export async function generateIdeas(input: {
   if (input.includeWinner) {
     estimateInput += 5_000
     estimateOutput += 1_000
+  }
+  if (input.includeAdsFramework) {
+    estimateInput += 6_000
+    estimateOutput += 1_500
   }
   const preCheck = await computeChargeFromUsage({
     featureKey: FEATURE_KEY,
@@ -569,9 +624,35 @@ export async function generateIdeas(input: {
       })
   }
 
+  let adsCallPromise: Promise<MethodCallResult> | null = null
+  if (input.includeAdsFramework) {
+    // ADS frameworks butuh system prompt yg permit channel ads — kalau user
+    // exclude META_ADS/TIKTOK_ADS dari targetChannels, skip method ini.
+    const hasAdsChannel =
+      (input.targetChannels ?? ALL_CHANNELS).some(
+        (c) => c === 'META_ADS' || c === 'TIKTOK_ADS',
+      )
+    if (hasAdsChannel) {
+      adsCallPromise = callAi(
+        'ADS_FRAMEWORK',
+        buildAdsFrameworkPrompt(contextSummary, getAllAdsFrameworks()),
+        systemPrompt,
+      )
+    } else {
+      adsCallPromise = Promise.resolve({
+        method: 'ADS_FRAMEWORK' as IdeaMethod,
+        ideas: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        error: 'Channel ads (META_ADS/TIKTOK_ADS) tidak ada di filter — aktifkan dulu',
+      })
+    }
+  }
+
   const allCalls: Promise<MethodCallResult>[] = [...baseCalls]
   if (trendsCallPromise) allCalls.push(trendsCallPromise)
   if (winnerCallPromise) allCalls.push(winnerCallPromise)
+  if (adsCallPromise) allCalls.push(adsCallPromise)
   const results = await Promise.all(allCalls)
   const hookRes = results[0]!
   const painRes = results[1]!
@@ -579,10 +660,12 @@ export async function generateIdeas(input: {
   let cursor = 3
   const trendsRes = input.includeTrends ? results[cursor++] : undefined
   const winnerRes = input.includeWinner ? results[cursor++] : undefined
+  const adsRes = input.includeAdsFramework ? results[cursor++] : undefined
 
   const orderedResults: MethodCallResult[] = [hookRes, painRes, personaRes]
   if (trendsRes) orderedResults.push(trendsRes)
   if (winnerRes) orderedResults.push(winnerRes)
+  if (adsRes) orderedResults.push(adsRes)
 
   const allIdeas: (GeneratedIdea & { isFreePreview: boolean })[] = []
   const methodResults = orderedResults.map((r) => ({

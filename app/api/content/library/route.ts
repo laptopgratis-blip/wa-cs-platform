@@ -1,4 +1,4 @@
-// GET /api/content/library?channel=&funnelStage=&status=&briefId=
+// GET /api/content/library?channel=&funnelStage=&status=&briefId=&pieceType=
 // List ContentPiece milik user dgn filter optional.
 import type { NextResponse } from 'next/server'
 
@@ -18,6 +18,7 @@ export async function GET(req: Request) {
     funnelStage: url.searchParams.get('funnelStage') ?? undefined,
     status: url.searchParams.get('status') ?? undefined,
     briefId: url.searchParams.get('briefId') ?? undefined,
+    pieceType: url.searchParams.get('pieceType') ?? undefined,
   })
   return jsonOk({ pieces })
 }

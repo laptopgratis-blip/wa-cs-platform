@@ -31,6 +31,9 @@ interface Piece {
   postedAt: string | null
   createdAt: string
   brief?: { lpId?: string; manualTitle?: string | null } | null
+  pieceType?: string
+  adsPlatform?: string | null
+  adsFormat?: string | null
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -40,6 +43,8 @@ const CHANNEL_LABEL: Record<string, string> = {
   IG_CAROUSEL: 'IG Carousel',
   IG_REELS: 'IG Reels',
   TIKTOK: 'TikTok',
+  META_ADS: 'Meta Ads',
+  TIKTOK_ADS: 'TikTok Ads',
 }
 
 const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
@@ -58,7 +63,11 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
 export function LibraryTab() {
   const [pieces, setPieces] = useState<Piece[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<{ channel?: string; status?: string }>({})
+  const [filter, setFilter] = useState<{
+    channel?: string
+    status?: string
+    pieceType?: string
+  }>({})
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -67,6 +76,7 @@ export function LibraryTab() {
     const url = new URL('/api/content/library', window.location.origin)
     if (filter.channel) url.searchParams.set('channel', filter.channel)
     if (filter.status) url.searchParams.set('status', filter.status)
+    if (filter.pieceType) url.searchParams.set('pieceType', filter.pieceType)
     fetch(url.pathname + url.search, { cache: 'no-store' })
       .then((r) => r.json())
       .then((j) => {
@@ -155,6 +165,17 @@ export function LibraryTab() {
       {/* Filter */}
       <div className="flex flex-wrap gap-2">
         <select
+          value={filter.pieceType ?? ''}
+          onChange={(e) =>
+            setFilter((f) => ({ ...f, pieceType: e.target.value || undefined }))
+          }
+          className="rounded-md border border-warm-300 bg-white px-2 py-1 text-xs"
+        >
+          <option value="">Organik + Iklan</option>
+          <option value="ORGANIC">Konten organik</option>
+          <option value="ADS">Iklan berbayar</option>
+        </select>
+        <select
           value={filter.channel ?? ''}
           onChange={(e) =>
             setFilter((f) => ({
@@ -214,6 +235,11 @@ export function LibraryTab() {
               <Card key={p.id}>
                 <CardContent className="space-y-3 p-4">
                   <div className="flex flex-wrap gap-1">
+                    {p.pieceType === 'ADS' && (
+                      <Badge className="bg-fuchsia-100 text-[10px] text-fuchsia-800">
+                        🎯 Iklan
+                      </Badge>
+                    )}
                     <Badge className="bg-warm-100 text-[10px] text-warm-700">
                       {CHANNEL_LABEL[p.channel] ?? p.channel}
                     </Badge>
@@ -371,6 +397,10 @@ function parseScheduleInput(input: string): Date | null {
 }
 
 function previewBody(bodyJson: Record<string, unknown>): string {
+  // Ads body — show first headline
+  if (Array.isArray(bodyJson.headlines) && bodyJson.headlines.length > 0) {
+    return String(bodyJson.headlines[0] ?? '')
+  }
   if (typeof bodyJson.hook === 'string') return bodyJson.hook
   if (Array.isArray(bodyJson.slides)) {
     const first = bodyJson.slides[0] as { headline?: string }
