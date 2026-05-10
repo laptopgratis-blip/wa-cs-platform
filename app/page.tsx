@@ -1,23 +1,32 @@
-// Landing page publik. Server component supaya paket harga di-fetch
-// langsung dari DB (tidak perlu client request).
+// Landing page utama — fokus ke "Bikin LP Gratis 5 menit" sebagai entry-point
+// utama UMKM (positioning baru 2026-05-10). Fitur CS WhatsApp AI dipindah ke
+// /cs-whatsapp sub-page biar home tidak terlalu padat.
+//
+// Funnel: Hero (LP gratis) → 3-step (cara kerja) → Features (apa yg didapat)
+// → MoreFeatures (cross-sell ke fitur lain Hulao) → Pricing (transparan)
+// → FAQ (objection handling) → FinalCTA (risk reversal).
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
-import { CTA } from '@/components/landing/CTA'
-import { FAQ } from '@/components/landing/FAQ'
-import { Features } from '@/components/landing/Features'
 import { Footer } from '@/components/landing/Footer'
-import { Hero } from '@/components/landing/Hero'
-import { HowItWorks } from '@/components/landing/HowItWorks'
-import { LpBuilderHook } from '@/components/landing/LpBuilderHook'
+import { Features } from '@/components/landing/lp-gratis/Features'
+import { FAQ } from '@/components/landing/lp-gratis/FAQ'
+import { FinalCTA } from '@/components/landing/lp-gratis/FinalCTA'
+import { Hero } from '@/components/landing/lp-gratis/Hero'
+import { MoreFeatures } from '@/components/landing/lp-gratis/MoreFeatures'
+import { ThreeSteps } from '@/components/landing/lp-gratis/ThreeSteps'
 import { Navbar } from '@/components/landing/Navbar'
-import { PowerTierExplainer } from '@/components/landing/PowerTierExplainer'
 import { Pricing } from '@/components/landing/Pricing'
-import { ProblemAgitation } from '@/components/landing/ProblemAgitation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata = {
+  title: 'Bikin Landing Page Gratis dalam 5 Menit · Hulao',
+  description:
+    'Pakai AI gratis (Gemini/Claude.ai), Hulao yang host & auto-connect ke WhatsApp. Tanpa coding, tanpa langganan bulanan. Custom slug, mobile responsive, editor visual.',
+}
 
 export default async function HomePage() {
   // Kalau sudah login, lompat langsung ke dashboard.
@@ -40,21 +49,15 @@ export default async function HomePage() {
     <div className="flex min-h-svh flex-col">
       <Navbar />
       <main className="flex-1">
-        {/* Order section disusun mengikuti funnel:
-            Hero → Problem (agitate) → Features (3-act solution) →
-            HowItWorks (gampang) → LpBuilder (lead magnet bonus) →
-            Power tier (untuk yang serius) → Pricing → FAQ (objection) → CTA */}
         <Hero />
-        <ProblemAgitation />
+        <ThreeSteps />
         <Features />
-        <HowItWorks />
-        <LpBuilderHook />
-        <div id="power">
-          <PowerTierExplainer />
+        <MoreFeatures />
+        <div id="pricing">
+          <Pricing packages={packages} />
         </div>
-        <Pricing packages={packages} />
         <FAQ />
-        <CTA />
+        <FinalCTA />
       </main>
       <Footer />
     </div>
