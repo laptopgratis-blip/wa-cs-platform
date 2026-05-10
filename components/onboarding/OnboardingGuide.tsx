@@ -19,8 +19,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { InlineTaskHost } from '@/components/onboarding/inline/InlineTaskHost'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import type { InlineTaskKind } from '@/lib/onboarding/checklists'
 import { cn } from '@/lib/utils'
 
 type Goal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
@@ -39,6 +41,7 @@ interface GuideStep {
   requiresPlan: 'POWER' | 'LMS' | null
   instructions: string[]
   actionLabel: string
+  inlineTask: InlineTaskKind | null
 }
 
 interface Props {
@@ -301,41 +304,53 @@ export function OnboardingGuide({
               </div>
             )}
 
-            {/* Tombol action utama */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button
-                asChild
-                size="lg"
-                className="bg-primary-500 hover:bg-primary-600 sm:flex-1"
-              >
-                <Link href={active.href} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="mr-2 size-4" />
-                  {active.actionLabel}
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={refresh}
-                disabled={refreshing}
-                className="sm:w-auto"
-                title="Cek lagi apakah step sudah selesai"
-              >
-                <RefreshCw className={cn('mr-2 size-4', refreshing && 'animate-spin')} />
-                Refresh status
-              </Button>
-            </div>
+            {/* Inline task: render mini-form langsung di wizard kalau step
+                support. Kalau tidak, tampilkan tombol link ke halaman fitur
+                (same-window, supaya user tidak kehilangan wizard di tab lain). */}
+            {active.inlineTask && !isDone && !isSkipped ? (
+              <InlineTaskHost
+                kind={active.inlineTask}
+                fallbackHref={active.href}
+                onCompleted={() => {
+                  // Mark step completed + auto-advance ke step berikut.
+                  void postAction(active.id, 'complete')
+                }}
+              />
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-primary-500 hover:bg-primary-600 sm:flex-1"
+                >
+                  <Link href={active.href}>
+                    <ExternalLink className="mr-2 size-4" />
+                    {active.actionLabel}
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={refresh}
+                  disabled={refreshing}
+                  className="sm:w-auto"
+                  title="Cek lagi apakah step sudah selesai"
+                >
+                  <RefreshCw className={cn('mr-2 size-4', refreshing && 'animate-spin')} />
+                  Refresh status
+                </Button>
+              </div>
+            )}
 
-            {/* Hint untuk user — kasih tahu opsi yang tersedia */}
-            {!isDone && !isSkipped && (
+            {/* Hint untuk user — beda antara inline vs link mode */}
+            {!isDone && !isSkipped && !active.inlineTask && (
               <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                💡 Setelah selesai di halaman tujuan, balik ke sini lalu pilih:{' '}
-                <strong>Tandai selesai</strong> (kalau sudah beres) atau{' '}
-                <strong>Selanjutnya</strong> (lanjut step berikut, sistem auto-detect kapan saja kamu balik ke sini).
+                💡 Klik tombol di atas — halaman fitur akan terbuka di tab ini.
+                Setelah selesai, klik tombol &ldquo;Sebelumnya&rdquo; di browser
+                untuk balik ke wizard, atau pilih{' '}
+                <strong>Tandai selesai</strong> kalau sudah beres.
                 {active.hasAutoCheck && (
-                  <>
-                    {' '}Atau klik <strong>Refresh status</strong> untuk paksa cek ulang.
-                  </>
+                  <> Sistem juga auto-detect saat kamu balik.</>
                 )}
               </p>
             )}

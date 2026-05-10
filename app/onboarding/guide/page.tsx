@@ -83,6 +83,7 @@ export default async function OnboardingGuidePage({ searchParams }: PageProps) {
         requiresPlan: s.requiresPlan ?? null,
         instructions: s.instructions ?? [],
         actionLabel: s.actionLabel ?? `Buka halaman`,
+        inlineTask: s.inlineTask ?? null,
       }))}
     />
   )

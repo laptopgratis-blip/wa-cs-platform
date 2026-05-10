@@ -23,6 +23,18 @@ export type AutoCheckKey =
   | 'lesson_added'
   | 'lms_subscribed'
 
+/**
+ * Inline task kind — kalau di-set, wizard /onboarding/guide akan render
+ * mini-form embedded (mis. scan QR WA, form rekening) langsung di dalam
+ * wizard, tanpa user harus buka tab baru. Step kompleks (LP builder, course
+ * builder) tidak punya inlineTask → fallback ke link halaman fitur.
+ */
+export type InlineTaskKind =
+  | 'wa_connect'
+  | 'bank_add'
+  | 'soul_setup'
+  | 'knowledge_add'
+
 export interface ChecklistStep {
   /** Stabil — disimpan ke User.onboardingChecklist JSON. */
   id: string
@@ -54,6 +66,11 @@ export interface ChecklistStep {
   instructions?: string[]
   /** Label tombol untuk buka halaman fitur. Default: "Buka {nama halaman}". */
   actionLabel?: string
+  /**
+   * Render inline mini-form di dalam wizard alih-alih cuma tombol "Buka
+   * halaman X di tab baru". Awam tidak perlu navigasi keluar wizard.
+   */
+  inlineTask?: InlineTaskKind
 }
 
 export interface ChecklistDefinition {
@@ -76,12 +93,11 @@ const CS_AI: ChecklistDefinition = {
       estimatedMin: 3,
       autoCheck: 'wa_connected',
       actionLabel: 'Buka halaman WhatsApp',
+      inlineTask: 'wa_connect',
       instructions: [
-        'Klik tombol "Buka halaman WhatsApp" di bawah (akan terbuka tab baru).',
-        'Klik "Tambah Akun WhatsApp" → tampil QR code.',
         'Buka WhatsApp di HP → menu (titik 3) → "Perangkat tertaut" → "Tautkan perangkat".',
-        'Scan QR yang ada di layar laptop. Tunggu 5-10 detik sampai status jadi "Tersambung".',
-        'Tutup tab dan kembali ke sini — langkah otomatis ditandai selesai.',
+        'Scan QR yang muncul di bawah pakai HP-mu.',
+        'Tunggu 5-10 detik — sistem otomatis lanjut ke step berikut saat tersambung.',
       ],
     },
     {
@@ -92,11 +108,12 @@ const CS_AI: ChecklistDefinition = {
       estimatedMin: 5,
       autoCheck: 'soul_configured',
       actionLabel: 'Buka pengaturan kepribadian',
+      inlineTask: 'soul_setup',
       instructions: [
-        'Klik tombol di bawah untuk buka halaman Soul (kepribadian AI).',
-        'Klik "Buat Soul Baru" atau pilih salah satu template (mis. "Sari CS Ramah").',
-        'Isi nama Soul (mis. "CS Toko Saya"), pilih gaya bicara, dan tambah konteks bisnis singkat.',
-        'Klik "Simpan". Kembali ke sini.',
+        'Kasih nama AI-mu (mis. "CS Toko Saya").',
+        'Pilih gaya bicara — Ramah / Profesional / Santai.',
+        'Tulis 1-2 kalimat info bisnis (apa yg dijual, target audience).',
+        'Klik Simpan — wizard otomatis lanjut.',
       ],
     },
     {
@@ -107,12 +124,11 @@ const CS_AI: ChecklistDefinition = {
       estimatedMin: 5,
       autoCheck: 'knowledge_added',
       actionLabel: 'Buka halaman Pengetahuan',
+      inlineTask: 'knowledge_add',
       instructions: [
-        'Klik tombol di bawah untuk buka halaman Pengetahuan.',
-        'Klik "Tambah Pengetahuan" → kasih judul (mis. "Daftar Harga", "Jam Buka").',
-        'Tempel atau ketik info bisnismu. Bisa juga upload file PDF/TXT.',
-        'Klik "Simpan". Tambah beberapa pengetahuan kalau perlu.',
-        'Kembali ke sini setelah selesai.',
+        'Kasih judul (mis. "Daftar Harga", "Jam Buka", "Alamat Toko").',
+        'Tempel atau ketik info-nya di kolom isi.',
+        'Klik Simpan. Bisa tambah lagi nanti dari halaman Pengetahuan.',
       ],
     },
     {
@@ -147,10 +163,10 @@ const SELL_LP: ChecklistDefinition = {
       estimatedMin: 3,
       autoCheck: 'wa_connected',
       actionLabel: 'Buka halaman WhatsApp',
+      inlineTask: 'wa_connect',
       instructions: [
-        'Klik tombol di bawah → buka halaman WhatsApp.',
-        'Tambah akun → scan QR pakai HP (menu titik 3 → Perangkat Tertaut → Tautkan).',
-        'Tunggu sampai status "Tersambung". Kembali ke sini.',
+        'Buka WhatsApp di HP → menu titik 3 → Perangkat Tertaut → Tautkan.',
+        'Scan QR di bawah. Sistem auto-lanjut saat tersambung.',
       ],
     },
     {
@@ -162,11 +178,11 @@ const SELL_LP: ChecklistDefinition = {
       autoCheck: 'bank_account_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka pengaturan rekening',
+      inlineTask: 'bank_add',
       instructions: [
-        'Klik tombol di bawah → buka halaman Pengaturan (Rekening).',
-        'Tambah minimal 1 rekening (BCA / Mandiri / dll) — nomor + nama pemilik.',
-        'Set nomor WA admin di section "WA Konfirmasi" — ini nomor kamu yang dapat notif order baru.',
-        'Klik Simpan, kembali ke sini.',
+        'Pilih bank (BCA / Mandiri / dll).',
+        'Isi nomor rekening + nama pemilik.',
+        'Klik Simpan — wizard otomatis lanjut.',
       ],
     },
     {
@@ -269,10 +285,10 @@ const SELL_WA: ChecklistDefinition = {
       estimatedMin: 3,
       autoCheck: 'wa_connected',
       actionLabel: 'Buka halaman WhatsApp',
+      inlineTask: 'wa_connect',
       instructions: [
-        'Klik tombol di bawah → halaman WhatsApp.',
-        'Tambah akun → scan QR pakai HP (menu titik 3 → Perangkat Tertaut → Tautkan).',
-        'Tunggu sampai status "Tersambung". Kembali ke sini.',
+        'Buka WhatsApp di HP → menu titik 3 → Perangkat Tertaut → Tautkan.',
+        'Scan QR di bawah. Auto-lanjut saat tersambung.',
       ],
     },
     {
@@ -283,12 +299,11 @@ const SELL_WA: ChecklistDefinition = {
       estimatedMin: 5,
       autoCheck: 'soul_configured',
       actionLabel: 'Buka pengaturan kepribadian',
+      inlineTask: 'soul_setup',
       instructions: [
-        'Klik tombol di bawah → halaman Soul.',
-        'Pilih template gaya bicara (mis. "Sari CS Ramah") atau buat kustom.',
-        'Isi konteks bisnis singkat (apa yang dijual, target audience).',
-        'Klik Simpan. Lalu buka halaman /knowledge → tambah info produk + harga.',
-        'Kembali ke sini.',
+        'Kasih nama AI-mu, pilih gaya bicara, isi konteks bisnis singkat.',
+        'Klik Simpan — wizard auto-lanjut.',
+        'Untuk tambah FAQ/info produk lebih lengkap, buka halaman Pengetahuan setelah ini.',
       ],
     },
     {
@@ -330,10 +345,10 @@ const SELL_WA: ChecklistDefinition = {
       autoCheck: 'bank_account_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka pengaturan rekening',
+      inlineTask: 'bank_add',
       instructions: [
-        'Klik tombol di bawah → halaman Pengaturan.',
-        'Tambah rekening (BCA / Mandiri / dll) — nomor + nama pemilik.',
-        'Klik Simpan. Kembali ke sini.',
+        'Pilih bank, isi nomor + nama pemilik.',
+        'Klik Simpan — auto-lanjut.',
       ],
     },
   ],
