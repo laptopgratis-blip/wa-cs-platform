@@ -5,6 +5,7 @@
 // X-Callback-Signature. Idempotent: kalau Payment sudah SUCCESS, skip kredit.
 //
 // Catatan: endpoint publik (tanpa auth user) — keamanan murni dari signature.
+import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
 import { upgradeTierFromPurchase } from '@/lib/lp-quota'
@@ -91,59 +92,65 @@ export async function POST(req: Request) {
     else if (status === 'FAILED' || status === 'REFUND') next = 'FAILED'
     else if (status === 'UNPAID') next = 'PENDING'
 
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: next,
-          paymentMethod: body.payment_method ?? payment.paymentMethod,
-          reference: reference ?? payment.reference,
-          paidAt:
-            next === 'SUCCESS'
-              ? body.paid_at
-                ? new Date(body.paid_at * 1000)
-                : new Date()
-              : null,
-        },
-      })
-
-      if (next === 'SUCCESS') {
-        await tx.tokenBalance.upsert({
-          where: { userId: payment.userId },
-          create: {
-            userId: payment.userId,
-            balance: payment.tokenAmount,
-            totalPurchased: payment.tokenAmount,
-          },
-          update: {
-            balance: { increment: payment.tokenAmount },
-            totalPurchased: { increment: payment.tokenAmount },
-          },
-        })
-        await tx.tokenTransaction.create({
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
           data: {
-            userId: payment.userId,
-            amount: payment.tokenAmount,
-            type: 'PURCHASE',
-            description: `Pembelian via Tripay (${body.payment_method ?? 'unknown'})`,
-            reference: merchantRef,
+            status: next,
+            paymentMethod: body.payment_method ?? payment.paymentMethod,
+            reference: reference ?? payment.reference,
+            paidAt:
+              next === 'SUCCESS'
+                ? body.paid_at
+                  ? new Date(body.paid_at * 1000)
+                  : new Date()
+                : null,
           },
         })
-      }
-    })
 
-    // Upgrade tier kuota LP setelah token dikredit. Di luar transaksi karena
-    // helper-nya baca TokenBalance (sudah ter-commit) dan failure di sini
-    // tidak boleh fail-kan webhook (token sudah masuk ke saldo user).
-    if (next === 'SUCCESS') {
-      try {
-        await upgradeTierFromPurchase(payment.userId, payment.tokenAmount)
-      } catch (quotaErr) {
-        console.error(
-          '[POST /api/payment/tripay-webhook] gagal upgrade tier:',
-          quotaErr,
-        )
+        if (next === 'SUCCESS') {
+          await tx.tokenBalance.upsert({
+            where: { userId: payment.userId },
+            create: {
+              userId: payment.userId,
+              balance: payment.tokenAmount,
+              totalPurchased: payment.tokenAmount,
+            },
+            update: {
+              balance: { increment: payment.tokenAmount },
+              totalPurchased: { increment: payment.tokenAmount },
+            },
+          })
+          await tx.tokenTransaction.create({
+            data: {
+              userId: payment.userId,
+              amount: payment.tokenAmount,
+              type: 'PURCHASE',
+              description: `Pembelian via Tripay (${body.payment_method ?? 'unknown'})`,
+              reference: merchantRef,
+            },
+          })
+          // Upgrade tier dalam transaksi yang sama supaya kalau gagal,
+          // kredit token + status payment ikut rollback (tidak bisa
+          // ada saldo masuk tapi tier tidak naik).
+          await upgradeTierFromPurchase(payment.userId, payment.tokenAmount, tx)
+        }
+      })
+    } catch (txErr) {
+      // P2002 = unique constraint violation di TokenTransaction (userId,
+      // reference, type). Artinya webhook+polling race — sudah ada baris
+      // PURCHASE untuk merchantRef ini. Treat as already-processed.
+      if (
+        txErr instanceof Prisma.PrismaClientKnownRequestError &&
+        txErr.code === 'P2002'
+      ) {
+        return NextResponse.json({
+          success: true,
+          data: { idempotent: true, dedupBy: 'unique_constraint' },
+        })
       }
+      throw txErr
     }
 
     return NextResponse.json({ success: true, data: { status: next } })

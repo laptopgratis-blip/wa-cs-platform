@@ -77,25 +77,34 @@ export async function POST(req: Request) {
   }
 
   if (body.status === 'PAID') {
-    await prisma.subscriptionInvoice.update({
-      where: { id: invoice.id },
-      data: {
-        status: 'PAID',
-        paidAt: body.paid_at
-          ? new Date(body.paid_at * 1000)
-          : new Date(),
-      },
-    })
+    // Wrap mark-PAID + activate dalam satu transaksi: kalau aktivasi gagal,
+    // invoice tidak boleh ter-tag PAID (mencegah inconsistent state — invoice
+    // PAID tapi subscription tidak aktif). Notifikasi fire setelah commit.
     try {
-      await activateSubscription(invoice.subscriptionId)
+      await prisma.$transaction(async (tx) => {
+        await tx.subscriptionInvoice.update({
+          where: { id: invoice.id },
+          data: {
+            status: 'PAID',
+            paidAt: body.paid_at
+              ? new Date(body.paid_at * 1000)
+              : new Date(),
+          },
+        })
+        await activateSubscription(invoice.subscriptionId, tx)
+      })
     } catch (err) {
       console.error(
-        '[subscription tripay-webhook] activate gagal:',
+        '[subscription tripay-webhook] activate atomik gagal:',
         invoice.subscriptionId,
         err,
       )
-      // Invoice sudah PAID (uang sudah masuk) — tidak rollback. Operator
-      // bisa retry activate manual via admin tools.
+      // Return 500 supaya Tripay retry — invoice masih UNPAID di DB,
+      // operator bisa investigate kalau retry juga gagal.
+      return NextResponse.json(
+        { success: false, error: 'activation failed' },
+        { status: 500 },
+      )
     }
     return NextResponse.json({ success: true })
   }

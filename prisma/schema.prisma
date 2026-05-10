@@ -194,11 +194,12 @@ model TokenTransaction {
   amount      Int // positif = tambah, negatif = kurang
   type        TokenTxType
   description String?
-  reference   String? // payment ID dari Midtrans
+  reference   String? // payment ID / invoice ID — dipakai untuk dedup saat webhook + polling race
   createdAt   DateTime    @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, reference, type], name: "userId_reference_type_unique")
   @@index([userId, createdAt])
 }
 
@@ -742,32 +743,32 @@ model LpOptimization {
   inputTokens  Int
   outputTokens Int
 
-  inputPricePer1MUsd  Float @default(0)
-  outputPricePer1MUsd Float @default(0)
-  providerCostUsd     Float @default(0)
-  providerCostRp      Float @default(0)
+  inputPricePer1MUsd    Float @default(0)
+  outputPricePer1MUsd   Float @default(0)
+  providerCostUsd       Float @default(0)
+  providerCostRp        Float @default(0)
   // Platform tokens yang di-charge ke user balance. 0 kalau discard.
-  platformTokensCharged Int @default(0)
+  platformTokensCharged Int   @default(0)
 
   // Output AI — di-validate parse JSON sebelum simpan.
-  suggestionsJson Json   @default("[]") // [{title, rationale, impact}]
-  focusAreasJson  Json   @default("[]") // ["pricing","social_proof",...]
+  suggestionsJson Json    @default("[]") // [{title, rationale, impact}]
+  focusAreasJson  Json    @default("[]") // ["pricing","social_proof",...]
   scoreBefore     Int? // estimasi 0-100 dari AI atas LP saat ini
   scoreAfter      Int? // estimasi setelah perbaikan diterapkan
   // Konteks input yg di-feed ke AI — disimpan untuk transparency & debug.
   contextSummary  String? @db.Text
 
   // Apply state
-  applied         Boolean   @default(false)
-  appliedAt       DateTime?
+  applied          Boolean   @default(false)
+  appliedAt        DateTime?
   // Snapshot HTML — beforeHtml selalu disimpan, afterHtml hanya kalau output
   // valid. Kedua field nullable supaya record tetap bisa dibuat saat error.
-  beforeHtml      String?   @db.Text
-  afterHtml       String?   @db.Text
+  beforeHtml       String?   @db.Text
+  afterHtml        String?   @db.Text
   // Link ke LpVersion yang ter-create saat apply. Null kalau discard.
   appliedVersionId String?
 
-  errorMessage String? @db.Text
+  errorMessage String?  @db.Text
   createdAt    DateTime @default(now())
 
   user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -784,18 +785,18 @@ model LpOptimization {
 // Auto-prune: keep last 20 versi per LP — yang lebih lama dihapus oleh cron
 // /api/cron/cleanup-lp.
 model LpVersion {
-  id          String @id @default(cuid())
-  lpId        String
+  id             String  @id @default(cuid())
+  lpId           String
   // Snapshot full HTML saat versi ini dibuat.
-  htmlContent String @db.Text
+  htmlContent    String  @db.Text
   // Source tag untuk filter di UI history.
-  source      String // manual | ai | restore
+  source         String // manual | ai | restore
   // Optional reference: kalau source=ai, point ke LpOptimization yang trigger.
   optimizationId String?
   // Score estimate snapshot — dari evaluator (Phase 5) atau AI optimization estimate.
   scoreSnapshot  Int?
   // Note opsional dari user atau auto-generated ("Apply AI suggestions").
-  note        String? @db.Text
+  note           String? @db.Text
 
   createdAt DateTime @default(now())
 
@@ -823,17 +824,17 @@ model LpGeneration {
 
   // Harga snapshot per 1M token (USD) saat call ini di-fire. Snapshot supaya
   // perubahan harga provider di masa depan tidak ngerusak audit historis.
-  inputPricePer1MUsd  Float @default(0)
-  outputPricePer1MUsd Float @default(0)
+  inputPricePer1MUsd    Float @default(0)
+  outputPricePer1MUsd   Float @default(0)
   // Hasil compute: provider cost dalam USD & Rp (pakai usdRate snapshot dari
   // PricingSettings saat call). Dua-duanya disimpan supaya UI tidak perlu
   // re-compute setiap render.
-  providerCostUsd     Float @default(0)
-  providerCostRp      Float @default(0)
+  providerCostUsd       Float @default(0)
+  providerCostRp        Float @default(0)
   // Token platform yang di-charge ke user untuk panggilan ini. Sumber kebenaran
   // billing tetap di TokenTransaction; field ini sekadar mirror untuk JOIN-free
   // reporting.
-  platformTokensCharged Int @default(0)
+  platformTokensCharged Int   @default(0)
 
   createdAt DateTime @default(now())
 
@@ -894,10 +895,10 @@ model LpVisit {
 
   // Engagement aggregates — di-update oleh tracker JS via /api/lp/events.
   // Visit baru default null/false, sampai event scroll/click/unload datang.
-  scrollMaxPct   Int? // 0-100, max scroll yg pernah dicapai
-  timeOnPageSec  Int? // estimated dari last-event minus pageview, capped 30 menit
-  ctaClicked     Boolean @default(false) // any CTA clicked di visit ini
-  bounced        Boolean @default(true) // default true; false saat scrollMaxPct >= 25 OR timeOnPageSec >= 10
+  scrollMaxPct  Int? // 0-100, max scroll yg pernah dicapai
+  timeOnPageSec Int? // estimated dari last-event minus pageview, capped 30 menit
+  ctaClicked    Boolean @default(false) // any CTA clicked di visit ini
+  bounced       Boolean @default(true) // default true; false saat scrollMaxPct >= 25 OR timeOnPageSec >= 10
 
   // UTM dari URL — hadir kalau visitor datang via campaign tracking.
   utmSource   String?
@@ -1003,9 +1004,9 @@ model LpEvent {
   // bisa di-insert untuk count agregat.
   visitId       String?
 
-  eventType   String // lihat docs di atas model
-  eventValue  String? @db.Text // payload string opsional (label CTA, URL host, dll)
-  scrollPct   Int? // 0-100 saat event terjadi
+  eventType     String // lihat docs di atas model
+  eventValue    String? @db.Text // payload string opsional (label CTA, URL host, dll)
+  scrollPct     Int? // 0-100 saat event terjadi
   timeOnPageSec Int? // detik sejak pageview saat event terjadi
 
   // Repeat fields penting supaya bisa query LpEvent tanpa JOIN ke LpVisit.
@@ -1493,7 +1494,7 @@ model UserOrder {
   notesAdmin  String? @db.Text
 
   // Tags many-to-many. User pakai untuk segmentasi (VIP, Komplain, Repeat, dll).
-  tags        OrderTag[] @relation("OrderTags")
+  tags OrderTag[] @relation("OrderTags")
 
   // COD | TRANSFER | BOOKING | CONSULTATION | FREE — string supaya gampang
   // nambah method baru tanpa migrate.
@@ -1599,9 +1600,9 @@ model OrderTag {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name      String
+  name  String
   // Hex color (#RRGGBB) untuk badge di UI.
-  color     String @default("#6B7280")
+  color String @default("#6B7280")
 
   orders UserOrder[] @relation("OrderTags")
 
@@ -1704,9 +1705,9 @@ model Product {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   name        String
-  description String? @db.Text
+  description String?  @db.Text
   price       Float
-  weightGrams Int     @default(500)
+  weightGrams Int      @default(500)
   // Cover image — auto-sync ke images[0] saat user upload multi. Tetap di-keep
   // sebagai field tunggal untuk consumer lama (invoice, orderCard, dll).
   imageUrl    String?
@@ -2292,20 +2293,20 @@ enum EnrollmentStatus {
 }
 
 model Course {
-  id          String       @id @default(cuid())
-  userId      String // Penjual (creator) — multi-tenant per user
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String       @id @default(cuid())
+  userId           String // Penjual (creator) — multi-tenant per user
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Slug per-user unique. Dipakai di URL portal student Phase 2:
   // /belajar/{slug}. Generated dari title saat create, editable.
-  slug        String
-  title       String
-  description String?      @db.Text
+  slug             String
+  title            String
+  description      String?      @db.Text
   // Cover image — reuse pola Product.imageUrl (path /uploads/lms-covers/...).
-  coverUrl    String?
-  status      CourseStatus @default(DRAFT)
+  coverUrl         String?
+  status           CourseStatus @default(DRAFT)
   // Total durasi semua lesson dalam detik — denormalisasi supaya list course
   // tidak perlu sum lessons. Update saat add/edit/delete lesson.
-  totalDurationSec Int @default(0)
+  totalDurationSec Int          @default(0)
 
   // Reverse 1:1 ke Product. Set via Product.courseId. Optional di sisi
   // Course supaya creator bisa bikin draft course dulu sebelum link product.
@@ -2323,13 +2324,13 @@ model Course {
 
 // Module = chapter / bab. Container untuk grouping Lessons.
 model CourseModule {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   courseId  String
-  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course    Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   title     String
   // Urutan tampil di builder + portal student. Manual int supaya gampang
   // re-order via drag (frontend kirim array urut, backend bulk-update).
-  sortOrder Int     @default(0)
+  sortOrder Int    @default(0)
 
   lessons Lesson[]
 
@@ -2340,28 +2341,28 @@ model CourseModule {
 }
 
 model Lesson {
-  id          String            @id @default(cuid())
-  moduleId    String
-  module      CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  title       String
-  contentType LessonContentType @default(VIDEO_EMBED)
+  id            String            @id @default(cuid())
+  moduleId      String
+  module        CourseModule      @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title         String
+  contentType   LessonContentType @default(VIDEO_EMBED)
   // Phase 1: pakai videoEmbedUrl (YT/Vimeo) atau richTextHtml.
   // Phase 2: fileUrl + fileSizeMB diisi saat user upload file.
   videoEmbedUrl String? // YT/Vimeo embed-able URL
-  richTextHtml  String? @db.Text
+  richTextHtml  String?           @db.Text
   fileUrl       String? // Phase 2
   fileSizeMB    Int? // Phase 2 — untuk quota storage check
   // Durasi manual (detik) — penjual input atau auto-detect via embed oEmbed
   // di Phase 2. Dipakai untuk progress tracking + total durasi course.
-  durationSec   Int     @default(0)
+  durationSec   Int               @default(0)
   // Free preview = bisa di-tonton tanpa enrollment. Maks 1-2 per course
   // untuk demo public. Di-enforce di portal Phase 2.
-  isFreePreview Boolean @default(false)
+  isFreePreview Boolean           @default(false)
   // Drip schedule (Phase 4): null = unlock immediate. Int = unlock setelah
   // N hari sejak enrolledAt. Plan PRO/UNLIMITED only — di-enforce di service
   // saat lesson PATCH. Phase 5 bisa upgrade ke absolute date.
   dripDays      Int?
-  sortOrder     Int     @default(0)
+  sortOrder     Int               @default(0)
 
   progress LessonProgress[]
 
@@ -2375,28 +2376,28 @@ model Lesson {
 // on-order-PAID atau admin manual. Phase 2: portal student verify via
 // (courseId, studentPhone) match.
 model Enrollment {
-  id           String           @id @default(cuid())
-  courseId     String
-  course       Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  id            String     @id @default(cuid())
+  courseId      String
+  course        Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   // Identitas student — phone E.164 (sumber: UserOrder.customerPhone). Email
   // optional (Phase 2 fallback OTP). Name snapshot supaya tampil di admin
   // tanpa lookup contact.
-  studentPhone String
-  studentName  String?
-  studentEmail String?
+  studentPhone  String
+  studentName   String?
+  studentEmail  String?
   // Order yg trigger enrollment (auto-flow). Null = manual oleh admin.
   // SetNull supaya enrollment tidak ikut hilang saat order soft-delete.
   orderId       String?
-  order         UserOrder?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order         UserOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
   // Snapshot invoiceNumber untuk display di admin tanpa join order.
   invoiceNumber String?
 
-  status      EnrollmentStatus @default(ACTIVE)
-  enrolledAt  DateTime         @default(now())
+  status       EnrollmentStatus @default(ACTIVE)
+  enrolledAt   DateTime         @default(now())
   // null = lifetime access. Phase 4: kalau course punya periodAccess (mis.
   // 90 hari), auto-set saat enroll.
-  expiresAt   DateTime?
-  revokedAt   DateTime?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
   revokeReason String?
 
   progress    LessonProgress[]
@@ -2463,25 +2464,25 @@ model StudentSession {
 // Why: Baileys WA session admin bisa disconnect → OTP gagal sampai. Magic
 // link 1x kirim → student simpan/bookmark → bisa re-login tanpa OTP berulang.
 model StudentMagicLink {
-  id            String    @id @default(cuid())
-  studentPhone  String
+  id           String    @id @default(cuid())
+  studentPhone String
   // Token random 32-byte hex — value di URL ?t=...
-  token         String    @unique
+  token        String    @unique
   // Hard expiry. Setelah lewat, klik link dapat error "expired".
-  expiresAt     DateTime
+  expiresAt    DateTime
   // Pertama kali link di-klik. Null = belum pernah dipakai.
-  consumedAt    DateTime?
+  consumedAt   DateTime?
   // Counter total klik untuk audit. Dipakai juga utk monitoring kalau token
   // bocor (akses dari banyak IP/device beda dlm waktu pendek).
-  useCount      Int       @default(0)
+  useCount     Int       @default(0)
   // "WA" | "EMAIL" — channel pengiriman primary saat issue (audit only,
   // bukan enforcement). WA bisa fallback ke EMAIL.
-  channel       String
+  channel      String
   // "ENROLLMENT" (auto saat order PAID) | "RESEND" (request manual student)
-  trigger       String
+  trigger      String
   // Saat token lebih baru di-issue utk phone yg sama, mark old revoked.
-  revokedAt     DateTime?
-  createdAt     DateTime  @default(now())
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([studentPhone, revokedAt])
   @@index([expiresAt])
@@ -2491,18 +2492,18 @@ model StudentMagicLink {
 // di-hash supaya tidak bocor walau DB dump. Verify dgn timingSafeEqual.
 // Throttle: max 3 OTP per phone per 60 menit (di-enforce di service).
 model StudentOtp {
-  id            String   @id @default(cuid())
-  studentPhone  String
+  id           String    @id @default(cuid())
+  studentPhone String
   // Hash sha256 dari OTP plaintext (lihat lib/services/lms/student-auth.ts).
-  otpHash       String
+  otpHash      String
   // 5 menit sejak issue. Setelah lewat, verify return error.
-  expiresAt     DateTime
+  expiresAt    DateTime
   // Counter percobaan verify untuk OTP ini. Setelah 5x salah, mark consumed
   // supaya brute force capped.
-  attempts      Int      @default(0)
+  attempts     Int       @default(0)
   // Timestamp saat OTP dipakai sukses → mark consumed (tidak bisa di-replay).
-  consumedAt    DateTime?
-  createdAt     DateTime @default(now())
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([studentPhone, createdAt(sort: Desc)])
   @@index([expiresAt])
@@ -2524,25 +2525,25 @@ enum LmsTier {
 }
 
 model LmsUpgradePackage {
-  id          String  @id @default(cuid())
-  name        String // "Basic", "Pro", "Unlimited"
-  description String?
-  tier        LmsTier @unique // FREE row di-seed sekali, tidak di-bayar
+  id                   String   @id @default(cuid())
+  name                 String // "Basic", "Pro", "Unlimited"
+  description          String?
+  tier                 LmsTier  @unique // FREE row di-seed sekali, tidak di-bayar
   // Limit per plan. -1 = unlimited (di-enforce di service: -1 → bypass).
-  maxCourses              Int
-  maxLessonsPerCourse     Int
-  maxStudentsPerCourse    Int
-  maxFileStorageMB        Int     @default(0) // Phase 2 file upload, Phase 4 enforce
-  canUseDripSchedule      Boolean @default(false) // Phase 4
-  canIssueCertificate     Boolean @default(false) // Phase 4
+  maxCourses           Int
+  maxLessonsPerCourse  Int
+  maxStudentsPerCourse Int
+  maxFileStorageMB     Int      @default(0) // Phase 2 file upload, Phase 4 enforce
+  canUseDripSchedule   Boolean  @default(false) // Phase 4
+  canIssueCertificate  Boolean  @default(false) // Phase 4
   // Harga subscription per bulan (Rupiah). Default 0 → FREE (tidak bisa
   // checkout). priceMonthly > 0 wajib supaya muncul di /pricing-lms.
-  priceMonthly            Int     @default(0)
-  isPopular               Boolean @default(false)
-  isActive                Boolean @default(true)
-  sortOrder               Int     @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  priceMonthly         Int      @default(0)
+  isPopular            Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  sortOrder            Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   subscriptions LmsSubscription[]
 
@@ -2555,35 +2556,35 @@ model LmsUpgradePackage {
 //   - Manual admin adjust
 // Default FREE row di-create lazily saat user pertama kali butuh quota.
 model LmsQuota {
-  id                    String  @id @default(cuid())
-  userId                String  @unique
-  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tier                  LmsTier @default(FREE)
-  maxCourses            Int     @default(1)
-  maxLessonsPerCourse   Int     @default(5)
-  maxStudentsPerCourse  Int     @default(50)
-  maxFileStorageMB      Int     @default(0)
-  canUseDripSchedule    Boolean @default(false)
-  canIssueCertificate   Boolean @default(false)
-  updatedAt             DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier                 LmsTier  @default(FREE)
+  maxCourses           Int      @default(1)
+  maxLessonsPerCourse  Int      @default(5)
+  maxStudentsPerCourse Int      @default(50)
+  maxFileStorageMB     Int      @default(0)
+  canUseDripSchedule   Boolean  @default(false)
+  canIssueCertificate  Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
 }
 
 model LmsSubscription {
-  id              String  @id @default(cuid())
-  userId          String
-  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lmsPackageId    String
-  lmsPackage      LmsUpgradePackage @relation(fields: [lmsPackageId], references: [id])
-  durationMonths  Int     // 1 | 3 | 6 | 12 (mirror DURATION_DISCOUNTS LP)
-  startDate       DateTime
-  endDate         DateTime
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lmsPackageId   String
+  lmsPackage     LmsUpgradePackage @relation(fields: [lmsPackageId], references: [id])
+  durationMonths Int // 1 | 3 | 6 | 12 (mirror DURATION_DISCOUNTS LP)
+  startDate      DateTime
+  endDate        DateTime
   // ACTIVE | EXPIRED | CANCELLED
-  status          String  @default("ACTIVE")
+  status         String            @default("ACTIVE")
   // Pricing snapshot (IDR) supaya audit historis akurat walau plan
   // priceMonthly berubah.
-  priceBase       Int
-  discountPct     Int     @default(0)
-  priceFinal      Int
+  priceBase      Int
+  discountPct    Int               @default(0)
+  priceFinal     Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2595,18 +2596,18 @@ model LmsSubscription {
 }
 
 model LmsSubscriptionInvoice {
-  id              String  @id @default(cuid())
-  subscriptionId  String
-  subscription    LmsSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  invoiceNumber   String  @unique
-  amount          Int     // IDR
+  id             String          @id @default(cuid())
+  subscriptionId String
+  subscription   LmsSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoiceNumber  String          @unique
+  amount         Int // IDR
   // Token equivalent yg dipotong (snapshot pricePerToken aktif saat checkout).
-  tokenAmount     Int
-  description     String  @db.Text
+  tokenAmount    Int
+  description    String          @db.Text
   // PAID — Phase 3 tidak ada PENDING karena atomic deduct token.
-  status          String  @default("PAID")
-  paidAt          DateTime
-  createdAt       DateTime @default(now())
+  status         String          @default("PAID")
+  paidAt         DateTime
+  createdAt      DateTime        @default(now())
 }
 
 // LMS Phase 4 — Sertifikat completion. Di-issue saat student selesai
@@ -2617,22 +2618,22 @@ model LmsSubscriptionInvoice {
 // Snapshot studentName + courseTitle + courseSlug supaya sertifikat
 // tetap valid display walau course title diubah atau di-archive nanti.
 model Certificate {
-  id            String  @id @default(cuid())
+  id           String     @id @default(cuid())
   // Number unik public-shareable (mis. "HULAO-LMS-2026-XXXXXX"). Dipakai
   // di URL verify /belajar/certificate/{number}. Indexed unique.
-  number        String  @unique
-  enrollmentId  String  @unique
-  enrollment    Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  number       String     @unique
+  enrollmentId String     @unique
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   // Snapshot supaya rendering certificate page tidak butuh join saat
   // course title berubah / archive di kemudian hari.
-  studentName   String
-  studentPhone  String
-  courseTitle   String
-  courseSlug    String
+  studentName  String
+  studentPhone String
+  courseTitle  String
+  courseSlug   String
   // Snapshot creator (penjual) name + ID — untuk credit di certificate.
-  issuerUserId  String
-  issuerName    String
-  issuedAt      DateTime @default(now())
+  issuerUserId String
+  issuerName   String
+  issuedAt     DateTime   @default(now())
 
   @@index([studentPhone])
   @@index([issuerUserId])
@@ -2659,30 +2660,30 @@ model Certificate {
 // service fetch via getFeatureConfig(key) dengan cache. Ganti rate / margin
 // di admin UI = effect langsung tanpa deploy.
 model AiFeatureConfig {
-  id                String   @id @default(cuid())
-  featureKey        String   @unique // 'CONTENT_IDEA' | 'CONTENT_GENERATE' | 'LP_OPTIMIZE' | future
-  displayName       String   // tampilan admin UI: "Idea Generator", "Content Generation"
-  modelName         String   // 'claude-haiku-4-5' | 'claude-sonnet-4-6' (snapshot ke log)
+  id               String   @id @default(cuid())
+  featureKey       String   @unique // 'CONTENT_IDEA' | 'CONTENT_GENERATE' | 'LP_OPTIMIZE' | future
+  displayName      String // tampilan admin UI: "Idea Generator", "Content Generation"
+  modelName        String // 'claude-haiku-4-5' | 'claude-sonnet-4-6' (snapshot ke log)
   // Provider rate (USD per 1M token). Admin update saat Anthropic naik harga.
-  inputPricePer1M   Float
-  outputPricePer1M  Float
+  inputPricePer1M  Float
+  outputPricePer1M Float
   // Margin multiplier — 1.3 = +30% margin platform.
-  platformMargin    Float    @default(1.3)
+  platformMargin   Float    @default(1.3)
   // Floor minimum token charge per call (anti-mikro-call).
-  floorTokens       Int      @default(100)
+  floorTokens      Int      @default(100)
   // Cap maksimum token charge per call (sanity guard kalau outlier cost).
-  capTokens         Int      @default(50000)
-  isActive          Boolean  @default(true)
-  description       String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  capTokens        Int      @default(50000)
+  isActive         Boolean  @default(true)
+  description      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 // Tabel log umum untuk semua AI feature generation. Source of truth untuk
 // /admin/profitability + cron profitability-check (extend dari Message-only).
 model AiGenerationLog {
   id              String   @id @default(cuid())
-  featureKey      String   // FK logical ke AiFeatureConfig
+  featureKey      String // FK logical ke AiFeatureConfig
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Subject ref — bebas: 'LP', 'CONTENT_IDEA_BATCH', 'CONTENT_PIECE'
@@ -2690,7 +2691,7 @@ model AiGenerationLog {
   subjectId       String?
   // Real Anthropic usage — input/output tokens sesuai SDK response.
   inputTokens     Int
-  outputTokens   Int
+  outputTokens    Int
   // Cost provider IDR (snapshot kurs saat call).
   apiCostUsd      Float
   apiCostRp       Float
@@ -2719,36 +2720,36 @@ model AiGenerationLog {
 // ContentPiece. promotedToPieceId nullable — null = belum di-generate konten
 // full-nya, hanya ide di library.
 model ContentIdea {
-  id                String    @id @default(cuid())
+  id                String        @id @default(cuid())
   userId            String
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Source LP — null kalau brief manual.
   lpId              String?
-  lp                LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
+  lp                LandingPage?  @relation(fields: [lpId], references: [id], onDelete: SetNull)
   // 'HOOK' | 'PAIN' | 'PERSONA' — dari metode mana ide ini dihasilkan.
   method            String
   // Hook tagline pembuka konten — 1 baris pendek.
-  hook              String    @db.Text
+  hook              String        @db.Text
   // Sudut pendekatan — 1-2 kalimat, konteks utk AI saat generate konten full.
-  angle             String    @db.Text
+  angle             String        @db.Text
   // Channel yg cocok untuk ide ini (multi). Mis. ['IG_REELS', 'TIKTOK'].
   channelFit        String[]
   // Format konten yg cocok ('VIDEO_SCRIPT' | 'CAROUSEL' | 'SINGLE_IMAGE' | 'TEXT_POST').
   format            String
   // Reasoning AI 1-2 kalimat kenapa ini bekerja.
-  whyItWorks        String    @db.Text
+  whyItWorks        String        @db.Text
   // Prediksi virality 1-5 (best-effort AI estimate).
-  predictedVirality Int       @default(3)
+  predictedVirality Int           @default(3)
   // 'TOFU' | 'MOFU' | 'BOFU'
   funnelStage       String
   // Estimasi token cost prediksi kalau jadi konten full (utk display "Bikin ini Rp X").
-  estimatedTokens   Int       @default(800)
+  estimatedTokens   Int           @default(800)
   // Free preview gate — true = ide ini visible gratis. False = blur kalau saldo nol.
-  isFreePreview     Boolean   @default(false)
+  isFreePreview     Boolean       @default(false)
   // Promote ke ContentPiece kalau user pilih.
-  promotedToPieceId String?   @unique
+  promotedToPieceId String?       @unique
   promotedToPiece   ContentPiece? @relation(fields: [promotedToPieceId], references: [id], onDelete: SetNull)
-  createdAt         DateTime  @default(now())
+  createdAt         DateTime      @default(now())
 
   @@index([userId, createdAt])
   @@index([lpId, createdAt])
@@ -2757,26 +2758,26 @@ model ContentIdea {
 // Brief = batch generation request. Boleh dari LP atau brief manual.
 // selectedIdeaIds di-snapshot ke ContentPiece.sourceIdeaId saat generate.
 model ContentBrief {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lpId            String?
-  lp              LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lpId           String?
+  lp             LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
   // Manual brief fields — dipakai kalau lpId null.
-  manualTitle     String?
-  manualAudience  String?   @db.Text
-  manualOffer     String?   @db.Text
+  manualTitle    String?
+  manualAudience String?      @db.Text
+  manualOffer    String?      @db.Text
   // Tone preset: 'CASUAL' | 'EDUKATIF' | 'AGGRESSIVE_OFFER' | 'STORYTELLING'
-  tone            String    @default("CASUAL")
+  tone           String       @default("CASUAL")
   // Target funnel mix — Json {tofu: 4, mofu: 3, bofu: 3} default.
-  funnelMix       Json
+  funnelMix      Json
   // Status: 'DRAFT' (sedang pilih ide) | 'GENERATING' (AI run) | 'COMPLETED' | 'FAILED'
-  status          String    @default("DRAFT")
-  errorMessage    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  status         String       @default("DRAFT")
+  errorMessage   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  pieces          ContentPiece[]
+  pieces ContentPiece[]
 
   @@index([userId, createdAt])
   @@index([lpId, createdAt])
@@ -2784,13 +2785,13 @@ model ContentBrief {
 
 // ContentPiece = 1 unit konten full (sudah ada body). Channel-aware.
 model ContentPiece {
-  id              String    @id @default(cuid())
+  id              String        @id @default(cuid())
   userId          String
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   briefId         String?
   brief           ContentBrief? @relation(fields: [briefId], references: [id], onDelete: SetNull)
   // Source idea kalau di-promote dari Idea Generator.
-  sourceIdeaId    String?   @unique
+  sourceIdeaId    String?       @unique
   sourceIdea      ContentIdea?
   // Channel: 'WA_STATUS' | 'IG_STORY' | 'IG_POST' | 'IG_CAROUSEL' | 'IG_REELS' | 'TIKTOK' | 'META_ADS' | 'TIKTOK_ADS'
   channel         String
@@ -2807,9 +2808,9 @@ model ContentPiece {
   //   META_ADS/TIKTOK_ADS: { primaryTexts[], headlines[], description, ctaButton, visualBrief, storyboard? }
   bodyJson        Json
   // Status: 'DRAFT' | 'READY' | 'POSTED' | 'ARCHIVED'
-  status          String    @default("DRAFT")
+  status          String        @default("DRAFT")
   // Audit token spend untuk piece ini.
-  tokensCharged   Int       @default(0)
+  tokensCharged   Int           @default(0)
   // Phase 3 — kalender konten. User schedule manual; tidak ada auto-publish
   // (cuma reminder/planning view). Null = belum dijadwalkan.
   scheduledFor    DateTime?
@@ -2827,16 +2828,16 @@ model ContentPiece {
   metricUpdatedAt DateTime?
   // Phase 6 — Ads creative discriminator
   // 'ORGANIC' (default) | 'ADS'. Field-level filter di Library.
-  pieceType       String    @default("ORGANIC")
+  pieceType       String        @default("ORGANIC")
   // 'META_ADS' | 'TIKTOK_ADS' | null. Null untuk organic.
   adsPlatform     String?
   // 'IMAGE' | 'VIDEO' | 'CAROUSEL' | null. Null untuk organic.
   adsFormat       String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  slides          ContentSlide[]
-  variants        AdVariant[]
+  slides   ContentSlide[]
+  variants AdVariant[]
 
   @@index([userId, status, createdAt])
   @@index([briefId, createdAt])
@@ -2849,14 +2850,14 @@ model ContentPiece {
 // boleh A/B test multi variant per piece. Performance metric per variant
 // di-record manual (impressions/clicks/CTR/conversions/spendRp).
 model AdVariant {
-  id              String    @id @default(cuid())
+  id              String       @id @default(cuid())
   pieceId         String
   piece           ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
   // 'HEADLINE' | 'PRIMARY_TEXT' | 'DESCRIPTION' | 'CTA'
   variantType     String
-  value           String    @db.Text
+  value           String       @db.Text
   // Order untuk display 0..N (A, B, C, ...)
-  order           Int       @default(0)
+  order           Int          @default(0)
   // Performance per variant — user input manual setelah jalan ads.
   impressions     Int?
   clicks          Int?
@@ -2864,8 +2865,8 @@ model AdVariant {
   conversions     Int?
   spendRp         Int?
   metricUpdatedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   @@index([pieceId, variantType, order])
 }
@@ -2873,17 +2874,17 @@ model AdVariant {
 // Stub Phase 2 — saat visual generator implement. Phase 1 sudah create row
 // supaya backfill bisa dilakukan tanpa migrasi data ulang.
 model ContentSlide {
-  id          String   @id @default(cuid())
-  pieceId     String
-  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
-  slideIndex  Int
-  headline    String
-  body        String   @db.Text
+  id         String       @id @default(cuid())
+  pieceId    String
+  piece      ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  slideIndex Int
+  headline   String
+  body       String       @db.Text
   // templateId & imageUrl di-isi Phase 2 (visual generator).
-  templateId  String?
-  imageUrl    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  templateId String?
+  imageUrl   String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   @@unique([pieceId, slideIndex])
   @@index([pieceId])

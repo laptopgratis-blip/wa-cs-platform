@@ -1,6 +1,7 @@
 // GET /api/payment/status?orderId=WA-xxx
 // Poll status pembayaran dari Tripay + sync ke DB lokal.
 // Dipakai oleh CheckoutStatusPoller untuk auto-update halaman checkout.
+import { Prisma } from '@prisma/client'
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
@@ -58,53 +59,64 @@ export async function GET(req: Request) {
 
     // Kalau status berubah, update DB.
     if (next !== payment.status) {
-      await prisma.$transaction(async (tx) => {
-        await tx.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: next,
-            paidAt:
-              next === 'SUCCESS'
-                ? detail.paid_at
-                  ? new Date(detail.paid_at * 1000)
-                  : new Date()
-                : null,
-          },
-        })
-
-        // Kredit token kalau PAID.
-        if (next === 'SUCCESS') {
-          await tx.tokenBalance.upsert({
-            where: { userId: payment.userId },
-            create: {
-              userId: payment.userId,
-              balance: payment.tokenAmount,
-              totalPurchased: payment.tokenAmount,
-            },
-            update: {
-              balance: { increment: payment.tokenAmount },
-              totalPurchased: { increment: payment.tokenAmount },
-            },
-          })
-          await tx.tokenTransaction.create({
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.payment.update({
+            where: { id: payment.id },
             data: {
-              userId: payment.userId,
-              amount: payment.tokenAmount,
-              type: 'PURCHASE',
-              description: `Pembelian via Tripay (${payment.paymentMethod ?? 'unknown'})`,
-              reference: orderId,
+              status: next,
+              paidAt:
+                next === 'SUCCESS'
+                  ? detail.paid_at
+                    ? new Date(detail.paid_at * 1000)
+                    : new Date()
+                  : null,
             },
           })
-        }
-      })
 
-      // Upgrade tier LP (di luar transaksi).
-      if (next === 'SUCCESS') {
-        try {
-          await upgradeTierFromPurchase(payment.userId, payment.tokenAmount)
-        } catch (quotaErr) {
-          console.error('[GET /api/payment/status] gagal upgrade tier:', quotaErr)
+          // Kredit token kalau PAID — atomik dengan tier upgrade.
+          if (next === 'SUCCESS') {
+            await tx.tokenBalance.upsert({
+              where: { userId: payment.userId },
+              create: {
+                userId: payment.userId,
+                balance: payment.tokenAmount,
+                totalPurchased: payment.tokenAmount,
+              },
+              update: {
+                balance: { increment: payment.tokenAmount },
+                totalPurchased: { increment: payment.tokenAmount },
+              },
+            })
+            await tx.tokenTransaction.create({
+              data: {
+                userId: payment.userId,
+                amount: payment.tokenAmount,
+                type: 'PURCHASE',
+                description: `Pembelian via Tripay (${payment.paymentMethod ?? 'unknown'})`,
+                reference: orderId,
+              },
+            })
+            await upgradeTierFromPurchase(payment.userId, payment.tokenAmount, tx)
+          }
+        })
+      } catch (txErr) {
+        // P2002 = unique TokenTransaction (userId, reference, type).
+        // Webhook sudah jalan duluan untuk orderId ini → biarkan webhook
+        // jadi source of truth, return status terakhir dari DB.
+        if (
+          txErr instanceof Prisma.PrismaClientKnownRequestError &&
+          txErr.code === 'P2002'
+        ) {
+          const refreshed = await prisma.payment.findUnique({
+            where: { id: payment.id },
+          })
+          return jsonOk({
+            status: refreshed?.status ?? next,
+            paidAt: refreshed?.paidAt?.toISOString() ?? null,
+          })
         }
+        throw txErr
       }
     }
 

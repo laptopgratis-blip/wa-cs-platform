@@ -2,9 +2,13 @@
 //
 // Tier kuota dipetakan dari total token yang user beli (akumulasi seumur hidup).
 // Hanya naik — tidak pernah turun, walaupun saldo token sudah habis.
-import type { LpTier, UserQuota } from '@prisma/client'
+import type { LpTier, Prisma, UserQuota } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+
+// Subset Prisma client yang fungsi-fungsi di file ini butuh — kompatibel
+// dengan baik global `prisma` maupun `tx` dari $transaction(callback).
+type Db = Prisma.TransactionClient | typeof prisma
 
 interface TierConfig {
   tier: LpTier
@@ -39,10 +43,15 @@ function tierForTotal(total: number): TierConfig {
 }
 
 // Ambil quota user; auto-create dengan default FREE kalau belum ada.
-export async function getUserQuota(userId: string): Promise<UserQuota> {
-  const existing = await prisma.userQuota.findUnique({ where: { userId } })
+// `db` opsional: kalau dipanggil di dalam $transaction, lewatkan `tx` supaya
+// read+create-nya ikut dalam transaksi.
+export async function getUserQuota(
+  userId: string,
+  db: Db = prisma,
+): Promise<UserQuota> {
+  const existing = await db.userQuota.findUnique({ where: { userId } })
   if (existing) return existing
-  return prisma.userQuota.create({
+  return db.userQuota.create({
     data: { userId, tier: 'FREE', maxLp: 1, maxStorageMB: 5 },
   })
 }
@@ -50,21 +59,25 @@ export async function getUserQuota(userId: string): Promise<UserQuota> {
 // Setelah user beli token (lewat Tripay atau transfer manual yang dikonfirmasi),
 // hitung total cumulative purchased dan upgrade tier kalau memenuhi threshold.
 // Idempotent — aman dipanggil berkali-kali, hanya menulis kalau ada perubahan.
+//
+// `db` opsional: lewatkan `tx` supaya update tier ikut dalam transaksi yang
+// kredit token (mencegah token committed tapi tier gagal upgrade).
 export async function upgradeTierFromPurchase(
   userId: string,
   _tokenAmount: number,
+  db: Db = prisma,
 ): Promise<UserQuota> {
   // Pakai snapshot totalPurchased dari TokenBalance (sudah update setelah kredit).
-  const balance = await prisma.tokenBalance.findUnique({ where: { userId } })
+  const balance = await db.tokenBalance.findUnique({ where: { userId } })
   const totalPurchased = balance?.totalPurchased ?? 0
 
   const target = tierForTotal(totalPurchased)
-  const current = await getUserQuota(userId)
+  const current = await getUserQuota(userId, db)
 
   // Hanya naik. Storage juga hanya naik (kalau quota baru lebih kecil, biarkan).
   if (RANK[target.tier] <= RANK[current.tier]) return current
 
-  return prisma.userQuota.update({
+  return db.userQuota.update({
     where: { userId },
     data: {
       tier: target.tier,

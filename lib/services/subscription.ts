@@ -10,10 +10,16 @@
 //     nomor user (kalau user punya WA session connected).
 //
 // Tidak ada eksplisit refund logic — prepaid no refund.
-import type { LpUpgradePackage, Subscription } from '@prisma/client'
+import type { LpUpgradePackage, Prisma, Subscription } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import { waService } from '@/lib/wa-service'
+
+// Subset Prisma client kompatibel dengan global `prisma` & `tx` dari
+// $transaction(callback). Dipakai untuk fungsi yang opsional bisa dipanggil
+// dari dalam transaksi caller (mis. webhook yang ingin atomik mark-paid +
+// activate).
+type Db = Prisma.TransactionClient | typeof prisma
 
 // Format tanggal Indonesia "5 Mei 2026" — dipakai banyak di message body.
 function formatDateId(d: Date): string {
@@ -133,20 +139,26 @@ export async function sendWaNotificationToUser(
 // (upgrade), startDate baru = NOW (replace).
 // ─────────────────────────────────────────────────────────────────────────
 
-export async function activateSubscription(subscriptionId: string): Promise<void> {
-  const sub = await prisma.subscription.findUnique({
+// Inti aktivasi yang menerima `db` (transactional client atau global
+// prisma) sehingga caller bisa mengkomposisi dengan operasi lain dalam satu
+// transaksi (mis. webhook: mark invoice PAID + activate dalam satu tx).
+async function activateSubscriptionCore(
+  subscriptionId: string,
+  db: Db,
+): Promise<{ ok: boolean; userId?: string; packageName?: string; endDate?: Date; durationMonths?: number }> {
+  const sub = await db.subscription.findUnique({
     where: { id: subscriptionId },
     include: { user: true, lpPackage: true },
   })
   if (!sub) throw new Error(`Subscription ${subscriptionId} tidak ditemukan`)
   if (sub.status === 'ACTIVE') {
     // Idempotent — invoice yg sama di-callback dua kali tidak boleh aktivasi ulang.
-    return
+    return { ok: false }
   }
 
   // Cek subscription ACTIVE existing user. Kalau sama plan (extend)
   // → startDate baru = endDate existing supaya benar-benar perpanjang.
-  const existingActive = await prisma.subscription.findFirst({
+  const existingActive = await db.subscription.findFirst({
     where: {
       userId: sub.userId,
       status: 'ACTIVE',
@@ -165,50 +177,74 @@ export async function activateSubscription(subscriptionId: string): Promise<void
   }
   const endDate = addMonths(startDate, sub.durationMonths)
 
-  await prisma.$transaction([
-    prisma.subscription.update({
-      where: { id: subscriptionId },
-      data: { status: 'ACTIVE', startDate, endDate },
-    }),
-    prisma.user.update({
-      where: { id: sub.userId },
-      data: {
-        currentSubscriptionId: subscriptionId,
-        currentPlanExpiresAt: endDate,
-      },
-    }),
-    // Upgrade UserQuota tier sesuai package — pakai existing logic supaya
-    // konsisten (tier hanya naik, max(...) di-merge).
-    prisma.userQuota.upsert({
-      where: { userId: sub.userId },
-      create: {
-        userId: sub.userId,
-        tier: sub.lpPackage.tier,
-        maxLp: sub.lpPackage.maxLp,
-        maxStorageMB: sub.lpPackage.maxStorageMB,
-      },
-      update: {
-        tier: sub.lpPackage.tier,
-        maxLp: sub.lpPackage.maxLp,
-        maxStorageMB: sub.lpPackage.maxStorageMB,
-      },
-    }),
-  ])
+  await db.subscription.update({
+    where: { id: subscriptionId },
+    data: { status: 'ACTIVE', startDate, endDate },
+  })
+  await db.user.update({
+    where: { id: sub.userId },
+    data: {
+      currentSubscriptionId: subscriptionId,
+      currentPlanExpiresAt: endDate,
+    },
+  })
+  await db.userQuota.upsert({
+    where: { userId: sub.userId },
+    create: {
+      userId: sub.userId,
+      tier: sub.lpPackage.tier,
+      maxLp: sub.lpPackage.maxLp,
+      maxStorageMB: sub.lpPackage.maxStorageMB,
+    },
+    update: {
+      tier: sub.lpPackage.tier,
+      maxLp: sub.lpPackage.maxLp,
+      maxStorageMB: sub.lpPackage.maxStorageMB,
+    },
+  })
+
+  return {
+    ok: true,
+    userId: sub.userId,
+    packageName: sub.lpPackage.name,
+    endDate,
+    durationMonths: sub.durationMonths,
+  }
+}
+
+// Public API. Kalau `tx` diberikan, jalankan core di tx caller (caller
+// yang bertanggung jawab commit). Notifikasi tetap fire setelah core sukses;
+// caller yang pakai tx perlu sadar notif fire walau tx caller belum commit
+// — best-effort & informational, jadi acceptable.
+//
+// Tanpa `tx`: bungkus core dalam $transaction(callback) sendiri supaya
+// invoice→subscription→user→quota tetap atomik (mirror perilaku lama).
+export async function activateSubscription(
+  subscriptionId: string,
+  tx?: Prisma.TransactionClient,
+): Promise<void> {
+  const result = tx
+    ? await activateSubscriptionCore(subscriptionId, tx)
+    : await prisma.$transaction((innerTx) =>
+        activateSubscriptionCore(subscriptionId, innerTx),
+      )
+  if (!result.ok || !result.userId || !result.endDate || !result.packageName)
+    return
 
   await createNotification({
-    userId: sub.userId,
+    userId: result.userId,
     subscriptionId,
     type: 'PAYMENT_SUCCESS',
     channel: 'IN_APP',
     title: '✅ Subscription Aktif!',
-    message: `Plan ${sub.lpPackage.name} (${sub.durationMonths} bulan) sudah aktif sampai ${formatDateId(endDate)}.`,
+    message: `Plan ${result.packageName} (${result.durationMonths} bulan) sudah aktif sampai ${formatDateId(result.endDate)}.`,
     link: '/billing/subscription',
   })
 
   // WA notification — best-effort, tidak block.
-  void sendWaNotificationToUser(sub.userId, {
+  void sendWaNotificationToUser(result.userId, {
     title: 'Subscription Aktif',
-    message: `Plan ${sub.lpPackage.name} aktif sampai ${formatDateId(endDate)}. Terima kasih sudah subscribe Hulao 🚀`,
+    message: `Plan ${result.packageName} aktif sampai ${formatDateId(result.endDate)}. Terima kasih sudah subscribe Hulao 🚀`,
     subscriptionId,
   })
 }
