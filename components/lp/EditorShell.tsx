@@ -1,18 +1,80 @@
 'use client'
 
 // EditorShell — top-level state holder & auto-save coordinator untuk LP editor.
-// Layout: topbar + 3 panel (ImageManager | Center | LivePreview).
-// Center: AiGenerator (atas) + HtmlEditor (bawah, flex-1).
+// Dua mode:
+//   - 'visual' (default): Visual Editor (preview + inline edit) + ColorsPanel
+//     untuk user awam. Layout 2 kolom (ImageManager + main).
+//   - 'lanjutan': HTML editor mentah + Live Preview untuk power user.
+//     Layout 3 kolom (ImageManager + center HTML + preview).
+import { Code2, MousePointerClick } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AiGenerator } from '@/components/lp/AiGenerator'
+import { ColorsPanel } from '@/components/lp/ColorsPanel'
 import { EditorTopbar, type SaveStatus, type Viewport } from '@/components/lp/EditorTopbar'
 import { HtmlEditor } from '@/components/lp/HtmlEditor'
 import { ImageManager } from '@/components/lp/ImageManager'
 import { LivePreview } from '@/components/lp/LivePreview'
 import { PublishDialog } from '@/components/lp/PublishDialog'
 import { SeoSettingsSheet } from '@/components/lp/SeoSettingsSheet'
+import { VisualEditor } from '@/components/lp/VisualEditor'
+import { cn } from '@/lib/utils'
+
+type EditorMode = 'visual' | 'lanjutan'
+
+// ModeBar — tab switcher di bawah topbar. Pakai bahasa awam: "Edit Mudah"
+// untuk visual, "HTML Lanjutan" untuk power user.
+function ModeBar({
+  mode,
+  onChange,
+}: {
+  mode: EditorMode
+  onChange: (m: EditorMode) => void
+}) {
+  return (
+    <div className="flex items-center gap-1 border-b border-warm-200 bg-warm-50/50 px-4 py-1.5">
+      <button
+        type="button"
+        onClick={() => onChange('visual')}
+        className={cn(
+          'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+          mode === 'visual'
+            ? 'bg-card text-warm-900 shadow-sm ring-1 ring-warm-200'
+            : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
+        )}
+        aria-pressed={mode === 'visual'}
+      >
+        <MousePointerClick className="size-3.5" />
+        Edit Mudah
+        {mode === 'visual' && (
+          <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+            disarankan
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('lanjutan')}
+        className={cn(
+          'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+          mode === 'lanjutan'
+            ? 'bg-card text-warm-900 shadow-sm ring-1 ring-warm-200'
+            : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
+        )}
+        aria-pressed={mode === 'lanjutan'}
+      >
+        <Code2 className="size-3.5" />
+        HTML Lanjutan
+      </button>
+      <span className="ml-2 hidden text-[10px] text-warm-500 md:inline">
+        {mode === 'visual'
+          ? 'Klik teks/tombol di preview untuk ubah · ganti warna di panel atas'
+          : 'Edit HTML mentah · cocok kalau kamu mau custom struktur'}
+      </span>
+    </div>
+  )
+}
 
 const AUTO_SAVE_INTERVAL_MS = 30_000
 
@@ -50,6 +112,10 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [lastSavedAt, setLastSavedAt] = useState<string>(initial.updatedAt)
   const [viewport, setViewport] = useState<Viewport>('desktop')
+
+  // Mode default: Visual untuk user awam; user bisa switch ke Lanjutan kalau
+  // butuh edit HTML mentah.
+  const [mode, setMode] = useState<EditorMode>('visual')
 
   // Modal/sheet open state
   const [seoOpen, setSeoOpen] = useState(false)
@@ -215,26 +281,48 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
         onSeoClick={() => setSeoOpen(true)}
       />
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr_1fr]">
-        <aside className="hidden border-r border-warm-200 bg-card lg:flex lg:flex-col lg:overflow-hidden">
-          <ImageManager lpId={initial.id} />
-        </aside>
+      <ModeBar mode={mode} onChange={setMode} />
 
-        <section className="flex min-h-0 flex-col border-r border-warm-200 bg-warm-50/30">
-          <AiGenerator lpId={initial.id} onGenerated={handleGeneratedHtml} />
-          <div className="flex min-h-0 flex-1 flex-col border-t border-warm-200">
-            <HtmlEditor
-              value={htmlContent}
-              onChange={setHtmlContent}
-              onSaveNow={() => void performSave()}
-            />
-          </div>
-        </section>
+      {mode === 'visual' ? (
+        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr]">
+          <aside className="hidden border-r border-warm-200 bg-card lg:flex lg:flex-col lg:overflow-hidden">
+            <ImageManager lpId={initial.id} />
+          </aside>
 
-        <section className="flex min-h-0 flex-col bg-warm-100/40">
-          <LivePreview htmlContent={htmlContent} viewport={viewport} />
-        </section>
-      </div>
+          <section className="flex min-h-0 flex-col bg-warm-50/30">
+            <AiGenerator lpId={initial.id} onGenerated={handleGeneratedHtml} />
+            <ColorsPanel html={htmlContent} onChange={setHtmlContent} />
+            <div className="flex min-h-0 flex-1 flex-col">
+              <VisualEditor
+                htmlContent={htmlContent}
+                viewport={viewport}
+                onChange={setHtmlContent}
+              />
+            </div>
+          </section>
+        </div>
+      ) : (
+        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr_1fr]">
+          <aside className="hidden border-r border-warm-200 bg-card lg:flex lg:flex-col lg:overflow-hidden">
+            <ImageManager lpId={initial.id} />
+          </aside>
+
+          <section className="flex min-h-0 flex-col border-r border-warm-200 bg-warm-50/30">
+            <AiGenerator lpId={initial.id} onGenerated={handleGeneratedHtml} />
+            <div className="flex min-h-0 flex-1 flex-col border-t border-warm-200">
+              <HtmlEditor
+                value={htmlContent}
+                onChange={setHtmlContent}
+                onSaveNow={() => void performSave()}
+              />
+            </div>
+          </section>
+
+          <section className="flex min-h-0 flex-col bg-warm-100/40">
+            <LivePreview htmlContent={htmlContent} viewport={viewport} />
+          </section>
+        </div>
+      )}
 
       <SeoSettingsSheet
         open={seoOpen}
