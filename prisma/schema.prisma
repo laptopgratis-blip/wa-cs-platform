@@ -90,6 +90,28 @@ model User {
   contentIdeas                 ContentIdea[]
   contentBriefs                ContentBrief[]
   contentPieces                ContentPiece[]
+  // Onboarding Wizard — Phase 0 (2026-05-10). Intent-based wizard + checklist
+  // progressive di dashboard. 4 goal: CS_AI / SELL_LP / SELL_WA / LMS.
+  onboardingGoal               String?
+  onboardingCompletedAt        DateTime?
+  onboardingChecklist          Json?
+  onboardingDismissedAt        DateTime?
+  onboardingEvents             OnboardingEvent[]
+}
+
+// Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
+// checklist step done, dll). Dipakai di /admin/onboarding-funnel nanti.
+model OnboardingEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  goal      String?
+  step      String
+  meta      Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([step, createdAt])
 }
 
 // NextAuth models

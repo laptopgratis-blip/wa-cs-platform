@@ -9,10 +9,11 @@
 //
 // Dipanggil dari header / bottom nav. State open dikontrol parent supaya
 // trigger di mana saja bisa pakai drawer yang sama.
-import { ChevronRight, LogOut } from 'lucide-react'
+import { ChevronRight, Eye, EyeOff, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -26,10 +27,13 @@ import { formatNumber } from '@/lib/format'
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_NAV_HOME,
+  type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
+  filterGroupsByGoal,
   filterGroupsByOrderSystem,
   filterGroupsByRole,
+  hasHiddenGroupsForGoal,
   type NavGroup,
   type Role,
 } from '@/lib/navigation'
@@ -48,6 +52,8 @@ interface MobileDrawerProps {
   tokenBalance?: number | null
   /** Akses Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
+  /** Goal onboarding user — filter group sidebar yg tidak relevan. */
+  onboardingGoal?: OnboardingGoal | null
 }
 
 export function MobileDrawer({
@@ -56,16 +62,44 @@ export function MobileDrawer({
   user,
   tokenBalance,
   hasOrderSystemAccess = false,
+  onboardingGoal = null,
 }: MobileDrawerProps) {
   const pathname = usePathname()
   const close = () => onOpenChange(false)
 
+  // Show-all toggle dishare dengan desktop via localStorage (key sama).
+  // User yg setup desktop kalau pernah set "tampilkan semua" → mobile ikut.
+  const [showAll, setShowAll] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const v = window.localStorage.getItem('hulao.sidebar.showAll')
+      if (v === '1') setShowAll(true)
+    } catch {
+      /* abaikan */
+    }
+  }, [open])
+
+  function toggleShowAll() {
+    setShowAll((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem('hulao.sidebar.showAll', next ? '1' : '0')
+      } catch {
+        /* abaikan */
+      }
+      return next
+    })
+  }
+
   // Filter admin groups by role; user groups selalu tampil kecuali Order System
-  // section yang difilter berdasarkan paket.
-  const userGroups = filterGroupsByOrderSystem(
+  // section yang difilter berdasarkan paket + filter by onboarding goal.
+  const orderFiltered = filterGroupsByOrderSystem(
     USER_NAV_GROUPS,
     hasOrderSystemAccess,
   )
+  const userGroups = filterGroupsByGoal(orderFiltered, onboardingGoal, showAll)
+  const hasHidden = hasHiddenGroupsForGoal(orderFiltered, onboardingGoal)
   const adminGroups: NavGroup[] =
     user.role === 'ADMIN' || user.role === 'FINANCE'
       ? filterGroupsByRole(ADMIN_NAV_GROUPS, user.role)
@@ -180,6 +214,29 @@ export function MobileDrawer({
               />
             ))}
           </>
+        )}
+
+        {/* Toggle "tampilkan semua menu" — tampil hanya kalau ada group
+            yg ke-hide oleh filter goal. Persist localStorage shared dgn
+            desktop sidebar. */}
+        {hasHidden && (
+          <div className="mt-2 border-t px-3 py-2">
+            <button
+              type="button"
+              onClick={toggleShowAll}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-warm-600 hover:bg-warm-100 hover:text-warm-900"
+            >
+              {showAll ? (
+                <>
+                  <EyeOff className="size-4" /> Sederhanakan menu
+                </>
+              ) : (
+                <>
+                  <Eye className="size-4" /> Tampilkan semua menu
+                </>
+              )}
+            </button>
+          </div>
         )}
 
         {/* Logout */}

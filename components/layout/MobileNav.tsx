@@ -7,7 +7,7 @@ import { useState } from 'react'
 
 import { BottomNav } from '@/components/layout/BottomNav'
 import { MobileDrawer } from '@/components/layout/MobileDrawer'
-import type { Role } from '@/lib/navigation'
+import type { OnboardingGoal, Role } from '@/lib/navigation'
 
 interface MobileNavProps {
   user: {
@@ -18,12 +18,14 @@ interface MobileNavProps {
   }
   tokenBalance?: number | null
   hasOrderSystemAccess?: boolean
+  onboardingGoal?: OnboardingGoal | null
 }
 
 export function MobileNav({
   user,
   tokenBalance,
   hasOrderSystemAccess,
+  onboardingGoal,
 }: MobileNavProps) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   return (
@@ -35,6 +37,7 @@ export function MobileNav({
         user={user}
         tokenBalance={tokenBalance}
         hasOrderSystemAccess={hasOrderSystemAccess}
+        onboardingGoal={onboardingGoal}
       />
     </>
   )

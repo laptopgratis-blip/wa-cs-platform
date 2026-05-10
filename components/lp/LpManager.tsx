@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { CreateLpModal } from '@/components/lp/CreateLpModal'
+import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -157,6 +158,13 @@ export function LpManager() {
 
   return (
     <div className="space-y-5">
+      <OnboardingHint
+        hintId="landing-pages"
+        relevantFor={['SELL_LP']}
+        matchMessage="LP yang convert = headline jelas + foto produk + tombol WA besar. Pakai AI generator untuk bikin draft 1 menit, baru tweak isinya."
+        matchCta={{ label: 'Bikin LP dengan AI', href: '/landing-pages?action=create' }}
+        mismatchMessage="Landing Page jadi pintu masuk customer dari iklan/sosmed. Kalau jualan langsung di WA tanpa funnel, fitur ini opsional."
+      />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">

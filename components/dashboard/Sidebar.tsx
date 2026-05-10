@@ -6,20 +6,24 @@
 // bisa di-collapse via chevron — state persist di localStorage. Sumber data
 // dari lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
 // dengan Drawer mobile.
-import { ChevronDown, ChevronRight, MessageCircle } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, MessageCircle } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
 import {
+  type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
+  filterGroupsByGoal,
   filterGroupsByOrderSystem,
+  hasHiddenGroupsForGoal,
 } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 
 const COLLAPSED_GROUPS_KEY = 'hulao.sidebar.collapsed'
+const SHOW_ALL_KEY = 'hulao.sidebar.showAll'
 
 interface SidebarProps {
   className?: string
@@ -28,6 +32,8 @@ interface SidebarProps {
   tokenBalance?: number | null
   /** Akses ke Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
+  /** Goal onboarding user — filter group sidebar yg tidak relevan. */
+  onboardingGoal?: OnboardingGoal | null
 }
 
 export function Sidebar({
@@ -35,12 +41,44 @@ export function Sidebar({
   onNavigate,
   tokenBalance,
   hasOrderSystemAccess = false,
+  onboardingGoal = null,
 }: SidebarProps) {
   const pathname = usePathname()
-  const groups = filterGroupsByOrderSystem(
+
+  // User toggle "Tampilkan semua menu" — persist di localStorage. Default
+  // false (= filter by goal). Begitu user klik, semua group tampil dan
+  // pilihan ini ingat sampai user klik balik.
+  const [showAll, setShowAll] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const v = window.localStorage.getItem(SHOW_ALL_KEY)
+      if (v === '1') setShowAll(true)
+    } catch {
+      /* abaikan */
+    }
+  }, [])
+
+  function toggleShowAll() {
+    setShowAll((prev) => {
+      const next = !prev
+      try {
+        window.localStorage.setItem(SHOW_ALL_KEY, next ? '1' : '0')
+      } catch {
+        /* abaikan */
+      }
+      return next
+    })
+  }
+
+  // 1. Filter by Order System access (POWER plan) — ini hard gate.
+  // 2. Filter by onboarding goal — soft hide, user bisa unhide.
+  const orderFiltered = filterGroupsByOrderSystem(
     USER_NAV_GROUPS,
     hasOrderSystemAccess,
   )
+  const groups = filterGroupsByGoal(orderFiltered, onboardingGoal, showAll)
+  const hasHidden = hasHiddenGroupsForGoal(orderFiltered, onboardingGoal)
 
   // Collapsed state per group label, persist ke localStorage. Default semua
   // expanded. Group yang punya item active otomatis di-force expand supaya
@@ -223,8 +261,30 @@ export function Sidebar({
       )}
 
       {/* Footer */}
-      <div className="border-t border-warm-200 px-4 py-3">
-        <p className="text-[11px] text-warm-400">v0.1.0 — beta</p>
+      <div className="flex flex-col gap-2 border-t border-warm-200 px-3 py-3">
+        {hasHidden && (
+          <button
+            type="button"
+            onClick={toggleShowAll}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-medium text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-800"
+            title={
+              showAll
+                ? 'Sembunyikan menu yg tidak relevan untuk tujuanmu'
+                : 'Buka menu lengkap (semua fitur)'
+            }
+          >
+            {showAll ? (
+              <>
+                <EyeOff className="size-3.5" /> Sederhanakan menu
+              </>
+            ) : (
+              <>
+                <Eye className="size-3.5" /> Tampilkan semua menu
+              </>
+            )}
+          </button>
+        )}
+        <p className="px-2 text-[11px] text-warm-400">v0.1.0 — beta</p>
       </div>
     </aside>
   )

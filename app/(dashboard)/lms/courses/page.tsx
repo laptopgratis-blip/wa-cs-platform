@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { CoursesList } from '@/components/lms/CoursesList'
+import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import {
@@ -23,6 +24,12 @@ export default async function LmsCoursesPage() {
 
   return (
     <div className="mx-auto flex h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+      <OnboardingHint
+        hintId="lms-courses"
+        relevantFor={['LMS']}
+        matchMessage="Mulai dengan course pendek (5-7 lesson) buat MVP. Setelah customer beli produk yang kamu link ke course, akses otomatis dikirim via WA."
+        mismatchMessage="LMS buat jualan course / produk digital. Kalau cuma jualan produk fisik, kamu nggak butuh menu ini."
+      />
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="mb-1 flex items-center gap-2">

@@ -2,6 +2,7 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
+import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { SoulList, type SoulListItem } from '@/components/soul/SoulList'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -41,6 +42,11 @@ export default async function SoulPage() {
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+      <OnboardingHint
+        hintId="soul"
+        relevantFor={['CS_AI', 'SELL_WA']}
+        matchMessage="Soul = kepribadian AI saat balas WhatsApp. Mulai dari template (Sari CS Ramah / Mas Bro Santai), baru kustomisasi gaya bicara sesuai brand-mu."
+      />
       <SoulList souls={souls} />
     </div>
   )

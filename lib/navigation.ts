@@ -14,6 +14,7 @@ import {
   Box,
   Building2,
   Calculator,
+  Compass,
   Cpu,
   CreditCard,
   DollarSign,
@@ -282,6 +283,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         icon: Sliders,
         roles: ['ADMIN'],
       },
+      {
+        label: 'Onboarding Funnel',
+        href: '/admin/onboarding-funnel',
+        icon: Compass,
+        roles: ['ADMIN'],
+      },
     ],
   },
   {
@@ -332,4 +339,48 @@ export function filterGroupsByOrderSystem(
   hasOrderSystemAccess: boolean,
 ): NavGroup[] {
   return groups.filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
+}
+
+// ─── ONBOARDING GOAL FILTER ───────────────────────────────────────────
+// Sembunyikan group yang tidak relevan untuk goal user. Tujuan: user awam
+// yg goal-nya cuma "CS AI" tidak overwhelmed lihat sidebar 20+ menu.
+// User tetap bisa override via tombol "Tampilkan semua menu" di Sidebar.
+
+export type OnboardingGoal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
+
+// Map goal → list group label yang di-hide. Match by label (case-sensitive)
+// supaya consistent dgn definisi group di atas. Group label baru harus
+// di-update di mapping ini juga.
+const HIDDEN_GROUPS_BY_GOAL: Record<OnboardingGoal, string[]> = {
+  // CS AI saja → tidak butuh jualan / course / integrasi pixel.
+  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS', 'INTEGRASI'],
+  // Jualan + LP → tidak butuh LMS.
+  SELL_LP: ['LMS'],
+  // Jualan WA only → tidak butuh LP & LMS. Content Studio (di group LP)
+  // juga ke-hide; user bisa unhide via "Tampilkan semua menu".
+  SELL_WA: ['LANDING PAGE', 'LMS'],
+  // Course/digital → semua relevan, tidak ada hide.
+  LMS: [],
+}
+
+export function filterGroupsByGoal(
+  groups: NavGroup[],
+  goal: OnboardingGoal | null | undefined,
+  showAll: boolean,
+): NavGroup[] {
+  if (!goal || showAll) return groups
+  const hide = HIDDEN_GROUPS_BY_GOAL[goal]
+  if (!hide || hide.length === 0) return groups
+  return groups.filter((g) => !hide.includes(g.label))
+}
+
+// Helper: cek apakah filter byGoal menyembunyikan group apa pun. Dipakai
+// untuk decide apakah render tombol "Tampilkan semua menu" di Sidebar.
+export function hasHiddenGroupsForGoal(
+  groups: NavGroup[],
+  goal: OnboardingGoal | null | undefined,
+): boolean {
+  if (!goal) return false
+  const hide = HIDDEN_GROUPS_BY_GOAL[goal] ?? []
+  return hide.some((label) => groups.some((g) => g.label === label))
 }

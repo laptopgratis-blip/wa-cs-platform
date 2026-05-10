@@ -21,6 +21,7 @@ import Image from 'next/image'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -470,6 +471,15 @@ export function ProductsClient({
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-6 md:py-8">
+      <div className="mb-4">
+        <OnboardingHint
+          hintId="products"
+          relevantFor={['SELL_LP', 'SELL_WA', 'LMS']}
+          matchMessage="Tambahkan produk pertamamu di sini — bisa fisik (skincare, fashion) atau digital (course, e-book). Foto + harga + berat aja udah cukup buat mulai."
+          mismatchMessage="Halaman ini buat yang jualan produk. Kalau cuma butuh CS AI menjawab WhatsApp, kamu bisa skip menu ini."
+        />
+      </div>
+
       <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
@@ -496,6 +506,10 @@ export function ProductsClient({
             <p className="mt-1 text-sm text-warm-500">
               Tambahkan produk pertama untuk dijual via Form Order.
             </p>
+            <Button onClick={openCreate} className="mt-4">
+              <Plus className="mr-2 size-4" />
+              Tambah Produk Pertama
+            </Button>
           </CardContent>
         </Card>
       ) : (

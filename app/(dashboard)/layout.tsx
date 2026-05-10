@@ -9,6 +9,7 @@ import { Sidebar } from '@/components/dashboard/Sidebar'
 import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { authOptions } from '@/lib/auth'
+import type { OnboardingGoal } from '@/lib/navigation'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 
@@ -19,6 +20,26 @@ export default async function DashboardLayout({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
+
+  // Onboarding: user baru (<7 hari) tanpa goal & belum skip → redirect
+  // ke /onboarding. Existing user >7 hari boleh tanpa goal (banner kecil
+  // di dashboard, no force redirect).
+  const userMeta = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      createdAt: true,
+      onboardingGoal: true,
+      onboardingDismissedAt: true,
+    },
+  })
+  if (
+    userMeta &&
+    !userMeta.onboardingGoal &&
+    !userMeta.onboardingDismissedAt &&
+    userMeta.createdAt.getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000
+  ) {
+    redirect('/onboarding')
+  }
 
   // Fetch saldo token + akses Order System paralel — di-pass ke Sidebar (desktop)
   // + Drawer (mobile) untuk filter menu Order System (POWER only).
@@ -31,6 +52,9 @@ export default async function DashboardLayout({
   ])
   const tokenBalance = balance?.balance ?? 0
   const hasOrderSystemAccess = orderAccess.hasAccess
+  const onboardingGoal = (userMeta?.onboardingGoal ?? null) as
+    | OnboardingGoal
+    | null
 
   return (
     <div className="flex min-h-svh w-full">
@@ -39,6 +63,7 @@ export default async function DashboardLayout({
         className="hidden md:flex"
         tokenBalance={tokenBalance}
         hasOrderSystemAccess={hasOrderSystemAccess}
+        onboardingGoal={onboardingGoal}
       />
       <div className="flex flex-1 flex-col">
         <Topbar
@@ -63,6 +88,7 @@ export default async function DashboardLayout({
         }}
         tokenBalance={tokenBalance}
         hasOrderSystemAccess={hasOrderSystemAccess}
+        onboardingGoal={onboardingGoal}
       />
     </div>
   )

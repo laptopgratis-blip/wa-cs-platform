@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { SalesFlowForm } from '@/components/sales-flow/SalesFlowForm'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -127,6 +128,11 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
 
   return (
     <>
+      <OnboardingHint
+        hintId="cara-jualan"
+        relevantFor={['SELL_WA']}
+        matchMessage="Pilih template paling cocok dulu (COD / Transfer / Booking) — kamu bisa edit step-stepnya nanti. AI akan ikuti alur ini saat customer chat."
+      />
       <div>
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
           Cara Jualan

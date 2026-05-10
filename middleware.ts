@@ -37,9 +37,9 @@ export default withAuth(
 )
 
 export const config = {
-  // Lindungi /dashboard dan /admin (semua sub-route).
+  // Lindungi /dashboard, /admin, /onboarding (semua sub-route).
   // Path lain (/, /login, /register, /p/<slug>, /api/*) sengaja tidak masuk
   // matcher — itu publik. Khususnya /p/<slug> harus bisa dibuka tanpa auth
   // karena LP yang dipublish user perlu accessible oleh end-customer.
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  matcher: ['/dashboard/:path*', '/admin/:path*', '/onboarding/:path*'],
 }

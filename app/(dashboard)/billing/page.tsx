@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { OnboardingGoalCard } from '@/components/onboarding/OnboardingGoalCard'
 import { authOptions } from '@/lib/auth'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
@@ -98,7 +99,7 @@ export default async function BillingPage({
   // dari 3 hari terakhir (biar user lihat konfirmasi terbaru sekilas).
   const manualSince = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
 
-  const [tokenBalance, packages, transactions, txCount, manualPayments] = await Promise.all([
+  const [tokenBalance, packages, transactions, txCount, manualPayments, userMeta] = await Promise.all([
     prisma.tokenBalance.findUnique({ where: { userId: session.user.id } }),
     prisma.tokenPackage.findMany({
       where: { isActive: true },
@@ -130,12 +131,23 @@ export default async function BillingPage({
       orderBy: { createdAt: 'desc' },
       include: { package: { select: { name: true } } },
     }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { onboardingGoal: true },
+    }),
   ])
 
   const balance = tokenBalance?.balance ?? 0
   const totalPurchased = tokenBalance?.totalPurchased ?? 0
   const totalUsed = tokenBalance?.totalUsed ?? 0
   const totalPages = Math.max(1, Math.ceil(txCount / PAGE_SIZE))
+  const onboardingGoal = userMeta?.onboardingGoal as
+    | 'CS_AI'
+    | 'SELL_LP'
+    | 'SELL_WA'
+    | 'LMS'
+    | null
+    | undefined
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -147,6 +159,8 @@ export default async function BillingPage({
           Kelola saldo token dan beli paket untuk balas pesan WhatsApp pakai AI.
         </p>
       </div>
+
+      <OnboardingGoalCard currentGoal={onboardingGoal ?? null} />
 
       <Card className="overflow-hidden rounded-xl border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-50">
         <CardHeader className="pb-2">

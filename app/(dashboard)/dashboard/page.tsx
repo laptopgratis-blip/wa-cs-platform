@@ -5,6 +5,11 @@ import { redirect } from 'next/navigation'
 
 import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
 import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
+import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
+import {
+  type OnboardingProgressData,
+  OnboardingProgressCard,
+} from '@/components/onboarding/OnboardingProgressCard'
 import {
   Card,
   CardContent,
@@ -14,8 +19,43 @@ import {
 } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
+import {
+  type OnboardingGoal,
+  getChecklistDefinition,
+} from '@/lib/onboarding/checklists'
+import { parseManualState, resolveChecklist } from '@/lib/onboarding/state'
 import { prisma } from '@/lib/prisma'
 import { cn } from '@/lib/utils'
+
+const VALID_GOALS = new Set<OnboardingGoal>(['CS_AI', 'SELL_LP', 'SELL_WA', 'LMS'])
+
+async function loadOnboardingProgress(
+  userId: string,
+): Promise<OnboardingProgressData | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { onboardingGoal: true, onboardingChecklist: true },
+  })
+  if (!user?.onboardingGoal) return null
+  if (!VALID_GOALS.has(user.onboardingGoal as OnboardingGoal)) return null
+
+  const goal = user.onboardingGoal as OnboardingGoal
+  const def = getChecklistDefinition(goal)
+  const manual = parseManualState(user.onboardingChecklist)
+  const resolved = await resolveChecklist(userId, goal, manual)
+
+  const completed = resolved.steps.filter(
+    (s) => s.status === 'completed' || s.status === 'skipped',
+  ).length
+  return {
+    title: def.title,
+    progressPct: resolved.progressPct,
+    allRequiredDone: resolved.allRequiredDone,
+    totalSteps: resolved.steps.length,
+    completedSteps: completed,
+    remainingSteps: Math.max(0, resolved.steps.length - completed),
+  }
+}
 
 const DAYS = 7
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
@@ -92,7 +132,18 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
-  const stats = await loadStats(session.user.id)
+  const [stats, userMeta, progressData] = await Promise.all([
+    loadStats(session.user.id),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { onboardingGoal: true },
+    }),
+    loadOnboardingProgress(session.user.id),
+  ])
+  const onboardingGoal = userMeta?.onboardingGoal as
+    | OnboardingGoal
+    | null
+    | undefined
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-7 overflow-y-auto p-4 md:p-6">
@@ -106,6 +157,11 @@ export default async function DashboardPage() {
       </div>
 
       <BalanceBanner balance={stats.balance} />
+
+      {/* Onboarding progress — server-rendered prominent card "Lanjutkan goal
+          kamu" dengan tombol besar ke /onboarding/guide. Pre-loaded data biar
+          tidak ada flicker / loading state saat hydrate. */}
+      <OnboardingProgressCard initialData={progressData} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -149,6 +205,10 @@ export default async function DashboardPage() {
           <MessagesChart data={stats.chart} />
         </CardContent>
       </Card>
+
+      {/* Semua wizard ditawarkan ulang — user bisa switch goal kapan saja
+          tanpa harus reset manual. Checklist & menu di atas auto-update. */}
+      <OnboardingGoalSelector currentGoal={onboardingGoal ?? null} />
     </div>
   )
 }
