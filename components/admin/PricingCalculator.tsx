@@ -1,10 +1,11 @@
 'use client'
 
-// PricingCalculator — admin tool untuk audit margin per AI model.
+// PricingCalculator — admin tool untuk audit margin per AI model + per AI Feature.
 // Section A asumsi (form, persist localStorage), B tabel analisis per model
-// (dengan tombol apply rekomendasi), C warning banner kalau ada model rugi,
-// D simulasi paket (berapa pesan per model untuk tiap TokenPackage aktif).
-import { Loader2 } from 'lucide-react'
+// (dengan tombol apply rekomendasi), C warning banner kalau ada surface rugi,
+// D simulasi paket, E section "AI Features" (Content Studio dst) dengan
+// breakdown margin & tombol "Set margin global" untuk apply ke semua sekaligus.
+import { AlertTriangle, Check, Loader2, Wand2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -19,6 +20,13 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -47,9 +55,23 @@ interface PackageRow {
   isPopular: boolean
 }
 
+interface AiFeatureRow {
+  id: string
+  featureKey: string
+  displayName: string
+  modelName: string
+  inputPricePer1M: number
+  outputPricePer1M: number
+  platformMargin: number // multiplier 1.3 = +30%
+  floorTokens: number
+  capTokens: number
+  isActive: boolean
+}
+
 interface Props {
   models: ModelRow[]
   packages: PackageRow[]
+  aiFeatures: AiFeatureRow[]
 }
 
 interface Assumptions {
@@ -94,11 +116,20 @@ function clampPositive(v: number, fallback: number): number {
   return Number.isFinite(v) && v >= 0 ? v : fallback
 }
 
-export function PricingCalculator({ models: initialModels, packages }: Props) {
+export function PricingCalculator({
+  models: initialModels,
+  packages,
+  aiFeatures: initialFeatures,
+}: Props) {
   const [models, setModels] = useState(initialModels)
+  const [features, setFeatures] = useState(initialFeatures)
   const [a, setA] = useState<Assumptions>(DEFAULTS)
   const [hydrated, setHydrated] = useState(false)
   const [applyingId, setApplyingId] = useState<string | null>(null)
+  // State khusus section AI Features
+  const [globalMargin, setGlobalMargin] = useState(1.3)
+  const [marginScope, setMarginScope] = useState<'all' | 'active'>('active')
+  const [applyingMargin, setApplyingMargin] = useState(false)
 
   // Hydrate dari localStorage di effect supaya tidak SSR-mismatch.
   useEffect(() => {
@@ -200,6 +231,91 @@ export function PricingCalculator({ models: initialModels, packages }: Props) {
     }
   }
 
+  // ── Per-feature breakdown (Content Studio dst) ───────────────────────
+  // Beda dari AiModel: revenue di sini = tokensCharged × pricePerToken,
+  // di mana tokensCharged = ceil(rawCostIdr × margin / pricePerToken)
+  // diclamp ke [floor, cap]. Margin dipakai ke charge (BUKAN sekadar
+  // diff antara cost & revenue), jadi profit = revenue - rawCost.
+  const featureBreakdown = useMemo(() => {
+    return features.map((f) => {
+      const rawCostUsd =
+        (a.inputTokens * f.inputPricePer1M +
+          a.outputTokens * f.outputPricePer1M) /
+        1_000_000
+      const rawCostIdr = rawCostUsd * a.usdToIdr
+
+      const desiredCharge = rawCostIdr * f.platformMargin
+      const tokensRaw =
+        a.pricePerToken > 0
+          ? Math.ceil(desiredCharge / a.pricePerToken)
+          : f.floorTokens
+      const tokensCharged = Math.min(
+        f.capTokens,
+        Math.max(f.floorTokens, tokensRaw),
+      )
+      const revenueIdr = tokensCharged * a.pricePerToken
+      const profitIdr = revenueIdr - rawCostIdr
+      const marginPct = revenueIdr > 0 ? (profitIdr / revenueIdr) * 100 : 0
+
+      let status: StatusKind
+      if (marginPct >= a.marginTarget) status = 'AMAN'
+      else if (marginPct >= 20) status = 'TIPIS'
+      else status = 'RUGI'
+
+      return {
+        ...f,
+        rawCostIdr,
+        tokensCharged,
+        revenueIdr,
+        profitIdr,
+        marginPct,
+        status,
+      }
+    })
+  }, [features, a])
+
+  const featureLosers = featureBreakdown.filter((b) => b.status === 'RUGI')
+
+  // Apply margin global ke semua / hanya active features.
+  async function applyGlobalMargin() {
+    if (
+      !confirm(
+        `Set platformMargin ${globalMargin}× ke ${marginScope === 'all' ? 'SEMUA' : 'feature aktif saja'}? Ini override margin per-feature yang sudah ada.`,
+      )
+    )
+      return
+    setApplyingMargin(true)
+    try {
+      const res = await fetch('/api/admin/ai-features/bulk-margin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ margin: globalMargin, scope: marginScope }),
+      })
+      const json = (await res.json()) as {
+        success: boolean
+        data?: { updated: number }
+        error?: string
+      }
+      if (!res.ok || !json.success || !json.data) {
+        toast.error(json.error || 'Gagal apply margin')
+        return
+      }
+      toast.success(`Margin diterapkan ke ${json.data.updated} feature`)
+      // Optimistic: update state lokal supaya tabel langsung re-render.
+      setFeatures((prev) =>
+        prev.map((f) =>
+          marginScope === 'all' || f.isActive
+            ? { ...f, platformMargin: globalMargin }
+            : f,
+        ),
+      )
+    } catch {
+      toast.error('Gagal apply margin')
+    } finally {
+      setApplyingMargin(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -212,19 +328,28 @@ export function PricingCalculator({ models: initialModels, packages }: Props) {
         </p>
       </div>
 
-      {/* Section C — warning banner */}
-      {losers.length > 0 && (
+      {/* Section C — warning banner (gabung AiModel + AiFeature losers) */}
+      {(losers.length > 0 || featureLosers.length > 0) && (
         <div
           role="alert"
           className="rounded-md border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
         >
-          <p className="font-semibold">
-            ⚠️ {losers.length} model merugi!
+          <p className="flex items-center gap-2 font-semibold">
+            <AlertTriangle className="size-4" />
+            {losers.length + featureLosers.length} surface AI merugi!
           </p>
-          <p className="mt-0.5 text-sm">
-            Estimasi loss per 1.000 pesan:{' '}
-            <strong>{formatRupiah(totalLossPer1k)}</strong>
-          </p>
+          {losers.length > 0 && (
+            <p className="mt-0.5 text-sm">
+              {losers.length} AI model (WA chat) — estimasi loss per 1.000
+              pesan: <strong>{formatRupiah(totalLossPer1k)}</strong>
+            </p>
+          )}
+          {featureLosers.length > 0 && (
+            <p className="mt-0.5 text-sm">
+              {featureLosers.length} AI feature (Content Studio dst) — atur
+              margin di section bawah.
+            </p>
+          )}
         </div>
       )}
 
@@ -478,6 +603,181 @@ export function PricingCalculator({ models: initialModels, packages }: Props) {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Section E — AI Features (Content Studio dst) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wand2 className="size-5 text-primary-500" />
+            AI Features (Content Studio &amp; lainnya)
+          </CardTitle>
+          <CardDescription>
+            Pricing per feature pakai{' '}
+            <code>platformMargin</code> multiplier (1.3 = +30%). Tabel ini
+            preview margin pakai asumsi token di atas. Kalau ada yang
+            🔴 RUGI, naikkan margin di sini.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Bulk-margin control */}
+          <div className="rounded-lg border border-warm-200 bg-warm-50 p-3 dark:border-warm-700 dark:bg-warm-900/30">
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+              <div className="space-y-1">
+                <Label htmlFor="globalMargin" className="text-xs">
+                  Margin global (multiplier)
+                </Label>
+                <Input
+                  id="globalMargin"
+                  type="number"
+                  step="0.05"
+                  min={0.5}
+                  max={10}
+                  value={globalMargin}
+                  onChange={(e) =>
+                    setGlobalMargin(
+                      clampPositive(Number(e.target.value), globalMargin),
+                    )
+                  }
+                />
+                <p className="text-[10px] text-warm-500">
+                  1.3 = +30% margin · 2.0 = +100% (2× cost API)
+                </p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Apply ke</Label>
+                <Select
+                  value={marginScope}
+                  onValueChange={(v) => setMarginScope(v as 'all' | 'active')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Hanya feature aktif</SelectItem>
+                    <SelectItem value="all">Semua feature</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={applyGlobalMargin}
+                disabled={applyingMargin || features.length === 0}
+                className="bg-primary-500 hover:bg-primary-600"
+              >
+                {applyingMargin && (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                )}
+                <Check className="mr-1.5 size-4" />
+                Apply ke semua
+              </Button>
+            </div>
+          </div>
+
+          {/* Per-feature breakdown table */}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Feature</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead className="text-right">API cost / call</TableHead>
+                  <TableHead className="text-right">Margin (×)</TableHead>
+                  <TableHead className="text-right">Token charge</TableHead>
+                  <TableHead className="text-right">Pendapatan</TableHead>
+                  <TableHead className="text-right">Margin %</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {featureBreakdown.map((b) => (
+                  <TableRow key={b.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">
+                          {b.displayName}
+                        </span>
+                        {!b.isActive && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-warm-100 text-[9px] font-normal text-warm-600"
+                          >
+                            disabled
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="font-mono text-[10px] text-muted-foreground">
+                        {b.featureKey}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {b.modelName}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatRupiah(b.rawCostIdr)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {b.platformMargin.toFixed(2)}×
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatNumber(b.tokensCharged)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatRupiah(b.revenueIdr)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums font-medium',
+                        b.marginPct < 20 && 'text-red-600',
+                        b.marginPct >= 20 &&
+                          b.marginPct < a.marginTarget &&
+                          'text-amber-700',
+                        b.marginPct >= a.marginTarget && 'text-emerald-600',
+                      )}
+                    >
+                      {b.marginPct.toFixed(1)}%
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className={cn('font-normal', STATUS_STYLE[b.status])}
+                      >
+                        {STATUS_LABEL[b.status]}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {featureBreakdown.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Belum ada AI feature config. Buat di /admin/ai-features.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <p className="text-[11px] text-warm-500">
+            💡 Edit per-feature (margin, floor, cap) di{' '}
+            <a
+              href="/admin/ai-features"
+              className="text-primary-600 underline"
+            >
+              /admin/ai-features
+            </a>
+            . Harga input/output otomatis sync dari{' '}
+            <a
+              href="/admin/ai-pricing"
+              className="text-primary-600 underline"
+            >
+              /admin/ai-pricing
+            </a>
+            .
+          </p>
         </CardContent>
       </Card>
     </div>

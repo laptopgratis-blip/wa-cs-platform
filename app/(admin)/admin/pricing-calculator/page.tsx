@@ -14,7 +14,7 @@ export default async function AdminPricingCalculatorPage() {
   if (!session) redirect('/login')
   if (session.user.role !== 'ADMIN') redirect('/dashboard')
 
-  const [models, packages] = await Promise.all([
+  const [models, packages, aiFeatures] = await Promise.all([
     prisma.aiModel.findMany({
       where: { isActive: true },
       orderBy: [{ provider: 'asc' }, { costPerMessage: 'asc' }],
@@ -22,6 +22,9 @@ export default async function AdminPricingCalculatorPage() {
     prisma.tokenPackage.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
+    }),
+    prisma.aiFeatureConfig.findMany({
+      orderBy: { displayName: 'asc' },
     }),
   ])
 
@@ -42,6 +45,18 @@ export default async function AdminPricingCalculatorPage() {
           tokenAmount: p.tokenAmount,
           price: p.price,
           isPopular: p.isPopular,
+        }))}
+        aiFeatures={aiFeatures.map((f) => ({
+          id: f.id,
+          featureKey: f.featureKey,
+          displayName: f.displayName,
+          modelName: f.modelName,
+          inputPricePer1M: f.inputPricePer1M,
+          outputPricePer1M: f.outputPricePer1M,
+          platformMargin: f.platformMargin,
+          floorTokens: f.floorTokens,
+          capTokens: f.capTokens,
+          isActive: f.isActive,
         }))}
       />
     </div>

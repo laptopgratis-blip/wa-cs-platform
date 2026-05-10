@@ -61,6 +61,18 @@ interface ByUser {
   profitRp: number
 }
 
+interface ByFeature {
+  featureKey: string
+  displayName: string
+  modelName: string | null
+  calls: number
+  apiCostRp: number
+  revenueRp: number
+  profitRp: number
+  marginPct: number
+  status: 'AMAN' | 'TIPIS' | 'RUGI'
+}
+
 type Preset = 'TODAY' | '7D' | '30D' | 'CUSTOM'
 
 function rangeOf(preset: Preset, customFrom: string, customTo: string): { from: string; to: string } {
@@ -104,6 +116,7 @@ export function ProfitabilityDashboard() {
   const [summary, setSummary] = useState<Summary | null>(null)
   const [byModel, setByModel] = useState<ByModel[]>([])
   const [byUser, setByUser] = useState<ByUser[]>([])
+  const [byFeature, setByFeature] = useState<ByFeature[]>([])
   const [loading, setLoading] = useState(false)
 
   const range = useMemo(() => rangeOf(preset, customFrom, customTo), [
@@ -116,14 +129,16 @@ export function ProfitabilityDashboard() {
     setLoading(true)
     try {
       const qs = `?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`
-      const [s, m, u] = await Promise.all([
+      const [s, m, u, f] = await Promise.all([
         fetch(`/api/admin/profitability/summary${qs}`).then((r) => r.json()),
         fetch(`/api/admin/profitability/by-model${qs}`).then((r) => r.json()),
         fetch(`/api/admin/profitability/by-user${qs}`).then((r) => r.json()),
+        fetch(`/api/admin/profitability/by-feature${qs}`).then((r) => r.json()),
       ])
       if (s.success) setSummary(s.data)
       if (m.success) setByModel(m.data)
       if (u.success) setByUser(u.data)
+      if (f.success) setByFeature(f.data)
     } finally {
       setLoading(false)
     }
@@ -325,6 +340,87 @@ export function ProfitabilityDashboard() {
                       className="py-8 text-center text-sm text-muted-foreground"
                     >
                       Belum ada data pesan AI di range ini.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section B-2 — Per AI Feature (Content Studio dst) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Performa Per AI Feature</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Feature</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead className="text-right">Calls</TableHead>
+                  <TableHead className="text-right">Cost API</TableHead>
+                  <TableHead className="text-right">Pendapatan</TableHead>
+                  <TableHead className="text-right">Profit</TableHead>
+                  <TableHead className="text-right">Margin</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {byFeature.map((f) => (
+                  <TableRow key={f.featureKey}>
+                    <TableCell>
+                      <div className="font-medium">{f.displayName}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">
+                        {f.featureKey}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {f.modelName ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatNumber(f.calls)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatRupiah(f.apiCostRp)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatRupiah(f.revenueRp)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums font-medium',
+                        f.profitRp < 0 && 'text-red-600',
+                      )}
+                    >
+                      {formatRupiah(f.profitRp)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {f.marginPct.toFixed(1)}%
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          'font-normal',
+                          STATUS_STYLE[f.status],
+                        )}
+                      >
+                        {STATUS_LABEL[f.status]}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {byFeature.length === 0 && !loading && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={8}
+                      className="py-8 text-center text-sm text-muted-foreground"
+                    >
+                      Belum ada call AI feature di range ini.
                     </TableCell>
                   </TableRow>
                 )}

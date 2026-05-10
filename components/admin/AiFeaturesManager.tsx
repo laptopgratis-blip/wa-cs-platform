@@ -3,8 +3,13 @@
 // AI Features Manager — admin CRUD AiFeatureConfig.
 // Per-feature pricing yg admin-tunable (Content Studio, future LP Lab migration).
 // Edit input/output rate, platform margin, floor/cap tokens, active toggle.
-import { Loader2, Plus, Save, Sparkles } from 'lucide-react'
-import { useEffect, useState } from 'react'
+//
+// Auto-sync: harga input/output otomatis ikut AiModelPreset (sumber kebenaran
+// harga API provider) saat preset di-update. Tombol "🔄 Sync dari preset" di
+// header untuk force-sync manual semua row sekaligus. Drift indicator
+// per-row kalau price config beda dari preset.
+import { AlertTriangle, Loader2, Plus, RefreshCw, Save, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -28,27 +33,82 @@ interface FeatureConfig {
   updatedAt: string
 }
 
+interface DriftEntry {
+  modelName: string
+  configInput: number
+  configOutput: number
+  presetInput: number | null
+  presetOutput: number | null
+  driftInput: boolean
+  driftOutput: boolean
+  presetMissing: boolean
+}
+
 export function AiFeaturesManager() {
   const [features, setFeatures] = useState<FeatureConfig[]>([])
+  const [drift, setDrift] = useState<Record<string, DriftEntry>>({})
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Map<string, Partial<FeatureConfig>>>(
     new Map(),
   )
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [syncingAll, setSyncingAll] = useState(false)
 
-  useEffect(() => {
-    refresh()
-  }, [])
-
-  async function refresh() {
+  const refresh = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/ai-features')
-      const json = await res.json()
-      if (json.success) setFeatures(json.data.features)
+      const [featRes, driftRes] = await Promise.all([
+        fetch('/api/admin/ai-features'),
+        fetch('/api/admin/ai-features/sync-from-presets'),
+      ])
+      const featJson = await featRes.json()
+      const driftJson = await driftRes.json()
+      if (featJson.success) setFeatures(featJson.data.features)
+      if (driftJson.success) setDrift(driftJson.data.drift)
     } finally {
       setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  async function syncAllFromPresets() {
+    if (
+      !confirm(
+        'Sync semua feature config dari AiModelPreset (database harga)? Harga input/output yg drift akan di-update. Margin/floor/cap tidak ikut di-update.',
+      )
+    )
+      return
+    setSyncingAll(true)
+    try {
+      const res = await fetch('/api/admin/ai-features/sync-from-presets', {
+        method: 'POST',
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal sync')
+        return
+      }
+      const { synced, unchanged, missing } = json.data as {
+        synced: number
+        unchanged: number
+        missing: string[]
+      }
+      const parts = [
+        synced > 0 && `${synced} feature di-update`,
+        unchanged > 0 && `${unchanged} sudah sinkron`,
+        missing.length > 0 && `${missing.length} model tidak ada di preset`,
+      ].filter(Boolean)
+      toast.success(parts.length > 0 ? parts.join(', ') : 'Tidak ada perubahan')
+      if (missing.length > 0) {
+        console.warn('[AiFeatures sync] preset missing untuk:', missing)
+      }
+      await refresh()
+    } finally {
+      setSyncingAll(false)
     }
   }
 
@@ -98,19 +158,54 @@ export function AiFeaturesManager() {
     await refresh()
   }
 
+  // Total drift count untuk badge di header.
+  const driftCount = Object.values(drift).filter(
+    (d) => d.driftInput || d.driftOutput,
+  ).length
+  const missingCount = Object.values(drift).filter((d) => d.presetMissing).length
+
   return (
     <div className="space-y-6">
-      <header>
-        <div className="mb-1 flex items-center gap-2">
-          <Sparkles className="size-5 text-primary-500" />
-          <h1 className="font-display text-2xl font-extrabold text-warm-900">
-            AI Feature Pricing
-          </h1>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <Sparkles className="size-5 text-primary-500" />
+            <h1 className="font-display text-2xl font-extrabold text-warm-900">
+              AI Feature Pricing
+            </h1>
+          </div>
+          <p className="text-sm text-warm-500">
+            Atur pricing per AI feature (Content Studio, future LP Lab). Update
+            margin/rate/cap di sini = effect max 60 detik (cache TTL).
+          </p>
         </div>
-        <p className="text-sm text-warm-500">
-          Atur pricing per AI feature (Content Studio, future LP Lab). Update
-          margin/rate/cap di sini = effect max 60 detik (cache TTL).
-        </p>
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={syncAllFromPresets}
+            disabled={syncingAll || loading}
+          >
+            {syncingAll ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 size-4" />
+            )}
+            Sync dari preset
+          </Button>
+          {driftCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+              <AlertTriangle className="size-3" />
+              {driftCount} feature beda harga dari preset
+            </span>
+          )}
+          {missingCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800">
+              <AlertTriangle className="size-3" />
+              {missingCount} model tidak ada di preset
+            </span>
+          )}
+        </div>
       </header>
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
@@ -123,6 +218,10 @@ export function AiFeaturesManager() {
         <br />
         Floor min = floorTokens, cap max = capTokens. Lihat /admin/profitability
         untuk monitor margin real per feature.
+        <br />
+        <strong>Sync dari preset:</strong> harga input/output otomatis
+        ter-update saat admin save di /admin/ai-pricing. Klik tombol di atas
+        untuk force-sync semua sekaligus.
       </div>
 
       {loading && (
@@ -158,12 +257,15 @@ export function AiFeaturesManager() {
         features.map((f) => {
           const draft = editing.get(f.id)
           const dirty = draft && Object.keys(draft).length > 0
+          const d = drift[f.id]
+          const hasDrift = d && (d.driftInput || d.driftOutput)
+          const presetMissing = d?.presetMissing ?? false
           return (
             <Card key={f.id}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-baseline justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-display text-base font-bold text-warm-900">
                         {f.displayName}
                       </h3>
@@ -176,10 +278,32 @@ export function AiFeaturesManager() {
                       >
                         {f.isActive ? 'Active' : 'Disabled'}
                       </Badge>
+                      {hasDrift && (
+                        <Badge
+                          className="bg-amber-100 text-[10px] text-amber-800"
+                          title={`Preset: $${d.presetInput?.toFixed(2)} / $${d.presetOutput?.toFixed(2)} per 1M`}
+                        >
+                          <AlertTriangle className="mr-1 size-3" />
+                          Drift dari preset
+                        </Badge>
+                      )}
+                      {presetMissing && (
+                        <Badge className="bg-rose-100 text-[10px] text-rose-800">
+                          Model tidak ada di preset
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-warm-500">
                       featureKey: <code>{f.featureKey}</code>
                     </p>
+                    {hasDrift && (
+                      <p className="mt-1 text-[11px] text-amber-700">
+                        Preset harga: <strong>${d.presetInput?.toFixed(2)}</strong>{' '}
+                        input / <strong>${d.presetOutput?.toFixed(2)}</strong>{' '}
+                        output. Klik &ldquo;Sync dari preset&rdquo; di header
+                        untuk pakai harga preset.
+                      </p>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button

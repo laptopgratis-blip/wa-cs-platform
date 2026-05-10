@@ -4,6 +4,7 @@ import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireAdmin } from '@/lib/api'
+import { syncFeatureConfigsFromPreset } from '@/lib/services/ai-feature-sync'
 import { prisma } from '@/lib/prisma'
 
 interface Params {
@@ -39,7 +40,20 @@ export async function PATCH(req: Request, { params }: Params) {
         lastUpdatedAt: new Date(),
       },
     })
-    return jsonOk(updated)
+    // Auto-sync ke AiFeatureConfig kalau price berubah — jadi semua feature
+    // yg pakai modelName ini langsung pakai harga baru tanpa intervensi admin.
+    let syncResult: Awaited<ReturnType<typeof syncFeatureConfigsFromPreset>> | null = null
+    if (
+      parsed.data.inputPricePer1M !== undefined ||
+      parsed.data.outputPricePer1M !== undefined
+    ) {
+      try {
+        syncResult = await syncFeatureConfigsFromPreset(updated.modelId)
+      } catch (err) {
+        console.warn('[PATCH preset] sync feature configs gagal:', err)
+      }
+    }
+    return jsonOk({ ...updated, syncResult })
   } catch (err) {
     console.error('[PATCH /api/admin/ai-pricing/presets/:id] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)

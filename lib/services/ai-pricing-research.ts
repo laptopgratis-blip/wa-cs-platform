@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { decrypt } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
+import { syncFeatureConfigsFromPreset } from '@/lib/services/ai-feature-sync'
 
 const RESEARCH_MODEL = 'claude-sonnet-4-5'
 // Cap tinggi karena hasil research bisa panjang (multi-call web_search +
@@ -280,6 +281,11 @@ export async function applyChanges(
   }
 
   let applied = 0
+  // Track modelIds yg di-apply, lalu trigger sync ke AiFeatureConfig sekali
+  // di akhir (per modelId, dedupe). Tidak fail kalau sync error — preset
+  // sudah ter-update tetap valid.
+  const touchedModelIds = new Set<string>()
+
   for (const modelId of selectedIds) {
     const e = byModelId.get(modelId)
     if (!e) continue
@@ -297,6 +303,7 @@ export async function applyChanges(
           lastUpdatedAt: new Date(),
         },
       })
+      touchedModelIds.add(e.after.modelId)
       applied++
     } else if (e.action === 'update' && e.presetId) {
       await prisma.aiModelPreset.update({
@@ -311,8 +318,19 @@ export async function applyChanges(
           lastUpdatedAt: new Date(),
         },
       })
+      touchedModelIds.add(e.after.modelId)
       applied++
     }
   }
+
+  // Trigger sync ke AiFeatureConfig — non-fatal kalau gagal.
+  for (const mid of touchedModelIds) {
+    try {
+      await syncFeatureConfigsFromPreset(mid)
+    } catch (err) {
+      console.warn('[applyChanges] sync feature configs gagal:', mid, err)
+    }
+  }
+
   return { applied }
 }
