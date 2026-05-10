@@ -18,11 +18,26 @@ interface LandingPage {
   isPublished: boolean
 }
 
+interface InitialIdea {
+  id: string
+  method: 'HOOK' | 'PAIN' | 'PERSONA'
+  hook: string
+  angle: string
+  channelFit: string[]
+  format: string
+  whyItWorks: string
+  predictedVirality: number
+  funnelStage: 'TOFU' | 'MOFU' | 'BOFU'
+  estimatedTokens: number
+  isFreePreview: boolean
+}
+
 interface Props {
   initialTab: 'generate' | 'library'
   initialLpId?: string
   landingPages: LandingPage[]
   tokenBalance: number
+  initialIdeas: InitialIdea[]
 }
 
 export function ContentStudioClient({
@@ -30,6 +45,7 @@ export function ContentStudioClient({
   initialLpId,
   landingPages,
   tokenBalance,
+  initialIdeas,
 }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState<'generate' | 'library'>(initialTab)
@@ -52,6 +68,7 @@ export function ContentStudioClient({
           initialLpId={initialLpId}
           landingPages={landingPages}
           tokenBalance={tokenBalance}
+          initialIdeas={initialIdeas}
           onPiecesCreated={() => {
             setTab('library')
             router.refresh()

@@ -17,6 +17,7 @@ import {
   Wand2,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -51,6 +52,7 @@ interface Props {
   initialLpId?: string
   landingPages: LandingPage[]
   tokenBalance: number
+  initialIdeas: Idea[]
   onPiecesCreated: () => void
 }
 
@@ -79,8 +81,10 @@ export function IdeaGeneratorTab({
   initialLpId,
   landingPages,
   tokenBalance,
+  initialIdeas,
   onPiecesCreated,
 }: Props) {
+  const router = useRouter()
   const [mode, setMode] = useState<'lp' | 'manual'>(
     initialLpId || landingPages.length > 0 ? 'lp' : 'manual',
   )
@@ -90,12 +94,22 @@ export function IdeaGeneratorTab({
   const [manualOffer, setManualOffer] = useState('')
 
   const [generating, setGenerating] = useState(false)
-  const [ideas, setIdeas] = useState<Idea[]>([])
+  // Initial state dari server-fetched unpromoted ideas — preserve refresh.
+  const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
   const [tokensCharged, setTokensCharged] = useState<number | null>(null)
   const [selected, setSelected] = useState<Map<string, string>>(new Map())
   // selected: ideaId → channel chosen
 
   const [briefBuilding, setBriefBuilding] = useState(false)
+
+  // Saat user ganti LP di dropdown, navigate ulang supaya server fetch
+  // ide untuk LP baru. Lebih simple daripada client-side fetch.
+  function handleLpChange(newLpId: string) {
+    setLpId(newLpId)
+    if (newLpId !== initialLpId) {
+      router.push(`/content?lpId=${newLpId}`)
+    }
+  }
 
   async function handleGenerate() {
     if (mode === 'lp' && !lpId) {
@@ -288,7 +302,7 @@ export function IdeaGeneratorTab({
                 <select
                   id="lp-select"
                   value={lpId}
-                  onChange={(e) => setLpId(e.target.value)}
+                  onChange={(e) => handleLpChange(e.target.value)}
                   className="w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-sm"
                 >
                   {landingPages.map((lp) => (

@@ -11,6 +11,7 @@ import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { prisma } from '@/lib/prisma'
 import {
   generateIdeas,
   persistIdeas,
@@ -64,6 +65,19 @@ export async function POST(req: Request) {
           .join('; ')}`,
         500,
       )
+    }
+
+    // Hapus ide unpromoted lama untuk LP ini supaya tidak nimbun di UI saat
+    // user generate ulang. Yang sudah di-promote ke piece tetap aman karena
+    // promotedToPieceId is NOT NULL.
+    if (parsed.data.lpId) {
+      await prisma.contentIdea.deleteMany({
+        where: {
+          userId: session.user.id,
+          lpId: parsed.data.lpId,
+          promotedToPieceId: null,
+        },
+      })
     }
 
     // Persist ke DB.

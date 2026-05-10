@@ -19,7 +19,9 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
 
   const { lpId, tab } = await searchParams
 
-  // Load LP list untuk dropdown.
+  // Resolve effective LP source untuk pre-load ide existing.
+  // Kalau lpId tidak ada di URL, default ke LP terbaru (most-recently-updated)
+  // — supaya saat user buka /content tanpa param, masih ada konteks.
   const [landingPages, balance] = await Promise.all([
     prisma.landingPage.findMany({
       where: { userId: session.user.id },
@@ -32,6 +34,22 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
       select: { balance: true },
     }),
   ])
+
+  const effectiveLpId = lpId ?? landingPages[0]?.id
+
+  // Pre-load 15 ide unpromoted terbaru untuk LP yg dipilih — supaya
+  // refresh tidak hilang. 15 = 1 batch generate.
+  const initialIdeas = effectiveLpId
+    ? await prisma.contentIdea.findMany({
+        where: {
+          userId: session.user.id,
+          lpId: effectiveLpId,
+          promotedToPieceId: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+      })
+    : []
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -50,9 +68,22 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
 
       <ContentStudioClient
         initialTab={tab === 'library' ? 'library' : 'generate'}
-        initialLpId={lpId}
+        initialLpId={effectiveLpId}
         landingPages={landingPages}
         tokenBalance={balance?.balance ?? 0}
+        initialIdeas={initialIdeas.map((i) => ({
+          id: i.id,
+          method: i.method as 'HOOK' | 'PAIN' | 'PERSONA',
+          hook: i.hook,
+          angle: i.angle,
+          channelFit: i.channelFit,
+          format: i.format,
+          whyItWorks: i.whyItWorks,
+          predictedVirality: i.predictedVirality,
+          funnelStage: i.funnelStage as 'TOFU' | 'MOFU' | 'BOFU',
+          estimatedTokens: i.estimatedTokens,
+          isFreePreview: i.isFreePreview,
+        }))}
       />
     </div>
   )
