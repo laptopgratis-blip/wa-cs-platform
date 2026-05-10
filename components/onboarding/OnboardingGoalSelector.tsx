@@ -8,7 +8,7 @@
 // Pakai endpoint existing /api/onboarding/save-goal — set goal baru →
 // onboardingDismissedAt=null otomatis (checklist muncul lagi). Progress step
 // di JSON tidak hilang, step yg tidak match goal baru auto-ignored saat resolve.
-import { ArrowRight, Check, Loader2 } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -97,12 +97,21 @@ const GOAL_VERBOSE: Record<Goal, string> = {
 interface Props {
   /** Goal user sekarang. Null = belum pilih (existing user atau dismissed). */
   currentGoal: Goal | null
+  /**
+   * Render versi kompak — heading kecil, cards lebih ringkas, default
+   * collapsed kalau tidak ada goal aktif. Dipakai di dashboard footer
+   * supaya tidak kompetisi dengan hero card LP gratis.
+   */
+  compact?: boolean
 }
 
-export function OnboardingGoalSelector({ currentGoal }: Props) {
+export function OnboardingGoalSelector({ currentGoal, compact }: Props) {
   const router = useRouter()
   const [pending, setPending] = useState<Goal | null>(null) // goal yg lagi di-confirm
   const [busy, setBusy] = useState(false)
+  // Compact mode: collapse default kalau belum ada goal aktif. Kalau ada
+  // goal aktif, expand supaya user lihat status aktifnya tanpa klik.
+  const [expanded, setExpanded] = useState(!compact || currentGoal !== null)
 
   function requestSelect(goal: Goal) {
     if (goal === currentGoal) {
@@ -141,69 +150,114 @@ export function OnboardingGoalSelector({ currentGoal }: Props) {
 
   return (
     <>
-      <Card className="rounded-xl border-warm-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="font-display text-lg">
-            🎯 Mau jelajah fitur lain?
-          </CardTitle>
-          <CardDescription>
-            Tujuan aktif sekarang punya badge ✓. Klik{' '}
-            <strong>Jadikan tujuan</strong> di card lain untuk switch fokus —
-            checklist & panduan menyesuaikan otomatis.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {OPTIONS.map((opt) => {
-              const isActive = opt.id === currentGoal
-              return (
-                <div
-                  key={opt.id}
-                  className={cn(
-                    'relative flex flex-col gap-3 rounded-xl border-2 p-4 transition-shadow',
-                    opt.bgClass,
-                    isActive ? opt.activeRingClass : opt.borderClass,
-                  )}
-                >
-                  {isActive && (
-                    <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
-                      <Check className="size-3" /> Aktif
-                    </span>
-                  )}
-                  <span className="text-3xl" aria-hidden>
-                    {opt.emoji}
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-display font-bold leading-tight text-warm-900">
-                      {opt.title}
-                    </p>
-                    <p className="mt-1 text-xs text-warm-600">{opt.short}</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={isActive ? 'outline' : 'default'}
-                    disabled={isActive || busy}
-                    onClick={() => requestSelect(opt.id)}
-                    className="w-full"
-                  >
-                    {isActive ? (
-                      'Sedang aktif'
-                    ) : (
-                      <>
-                        Jadikan tujuan <ArrowRight className="ml-1 size-3.5" />
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )
-            })}
+      <Card className={cn('rounded-xl border-warm-200 shadow-sm', compact && 'border-warm-200/70 bg-warm-50/30')}>
+        <CardHeader
+          className={cn('pb-3', compact && 'cursor-pointer pb-2')}
+          onClick={compact ? () => setExpanded((v) => !v) : undefined}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className={cn('font-display', compact ? 'text-sm' : 'text-lg')}>
+                🎯 Setup lengkap untuk fitur lain
+              </CardTitle>
+              {compact ? (
+                <CardDescription className="text-xs">
+                  CS AI · Jualan WA · Course/LMS · setup lebih lengkap (di luar
+                  LP gratis)
+                </CardDescription>
+              ) : (
+                <CardDescription>
+                  Tujuan aktif sekarang punya badge ✓. Klik{' '}
+                  <strong>Jadikan tujuan</strong> di card lain untuk switch fokus —
+                  checklist & panduan menyesuaikan otomatis.
+                </CardDescription>
+              )}
+            </div>
+            {compact && (
+              <button
+                type="button"
+                aria-label={expanded ? 'Ciutkan' : 'Buka'}
+                className="rounded p-1 text-warm-500 hover:bg-warm-100 hover:text-warm-900"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setExpanded((v) => !v)
+                }}
+              >
+                {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+              </button>
+            )}
           </div>
-          <p className="mt-3 text-xs text-warm-500">
-            💡 Switching goal tidak menghapus progress lama. Kamu bisa balik
-            kapan saja — step yang sudah selesai tetap kebaca.
-          </p>
-        </CardContent>
+        </CardHeader>
+        {expanded && (
+          <CardContent className={cn(compact && 'pt-0')}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {OPTIONS.map((opt) => {
+                const isActive = opt.id === currentGoal
+                return (
+                  <div
+                    key={opt.id}
+                    className={cn(
+                      'relative flex flex-col rounded-xl border-2 transition-shadow',
+                      compact ? 'gap-2 p-3' : 'gap-3 p-4',
+                      opt.bgClass,
+                      isActive ? opt.activeRingClass : opt.borderClass,
+                    )}
+                  >
+                    {isActive && (
+                      <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm">
+                        <Check className="size-3" /> Aktif
+                      </span>
+                    )}
+                    <span className={cn(compact ? 'text-xl' : 'text-3xl')} aria-hidden>
+                      {opt.emoji}
+                    </span>
+                    <div className="flex-1">
+                      <p
+                        className={cn(
+                          'font-display font-bold leading-tight text-warm-900',
+                          compact ? 'text-xs' : 'text-base',
+                        )}
+                      >
+                        {opt.title}
+                      </p>
+                      <p
+                        className={cn(
+                          'mt-0.5 text-warm-600',
+                          compact ? 'line-clamp-2 text-[10px]' : 'mt-1 text-xs',
+                        )}
+                      >
+                        {opt.short}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={isActive ? 'outline' : 'default'}
+                      disabled={isActive || busy}
+                      onClick={() => requestSelect(opt.id)}
+                      className={cn('w-full', compact && 'h-7 text-[11px]')}
+                    >
+                      {isActive ? (
+                        'Sedang aktif'
+                      ) : (
+                        <>
+                          {compact ? 'Pilih' : 'Jadikan tujuan'}
+                          <ArrowRight className="ml-1 size-3.5" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+            {!compact && (
+              <p className="mt-3 text-xs text-warm-500">
+                💡 Switching goal tidak menghapus progress lama. Kamu bisa balik
+                kapan saja — step yang sudah selesai tetap kebaca.
+              </p>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       <AlertDialog

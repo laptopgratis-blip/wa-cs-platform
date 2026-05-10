@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
+import { LpGratisHero } from '@/components/dashboard/LpGratisHero'
 import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
 import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
 import {
@@ -158,9 +159,14 @@ export default async function DashboardPage() {
 
       <BalanceBanner balance={stats.balance} />
 
-      {/* Onboarding progress — server-rendered prominent card "Lanjutkan goal
-          kamu" dengan tombol besar ke /onboarding/guide. Pre-loaded data biar
-          tidak ada flicker / loading state saat hydrate. */}
+      {/* Wizard utama: LP Gratis — eye-catching hero, mengarahkan user awam
+          ke flow standalone /onboarding/lp-gratis (5 menit, tanpa upgrade
+          plan). Selalu di top supaya jelas ini opsi entry-level. */}
+      <LpGratisHero />
+
+      {/* Onboarding progress — kalau user sudah pilih goal lain (CS_AI,
+          SELL_WA, dst), tampilkan progress card-nya. Pre-loaded server-side
+          biar tidak flicker. Kalau belum pilih goal → null (hide). */}
       <OnboardingProgressCard initialData={progressData} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -206,9 +212,11 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Semua wizard ditawarkan ulang — user bisa switch goal kapan saja
-          tanpa harus reset manual. Checklist & menu di atas auto-update. */}
-      <OnboardingGoalSelector currentGoal={onboardingGoal ?? null} />
+      {/* Goal selector: compact mode supaya tidak kompetisi dengan hero LP
+          gratis di atas. Default collapsed kalau user belum pilih goal apa
+          pun (asumsi: pakai LP gratis dulu). Auto-expand kalau ada goal aktif
+          supaya user lihat status & bisa switch. */}
+      <OnboardingGoalSelector currentGoal={onboardingGoal ?? null} compact />
     </div>
   )
 }
