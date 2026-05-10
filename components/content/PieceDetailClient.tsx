@@ -8,15 +8,20 @@ import {
   Clipboard,
   ClipboardCheck,
   Edit3,
+  FileText,
+  Image as ImageIcon,
   Save,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { CarouselBuilder } from './CarouselBuilder'
+import { VisualBuilder } from './VisualBuilder'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 interface Slide {
   id: string
@@ -69,6 +74,14 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   ARCHIVED: { label: 'Arsip', cls: 'bg-rose-100 text-rose-700' },
 }
 
+// Channel yg punya visual builder.
+const VISUAL_CHANNELS = new Set([
+  'WA_STATUS',
+  'IG_STORY',
+  'IG_POST',
+  'IG_CAROUSEL',
+])
+
 export function PieceDetailClient({ piece }: { piece: PieceData }) {
   const [body, setBody] = useState(piece.bodyJson)
   const [status, setStatus] = useState(piece.status)
@@ -76,6 +89,8 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
   const [editValue, setEditValue] = useState(JSON.stringify(piece.bodyJson, null, 2))
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  const hasVisual = VISUAL_CHANNELS.has(piece.channel)
 
   async function copyToClipboard() {
     const text = formatForClipboard(piece.channel, body)
@@ -209,8 +224,27 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
         )}
       </div>
 
-      {/* Body render */}
-      {!editing && <BodyRenderer channel={piece.channel} body={body} slides={piece.slides} />}
+      {/* Body render — tab visual + script kalau channel punya visual */}
+      {!editing && hasVisual ? (
+        <Tabs defaultValue="script">
+          <TabsList>
+            <TabsTrigger value="script">
+              <FileText className="mr-1.5 size-3.5" /> Script & caption
+            </TabsTrigger>
+            <TabsTrigger value="visual">
+              <ImageIcon className="mr-1.5 size-3.5" /> Buat Visual
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="script" className="mt-4">
+            <BodyRenderer channel={piece.channel} body={body} slides={piece.slides} />
+          </TabsContent>
+          <TabsContent value="visual" className="mt-4">
+            <VisualSection channel={piece.channel} body={body} slides={piece.slides} pieceTitle={piece.title} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        !editing && <BodyRenderer channel={piece.channel} body={body} slides={piece.slides} />
+      )}
 
       {/* Edit JSON raw */}
       {editing && (
@@ -252,6 +286,63 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
         Token kepake bikin konten ini: {piece.tokensCharged.toLocaleString('id-ID')}
       </p>
     </div>
+  )
+}
+
+function VisualSection({
+  channel,
+  body,
+  slides,
+  pieceTitle,
+}: {
+  channel: string
+  body: Record<string, unknown>
+  slides: Slide[]
+  pieceTitle: string
+}) {
+  if (channel === 'IG_CAROUSEL') {
+    // Source: ContentSlide rows kalau ada (Phase 1 sudah persist), atau
+    // bodyJson.slides fallback.
+    const fromDb = slides.map((s) => ({
+      headline: s.headline,
+      body: s.body,
+    }))
+    const fromBody = Array.isArray(body.slides)
+      ? (body.slides as { headline?: string; body?: string }[]).map((s) => ({
+          headline: String(s.headline ?? ''),
+          body: String(s.body ?? ''),
+        }))
+      : []
+    const slideInputs = fromDb.length > 0 ? fromDb : fromBody
+    if (slideInputs.length === 0) {
+      return (
+        <div className="rounded-md border border-warm-200 bg-warm-50 p-4 text-sm text-warm-500">
+          Slide kosong — tidak bisa generate visual.
+        </div>
+      )
+    }
+    return <CarouselBuilder slides={slideInputs} pieceTitle={pieceTitle} />
+  }
+
+  // WA_STATUS / IG_STORY / IG_POST — single image.
+  const c = channel as 'WA_STATUS' | 'IG_STORY' | 'IG_POST'
+  return (
+    <VisualBuilder
+      channel={c}
+      initialHeadline={
+        typeof body.hook === 'string' ? body.hook : undefined
+      }
+      initialBody={
+        typeof body.body === 'string'
+          ? body.body
+          : typeof body.stickerText === 'string'
+            ? body.stickerText
+            : undefined
+      }
+      initialCta={typeof body.cta === 'string' ? body.cta : undefined}
+      initialBrand="Hulao"
+      pieceTitle={pieceTitle}
+    />
   )
 }
 
