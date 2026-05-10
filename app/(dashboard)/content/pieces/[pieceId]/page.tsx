@@ -42,6 +42,16 @@ export default async function PieceDetailPage({ params }: Params) {
           status: piece.status,
           tokensCharged: piece.tokensCharged,
           scheduledFor: piece.scheduledFor?.toISOString() ?? null,
+          metrics: {
+            reach: piece.reach,
+            impressions: piece.impressions,
+            saves: piece.saves,
+            shares: piece.shares,
+            comments: piece.comments,
+            dms: piece.dms,
+            linkClicks: piece.linkClicks,
+            metricUpdatedAt: piece.metricUpdatedAt?.toISOString() ?? null,
+          },
           bodyJson: piece.bodyJson as Record<string, unknown>,
           slides: piece.slides.map((s) => ({
             id: s.id,

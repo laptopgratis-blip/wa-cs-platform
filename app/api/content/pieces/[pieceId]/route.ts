@@ -34,6 +34,14 @@ const patchSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   // ISO datetime atau null untuk clear schedule.
   scheduledFor: z.string().datetime().nullable().optional(),
+  // Phase 5 — metric input (semua optional, null = clear).
+  reach: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  impressions: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  saves: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  shares: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  comments: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  dms: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  linkClicks: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
 })
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -56,10 +64,29 @@ export async function PATCH(req: Request, { params }: Params) {
       )
       return jsonOk({ piece })
     }
+    const metricKeys = [
+      'reach',
+      'impressions',
+      'saves',
+      'shares',
+      'comments',
+      'dms',
+      'linkClicks',
+    ] as const
+    const metricChanges: Record<string, number | null> = {}
+    let hasMetricChange = false
+    for (const k of metricKeys) {
+      if (parsed.data[k] !== undefined) {
+        metricChanges[k] = parsed.data[k]
+        hasMetricChange = true
+      }
+    }
+
     if (
       parsed.data.bodyJson ||
       parsed.data.title ||
-      parsed.data.scheduledFor !== undefined
+      parsed.data.scheduledFor !== undefined ||
+      hasMetricChange
     ) {
       const result = await prisma.contentPiece.updateMany({
         where: { id: pieceId, userId: session.user.id },
@@ -73,6 +100,8 @@ export async function PATCH(req: Request, { params }: Params) {
               ? new Date(parsed.data.scheduledFor)
               : null,
           }),
+          ...metricChanges,
+          ...(hasMetricChange && { metricUpdatedAt: new Date() }),
         },
       })
       if (result.count === 0) return jsonError('Piece tidak ditemukan', 404)

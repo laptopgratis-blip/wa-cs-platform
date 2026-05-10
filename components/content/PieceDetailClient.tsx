@@ -4,6 +4,7 @@
 // (copy, mark posted/archived, edit body raw via JSON textarea).
 import {
   Archive,
+  BarChart3,
   CalendarPlus,
   CheckCircle2,
   Clipboard,
@@ -31,6 +32,17 @@ interface Slide {
   body: string
 }
 
+interface PieceMetrics {
+  reach: number | null
+  impressions: number | null
+  saves: number | null
+  shares: number | null
+  comments: number | null
+  dms: number | null
+  linkClicks: number | null
+  metricUpdatedAt: string | null
+}
+
 interface PieceData {
   id: string
   title: string
@@ -40,6 +52,7 @@ interface PieceData {
   status: string
   tokensCharged: number
   scheduledFor: string | null
+  metrics: PieceMetrics
   bodyJson: Record<string, unknown>
   slides: Slide[]
   sourceIdea: {
@@ -365,9 +378,131 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
         </Card>
       )}
 
+      {/* Phase 5: form metric input */}
+      {(status === 'POSTED' || piece.metrics.metricUpdatedAt) && (
+        <MetricSection pieceId={piece.id} initial={piece.metrics} />
+      )}
+
       <p className="text-[11px] text-warm-400">
         Token kepake bikin konten ini: {piece.tokensCharged.toLocaleString('id-ID')}
       </p>
+    </div>
+  )
+}
+
+function MetricSection({
+  pieceId,
+  initial,
+}: {
+  pieceId: string
+  initial: PieceMetrics
+}) {
+  const [m, setM] = useState({
+    reach: initial.reach ?? '',
+    saves: initial.saves ?? '',
+    shares: initial.shares ?? '',
+    comments: initial.comments ?? '',
+    dms: initial.dms ?? '',
+    linkClicks: initial.linkClicks ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [updatedAt, setUpdatedAt] = useState(initial.metricUpdatedAt)
+
+  function patch(key: keyof typeof m, value: string) {
+    setM((prev) => ({ ...prev, [key]: value }))
+  }
+
+  async function save() {
+    setSaving(true)
+    try {
+      const body: Record<string, number | null> = {}
+      ;(['reach', 'saves', 'shares', 'comments', 'dms', 'linkClicks'] as const).forEach(
+        (k) => {
+          const raw = m[k]
+          if (raw === '' || raw === null) {
+            body[k] = null
+          } else {
+            const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10)
+            body[k] = Number.isFinite(n) ? n : null
+          }
+        },
+      )
+      const res = await fetch(`/api/content/pieces/${pieceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal save metric')
+        return
+      }
+      setUpdatedAt(new Date().toISOString())
+      toast.success('Metric tersimpan')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-warm-900">
+            <BarChart3 className="size-4 text-primary-500" />
+            Performa konten
+          </h3>
+          {updatedAt && (
+            <span className="text-[10px] text-warm-500">
+              Update: {new Date(updatedAt).toLocaleString('id-ID', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+              })}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-warm-500">
+          Catat metric setelah konten dipost — Hulao pakai data ini untuk
+          rekomendasi konten serupa di masa depan.
+        </p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <MetricInput label="Reach" value={m.reach} onChange={(v) => patch('reach', v)} />
+          <MetricInput label="Saves" value={m.saves} onChange={(v) => patch('saves', v)} />
+          <MetricInput label="Shares" value={m.shares} onChange={(v) => patch('shares', v)} />
+          <MetricInput label="Comments" value={m.comments} onChange={(v) => patch('comments', v)} />
+          <MetricInput label="DM masuk" value={m.dms} onChange={(v) => patch('dms', v)} />
+          <MetricInput label="Klik link" value={m.linkClicks} onChange={(v) => patch('linkClicks', v)} />
+        </div>
+        <Button onClick={save} disabled={saving} size="sm">
+          {saving ? 'Menyimpan...' : 'Simpan metric'}
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+
+function MetricInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number | string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="space-y-1">
+      <label className="text-[10px] font-medium uppercase tracking-wide text-warm-500">
+        {label}
+      </label>
+      <input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
+        className="w-full rounded-md border border-warm-300 bg-white px-2 py-1.5 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-200"
+      />
     </div>
   )
 }

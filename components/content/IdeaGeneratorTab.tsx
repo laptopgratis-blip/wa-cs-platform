@@ -15,6 +15,7 @@ import {
   Sparkles,
   Star,
   TrendingUp,
+  Trophy,
   Wand2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -37,7 +38,7 @@ interface LandingPage {
 
 interface Idea {
   id: string
-  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS'
+  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER'
   hook: string
   angle: string
   channelFit: string[]
@@ -62,6 +63,7 @@ const METHOD_LABEL: Record<string, { label: string; cls: string }> = {
   PAIN: { label: 'Pain Point', cls: 'bg-rose-100 text-rose-700' },
   PERSONA: { label: 'Persona POV', cls: 'bg-purple-100 text-purple-700' },
   TRENDS: { label: '🔥 Trending Search', cls: 'bg-amber-100 text-amber-700' },
+  WINNER: { label: '🏆 Pola Viral', cls: 'bg-emerald-100 text-emerald-700' },
 }
 
 const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
@@ -97,6 +99,7 @@ export function IdeaGeneratorTab({
 
   const [generating, setGenerating] = useState(false)
   const [includeTrends, setIncludeTrends] = useState(false)
+  const [includeWinner, setIncludeWinner] = useState(false)
   // Initial state dari server-fetched unpromoted ideas — preserve refresh.
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
   const [tokensCharged, setTokensCharged] = useState<number | null>(null)
@@ -132,12 +135,13 @@ export function IdeaGeneratorTab({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           mode === 'lp'
-            ? { lpId, includeTrends }
+            ? { lpId, includeTrends, includeWinner }
             : {
                 manualTitle: manualTitle.trim(),
                 manualAudience: manualAudience.trim() || undefined,
                 manualOffer: manualOffer.trim() || undefined,
                 includeTrends,
+                includeWinner,
               },
         ),
       })
@@ -372,7 +376,27 @@ export function IdeaGeneratorTab({
               </div>
               <p className="mt-0.5 text-[11px] text-warm-500">
                 Hulao cek apa yg lagi dicari orang di Google Indonesia terkait
-                produk kamu, lalu buat ide riding wave-nya. Total jadi 20 ide.
+                produk kamu, lalu buat ide riding wave-nya.
+              </p>
+            </div>
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+            <input
+              type="checkbox"
+              checked={includeWinner}
+              onChange={(e) => setIncludeWinner(e.target.checked)}
+              className="mt-0.5 size-4 cursor-pointer accent-primary-500"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-1 font-semibold text-warm-900">
+                <Trophy className="size-3.5 text-emerald-600" />
+                Belajar dari konten viral (+5 ide)
+              </div>
+              <p className="mt-0.5 text-[11px] text-warm-500">
+                Hulao analisa konten kamu dgn reach tertinggi & buat ide baru
+                yg tiru pola sukses-nya. Butuh konten POSTED dgn metric tercatat
+                — input metric di tab Insights setelah post.
               </p>
             </div>
           </label>
@@ -391,7 +415,7 @@ export function IdeaGeneratorTab({
             ) : (
               <>
                 <Wand2 className="mr-2 size-4" />
-                Generate {includeTrends ? '20' : '15'} ide konten
+                Generate {15 + (includeTrends ? 5 : 0) + (includeWinner ? 5 : 0)} ide konten
               </>
             )}
           </Button>

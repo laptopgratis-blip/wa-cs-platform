@@ -26,12 +26,13 @@ import {
 
 import { extractSeeds, fetchSuggestionsBatch } from './external-signals'
 import { HOOK_FRAMEWORKS, sampleHookFrameworks } from './hook-frameworks'
+import { getInsightsForUser } from './insights'
 
 const FEATURE_KEY = 'CONTENT_IDEA'
 const AI_TIMEOUT_MS = 60_000
 const MAX_OUTPUT_TOKENS = 2_500 // per metode
 
-export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS'
+export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER'
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU'
 
 export interface IdeaInput {
@@ -223,6 +224,43 @@ Channel fit: minimal 2 yg fit untuk IG_REELS/TIKTOK (storytime), 1 IG_CAROUSEL (
 Keluarkan JSON array 5 object sesuai schema. Hook tiap ide harus terdengar seperti narasi pribadi, bukan deskripsi.`
 }
 
+function buildWinnerPrompt(
+  context: string,
+  winners: {
+    title: string
+    channel: string
+    funnelStage: string
+    method?: string
+    hook?: string
+    reach: number
+    saves: number
+    dms: number
+  }[],
+): string {
+  const winnerLines = winners
+    .map(
+      (w, i) =>
+        `${i + 1}. "${w.hook ?? w.title}" — channel:${w.channel}, funnel:${w.funnelStage}${w.method ? `, method:${w.method}` : ''}\n   Performa: ${w.reach.toLocaleString('id-ID')} reach, ${w.saves} saves, ${w.dms} DM`,
+    )
+    .join('\n')
+  return `KONTEKS PRODUK/LP:
+${context}
+
+KONTEN VIRAL USER (3 paling tinggi reach, real performance data):
+${winnerLines}
+
+Tugas: hasilkan 5 ide konten BARU yg replicate pola sukses dari konten viral di atas. Tiap ide harus:
+- Pakai struktur hook yg mirip pola pemenang (tone, panjang, angle)
+- Channel & funnel kombinasi yg terbukti works (lihat winner)
+- TIDAK copy persis — variasi topik/sudut, tapi pertahankan formula
+- predictedVirality 4-5 (high confidence — pattern proven)
+
+Funnel mix: variatif sesuai pemenang.
+Channel fit: prioritas channel yg ada di winner. Tetap kasih opsi alternatif kalau format support.
+
+Keluarkan JSON array 5 object sesuai schema.`
+}
+
 function buildTrendsPrompt(
   context: string,
   signals: { seed: string; suggestions: string[] }[],
@@ -388,6 +426,10 @@ export async function generateIdeas(input: {
   // includeTrends=true → tambah method TRENDS (4th metode), fetch Google
   // Suggest dulu, kasih AI sebagai context. Total ide jadi 20 (15+5).
   includeTrends?: boolean
+  // includeWinner=true → tambah method WINNER (5th metode), inject top 3
+  // POSTED+metric piece sebagai pattern reference. Hanya bekerja kalau
+  // user punya >=3 piece dgn metric tercatat.
+  includeWinner?: boolean
   // mode='preview' → run AI tapi mark 3 ide pertama sebagai isFreePreview=true,
   // log dengan status='OK', tetap deduct token (because AI did get called).
   // Caller bisa decide untuk skip-deduct kalau preview-only flow.
@@ -401,11 +443,17 @@ export async function generateIdeas(input: {
 }> {
   const { contextSummary, seedContext } = await buildContext(input)
 
-  // Pre-flight estimasi balance kalau mode=full. Estimate ~15K input
-  // + 3K output (3 metode × ~1K output). Kalau includeTrends, tambah ~5K
-  // input + 1K output (4th method). Charge biasanya 200-700 token.
-  const estimateInput = input.includeTrends ? 20_000 : 15_000
-  const estimateOutput = input.includeTrends ? 4_000 : 3_000
+  // Pre-flight estimasi balance kalau mode=full. Tambah per opt-in method.
+  let estimateInput = 15_000
+  let estimateOutput = 3_000
+  if (input.includeTrends) {
+    estimateInput += 5_000
+    estimateOutput += 1_000
+  }
+  if (input.includeWinner) {
+    estimateInput += 5_000
+    estimateOutput += 1_000
+  }
   const preCheck = await computeChargeFromUsage({
     featureKey: FEATURE_KEY,
     inputTokens: estimateInput,
@@ -446,27 +494,51 @@ export async function generateIdeas(input: {
   let trendsCallPromise: Promise<MethodCallResult> | null = null
   if (input.includeTrends) {
     const seeds = extractSeeds(seedContext)
-    const trendsPromise = fetchSuggestionsBatch(seeds)
+    trendsCallPromise = fetchSuggestionsBatch(seeds)
       .catch(() => [])
       .then((signals) =>
         callAi('TRENDS', buildTrendsPrompt(contextSummary, signals)),
       )
-    trendsCallPromise = trendsPromise
   }
 
-  const allCalls = trendsCallPromise
-    ? [...baseCalls, trendsCallPromise]
-    : baseCalls
+  let winnerCallPromise: Promise<MethodCallResult> | null = null
+  if (input.includeWinner) {
+    winnerCallPromise = getInsightsForUser(input.userId)
+      .catch(() => null)
+      .then((insights) => {
+        if (!insights || insights.winners.length === 0) {
+          // Skip — kalau gak ada winner data, return empty result
+          return {
+            method: 'WINNER' as IdeaMethod,
+            ideas: [],
+            inputTokens: 0,
+            outputTokens: 0,
+            error: 'Belum ada konten dgn metric — record metric dulu di piece detail',
+          }
+        }
+        return callAi(
+          'WINNER',
+          buildWinnerPrompt(contextSummary, insights.winners),
+        )
+      })
+  }
+
+  const allCalls: Promise<MethodCallResult>[] = [...baseCalls]
+  if (trendsCallPromise) allCalls.push(trendsCallPromise)
+  if (winnerCallPromise) allCalls.push(winnerCallPromise)
   const results = await Promise.all(allCalls)
   const hookRes = results[0]!
   const painRes = results[1]!
   const personaRes = results[2]!
-  const trendsRes = input.includeTrends ? results[3] : undefined
+  let cursor = 3
+  const trendsRes = input.includeTrends ? results[cursor++] : undefined
+  const winnerRes = input.includeWinner ? results[cursor++] : undefined
+
+  const orderedResults: MethodCallResult[] = [hookRes, painRes, personaRes]
+  if (trendsRes) orderedResults.push(trendsRes)
+  if (winnerRes) orderedResults.push(winnerRes)
 
   const allIdeas: (GeneratedIdea & { isFreePreview: boolean })[] = []
-  const orderedResults = trendsRes
-    ? [hookRes, painRes, personaRes, trendsRes]
-    : [hookRes, painRes, personaRes]
   const methodResults = orderedResults.map((r) => ({
     method: r.method,
     ok: !r.error && r.ideas.length > 0,

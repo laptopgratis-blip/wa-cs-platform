@@ -23,6 +23,7 @@ const schema = z.object({
   manualAudience: z.string().max(2000).optional(),
   manualOffer: z.string().max(2000).optional(),
   includeTrends: z.boolean().optional(),
+  includeWinner: z.boolean().optional(),
 })
 
 export const maxDuration = 120
@@ -50,6 +51,7 @@ export async function POST(req: Request) {
       manualAudience: parsed.data.manualAudience,
       manualOffer: parsed.data.manualOffer,
       includeTrends: parsed.data.includeTrends,
+      includeWinner: parsed.data.includeWinner,
     })
 
     if (result.status === 'INSUFFICIENT_BALANCE') {

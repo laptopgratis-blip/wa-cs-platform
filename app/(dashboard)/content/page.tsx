@@ -72,14 +72,16 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
             ? 'library'
             : tab === 'calendar'
               ? 'calendar'
-              : 'generate'
+              : tab === 'insights'
+                ? 'insights'
+                : 'generate'
         }
         initialLpId={effectiveLpId}
         landingPages={landingPages}
         tokenBalance={balance?.balance ?? 0}
         initialIdeas={initialIdeas.map((i) => ({
           id: i.id,
-          method: i.method as 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS',
+          method: i.method as 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER',
           hook: i.hook,
           angle: i.angle,
           channelFit: i.channelFit,

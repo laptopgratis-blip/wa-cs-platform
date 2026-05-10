@@ -2791,6 +2791,17 @@ model ContentPiece {
   // (cuma reminder/planning view). Null = belum dijadwalkan.
   scheduledFor    DateTime?
   postedAt        DateTime?
+  // Phase 5 — performance loop. User input metric manual setelah POSTED.
+  // Field optional; null = belum di-record. metricUpdatedAt jadi anchor
+  // untuk dashboard insights "konten yg punya data".
+  reach           Int?
+  impressions     Int?
+  saves           Int?
+  shares          Int?
+  comments        Int?
+  dms             Int?
+  linkClicks      Int?
+  metricUpdatedAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
