@@ -32,6 +32,8 @@ const patchSchema = z.object({
   status: z.enum(['DRAFT', 'READY', 'POSTED', 'ARCHIVED']).optional(),
   bodyJson: z.record(z.string(), z.unknown()).optional(),
   title: z.string().min(1).max(200).optional(),
+  // ISO datetime atau null untuk clear schedule.
+  scheduledFor: z.string().datetime().nullable().optional(),
 })
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -54,7 +56,11 @@ export async function PATCH(req: Request, { params }: Params) {
       )
       return jsonOk({ piece })
     }
-    if (parsed.data.bodyJson || parsed.data.title) {
+    if (
+      parsed.data.bodyJson ||
+      parsed.data.title ||
+      parsed.data.scheduledFor !== undefined
+    ) {
       const result = await prisma.contentPiece.updateMany({
         where: { id: pieceId, userId: session.user.id },
         data: {
@@ -62,6 +68,11 @@ export async function PATCH(req: Request, { params }: Params) {
             bodyJson: parsed.data.bodyJson as object,
           }),
           ...(parsed.data.title && { title: parsed.data.title }),
+          ...(parsed.data.scheduledFor !== undefined && {
+            scheduledFor: parsed.data.scheduledFor
+              ? new Date(parsed.data.scheduledFor)
+              : null,
+          }),
         },
       })
       if (result.count === 0) return jsonError('Piece tidak ditemukan', 404)

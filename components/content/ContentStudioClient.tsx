@@ -3,10 +3,11 @@
 // Client component utama Content Studio dengan 2 tab:
 // - Generate Ide: LP picker / brief manual → 15 ide cards → pilih → Generate
 // - Library: list ContentPiece dgn filter
-import { Loader2, Sparkles, FolderOpen } from 'lucide-react'
+import { CalendarDays, FolderOpen, Loader2, Sparkles } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { CalendarTab } from './CalendarTab'
 import { IdeaGeneratorTab } from './IdeaGeneratorTab'
 import { LibraryTab } from './LibraryTab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -32,8 +33,10 @@ interface InitialIdea {
   isFreePreview: boolean
 }
 
+type TabKey = 'generate' | 'library' | 'calendar'
+
 interface Props {
-  initialTab: 'generate' | 'library'
+  initialTab: TabKey
   initialLpId?: string
   landingPages: LandingPage[]
   tokenBalance: number
@@ -48,18 +51,22 @@ export function ContentStudioClient({
   initialIdeas,
 }: Props) {
   const router = useRouter()
-  const [tab, setTab] = useState<'generate' | 'library'>(initialTab)
+  const [tab, setTab] = useState<TabKey>(initialTab)
 
   return (
-    <Tabs value={tab} onValueChange={(v) => setTab(v as 'generate' | 'library')}>
-      <TabsList className="grid w-full max-w-md grid-cols-2">
+    <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)}>
+      <TabsList className="grid w-full max-w-xl grid-cols-3">
         <TabsTrigger value="generate">
           <Sparkles className="mr-1.5 size-4" />
           Generate Ide
         </TabsTrigger>
         <TabsTrigger value="library">
           <FolderOpen className="mr-1.5 size-4" />
-          Library Konten
+          Library
+        </TabsTrigger>
+        <TabsTrigger value="calendar">
+          <CalendarDays className="mr-1.5 size-4" />
+          Kalender
         </TabsTrigger>
       </TabsList>
 
@@ -78,6 +85,10 @@ export function ContentStudioClient({
 
       <TabsContent value="library" className="mt-6">
         <LibraryTab />
+      </TabsContent>
+
+      <TabsContent value="calendar" className="mt-6">
+        <CalendarTab />
       </TabsContent>
     </Tabs>
   )

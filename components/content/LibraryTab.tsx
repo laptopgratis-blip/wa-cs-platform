@@ -3,6 +3,7 @@
 // Library tab — list ContentPiece dgn filter channel/status, copy-to-clipboard, mark posted/archived.
 import {
   Archive,
+  CalendarPlus,
   CheckCircle2,
   Clipboard,
   ClipboardCheck,
@@ -26,6 +27,7 @@ interface Piece {
   bodyJson: Record<string, unknown>
   status: string
   tokensCharged: number
+  scheduledFor: string | null
   postedAt: string | null
   createdAt: string
   brief?: { lpId?: string; manualTitle?: string | null } | null
@@ -110,6 +112,42 @@ export function LibraryTab() {
       ),
     )
     toast.success(`Status: ${STATUS_LABEL[status]?.label ?? status}`)
+  }
+
+  async function schedulePiece(pieceId: string) {
+    // Native datetime-local prompt — simple, no extra deps. User isi tanggal+jam.
+    const now = new Date()
+    const defaultIso = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 16)
+    const input = window.prompt(
+      'Jadwalkan posting (format: YYYY-MM-DD HH:MM, contoh besok jam 9 pagi):',
+      defaultIso.replace('T', ' '),
+    )
+    if (!input) return
+    const parsed = parseScheduleInput(input)
+    if (!parsed) {
+      toast.error('Format tidak valid. Pakai YYYY-MM-DD HH:MM')
+      return
+    }
+    const res = await fetch(`/api/content/pieces/${pieceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledFor: parsed.toISOString() }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      toast.error(json.error || 'Gagal schedule')
+      return
+    }
+    setPieces((prev) =>
+      prev.map((p) =>
+        p.id === pieceId ? { ...p, scheduledFor: parsed.toISOString() } : p,
+      ),
+    )
+    toast.success(
+      `Dijadwalkan ${parsed.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    )
   }
 
   return (
@@ -212,6 +250,17 @@ export function LibraryTab() {
                         month: 'short',
                       })}
                     </span>
+                    {p.scheduledFor && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
+                        📅{' '}
+                        {new Date(p.scheduledFor).toLocaleDateString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex gap-1.5">
@@ -233,6 +282,16 @@ export function LibraryTab() {
                         </>
                       )}
                     </Button>
+                    {p.status !== 'POSTED' && p.status !== 'ARCHIVED' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => schedulePiece(p.id)}
+                        title="Jadwalkan posting"
+                      >
+                        <CalendarPlus className="size-3.5 text-blue-600" />
+                      </Button>
+                    )}
                     {p.status !== 'POSTED' && p.status !== 'ARCHIVED' && (
                       <Button
                         size="sm"
@@ -298,6 +357,17 @@ function formatPieceForClipboard(piece: Piece): string {
     lines.push('', body.hashtags.join(' '))
   }
   return lines.filter(Boolean).join('\n').trim()
+}
+
+// Parse "YYYY-MM-DD HH:MM" or "YYYY-MM-DDTHH:MM" → Date | null.
+function parseScheduleInput(input: string): Date | null {
+  const trimmed = input.trim().replace(' ', 'T')
+  // Tambahkan :00 detik kalau belum ada.
+  const withSec = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)
+    ? `${trimmed}:00`
+    : trimmed
+  const d = new Date(withSec)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
 function previewBody(bodyJson: Record<string, unknown>): string {

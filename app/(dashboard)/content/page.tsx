@@ -67,7 +67,13 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
       </header>
 
       <ContentStudioClient
-        initialTab={tab === 'library' ? 'library' : 'generate'}
+        initialTab={
+          tab === 'library'
+            ? 'library'
+            : tab === 'calendar'
+              ? 'calendar'
+              : 'generate'
+        }
         initialLpId={effectiveLpId}
         landingPages={landingPages}
         tokenBalance={balance?.balance ?? 0}

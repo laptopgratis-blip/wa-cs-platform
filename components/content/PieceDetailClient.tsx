@@ -4,6 +4,7 @@
 // (copy, mark posted/archived, edit body raw via JSON textarea).
 import {
   Archive,
+  CalendarPlus,
   CheckCircle2,
   Clipboard,
   ClipboardCheck,
@@ -38,6 +39,7 @@ interface PieceData {
   format: string
   status: string
   tokensCharged: number
+  scheduledFor: string | null
   bodyJson: Record<string, unknown>
   slides: Slide[]
   sourceIdea: {
@@ -85,6 +87,7 @@ const VISUAL_CHANNELS = new Set([
 export function PieceDetailClient({ piece }: { piece: PieceData }) {
   const [body, setBody] = useState(piece.bodyJson)
   const [status, setStatus] = useState(piece.status)
+  const [scheduledFor, setScheduledFor] = useState(piece.scheduledFor)
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(JSON.stringify(piece.bodyJson, null, 2))
   const [copied, setCopied] = useState(false)
@@ -117,6 +120,59 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
     }
     setStatus(newStatus)
     toast.success(`Status: ${STATUS_LABEL[newStatus]?.label ?? newStatus}`)
+  }
+
+  async function schedule() {
+    const defaultIso = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 16)
+      .replace('T', ' ')
+    const input = window.prompt(
+      'Jadwalkan posting (YYYY-MM-DD HH:MM):',
+      scheduledFor
+        ? new Date(scheduledFor).toISOString().slice(0, 16).replace('T', ' ')
+        : defaultIso,
+    )
+    if (input === null) return // user cancel
+    if (!input.trim()) {
+      // Clear schedule.
+      const res = await fetch(`/api/content/pieces/${piece.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheduledFor: null }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal update')
+        return
+      }
+      setScheduledFor(null)
+      toast.success('Schedule dihapus')
+      return
+    }
+    const trimmed = input.trim().replace(' ', 'T')
+    const withSec = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)
+      ? `${trimmed}:00`
+      : trimmed
+    const d = new Date(withSec)
+    if (Number.isNaN(d.getTime())) {
+      toast.error('Format tidak valid. Pakai YYYY-MM-DD HH:MM')
+      return
+    }
+    const res = await fetch(`/api/content/pieces/${piece.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledFor: d.toISOString() }),
+    })
+    const json = await res.json()
+    if (!res.ok || !json.success) {
+      toast.error(json.error || 'Gagal schedule')
+      return
+    }
+    setScheduledFor(d.toISOString())
+    toast.success(
+      `Dijadwalkan ${d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    )
   }
 
   async function saveEdit() {
@@ -186,6 +242,24 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
         </Card>
       )}
 
+      {/* Schedule indicator */}
+      {scheduledFor && (
+        <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-3 text-sm">
+          <span className="text-blue-900">
+            📅 Dijadwalkan{' '}
+            <strong>
+              {new Date(scheduledFor).toLocaleString('id-ID', {
+                dateStyle: 'full',
+                timeStyle: 'short',
+              })}
+            </strong>
+          </span>
+          <Button size="sm" variant="ghost" onClick={schedule}>
+            Ubah
+          </Button>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">
         <Button onClick={copyToClipboard} variant="default">
@@ -199,6 +273,15 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
             </>
           )}
         </Button>
+        {status !== 'POSTED' && status !== 'ARCHIVED' && !scheduledFor && (
+          <Button
+            variant="outline"
+            onClick={schedule}
+            className="text-blue-700"
+          >
+            <CalendarPlus className="mr-1.5 size-4" /> Jadwalkan
+          </Button>
+        )}
         {status !== 'POSTED' && (
           <Button
             variant="outline"

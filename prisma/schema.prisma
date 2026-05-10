@@ -2787,6 +2787,9 @@ model ContentPiece {
   status          String    @default("DRAFT")
   // Audit token spend untuk piece ini.
   tokensCharged   Int       @default(0)
+  // Phase 3 — kalender konten. User schedule manual; tidak ada auto-publish
+  // (cuma reminder/planning view). Null = belum dijadwalkan.
+  scheduledFor    DateTime?
   postedAt        DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -2796,6 +2799,7 @@ model ContentPiece {
   @@index([userId, status, createdAt])
   @@index([briefId, createdAt])
   @@index([channel, status])
+  @@index([userId, scheduledFor])
 }
 
 // Stub Phase 2 — saat visual generator implement. Phase 1 sudah create row
