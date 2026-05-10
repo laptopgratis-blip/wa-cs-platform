@@ -477,6 +477,18 @@ export function LpManager() {
                         <BarChart3 className="size-3.5" />
                       </Link>
                     </Button>
+                    {/* Content Studio CTA — start dari LP, generate ide & konten. */}
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="sm"
+                      title="Bikin konten promosi LP ini — Content Studio"
+                      className="text-primary-700 hover:bg-primary-50"
+                    >
+                      <Link href={`/content?lpId=${lp.id}`}>
+                        <Sparkles className="size-3.5" />
+                      </Link>
+                    </Button>
                     {lp.isPublished && (
                       <>
                         <Button

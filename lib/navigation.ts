@@ -109,6 +109,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
     label: 'LANDING PAGE',
     items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
+      { label: 'Content Studio', href: '/content', icon: Sparkles },
       { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
     ],
   },
@@ -232,6 +233,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         label: 'Pricing Database',
         href: '/admin/ai-pricing',
         icon: DollarSign,
+        roles: ['ADMIN'],
+      },
+      {
+        label: 'AI Features Pricing',
+        href: '/admin/ai-features',
+        icon: Sparkles,
         roles: ['ADMIN'],
       },
       {

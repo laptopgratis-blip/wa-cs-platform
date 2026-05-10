@@ -116,6 +116,85 @@ export async function POST(req: Request) {
     created.push({ id: a.id, level: a.level, category: a.category })
   }
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Per-feature profitability (AiGenerationLog) — Content Studio + future
+  // AI feature lain. Aggregate by featureKey untuk 24h terakhir.
+  // ───────────────────────────────────────────────────────────────────────
+  const featureAgg = await prisma.aiGenerationLog.groupBy({
+    by: ['featureKey'],
+    where: {
+      createdAt: { gte: since },
+      status: 'OK',
+    },
+    _sum: {
+      profitRp: true,
+      revenueRp: true,
+    },
+    _count: true,
+  })
+  for (const r of featureAgg) {
+    const profit = r._sum.profitRp ?? 0
+    const revenue = r._sum.revenueRp ?? 0
+    const marginPct = revenue > 0 ? (profit / revenue) * 100 : -100
+    const calls = r._count
+    if (profit < PROFIT_NEGATIVE_THRESHOLD_RP) {
+      const a = await prisma.alert.create({
+        data: {
+          level: 'RED',
+          category: 'PROFIT_NEGATIVE',
+          title: `Feature "${r.featureKey}" rugi`,
+          message: `Total profit 24 jam: Rp ${profit.toFixed(0)} (${calls} call). Cek AiFeatureConfig: rate / margin / cap.`,
+          metadata: {
+            featureKey: r.featureKey,
+            profitRp: profit,
+            calls,
+            scope: 'AI_FEATURE',
+          },
+        },
+      })
+      created.push({ id: a.id, level: a.level, category: a.category })
+      continue
+    }
+    if (marginPct < MARGIN_LOW_THRESHOLD_PCT) {
+      const a = await prisma.alert.create({
+        data: {
+          level: 'YELLOW',
+          category: 'MARGIN_LOW',
+          title: `Margin feature "${r.featureKey}" tipis`,
+          message: `Margin 24 jam: ${marginPct.toFixed(1)}% (di bawah ${MARGIN_LOW_THRESHOLD_PCT}%) dari ${calls} call. Naikan platformMargin atau adjust pricePerToken.`,
+          metadata: {
+            featureKey: r.featureKey,
+            marginPct,
+            calls,
+            scope: 'AI_FEATURE',
+          },
+        },
+      })
+      created.push({ id: a.id, level: a.level, category: a.category })
+    }
+  }
+
+  // Anomali per-feature: input token > threshold (lebih agresif dibanding
+  // chatbot karena prompt feature biasanya bounded).
+  const featureAnomalies = await prisma.aiGenerationLog.count({
+    where: {
+      createdAt: { gte: since },
+      inputTokens: { gt: ANOMALY_INPUT_TOKEN_THRESHOLD },
+    },
+  })
+  if (featureAnomalies > 0) {
+    const a = await prisma.alert.create({
+      data: {
+        level: 'YELLOW',
+        category: 'ANOMALY',
+        title: `${featureAnomalies} AI feature call dengan input > ${ANOMALY_INPUT_TOKEN_THRESHOLD}`,
+        message: `Cek feature mana yg loop / context terlalu besar. Lihat AiGenerationLog untuk detail per call.`,
+        metadata: { count: featureAnomalies, scope: 'AI_FEATURE' },
+      },
+    })
+    created.push({ id: a.id, level: a.level, category: a.category })
+  }
+
   return NextResponse.json({
     success: true,
     data: { created: created.length, items: created },

@@ -85,6 +85,11 @@ model User {
   // LMS — Phase 3 (2026-05-09). Plan upgrade LMS via token.
   lmsQuota                     LmsQuota?
   lmsSubscriptions             LmsSubscription[]
+  // Content Studio — Phase 1 (2026-05-10). Idea Generator + AI content gen.
+  aiGenerationLogs             AiGenerationLog[]
+  contentIdeas                 ContentIdea[]
+  contentBriefs                ContentBrief[]
+  contentPieces                ContentPiece[]
 }
 
 // NextAuth models
@@ -634,6 +639,8 @@ model LandingPage {
   optimizations LpOptimization[]
   versions      LpVersion[]
   scores        LpScore[]
+  contentIdeas  ContentIdea[]
+  contentBriefs ContentBrief[]
 
   @@index([userId, isPublished])
 }
@@ -2607,4 +2614,205 @@ model Certificate {
 
   @@index([studentPhone])
   @@index([issuerUserId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CONTENT STUDIO + IDEA GENERATOR — Phase 1
+//
+// Idea Generator = entry point setelah user save LP. AI hasilkan 15 ide via
+// 3 metode (HOOK framework / PAIN-point / PERSONA POV). User pick & choose
+// → ContentBrief → Content Studio generate full body per channel.
+//
+// Free preview tactic: 3 ide pertama (HOOK_1, PAIN_1, PERSONA_1) tampil
+// gratis tanpa deduct token. 12 sisanya gated, klik "Buka semua" → top up
+// kalau saldo nol, lalu deduct atomic.
+//
+// Pricing admin-controllable via AiFeatureConfig — sumber kebenaran pricing
+// untuk SEMUA AI feature (Content Studio sekarang, future LP Lab migration).
+// Profitability tracking via AiGenerationLog yg jadi source untuk cron
+// profitability-check.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Per-feature pricing config admin-tunable. featureKey unique → semua AI
+// service fetch via getFeatureConfig(key) dengan cache. Ganti rate / margin
+// di admin UI = effect langsung tanpa deploy.
+model AiFeatureConfig {
+  id                String   @id @default(cuid())
+  featureKey        String   @unique // 'CONTENT_IDEA' | 'CONTENT_GENERATE' | 'LP_OPTIMIZE' | future
+  displayName       String   // tampilan admin UI: "Idea Generator", "Content Generation"
+  modelName         String   // 'claude-haiku-4-5' | 'claude-sonnet-4-6' (snapshot ke log)
+  // Provider rate (USD per 1M token). Admin update saat Anthropic naik harga.
+  inputPricePer1M   Float
+  outputPricePer1M  Float
+  // Margin multiplier — 1.3 = +30% margin platform.
+  platformMargin    Float    @default(1.3)
+  // Floor minimum token charge per call (anti-mikro-call).
+  floorTokens       Int      @default(100)
+  // Cap maksimum token charge per call (sanity guard kalau outlier cost).
+  capTokens         Int      @default(50000)
+  isActive          Boolean  @default(true)
+  description       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Tabel log umum untuk semua AI feature generation. Source of truth untuk
+// /admin/profitability + cron profitability-check (extend dari Message-only).
+model AiGenerationLog {
+  id              String   @id @default(cuid())
+  featureKey      String   // FK logical ke AiFeatureConfig
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Subject ref — bebas: 'LP', 'CONTENT_IDEA_BATCH', 'CONTENT_PIECE'
+  subjectType     String?
+  subjectId       String?
+  // Real Anthropic usage — input/output tokens sesuai SDK response.
+  inputTokens     Int
+  outputTokens   Int
+  // Cost provider IDR (snapshot kurs saat call).
+  apiCostUsd      Float
+  apiCostRp       Float
+  // Token platform di-deduct dari user.
+  tokensCharged   Int
+  // Pendapatan platform (IDR) = tokensCharged × pricePerToken (snapshot kurs).
+  revenueRp       Float
+  // Profit (IDR) = revenueRp - apiCostRp. Bisa negatif (loss).
+  profitRp        Float
+  // Margin % = (profit / revenue) × 100. Cron pakai untuk MARGIN_LOW alert.
+  marginPct       Float
+  modelName       String
+  // Snapshot full config saat call — audit trail kalau pricing berubah.
+  pricingSnapshot Json
+  // Status: 'OK' | 'FAILED' (AI error tapi belum di-charge) | 'INSUFFICIENT_BALANCE'
+  status          String   @default("OK")
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([featureKey, createdAt])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+// Idea hasil Idea Generator. User pick & choose dari 15 ide → promote jadi
+// ContentPiece. promotedToPieceId nullable — null = belum di-generate konten
+// full-nya, hanya ide di library.
+model ContentIdea {
+  id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Source LP — null kalau brief manual.
+  lpId              String?
+  lp                LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
+  // 'HOOK' | 'PAIN' | 'PERSONA' — dari metode mana ide ini dihasilkan.
+  method            String
+  // Hook tagline pembuka konten — 1 baris pendek.
+  hook              String    @db.Text
+  // Sudut pendekatan — 1-2 kalimat, konteks utk AI saat generate konten full.
+  angle             String    @db.Text
+  // Channel yg cocok untuk ide ini (multi). Mis. ['IG_REELS', 'TIKTOK'].
+  channelFit        String[]
+  // Format konten yg cocok ('VIDEO_SCRIPT' | 'CAROUSEL' | 'SINGLE_IMAGE' | 'TEXT_POST').
+  format            String
+  // Reasoning AI 1-2 kalimat kenapa ini bekerja.
+  whyItWorks        String    @db.Text
+  // Prediksi virality 1-5 (best-effort AI estimate).
+  predictedVirality Int       @default(3)
+  // 'TOFU' | 'MOFU' | 'BOFU'
+  funnelStage       String
+  // Estimasi token cost prediksi kalau jadi konten full (utk display "Bikin ini Rp X").
+  estimatedTokens   Int       @default(800)
+  // Free preview gate — true = ide ini visible gratis. False = blur kalau saldo nol.
+  isFreePreview     Boolean   @default(false)
+  // Promote ke ContentPiece kalau user pilih.
+  promotedToPieceId String?   @unique
+  promotedToPiece   ContentPiece? @relation(fields: [promotedToPieceId], references: [id], onDelete: SetNull)
+  createdAt         DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([lpId, createdAt])
+}
+
+// Brief = batch generation request. Boleh dari LP atau brief manual.
+// selectedIdeaIds di-snapshot ke ContentPiece.sourceIdeaId saat generate.
+model ContentBrief {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lpId            String?
+  lp              LandingPage? @relation(fields: [lpId], references: [id], onDelete: SetNull)
+  // Manual brief fields — dipakai kalau lpId null.
+  manualTitle     String?
+  manualAudience  String?   @db.Text
+  manualOffer     String?   @db.Text
+  // Tone preset: 'CASUAL' | 'EDUKATIF' | 'AGGRESSIVE_OFFER' | 'STORYTELLING'
+  tone            String    @default("CASUAL")
+  // Target funnel mix — Json {tofu: 4, mofu: 3, bofu: 3} default.
+  funnelMix       Json
+  // Status: 'DRAFT' (sedang pilih ide) | 'GENERATING' (AI run) | 'COMPLETED' | 'FAILED'
+  status          String    @default("DRAFT")
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  pieces          ContentPiece[]
+
+  @@index([userId, createdAt])
+  @@index([lpId, createdAt])
+}
+
+// ContentPiece = 1 unit konten full (sudah ada body). Channel-aware.
+model ContentPiece {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  briefId         String?
+  brief           ContentBrief? @relation(fields: [briefId], references: [id], onDelete: SetNull)
+  // Source idea kalau di-promote dari Idea Generator.
+  sourceIdeaId    String?   @unique
+  sourceIdea      ContentIdea?
+  // Channel: 'WA_STATUS' | 'IG_STORY' | 'IG_POST' | 'IG_CAROUSEL' | 'IG_REELS' | 'TIKTOK'
+  channel         String
+  // Funnel: 'TOFU' | 'MOFU' | 'BOFU'
+  funnelStage     String
+  // Format detail: 'TEXT' | 'CAROUSEL' | 'VIDEO_SCRIPT' | 'SINGLE_IMAGE'
+  format          String
+  // Title untuk display di library.
+  title           String
+  // Body lengkap — flexible JSON sesuai channel:
+  //   WA_STATUS / IG_STORY / IG_POST: { caption, hook, cta, hashtags[] }
+  //   IG_CAROUSEL: { slides: [{headline, body}], caption, cta, hashtags[] }
+  //   IG_REELS / TIKTOK: { hook, scenes: [{seconds, narration, visual, broll}], caption, cta, soundSuggest }
+  bodyJson        Json
+  // Status: 'DRAFT' | 'READY' | 'POSTED' | 'ARCHIVED'
+  status          String    @default("DRAFT")
+  // Audit token spend untuk piece ini.
+  tokensCharged   Int       @default(0)
+  postedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  slides          ContentSlide[]
+
+  @@index([userId, status, createdAt])
+  @@index([briefId, createdAt])
+  @@index([channel, status])
+}
+
+// Stub Phase 2 — saat visual generator implement. Phase 1 sudah create row
+// supaya backfill bisa dilakukan tanpa migrasi data ulang.
+model ContentSlide {
+  id          String   @id @default(cuid())
+  pieceId     String
+  piece       ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+  slideIndex  Int
+  headline    String
+  body        String   @db.Text
+  // templateId & imageUrl di-isi Phase 2 (visual generator).
+  templateId  String?
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([pieceId, slideIndex])
+  @@index([pieceId])
 }
