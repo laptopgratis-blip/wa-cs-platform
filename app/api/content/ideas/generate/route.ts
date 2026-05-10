@@ -17,6 +17,16 @@ import {
   persistIdeas,
 } from '@/lib/services/content/idea-generator'
 
+const CHANNEL_ENUM = z.enum([
+  'WA_STATUS',
+  'IG_STORY',
+  'IG_POST',
+  'IG_CAROUSEL',
+  'IG_REELS',
+  'TIKTOK',
+])
+const FUNNEL_ENUM = z.enum(['TOFU', 'MOFU', 'BOFU'])
+
 const schema = z.object({
   lpId: z.string().optional(),
   manualTitle: z.string().max(200).optional(),
@@ -24,6 +34,8 @@ const schema = z.object({
   manualOffer: z.string().max(2000).optional(),
   includeTrends: z.boolean().optional(),
   includeWinner: z.boolean().optional(),
+  targetChannels: z.array(CHANNEL_ENUM).min(1).max(6).optional(),
+  targetFunnels: z.array(FUNNEL_ENUM).min(1).max(3).optional(),
 })
 
 export const maxDuration = 120
@@ -52,6 +64,8 @@ export async function POST(req: Request) {
       manualOffer: parsed.data.manualOffer,
       includeTrends: parsed.data.includeTrends,
       includeWinner: parsed.data.includeWinner,
+      targetChannels: parsed.data.targetChannels,
+      targetFunnels: parsed.data.targetFunnels,
     })
 
     if (result.status === 'INSUFFICIENT_BALANCE') {

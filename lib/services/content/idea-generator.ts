@@ -35,6 +35,24 @@ const MAX_OUTPUT_TOKENS = 2_500 // per metode
 export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS' | 'WINNER'
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU'
 
+export type TargetChannel =
+  | 'WA_STATUS'
+  | 'IG_STORY'
+  | 'IG_POST'
+  | 'IG_CAROUSEL'
+  | 'IG_REELS'
+  | 'TIKTOK'
+
+export const ALL_CHANNELS: TargetChannel[] = [
+  'WA_STATUS',
+  'IG_STORY',
+  'IG_POST',
+  'IG_CAROUSEL',
+  'IG_REELS',
+  'TIKTOK',
+]
+export const ALL_FUNNELS: FunnelStage[] = ['TOFU', 'MOFU', 'BOFU']
+
 export interface IdeaInput {
   // Source LP — kalau ada, di-fetch dari DB untuk extract context.
   lpId?: string
@@ -152,7 +170,13 @@ function stripHtml(html: string): string {
 
 // ─────────────────────── Prompt builders ───────────────────────
 
-const COMMON_SYSTEM = `Kamu adalah AI content strategist yg bantu seller Indonesia bikin konten organik di sosmed (IG, TikTok, WA Status). Output bahasa Indonesia, casual conversational. JANGAN gunakan emoji berlebihan (max 1-2 per ide). JANGAN repetitive. Tiap ide harus actionable dan bisa direkam/diposting hari itu juga.
+function buildCommonSystem(
+  targetChannels: TargetChannel[],
+  targetFunnels: FunnelStage[],
+): string {
+  const channelList = targetChannels.join(', ')
+  const funnelList = targetFunnels.join(', ')
+  return `Kamu adalah AI content strategist yg bantu seller Indonesia bikin konten organik di sosmed (IG, TikTok, WA Status). Output bahasa Indonesia, casual conversational. JANGAN gunakan emoji berlebihan (max 1-2 per ide). JANGAN repetitive. Tiap ide harus actionable dan bisa direkam/diposting hari itu juga.
 
 Output FORMAT WAJIB JSON array dari 5 object dengan struktur:
 [
@@ -168,11 +192,15 @@ Output FORMAT WAJIB JSON array dari 5 object dengan struktur:
   }
 ]
 
-channelFit values yg valid: WA_STATUS, IG_STORY, IG_POST, IG_CAROUSEL, IG_REELS, TIKTOK.
+🚨 CONSTRAINT WAJIB DIPATUHI 🚨
+1. channelFit HANYA boleh dari: ${channelList}. JANGAN sebut channel di luar list ini. Tiap ide minimal 1 channel dari list. User sengaja exclude channel lain.
+2. funnelStage HANYA boleh dari: ${funnelList}. Distribusikan rata di antara stage yg dipilih.
+
 predictedVirality: integer 1-5.
 estimatedTokens: integer 500-1500 prediksi token AI cost kalau ide ini di-generate full.
 
 Output HANYA JSON valid, tanpa markdown code fence, tanpa preamble.`
+}
 
 function buildHookPrompt(context: string, frameworks: typeof HOOK_FRAMEWORKS): string {
   const fwList = frameworks
@@ -302,6 +330,7 @@ interface MethodCallResult {
 async function callAi(
   method: IdeaMethod,
   prompt: string,
+  systemPrompt: string,
 ): Promise<MethodCallResult> {
   const client = getAnthropicClient()
   try {
@@ -309,7 +338,7 @@ async function callAi(
       client.messages.create({
         model: 'claude-haiku-4-5',
         max_tokens: MAX_OUTPUT_TOKENS,
-        system: COMMON_SYSTEM,
+        system: systemPrompt,
         messages: [{ role: 'user', content: prompt }],
       }),
       new Promise((_, reject) =>
@@ -430,6 +459,11 @@ export async function generateIdeas(input: {
   // POSTED+metric piece sebagai pattern reference. Hanya bekerja kalau
   // user punya >=3 piece dgn metric tercatat.
   includeWinner?: boolean
+  // Filter channel & funnel — kalau user gak mau Reels/TikTok atau cuma
+  // mau BOFU, set di sini. Default = semua. Constraint masuk ke prompt
+  // + post-filter defensif.
+  targetChannels?: TargetChannel[]
+  targetFunnels?: FunnelStage[]
   // mode='preview' → run AI tapi mark 3 ide pertama sebagai isFreePreview=true,
   // log dengan status='OK', tetap deduct token (because AI did get called).
   // Caller bisa decide untuk skip-deduct kalau preview-only flow.
@@ -482,13 +516,24 @@ export async function generateIdeas(input: {
     }
   }
 
+  // Resolve target filters — default ke ALL kalau gak di-pass.
+  const targetChannels =
+    input.targetChannels && input.targetChannels.length > 0
+      ? input.targetChannels
+      : ALL_CHANNELS
+  const targetFunnels =
+    input.targetFunnels && input.targetFunnels.length > 0
+      ? input.targetFunnels
+      : ALL_FUNNELS
+  const systemPrompt = buildCommonSystem(targetChannels, targetFunnels)
+
   // Run 3-4 metode parallel. TRENDS opsional — fetch Google Suggest dulu,
   // lalu kirim ke AI sebagai context.
   const sampledFrameworks = sampleHookFrameworks(5)
   const baseCalls: Promise<MethodCallResult>[] = [
-    callAi('HOOK', buildHookPrompt(contextSummary, sampledFrameworks)),
-    callAi('PAIN', buildPainPrompt(contextSummary)),
-    callAi('PERSONA', buildPersonaPrompt(contextSummary)),
+    callAi('HOOK', buildHookPrompt(contextSummary, sampledFrameworks), systemPrompt),
+    callAi('PAIN', buildPainPrompt(contextSummary), systemPrompt),
+    callAi('PERSONA', buildPersonaPrompt(contextSummary), systemPrompt),
   ]
 
   let trendsCallPromise: Promise<MethodCallResult> | null = null
@@ -497,7 +542,7 @@ export async function generateIdeas(input: {
     trendsCallPromise = fetchSuggestionsBatch(seeds)
       .catch(() => [])
       .then((signals) =>
-        callAi('TRENDS', buildTrendsPrompt(contextSummary, signals)),
+        callAi('TRENDS', buildTrendsPrompt(contextSummary, signals), systemPrompt),
       )
   }
 
@@ -519,6 +564,7 @@ export async function generateIdeas(input: {
         return callAi(
           'WINNER',
           buildWinnerPrompt(contextSummary, insights.winners),
+          systemPrompt,
         )
       })
   }
@@ -545,9 +591,25 @@ export async function generateIdeas(input: {
     error: r.error,
   }))
 
+  // Post-filter defensif — drop ide yg AI tetap output di luar target.
+  const channelSet = new Set<string>(targetChannels)
+  const funnelSet = new Set<string>(targetFunnels)
+  function ideaMatchesFilter(idea: GeneratedIdea): boolean {
+    const channelOk = idea.channelFit.some((c) => channelSet.has(c))
+    const funnelOk = funnelSet.has(idea.funnelStage)
+    return channelOk && funnelOk
+  }
+  // Restrict channelFit list ke yg user pilih juga (biar UI selector
+  // nanti hanya tampilkan opsi yg valid).
+  function clampChannelFit(idea: GeneratedIdea): GeneratedIdea {
+    const filtered = idea.channelFit.filter((c) => channelSet.has(c))
+    return { ...idea, channelFit: filtered.length > 0 ? filtered : [targetChannels[0]!] }
+  }
+
   // Free preview: 1 ide pertama dari tiap metode.
   orderedResults.forEach((r) => {
-    r.ideas.forEach((idea, idx) => {
+    const filtered = r.ideas.filter(ideaMatchesFilter).map(clampChannelFit)
+    filtered.forEach((idea, idx) => {
       allIdeas.push({ ...idea, isFreePreview: idx === 0 })
     })
   })

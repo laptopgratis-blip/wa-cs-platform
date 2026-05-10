@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
@@ -81,6 +81,26 @@ const CHANNEL_LABEL: Record<string, string> = {
   TIKTOK: 'TikTok',
 }
 
+const ALL_CHANNELS = [
+  'WA_STATUS',
+  'IG_STORY',
+  'IG_POST',
+  'IG_CAROUSEL',
+  'IG_REELS',
+  'TIKTOK',
+] as const
+
+const ALL_FUNNELS = ['TOFU', 'MOFU', 'BOFU'] as const
+
+const FUNNEL_FRIENDLY_LABEL: Record<string, { label: string; desc: string }> = {
+  TOFU: { label: 'Awareness', desc: 'Kenalin produk, tarik perhatian luas' },
+  MOFU: { label: 'Pertimbangan', desc: 'Edukasi & yakinkan calon pembeli' },
+  BOFU: { label: 'Beli', desc: 'Push offer, urgency, testimoni' },
+}
+
+const PREF_KEY_CHANNELS = 'hulao-content-target-channels'
+const PREF_KEY_FUNNELS = 'hulao-content-target-funnels'
+
 export function IdeaGeneratorTab({
   initialLpId,
   landingPages,
@@ -100,6 +120,62 @@ export function IdeaGeneratorTab({
   const [generating, setGenerating] = useState(false)
   const [includeTrends, setIncludeTrends] = useState(false)
   const [includeWinner, setIncludeWinner] = useState(false)
+  // Filter target — default semua. Persist di localStorage supaya next time
+  // auto-restore.
+  const [targetChannels, setTargetChannels] = useState<string[]>(
+    Array.from(ALL_CHANNELS),
+  )
+  const [targetFunnels, setTargetFunnels] = useState<string[]>(
+    Array.from(ALL_FUNNELS),
+  )
+
+  // Load preference dari localStorage saat mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const ch = localStorage.getItem(PREF_KEY_CHANNELS)
+      if (ch) {
+        const parsed = JSON.parse(ch)
+        if (Array.isArray(parsed) && parsed.length > 0) setTargetChannels(parsed)
+      }
+      const fn = localStorage.getItem(PREF_KEY_FUNNELS)
+      if (fn) {
+        const parsed = JSON.parse(fn)
+        if (Array.isArray(parsed) && parsed.length > 0) setTargetFunnels(parsed)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  // Persist preference saat berubah.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(PREF_KEY_CHANNELS, JSON.stringify(targetChannels))
+    } catch {
+      /* ignore */
+    }
+  }, [targetChannels])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(PREF_KEY_FUNNELS, JSON.stringify(targetFunnels))
+    } catch {
+      /* ignore */
+    }
+  }, [targetFunnels])
+
+  function toggleChannel(c: string) {
+    setTargetChannels((arr) =>
+      arr.includes(c) ? arr.filter((x) => x !== c) : [...arr, c],
+    )
+  }
+  function toggleFunnel(f: string) {
+    setTargetFunnels((arr) =>
+      arr.includes(f) ? arr.filter((x) => x !== f) : [...arr, f],
+    )
+  }
   // Initial state dari server-fetched unpromoted ideas — preserve refresh.
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
   const [tokensCharged, setTokensCharged] = useState<number | null>(null)
@@ -126,22 +202,35 @@ export function IdeaGeneratorTab({
       toast.error('Isi judul produk dulu')
       return
     }
+    if (targetChannels.length === 0) {
+      toast.error('Pilih minimal 1 channel')
+      return
+    }
+    if (targetFunnels.length === 0) {
+      toast.error('Pilih minimal 1 tahap funnel')
+      return
+    }
     setGenerating(true)
     setIdeas([])
     setSelected(new Map())
     try {
+      const baseBody = {
+        includeTrends,
+        includeWinner,
+        targetChannels,
+        targetFunnels,
+      }
       const res = await fetch('/api/content/ideas/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           mode === 'lp'
-            ? { lpId, includeTrends, includeWinner }
+            ? { ...baseBody, lpId }
             : {
+                ...baseBody,
                 manualTitle: manualTitle.trim(),
                 manualAudience: manualAudience.trim() || undefined,
                 manualOffer: manualOffer.trim() || undefined,
-                includeTrends,
-                includeWinner,
               },
         ),
       })
@@ -361,6 +450,110 @@ export function IdeaGeneratorTab({
               </div>
             </div>
           )}
+
+          {/* Section: pilih channel target */}
+          <div className="space-y-2 rounded-md border border-warm-200 bg-white p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-warm-900">
+                Mau bikin konten apa? ({targetChannels.length}/6)
+              </Label>
+              <div className="flex gap-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setTargetChannels(Array.from(ALL_CHANNELS))}
+                  className="text-primary-600 hover:underline"
+                >
+                  Semua
+                </button>
+                <span className="text-warm-300">·</span>
+                <button
+                  type="button"
+                  onClick={() => setTargetChannels([])}
+                  className="text-warm-500 hover:underline"
+                >
+                  Kosongin
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              {ALL_CHANNELS.map((c) => {
+                const checked = targetChannels.includes(c)
+                return (
+                  <label
+                    key={c}
+                    className={`flex cursor-pointer items-center gap-2 rounded border px-2.5 py-1.5 text-xs transition-all ${
+                      checked
+                        ? 'border-primary-500 bg-primary-50 font-medium text-primary-900'
+                        : 'border-warm-200 text-warm-600 hover:bg-warm-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleChannel(c)}
+                      className="size-3.5 cursor-pointer accent-primary-500"
+                    />
+                    {CHANNEL_LABEL[c]}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Section: pilih funnel target */}
+          <div className="space-y-2 rounded-md border border-warm-200 bg-white p-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-warm-900">
+                Targetin tahap apa? ({targetFunnels.length}/3)
+              </Label>
+              <div className="flex gap-1.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setTargetFunnels(Array.from(ALL_FUNNELS))}
+                  className="text-primary-600 hover:underline"
+                >
+                  Semua
+                </button>
+                <span className="text-warm-300">·</span>
+                <button
+                  type="button"
+                  onClick={() => setTargetFunnels([])}
+                  className="text-warm-500 hover:underline"
+                >
+                  Kosongin
+                </button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              {ALL_FUNNELS.map((f) => {
+                const checked = targetFunnels.includes(f)
+                const meta = FUNNEL_FRIENDLY_LABEL[f]!
+                return (
+                  <label
+                    key={f}
+                    className={`flex cursor-pointer items-start gap-2 rounded border px-3 py-2 text-xs transition-all ${
+                      checked
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-warm-200 hover:bg-warm-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleFunnel(f)}
+                      className="mt-0.5 size-3.5 cursor-pointer accent-primary-500"
+                    />
+                    <div className="flex-1">
+                      <div className={`font-semibold ${checked ? 'text-primary-900' : 'text-warm-900'}`}>
+                        {meta.label}
+                      </div>
+                      <div className="text-[11px] text-warm-500">{meta.desc}</div>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
 
           <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
             <input
