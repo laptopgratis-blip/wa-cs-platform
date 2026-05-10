@@ -21,7 +21,7 @@ interface LandingPage {
 
 interface InitialIdea {
   id: string
-  method: 'HOOK' | 'PAIN' | 'PERSONA'
+  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS'
   hook: string
   angle: string
   channelFit: string[]

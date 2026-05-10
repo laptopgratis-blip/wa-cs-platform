@@ -24,13 +24,14 @@ import {
   logGeneration,
 } from '../ai-generation-log'
 
+import { extractSeeds, fetchSuggestionsBatch } from './external-signals'
 import { HOOK_FRAMEWORKS, sampleHookFrameworks } from './hook-frameworks'
 
 const FEATURE_KEY = 'CONTENT_IDEA'
 const AI_TIMEOUT_MS = 60_000
 const MAX_OUTPUT_TOKENS = 2_500 // per metode
 
-export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA'
+export type IdeaMethod = 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS'
 export type FunnelStage = 'TOFU' | 'MOFU' | 'BOFU'
 
 export interface IdeaInput {
@@ -73,6 +74,14 @@ interface LpContext {
 async function buildContext(input: IdeaInput): Promise<{
   contextSummary: string
   hasRichSource: boolean
+  // Lightweight context untuk extract seed keyword (terlepas dari summary panjang).
+  seedContext: {
+    lpTitle?: string
+    manualTitle?: string
+    manualAudience?: string
+    manualOffer?: string
+    contentSnippet?: string
+  }
 }> {
   if (input.lpId) {
     const lp = await prisma.landingPage.findUnique({
@@ -101,6 +110,10 @@ async function buildContext(input: IdeaInput): Promise<{
           .filter(Boolean)
           .join('\n\n'),
         hasRichSource: ctx.textContent.length > 200,
+        seedContext: {
+          lpTitle: ctx.title,
+          contentSnippet: ctx.textContent.slice(0, 500),
+        },
       }
     }
   }
@@ -115,6 +128,11 @@ async function buildContext(input: IdeaInput): Promise<{
   return {
     contextSummary: summary || 'Brief manual kosong — generate ide generic untuk produk online seller.',
     hasRichSource: Boolean(input.manualTitle && input.manualOffer),
+    seedContext: {
+      manualTitle: input.manualTitle,
+      manualAudience: input.manualAudience,
+      manualOffer: input.manualOffer,
+    },
   }
 }
 
@@ -205,6 +223,34 @@ Channel fit: minimal 2 yg fit untuk IG_REELS/TIKTOK (storytime), 1 IG_CAROUSEL (
 Keluarkan JSON array 5 object sesuai schema. Hook tiap ide harus terdengar seperti narasi pribadi, bukan deskripsi.`
 }
 
+function buildTrendsPrompt(
+  context: string,
+  signals: { seed: string; suggestions: string[] }[],
+): string {
+  const signalLines = signals
+    .filter((s) => s.suggestions.length > 0)
+    .map(
+      (s) =>
+        `- Seed "${s.seed}":\n  ${s.suggestions.slice(0, 6).join('\n  ')}`,
+    )
+    .join('\n')
+  return `KONTEKS PRODUK/LP:
+${context}
+
+SIGNAL TRENDING SEARCH (Google Suggest Indonesia, real-time demand) — apa yg orang cari di Google terkait niche ini:
+${signalLines || '(tidak ada signal — generate ide generic ber-nuance trending)'}
+
+Tugas: hasilkan 5 ide konten yg "menjawab" trending search di atas. Tiap ide HARUS:
+- Hook menyebut pertanyaan/keinginan dari suggestion (rephrase ke conversational, bukan copy paste)
+- Solving search intent — orang lagi cari ini, kasih jawaban yg klik
+- Match ke produk/LP konteks (jangan generic)
+
+Mix funnel: 3 TOFU (jawab pertanyaan luas), 2 MOFU (problem-aware → solution).
+Channel: variatif. Format: prefer SINGLE_IMAGE atau IG_CAROUSEL untuk topik edukasi, VIDEO_SCRIPT untuk reactionable.
+
+Keluarkan JSON array 5 object sesuai schema. predictedVirality lebih tinggi (4-5) karena search demand sudah valid.`
+}
+
 // ─────────────────────── AI call wrapper ───────────────────────
 
 interface MethodCallResult {
@@ -286,6 +332,9 @@ const VALID_FORMATS = new Set([
   'TEXT_POST',
 ])
 const VALID_FUNNELS = new Set(['TOFU', 'MOFU', 'BOFU'])
+const VALID_METHODS = new Set<IdeaMethod>(['HOOK', 'PAIN', 'PERSONA', 'TRENDS'])
+
+export { VALID_METHODS }
 
 function sanitizeIdea(raw: unknown, method: IdeaMethod, idx: number): GeneratedIdea {
   if (!raw || typeof raw !== 'object') {
@@ -336,6 +385,9 @@ export async function generateIdeas(input: {
   manualTitle?: string
   manualAudience?: string
   manualOffer?: string
+  // includeTrends=true → tambah method TRENDS (4th metode), fetch Google
+  // Suggest dulu, kasih AI sebagai context. Total ide jadi 20 (15+5).
+  includeTrends?: boolean
   // mode='preview' → run AI tapi mark 3 ide pertama sebagai isFreePreview=true,
   // log dengan status='OK', tetap deduct token (because AI did get called).
   // Caller bisa decide untuk skip-deduct kalau preview-only flow.
@@ -347,12 +399,13 @@ export async function generateIdeas(input: {
   methodResults: { method: IdeaMethod; ok: boolean; error?: string }[]
   status: 'OK' | 'INSUFFICIENT_BALANCE'
 }> {
-  const { contextSummary } = await buildContext(input)
+  const { contextSummary, seedContext } = await buildContext(input)
 
-  // Pre-flight estimasi balance kalau mode=full. Kita estimate ~15K input
-  // + 3K output (3 metode × ~1K output = 3K). Charge biasanya 200-500 token.
-  const estimateInput = 15_000
-  const estimateOutput = 3_000
+  // Pre-flight estimasi balance kalau mode=full. Estimate ~15K input
+  // + 3K output (3 metode × ~1K output). Kalau includeTrends, tambah ~5K
+  // input + 1K output (4th method). Charge biasanya 200-700 token.
+  const estimateInput = input.includeTrends ? 20_000 : 15_000
+  const estimateOutput = input.includeTrends ? 4_000 : 3_000
   const preCheck = await computeChargeFromUsage({
     featureKey: FEATURE_KEY,
     inputTokens: estimateInput,
@@ -381,30 +434,54 @@ export async function generateIdeas(input: {
     }
   }
 
-  // Run 3 metode parallel.
+  // Run 3-4 metode parallel. TRENDS opsional — fetch Google Suggest dulu,
+  // lalu kirim ke AI sebagai context.
   const sampledFrameworks = sampleHookFrameworks(5)
-  const [hookRes, painRes, personaRes] = await Promise.all([
+  const baseCalls: Promise<MethodCallResult>[] = [
     callAi('HOOK', buildHookPrompt(contextSummary, sampledFrameworks)),
     callAi('PAIN', buildPainPrompt(contextSummary)),
     callAi('PERSONA', buildPersonaPrompt(contextSummary)),
-  ])
+  ]
+
+  let trendsCallPromise: Promise<MethodCallResult> | null = null
+  if (input.includeTrends) {
+    const seeds = extractSeeds(seedContext)
+    const trendsPromise = fetchSuggestionsBatch(seeds)
+      .catch(() => [])
+      .then((signals) =>
+        callAi('TRENDS', buildTrendsPrompt(contextSummary, signals)),
+      )
+    trendsCallPromise = trendsPromise
+  }
+
+  const allCalls = trendsCallPromise
+    ? [...baseCalls, trendsCallPromise]
+    : baseCalls
+  const results = await Promise.all(allCalls)
+  const hookRes = results[0]!
+  const painRes = results[1]!
+  const personaRes = results[2]!
+  const trendsRes = input.includeTrends ? results[3] : undefined
 
   const allIdeas: (GeneratedIdea & { isFreePreview: boolean })[] = []
-  const methodResults = [hookRes, painRes, personaRes].map((r) => ({
+  const orderedResults = trendsRes
+    ? [hookRes, painRes, personaRes, trendsRes]
+    : [hookRes, painRes, personaRes]
+  const methodResults = orderedResults.map((r) => ({
     method: r.method,
     ok: !r.error && r.ideas.length > 0,
     error: r.error,
   }))
 
   // Free preview: 1 ide pertama dari tiap metode.
-  ;[hookRes, painRes, personaRes].forEach((r) => {
+  orderedResults.forEach((r) => {
     r.ideas.forEach((idea, idx) => {
       allIdeas.push({ ...idea, isFreePreview: idx === 0 })
     })
   })
 
-  const totalInput = hookRes.inputTokens + painRes.inputTokens + personaRes.inputTokens
-  const totalOutput = hookRes.outputTokens + painRes.outputTokens + personaRes.outputTokens
+  const totalInput = orderedResults.reduce((s, r) => s + r.inputTokens, 0)
+  const totalOutput = orderedResults.reduce((s, r) => s + r.outputTokens, 0)
 
   // Compute actual charge.
   const charge = await computeChargeFromUsage({

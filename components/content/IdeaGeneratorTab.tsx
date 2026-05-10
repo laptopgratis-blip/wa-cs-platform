@@ -14,6 +14,7 @@ import {
   Loader2,
   Sparkles,
   Star,
+  TrendingUp,
   Wand2,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -36,7 +37,7 @@ interface LandingPage {
 
 interface Idea {
   id: string
-  method: 'HOOK' | 'PAIN' | 'PERSONA'
+  method: 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS'
   hook: string
   angle: string
   channelFit: string[]
@@ -60,6 +61,7 @@ const METHOD_LABEL: Record<string, { label: string; cls: string }> = {
   HOOK: { label: 'Hook Framework', cls: 'bg-primary-100 text-primary-700' },
   PAIN: { label: 'Pain Point', cls: 'bg-rose-100 text-rose-700' },
   PERSONA: { label: 'Persona POV', cls: 'bg-purple-100 text-purple-700' },
+  TRENDS: { label: '🔥 Trending Search', cls: 'bg-amber-100 text-amber-700' },
 }
 
 const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
@@ -94,6 +96,7 @@ export function IdeaGeneratorTab({
   const [manualOffer, setManualOffer] = useState('')
 
   const [generating, setGenerating] = useState(false)
+  const [includeTrends, setIncludeTrends] = useState(false)
   // Initial state dari server-fetched unpromoted ideas — preserve refresh.
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas)
   const [tokensCharged, setTokensCharged] = useState<number | null>(null)
@@ -129,11 +132,12 @@ export function IdeaGeneratorTab({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           mode === 'lp'
-            ? { lpId }
+            ? { lpId, includeTrends }
             : {
                 manualTitle: manualTitle.trim(),
                 manualAudience: manualAudience.trim() || undefined,
                 manualOffer: manualOffer.trim() || undefined,
+                includeTrends,
               },
         ),
       })
@@ -354,6 +358,25 @@ export function IdeaGeneratorTab({
             </div>
           )}
 
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+            <input
+              type="checkbox"
+              checked={includeTrends}
+              onChange={(e) => setIncludeTrends(e.target.checked)}
+              className="mt-0.5 size-4 cursor-pointer accent-primary-500"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-1 font-semibold text-warm-900">
+                <TrendingUp className="size-3.5 text-amber-600" />
+                Tambahkan ide trending search (+5 ide)
+              </div>
+              <p className="mt-0.5 text-[11px] text-warm-500">
+                Hulao cek apa yg lagi dicari orang di Google Indonesia terkait
+                produk kamu, lalu buat ide riding wave-nya. Total jadi 20 ide.
+              </p>
+            </div>
+          </label>
+
           <Button
             onClick={handleGenerate}
             disabled={generating}
@@ -368,7 +391,7 @@ export function IdeaGeneratorTab({
             ) : (
               <>
                 <Wand2 className="mr-2 size-4" />
-                Generate 15 ide konten
+                Generate {includeTrends ? '20' : '15'} ide konten
               </>
             )}
           </Button>

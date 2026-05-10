@@ -79,7 +79,7 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
         tokenBalance={balance?.balance ?? 0}
         initialIdeas={initialIdeas.map((i) => ({
           id: i.id,
-          method: i.method as 'HOOK' | 'PAIN' | 'PERSONA',
+          method: i.method as 'HOOK' | 'PAIN' | 'PERSONA' | 'TRENDS',
           hook: i.hook,
           angle: i.angle,
           channelFit: i.channelFit,
