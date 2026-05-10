@@ -1,64 +1,67 @@
 'use client'
 
-// InlineKnowledgeAdd — form simple buat 1 knowledge entry tipe TEXT langsung
-// di wizard. POST /api/knowledge dengan contentType=TEXT. User bisa tambah
-// lebih lanjut dari halaman /knowledge nanti.
+// InlineShippingZone — bikin zona ongkir "default" inline tanpa harus buka
+// halaman /shipping-zones (yang butuh search kota via Komerce).
+//
+// Strategi simple: zona matchType=ALL (apply ke semua tujuan) tanpa subsidi.
+// Cukup untuk auto-check `shipping_zone_added` (count > 0) ke-tick. User
+// bisa setup zona spesifik (per kota / provinsi + subsidi) dari halaman
+// lengkap kapan saja.
 
-import { CheckCircle2, Loader2, Save } from 'lucide-react'
+import { CheckCircle2, Loader2, Save, Truck } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 
 import type { InlineTaskCommonProps } from './InlineTaskHost'
 
-export function InlineKnowledgeAdd({
+export function InlineShippingZone({
   onCompleted,
   fallbackHref,
 }: InlineTaskCommonProps) {
-  const [title, setTitle] = useState('Daftar Harga & Info Produk')
-  const [textContent, setTextContent] = useState('')
+  const [name, setName] = useState('Semua Tujuan (default)')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (submitting) return
-    if (title.trim().length < 2) {
-      toast.error('Judul minimal 2 karakter')
-      return
-    }
-    if (textContent.trim().length < 1) {
-      toast.error('Isi tidak boleh kosong')
+    if (name.trim().length < 1) {
+      toast.error('Nama zona wajib diisi')
       return
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/knowledge', {
+      const res = await fetch('/api/shipping-zones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contentType: 'TEXT',
-          title: title.trim(),
-          textContent: textContent.trim(),
-          triggerKeywords: [],
+          name: name.trim(),
+          matchType: 'ALL',
+          cityIds: [],
+          provinceIds: [],
+          cityNames: [],
+          provinceNames: [],
+          subsidyType: 'NONE',
+          subsidyValue: 0,
           isActive: true,
+          priority: 0,
         }),
       })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal simpan pengetahuan')
+        toast.error(json.error || 'Gagal simpan zona')
         setSubmitting(false)
         return
       }
-      toast.success('Pengetahuan tersimpan')
+      toast.success('Zona ongkir tersimpan')
       setDone(true)
       setTimeout(() => onCompleted(), 800)
     } catch (err) {
-      console.error('[InlineKnowledgeAdd submit]', err)
+      console.error('[InlineShippingZone submit]', err)
       toast.error('Tidak bisa hubungi server')
       setSubmitting(false)
     }
@@ -71,7 +74,7 @@ export function InlineKnowledgeAdd({
           <CheckCircle2 className="size-6" />
         </div>
         <p className="font-display text-base font-bold text-emerald-900">
-          Pengetahuan tersimpan
+          Zona ongkir tersimpan
         </p>
         <p className="text-xs text-emerald-700">Lanjut ke step berikutnya…</p>
       </div>
@@ -83,39 +86,38 @@ export function InlineKnowledgeAdd({
       onSubmit={handleSubmit}
       className="space-y-3 rounded-xl border-2 border-primary-200 bg-card p-5"
     >
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-600">
+          <Truck className="size-5" />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-display text-base font-bold text-warm-900">
+            Setup zona ongkir default
+          </h3>
+          <p className="mt-0.5 text-xs text-warm-600">
+            Bikin zona yang berlaku untuk <strong>semua tujuan</strong> tanpa
+            subsidi. Ongkir akan dihitung otomatis lewat Komerce. Atur zona
+            khusus per kota / subsidi dari halaman lengkap nanti.
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-1.5">
-        <Label htmlFor="ob-kn-title" className="text-xs">
-          Judul (mis. &ldquo;Daftar Harga&rdquo;, &ldquo;Jam Buka&rdquo;,
-          &ldquo;Alamat Toko&rdquo;)
+        <Label htmlFor="ob-zone-name" className="text-xs">
+          Nama zona (untuk catatan internal)
         </Label>
         <Input
-          id="ob-kn-title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={120}
+          id="ob-zone-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={80}
           className="h-9 text-sm"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="ob-kn-content" className="text-xs">
-          Isi
-        </Label>
-        <Textarea
-          id="ob-kn-content"
-          rows={6}
-          value={textContent}
-          onChange={(e) => setTextContent(e.target.value)}
-          maxLength={2000}
-          placeholder={
-            'Contoh:\n• Sepatu Sneakers - Rp 350.000\n• Sandal Casual - Rp 150.000\n• Tas Tote Bag - Rp 200.000\n\nJam buka: Senin-Sabtu 09.00-18.00\nAlamat: Jl. Mawar No. 12, Jakarta'
-          }
-          className="text-xs"
-        />
-        <p className="text-[10px] text-warm-500">
-          {textContent.length} / 2000 karakter. Bisa nambah pengetahuan lain
-          (FAQ, return policy, dll) dari halaman Pengetahuan setelah ini.
-        </p>
+      <div className="rounded-md bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
+        💡 Untuk setup gratis ongkir per area / subsidi flat / minimum order,
+        buka halaman lengkap setelah ini.
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -132,7 +134,7 @@ export function InlineKnowledgeAdd({
           ) : (
             <>
               <Save className="mr-2 size-4" />
-              Simpan pengetahuan
+              Simpan zona default
             </>
           )}
         </Button>

@@ -134,11 +134,12 @@ export function OnboardingGoalSelector({ currentGoal, compact }: Props) {
         const json = await res.json().catch(() => ({}))
         throw new Error(json.error ?? 'Gagal switch goal')
       }
-      toast.success(`Tujuan diubah ke ${GOAL_VERBOSE[pending]} — buka panduan baru`)
+      toast.success(`Tujuan diubah ke ${GOAL_VERBOSE[pending]} — panduan auto-update`)
       setPending(null)
-      // Setelah switch, langsung ke wizard mode untuk goal baru biar user
-      // langsung dipandu (jangan tinggal sendirian di dashboard).
-      router.push('/onboarding/guide')
+      // Wizard sudah inline di dashboard — cukup refresh supaya
+      // EmbeddedOnboardingGuide re-render dengan goal baru. Reset ?step=1
+      // supaya mulai dari step pertama goal yang baru dipilih.
+      router.replace('/dashboard?step=1')
       router.refresh()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Gagal switch goal'

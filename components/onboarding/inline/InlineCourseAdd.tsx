@@ -1,10 +1,10 @@
 'use client'
 
-// InlineKnowledgeAdd — form simple buat 1 knowledge entry tipe TEXT langsung
-// di wizard. POST /api/knowledge dengan contentType=TEXT. User bisa tambah
-// lebih lanjut dari halaman /knowledge nanti.
+// InlineCourseAdd — form simple bikin course pertama di wizard. POST
+// /api/lms/courses dengan title + description. Course di-create dengan
+// status DRAFT — user tinggal tambah module/lesson di halaman lengkap.
 
-import { CheckCircle2, Loader2, Save } from 'lucide-react'
+import { CheckCircle2, GraduationCap, Loader2, Save } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -15,12 +15,12 @@ import { Textarea } from '@/components/ui/textarea'
 
 import type { InlineTaskCommonProps } from './InlineTaskHost'
 
-export function InlineKnowledgeAdd({
+export function InlineCourseAdd({
   onCompleted,
   fallbackHref,
 }: InlineTaskCommonProps) {
-  const [title, setTitle] = useState('Daftar Harga & Info Produk')
-  const [textContent, setTextContent] = useState('')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -28,37 +28,34 @@ export function InlineKnowledgeAdd({
     e.preventDefault()
     if (submitting) return
     if (title.trim().length < 2) {
-      toast.error('Judul minimal 2 karakter')
-      return
-    }
-    if (textContent.trim().length < 1) {
-      toast.error('Isi tidak boleh kosong')
+      toast.error('Judul course minimal 2 karakter')
       return
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/knowledge', {
+      const res = await fetch('/api/lms/courses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contentType: 'TEXT',
           title: title.trim(),
-          textContent: textContent.trim(),
-          triggerKeywords: [],
-          isActive: true,
+          description: description.trim() || null,
         }),
       })
-      const json = (await res.json()) as { success: boolean; error?: string }
+      const json = (await res.json()) as {
+        success: boolean
+        message?: string
+        error?: string
+      }
       if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal simpan pengetahuan')
+        toast.error(json.message || json.error || 'Gagal bikin course')
         setSubmitting(false)
         return
       }
-      toast.success('Pengetahuan tersimpan')
+      toast.success('Course tersimpan')
       setDone(true)
       setTimeout(() => onCompleted(), 800)
     } catch (err) {
-      console.error('[InlineKnowledgeAdd submit]', err)
+      console.error('[InlineCourseAdd submit]', err)
       toast.error('Tidak bisa hubungi server')
       setSubmitting(false)
     }
@@ -71,9 +68,11 @@ export function InlineKnowledgeAdd({
           <CheckCircle2 className="size-6" />
         </div>
         <p className="font-display text-base font-bold text-emerald-900">
-          Pengetahuan tersimpan
+          Course tersimpan (DRAFT)
         </p>
-        <p className="text-xs text-emerald-700">Lanjut ke step berikutnya…</p>
+        <p className="text-xs text-emerald-700">
+          Lanjut tambah modul &amp; lesson di step berikutnya…
+        </p>
       </div>
     )
   }
@@ -83,39 +82,47 @@ export function InlineKnowledgeAdd({
       onSubmit={handleSubmit}
       className="space-y-3 rounded-xl border-2 border-primary-200 bg-card p-5"
     >
+      <div className="flex items-start gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-100 text-primary-600">
+          <GraduationCap className="size-5" />
+        </div>
+        <div className="flex-1">
+          <h3 className="font-display text-base font-bold text-warm-900">
+            Bikin course baru
+          </h3>
+          <p className="mt-0.5 text-xs text-warm-600">
+            Wadah lesson kamu. Module &amp; lesson ditambah belakangan.
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-1.5">
-        <Label htmlFor="ob-kn-title" className="text-xs">
-          Judul (mis. &ldquo;Daftar Harga&rdquo;, &ldquo;Jam Buka&rdquo;,
-          &ldquo;Alamat Toko&rdquo;)
+        <Label htmlFor="ob-course-title" className="text-xs">
+          Judul course
         </Label>
         <Input
-          id="ob-kn-title"
+          id="ob-course-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          maxLength={120}
+          maxLength={200}
+          placeholder="mis. Belajar Skincare 7 Hari"
           className="h-9 text-sm"
         />
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="ob-kn-content" className="text-xs">
-          Isi
+        <Label htmlFor="ob-course-desc" className="text-xs">
+          Deskripsi singkat (opsional)
         </Label>
         <Textarea
-          id="ob-kn-content"
-          rows={6}
-          value={textContent}
-          onChange={(e) => setTextContent(e.target.value)}
+          id="ob-course-desc"
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           maxLength={2000}
-          placeholder={
-            'Contoh:\n• Sepatu Sneakers - Rp 350.000\n• Sandal Casual - Rp 150.000\n• Tas Tote Bag - Rp 200.000\n\nJam buka: Senin-Sabtu 09.00-18.00\nAlamat: Jl. Mawar No. 12, Jakarta'
-          }
+          placeholder="Apa yang akan dipelajari peserta + target audience."
           className="text-xs"
         />
-        <p className="text-[10px] text-warm-500">
-          {textContent.length} / 2000 karakter. Bisa nambah pengetahuan lain
-          (FAQ, return policy, dll) dari halaman Pengetahuan setelah ini.
-        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -132,7 +139,7 @@ export function InlineKnowledgeAdd({
           ) : (
             <>
               <Save className="mr-2 size-4" />
-              Simpan pengetahuan
+              Simpan course
             </>
           )}
         </Button>

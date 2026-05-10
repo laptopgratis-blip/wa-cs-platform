@@ -6,8 +6,7 @@
 //
 // Validasi mirror dari `bankAccountCreateSchema` di lib/validations.
 
-import { CheckCircle2, ExternalLink, Loader2, Save } from 'lucide-react'
-import Link from 'next/link'
+import { CheckCircle2, Loader2, Save } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -175,17 +174,11 @@ export function InlineBankAdd({ onCompleted, fallbackHref }: InlineTaskCommonPro
             </>
           )}
         </Button>
-        <Button asChild type="button" variant="ghost" size="sm">
-          <Link href={fallbackHref}>
-            <ExternalLink className="mr-1.5 size-3.5" />
-            Buka halaman lengkap
-          </Link>
-        </Button>
       </div>
 
       <p className="text-[10px] text-warm-500">
         Bisa tambah rekening lain & set default lain dari halaman Pengaturan
-        nanti.
+        setelah onboarding selesai.
       </p>
     </form>
   )

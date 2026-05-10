@@ -6,11 +6,8 @@ import { redirect } from 'next/navigation'
 import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
 import { LpGratisHero } from '@/components/dashboard/LpGratisHero'
 import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
+import { EmbeddedOnboardingGuide } from '@/components/onboarding/EmbeddedOnboardingGuide'
 import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
-import {
-  type OnboardingProgressData,
-  OnboardingProgressCard,
-} from '@/components/onboarding/OnboardingProgressCard'
 import {
   Card,
   CardContent,
@@ -20,42 +17,22 @@ import {
 } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
 import { formatNumber } from '@/lib/format'
-import {
-  type OnboardingGoal,
-  getChecklistDefinition,
-} from '@/lib/onboarding/checklists'
-import { parseManualState, resolveChecklist } from '@/lib/onboarding/state'
+import { type OnboardingGoal } from '@/lib/onboarding/checklists'
 import { prisma } from '@/lib/prisma'
 import { cn } from '@/lib/utils'
 
 const VALID_GOALS = new Set<OnboardingGoal>(['CS_AI', 'SELL_LP', 'SELL_WA', 'LMS'])
 
-async function loadOnboardingProgress(
-  userId: string,
-): Promise<OnboardingProgressData | null> {
+// Cek ringan: apakah user sudah punya goal aktif (non-dismissed). Dipakai
+// untuk decide rendering EmbeddedOnboardingGuide vs hanya goal selector.
+async function loadHasActiveGoal(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { onboardingGoal: true, onboardingChecklist: true },
+    select: { onboardingGoal: true, onboardingDismissedAt: true },
   })
-  if (!user?.onboardingGoal) return null
-  if (!VALID_GOALS.has(user.onboardingGoal as OnboardingGoal)) return null
-
-  const goal = user.onboardingGoal as OnboardingGoal
-  const def = getChecklistDefinition(goal)
-  const manual = parseManualState(user.onboardingChecklist)
-  const resolved = await resolveChecklist(userId, goal, manual)
-
-  const completed = resolved.steps.filter(
-    (s) => s.status === 'completed' || s.status === 'skipped',
-  ).length
-  return {
-    title: def.title,
-    progressPct: resolved.progressPct,
-    allRequiredDone: resolved.allRequiredDone,
-    totalSteps: resolved.steps.length,
-    completedSteps: completed,
-    remainingSteps: Math.max(0, resolved.steps.length - completed),
-  }
+  if (!user?.onboardingGoal) return false
+  if (user.onboardingDismissedAt) return false
+  return VALID_GOALS.has(user.onboardingGoal as OnboardingGoal)
 }
 
 const DAYS = 7
@@ -129,22 +106,27 @@ function firstName(full: string | null | undefined): string {
   return full.trim().split(/\s+/)[0] ?? 'kawan'
 }
 
-export default async function DashboardPage() {
+interface DashboardPageProps {
+  searchParams: Promise<{ step?: string }>
+}
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
-  const [stats, userMeta, progressData] = await Promise.all([
+  const [stats, userMeta, hasActiveGoal] = await Promise.all([
     loadStats(session.user.id),
     prisma.user.findUnique({
       where: { id: session.user.id },
       select: { onboardingGoal: true },
     }),
-    loadOnboardingProgress(session.user.id),
+    loadHasActiveGoal(session.user.id),
   ])
   const onboardingGoal = userMeta?.onboardingGoal as
     | OnboardingGoal
     | null
     | undefined
+  const params = await searchParams
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-7 overflow-y-auto p-4 md:p-6">
@@ -164,10 +146,15 @@ export default async function DashboardPage() {
           plan). Selalu di top supaya jelas ini opsi entry-level. */}
       <LpGratisHero />
 
-      {/* Onboarding progress — kalau user sudah pilih goal lain (CS_AI,
-          SELL_WA, dst), tampilkan progress card-nya. Pre-loaded server-side
-          biar tidak flicker. Kalau belum pilih goal → null (hide). */}
-      <OnboardingProgressCard initialData={progressData} />
+      {/* Wizard goal aktif — render inline (step-by-step) langsung di
+          dashboard, supaya user tidak perlu pindah halaman. Kalau user belum
+          pilih goal atau dismiss, EmbeddedOnboardingGuide return null. */}
+      {hasActiveGoal && (
+        <EmbeddedOnboardingGuide
+          step={params.step}
+          basePath="/dashboard"
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

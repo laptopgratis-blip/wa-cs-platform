@@ -52,6 +52,20 @@ interface Props {
   progressPct: number
   allRequiredDone: boolean
   steps: GuideStep[]
+  /**
+   * Base path untuk URL navigation ?step=N. Default '/onboarding/guide'.
+   * Saat di-embed di dashboard, set ke '/dashboard' supaya next/prev tetap
+   * di halaman dashboard (tidak pindah halaman).
+   */
+  basePath?: string
+  /**
+   * Embedded mode = wizard di-render di dalam halaman lain (dashboard).
+   * Ubah beberapa UI:
+   *  - Celebration screen lebih kompak (tidak full-page)
+   *  - Tombol "Buka Dashboard" tidak ditampilkan (sudah di sini)
+   *  - "Tutup panduan permanen" tetap ada untuk dismiss card
+   */
+  embedded?: boolean
 }
 
 export function OnboardingGuide({
@@ -61,6 +75,8 @@ export function OnboardingGuide({
   progressPct,
   allRequiredDone,
   steps,
+  basePath = '/onboarding/guide',
+  embedded = false,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -86,9 +102,9 @@ export function OnboardingGuide({
       if (idx < 0 || idx >= steps.length) return
       const params = new URLSearchParams(searchParams.toString())
       params.set('step', String(idx + 1))
-      router.push(`/onboarding/guide?${params.toString()}`)
+      router.push(`${basePath}?${params.toString()}`)
     },
-    [router, searchParams, steps.length],
+    [router, searchParams, steps.length, basePath],
   )
 
   async function postAction(stepId: string, action: 'complete' | 'skip') {
@@ -146,6 +162,28 @@ export function OnboardingGuide({
 
   // ─── Celebration screen kalau semua wajib selesai ────────────────────
   if (allRequiredDone) {
+    if (embedded) {
+      return (
+        <Card className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm">
+          <div className="flex items-center gap-4 p-5">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-orange">
+              <PartyPopper className="size-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display text-base font-extrabold text-warm-900">
+                Setup selesai 🎉
+              </h2>
+              <p className="text-sm text-warm-600">
+                Semua langkah utama untuk <strong>{title}</strong> sudah selesai.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => goToStep(0)}>
+              Lihat ulang
+            </Button>
+          </div>
+        </Card>
+      )
+    }
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <div className="mb-6 flex size-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-orange">
@@ -304,10 +342,12 @@ export function OnboardingGuide({
               </div>
             )}
 
-            {/* Inline task: render mini-form langsung di wizard kalau step
-                support. Kalau tidak, tampilkan tombol link ke halaman fitur
-                (same-window, supaya user tidak kehilangan wizard di tab lain). */}
-            {active.inlineTask && !isDone && !isSkipped ? (
+            {/* Action inline — selalu render kalau step punya inlineTask,
+                terlepas dari status completed/skipped. Component sendiri
+                yang handle "sudah pernah dilakukan" view (mis. QR jadi
+                "WhatsApp tersambung", form jadi tetap kosong untuk tambah
+                lain). User bisa lihat detail tiap step kapan saja. */}
+            {active.inlineTask && (
               <InlineTaskHost
                 kind={active.inlineTask}
                 fallbackHref={active.href}
@@ -316,43 +356,20 @@ export function OnboardingGuide({
                   void postAction(active.id, 'complete')
                 }}
               />
-            ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Button
-                  asChild
-                  size="lg"
-                  className="bg-primary-500 hover:bg-primary-600 sm:flex-1"
-                >
-                  <Link href={active.href}>
-                    <ExternalLink className="mr-2 size-4" />
-                    {active.actionLabel}
-                  </Link>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={refresh}
-                  disabled={refreshing}
-                  className="sm:w-auto"
-                  title="Cek lagi apakah step sudah selesai"
-                >
-                  <RefreshCw className={cn('mr-2 size-4', refreshing && 'animate-spin')} />
-                  Refresh status
-                </Button>
-              </div>
             )}
-
-            {/* Hint untuk user — beda antara inline vs link mode */}
-            {!isDone && !isSkipped && !active.inlineTask && (
-              <p className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                💡 Klik tombol di atas — halaman fitur akan terbuka di tab ini.
-                Setelah selesai, klik tombol &ldquo;Sebelumnya&rdquo; di browser
-                untuk balik ke wizard, atau pilih{' '}
-                <strong>Tandai selesai</strong> kalau sudah beres.
-                {active.hasAutoCheck && (
-                  <> Sistem juga auto-detect saat kamu balik.</>
-                )}
-              </p>
+            {/* Fallback: kalau ada step legacy tanpa inlineTask, tampilkan
+                instruksi saja + tombol Refresh status. */}
+            {!active.inlineTask && !isDone && !isSkipped && (
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={refresh}
+                disabled={refreshing}
+                title="Cek apakah step sudah selesai"
+              >
+                <RefreshCw className={cn('mr-2 size-4', refreshing && 'animate-spin')} />
+                Refresh status
+              </Button>
             )}
           </div>
         </CardContent>
@@ -405,11 +422,17 @@ export function OnboardingGuide({
               Selanjutnya <ArrowRight className="ml-1.5 size-4" />
             </Button>
           )}
-          {isLastStep && (
+          {isLastStep && !embedded && (
             <Button asChild>
               <Link href="/dashboard">
                 Selesai, buka Dashboard <ArrowRight className="ml-1.5 size-4" />
               </Link>
+            </Button>
+          )}
+          {isLastStep && embedded && (
+            <Button onClick={() => router.refresh()}>
+              <Check className="mr-1.5 size-4" />
+              Cek progress
             </Button>
           )}
         </div>

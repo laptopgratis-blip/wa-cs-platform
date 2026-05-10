@@ -145,7 +145,16 @@ Berikan HANYA kode HTML lengkap dalam 1 file (mulai dari <!DOCTYPE html> sampai 
 
 // ─── Component ──────────────────────────────────────────────────────────
 
-export function LpGratisWizard() {
+interface LpGratisWizardProps {
+  /**
+   * Callback opsional saat user selesai paste HTML (step 4). Kalau di-set,
+   * wizard tidak `router.push` ke /landing-pages/:id/edit — caller yang
+   * handle (mis. embedded di onboarding: callback publish LP + advance step).
+   */
+  onCompleted?: (lpId: string) => void
+}
+
+export function LpGratisWizard({ onCompleted }: LpGratisWizardProps = {}) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [lpId, setLpId] = useState<string | null>(null)
@@ -302,6 +311,10 @@ export function LpGratisWizard() {
                 if (!res.ok || !json.success) {
                   toast.error(json.error || 'Gagal simpan HTML')
                   setSubmitting(false)
+                  return
+                }
+                if (onCompleted) {
+                  onCompleted(id)
                   return
                 }
                 toast.success('LP tersimpan, buka editor…')

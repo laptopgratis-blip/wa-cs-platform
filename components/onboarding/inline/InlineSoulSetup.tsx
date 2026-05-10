@@ -9,8 +9,7 @@
 // "profesional", "santai") supaya UI deterministic untuk awam. Kalau tidak
 // match, fallback pakai 3 style pertama.
 
-import { CheckCircle2, ExternalLink, Loader2, Save, Sparkles } from 'lucide-react'
-import Link from 'next/link'
+import { CheckCircle2, Loader2, Save, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -238,12 +237,6 @@ export function InlineSoulSetup({ onCompleted, fallbackHref }: InlineTaskCommonP
               Simpan kepribadian
             </>
           )}
-        </Button>
-        <Button asChild type="button" variant="ghost" size="sm">
-          <Link href={fallbackHref}>
-            <ExternalLink className="mr-1.5 size-3.5" />
-            Buka halaman lengkap
-          </Link>
         </Button>
       </div>
     </form>

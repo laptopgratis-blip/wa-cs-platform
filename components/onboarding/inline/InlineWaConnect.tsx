@@ -12,8 +12,7 @@
 // Catatan: pakai polling sederhana (bukan Socket.io) supaya lifecycle
 // component lebih predictable dan tidak butuh state global di wizard.
 
-import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Smartphone } from 'lucide-react'
-import Link from 'next/link'
+import { CheckCircle2, Loader2, RefreshCw, Smartphone } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -69,16 +68,17 @@ export function InlineWaConnect({ onCompleted, fallbackHref }: InlineTaskCommonP
       if (listRes.ok) {
         const json = (await listRes.json()) as { success: boolean; data: SessionListItem[] }
         const sessions = json.data ?? []
-        // Sudah connected → langsung beres.
+        // Sudah connected → tampilkan success view supaya user bisa lihat
+        // status nomornya. JANGAN auto-call onCompleted: kalau user revisit
+        // step ini setelah step lain, mereka harus bisa lihat detail dulu,
+        // bukan langsung ke-bounce ke step berikut. Auto-advance hanya saat
+        // polling detect transition WAITING_QR → CONNECTED (lihat poll
+        // useEffect di bawah).
         const connected = sessions.find((s) => s.status === TERMINAL_OK)
         if (connected) {
           setSessionId(connected.id)
           setStatus('CONNECTED')
           setPhoneNumber(connected.phoneNumber)
-          if (!completedRef.current) {
-            completedRef.current = true
-            onCompleted()
-          }
           setBootstrapping(false)
           return
         }
@@ -209,12 +209,6 @@ export function InlineWaConnect({ onCompleted, fallbackHref }: InlineTaskCommonP
           <Button onClick={handleRetry} className="bg-primary-500 hover:bg-primary-600">
             <RefreshCw className="mr-1.5 size-4" /> Coba lagi
           </Button>
-          <Button asChild variant="outline">
-            <Link href={fallbackHref}>
-              <ExternalLink className="mr-1.5 size-4" />
-              Buka halaman lengkap
-            </Link>
-          </Button>
         </div>
       </div>
     )
@@ -227,12 +221,18 @@ export function InlineWaConnect({ onCompleted, fallbackHref }: InlineTaskCommonP
           <CheckCircle2 className="size-7" />
         </div>
         <p className="font-display text-lg font-bold text-emerald-900">
-          WhatsApp tersambung!
+          WhatsApp tersambung
         </p>
         {phoneNumber && (
           <p className="font-mono text-sm text-emerald-700">+{phoneNumber}</p>
         )}
-        <p className="text-xs text-emerald-700">Lanjut ke step berikutnya…</p>
+        <button
+          type="button"
+          onClick={handleRetry}
+          className="mt-1 text-[11px] text-emerald-700 underline hover:text-emerald-900"
+        >
+          Ganti / sambung ulang nomor lain
+        </button>
       </div>
     )
   }
@@ -305,15 +305,6 @@ export function InlineWaConnect({ onCompleted, fallbackHref }: InlineTaskCommonP
         </div>
       </div>
 
-      <p className="mt-4 border-t border-warm-200 pt-3 text-center text-[11px] text-warm-500">
-        Butuh bantuan?{' '}
-        <Link
-          href={fallbackHref}
-          className="text-primary-600 underline hover:text-primary-700"
-        >
-          Buka halaman lengkap
-        </Link>
-      </p>
     </div>
   )
 }

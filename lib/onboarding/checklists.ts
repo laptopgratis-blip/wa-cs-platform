@@ -34,6 +34,16 @@ export type InlineTaskKind =
   | 'bank_add'
   | 'soul_setup'
   | 'knowledge_add'
+  | 'product_add'
+  | 'order_form'
+  | 'test_chat'
+  | 'followup_on'
+  | 'sales_flow'
+  | 'course_add'
+  | 'lesson_add'
+  | 'shipping_zone'
+  | 'lp_publish'
+  | 'lms_subscribe'
 
 export interface ChecklistStep {
   /** Stabil — disimpan ke User.onboardingChecklist JSON. */
@@ -139,6 +149,7 @@ const CS_AI: ChecklistDefinition = {
       estimatedMin: 2,
       autoCheck: null,
       actionLabel: 'Buka halaman Inbox',
+      inlineTask: 'test_chat',
       instructions: [
         'Pakai HP / nomor lain, kirim pesan ke nomor WA bisnis yang baru di-connect.',
         'Buka halaman Inbox di Hulao untuk lihat percakapan masuk + jawaban AI.',
@@ -194,28 +205,26 @@ const SELL_LP: ChecklistDefinition = {
       autoCheck: 'product_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka halaman Produk',
+      inlineTask: 'product_add',
       instructions: [
-        'Klik tombol di bawah → buka halaman Produk.',
-        'Klik "Tambah Produk" → isi nama, harga, deskripsi singkat.',
-        'Upload minimal 1 foto produk (max 4MB). Set berat dalam gram (penting untuk hitung ongkir).',
-        'Optional: tambah varian (Size S/M/L, warna, dll).',
-        'Klik Simpan. Kembali ke sini.',
+        'Isi nama, harga, dan berat produk (gram, untuk hitung ongkir).',
+        'Upload 1 foto utama (auto-resize, max 8MB).',
+        'Klik Simpan. Bisa tambah varian / multi-foto / flash sale dari halaman lengkap nanti.',
       ],
     },
     {
       id: 'shipping_zone',
       title: 'Set zona ongkir',
-      description: 'Tentukan kota asal pengiriman + (opsional) subsidi ongkir per area.',
+      description: 'Bikin zona default biar form order siap terima pesanan ke semua tujuan.',
       href: '/shipping-zones',
       estimatedMin: 3,
       autoCheck: 'shipping_zone_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka Zona Ongkir',
+      inlineTask: 'shipping_zone',
       instructions: [
-        'Klik tombol di bawah → buka Zona Ongkir.',
-        'Set kota asal pengiriman (di /bank-accounts → tab Pengiriman) — pakai pencarian kota.',
-        'Optional: tambah zona dengan subsidi ongkir (mis. "Jakarta gratis ongkir di atas 200rb").',
-        'Klik Simpan, kembali ke sini.',
+        'Klik Simpan untuk bikin zona "default" yang berlaku ke semua tujuan.',
+        'Untuk subsidi ongkir per kota / minimum order, edit dari halaman lengkap.',
       ],
     },
     {
@@ -226,13 +235,10 @@ const SELL_LP: ChecklistDefinition = {
       estimatedMin: 10,
       autoCheck: 'lp_published',
       actionLabel: 'Buka Landing Page Builder',
+      inlineTask: 'lp_publish',
       instructions: [
-        'Klik tombol di bawah → buka Landing Page.',
-        'Klik "Buat LP Baru" → pilih "Generate dengan AI".',
-        'Isi: nama produk, target audience, value-prop singkat. AI bikin draft full HTML.',
-        'Edit kalau perlu. Klik tombol "Publish" di toolbar atas.',
-        'Salin link LP-mu (mis. https://hulao.id/p/abc123) — ini yang akan kamu pasang di iklan.',
-        'Kembali ke sini.',
+        '4 step inline: siapkan foto → upload → copy prompt ke AI (ChatGPT/Claude.ai) → tempel HTML hasil.',
+        'Setelah klik "Tempel HTML & Publish" di akhir, LP otomatis online.',
       ],
     },
     {
@@ -244,12 +250,11 @@ const SELL_LP: ChecklistDefinition = {
       autoCheck: 'order_form_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka Form Order',
+      inlineTask: 'order_form',
       instructions: [
-        'Klik tombol di bawah → buka Form Order.',
-        'Klik "Buat Form Baru" → kasih nama (mis. "Order Skincare").',
-        'Pilih produk yang akan tampil di form (default: semua produk).',
-        'Salin link form (mis. /order/abc) — pasang di tombol CTA Landing Page-mu.',
-        'Kembali ke sini.',
+        'Kasih nama form (mis. "Form Pesanan Utama").',
+        'Pilih produk yang ditampilkan (default: semua produk aktif).',
+        'Klik Simpan. Buka halaman Form Order untuk salin link form-nya.',
       ],
     },
     {
@@ -262,11 +267,10 @@ const SELL_LP: ChecklistDefinition = {
       optional: true,
       requiresPlan: 'POWER',
       actionLabel: 'Buka Follow-Up',
+      inlineTask: 'followup_on',
       instructions: [
-        'Klik tombol di bawah → buka halaman Follow-Up.',
-        'Klik "Aktifkan & Buat Template Default" → 7 template otomatis ter-seed (reminder bayar, konfirmasi paid, dll).',
-        'Boleh edit template kalau kata-katanya mau disesuaikan.',
-        'Kembali ke sini.',
+        'Klik tombol di bawah → 7 template default ter-seed otomatis (reminder bayar, konfirmasi paid, info pengiriman, dll).',
+        'Boleh edit kata-kata template nanti dari halaman Follow-Up.',
       ],
     },
   ],
@@ -315,10 +319,11 @@ const SELL_WA: ChecklistDefinition = {
       autoCheck: 'product_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka halaman Produk',
+      inlineTask: 'product_add',
       instructions: [
-        'Klik tombol di bawah → halaman Produk.',
-        'Tambah minimal 1 produk dengan nama + harga + foto.',
-        'Klik Simpan. Kembali ke sini.',
+        'Isi nama, harga, dan berat (gram).',
+        'Upload 1 foto utama. Klik Simpan.',
+        'Untuk varian, multi-foto, atau detail lain → buka halaman lengkap.',
       ],
     },
     {
@@ -329,11 +334,11 @@ const SELL_WA: ChecklistDefinition = {
       estimatedMin: 10,
       autoCheck: 'sales_flow_added',
       actionLabel: 'Buka Cara Jualan',
+      inlineTask: 'sales_flow',
       instructions: [
-        'Klik tombol di bawah → halaman Cara Jualan.',
-        'Pilih salah satu template: COD, Transfer, atau Booking. Klik "Pakai template ini".',
-        'Edit step-step kalau perlu (mis. ubah pertanyaan AI).',
-        'Aktifkan flow dengan toggle. Kembali ke sini.',
+        'Pilih satu template: COD / Transfer / Booking / Konsultasi.',
+        'Klik "Aktifkan template ini" — flow langsung jalan.',
+        'Untuk edit step-step (pertanyaan AI), buka halaman lengkap.',
       ],
     },
     {
@@ -368,11 +373,11 @@ const LMS: ChecklistDefinition = {
       autoCheck: 'lms_subscribed',
       requiresPlan: 'LMS',
       actionLabel: 'Buka Pricing LMS',
+      inlineTask: 'lms_subscribe',
       instructions: [
-        'Klik tombol di bawah → halaman pricing LMS.',
-        'Pilih paket BASIC (cocok untuk start) atau PRO/UNLIMITED kalau target lebih banyak murid.',
-        'Klik "Aktifkan" → bayar pakai token saldo.',
-        'Tunggu sampai status aktif. Kembali ke sini.',
+        'Pilih plan (BASIC paling murah, cocok untuk course pertama).',
+        'Klik Aktifkan — pembayaran otomatis dipotong dari saldo token (durasi 1 bulan).',
+        'Untuk extend ke 6/12 bulan, buka halaman pricing nanti.',
       ],
     },
     {
@@ -384,29 +389,27 @@ const LMS: ChecklistDefinition = {
       autoCheck: 'course_added',
       requiresPlan: 'LMS',
       actionLabel: 'Buka Course Saya',
+      inlineTask: 'course_add',
       instructions: [
-        'Klik tombol di bawah → halaman Course Saya.',
-        'Klik "Buat Course Baru".',
-        'Isi judul (mis. "Belajar Skincare 7 Hari"), deskripsi, target peserta.',
-        'Klik Simpan. Kembali ke sini.',
+        'Isi judul course (mis. "Belajar Skincare 7 Hari") + deskripsi singkat.',
+        'Klik Simpan — course di-create dengan status DRAFT.',
+        'Tambah modul + lesson di step berikutnya atau via halaman LMS lengkap.',
       ],
     },
     {
       id: 'lesson_add',
       title: 'Tambah lesson (video / teks)',
-      description: 'Konten course — embed YouTube/Vimeo atau tulis teks. Mulai dengan 3-5 lesson dulu.',
+      description: 'Konten course — embed YouTube/Vimeo atau tulis teks. Mulai dengan 1 lesson dulu.',
       href: '/lms/courses',
       estimatedMin: 10,
       autoCheck: 'lesson_added',
       requiresPlan: 'LMS',
       actionLabel: 'Kelola Course',
+      inlineTask: 'lesson_add',
       instructions: [
-        'Klik tombol di bawah → buka course yang baru kamu bikin.',
-        'Klik "Tambah Modul" (mis. "Pengenalan", "Tips Praktis").',
-        'Di tiap modul, klik "Tambah Lesson" → pilih tipe Video Embed (YouTube/Vimeo) atau Teks.',
-        'Tambah minimal 3-5 lesson. Klik Simpan tiap selesai.',
-        'Optional: aktifkan drip schedule (lesson dibuka per hari).',
-        'Kembali ke sini.',
+        'Pilih tipe konten: Teks atau Video (YouTube/Vimeo embed URL).',
+        'Isi judul + content. Klik Simpan — lesson masuk ke "Modul 1" otomatis.',
+        'Untuk tambah lesson lain / atur ulang / drip schedule, buka halaman LMS lengkap.',
       ],
     },
     {
@@ -418,12 +421,11 @@ const LMS: ChecklistDefinition = {
       autoCheck: 'product_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka halaman Produk',
+      inlineTask: 'product_add',
       instructions: [
-        'Klik tombol di bawah → halaman Produk.',
-        'Klik "Tambah Produk" → isi nama (mis. nama course-mu), harga, foto thumbnail.',
-        'Set berat = 0 (course digital, tidak dikirim fisik).',
-        'Di section "Course terhubung", pilih course yang baru kamu bikin.',
-        'Klik Simpan. Kembali ke sini.',
+        'Isi nama produk (mis. nama course-mu), harga course, berat 1 gram (digital).',
+        'Upload foto thumbnail. Klik Simpan.',
+        'Buka halaman Produk lengkap untuk hubungkan ke course (section "Course terhubung").',
       ],
     },
     {
@@ -435,12 +437,11 @@ const LMS: ChecklistDefinition = {
       autoCheck: 'order_form_added',
       requiresPlan: 'POWER',
       actionLabel: 'Buka Form Order',
+      inlineTask: 'order_form',
       instructions: [
-        'Klik tombol di bawah → halaman Form Order.',
-        'Klik "Buat Form Baru" → kasih nama (mis. "Daftar Course Skincare").',
-        'Pilih produk course yang baru ditambah.',
-        'Salin link form (mis. /order/abc) — sebar ke pelanggan.',
-        'Kembali ke sini.',
+        'Kasih nama form (mis. "Daftar Course Skincare").',
+        'Pilih produk course yang sudah ditambah.',
+        'Klik Simpan. Buka halaman Form Order untuk salin link sebar ke pelanggan.',
       ],
     },
   ],
