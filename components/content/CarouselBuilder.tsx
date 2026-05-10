@@ -5,7 +5,7 @@
 //
 // Slide schema dari ContentSlide DB row OR dari bodyJson.slides array.
 import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import {
@@ -54,13 +54,29 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
     slides.map((s, i) => ({
       headline: s.headline,
       body: s.body,
-      badge: i === 0 ? `1/${slides.length}` : `${i + 1}/${slides.length}`,
+      badge: `${i + 1}/${slides.length}`,
       brandLabel: 'Hulao',
       accent: '#ea580c',
       background: '#ea580c',
       templateId: defaultTemplate(i, slides.length),
     })),
   )
+
+  // Keyboard arrow navigation — left/right untuk switch slide.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      // Skip kalau user lagi typing di input/textarea.
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key === 'ArrowLeft') {
+        setActiveIdx((i) => Math.max(0, i - 1))
+      } else if (e.key === 'ArrowRight') {
+        setActiveIdx((i) => Math.min(slideStates.length - 1, i + 1))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [slideStates.length])
 
   const active = slideStates[activeIdx]
   if (!active) return <div className="text-sm text-warm-500">Tidak ada slide</div>
@@ -73,6 +89,13 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
       next[activeIdx] = { ...next[activeIdx]!, [key]: value }
       return next
     })
+  }
+
+  function goPrev() {
+    setActiveIdx((i) => Math.max(0, i - 1))
+  }
+  function goNext() {
+    setActiveIdx((i) => Math.min(slideStates.length - 1, i + 1))
   }
 
   async function downloadCurrent() {
@@ -147,70 +170,111 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Slide thumb strip */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {slideStates.map((s, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => setActiveIdx(i)}
-            className={`shrink-0 rounded-md border-2 px-3 py-1 text-xs transition-all ${
-              i === activeIdx
-                ? 'border-primary-500 bg-primary-50 font-semibold text-primary-700'
-                : 'border-warm-200 text-warm-600 hover:bg-warm-50'
-            }`}
-          >
-            Slide {i + 1}
-          </button>
-        ))}
+      {/* Header: slide count + thumb strip */}
+      <div className="flex flex-col gap-2 rounded-md border border-warm-200 bg-warm-50 p-3">
+        <div className="flex items-center justify-between text-xs">
+          <strong className="text-warm-900">
+            Slide {activeIdx + 1} dari {slideStates.length}
+          </strong>
+          <span className="text-warm-500">
+            Tip: pakai panah ◀▶ keyboard untuk navigasi cepat
+          </span>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto">
+          {slideStates.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={`shrink-0 rounded px-3 py-1 text-xs font-medium transition-all ${
+                i === activeIdx
+                  ? 'bg-primary-500 text-white shadow-md'
+                  : 'bg-white text-warm-600 hover:bg-warm-100'
+              }`}
+            >
+              Slide {i + 1}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Preview */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        {/* Preview dengan big nav arrows */}
         <div className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-warm-500">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={activeIdx === 0}
-              onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-            >
-              <ChevronLeft className="size-3.5" />
-            </Button>
-            Slide {activeIdx + 1} / {slideStates.length} ({REAL_W}×{REAL_H})
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={activeIdx === slideStates.length - 1}
-              onClick={() =>
-                setActiveIdx((i) => Math.min(slideStates.length - 1, i + 1))
-              }
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
-          <div
-            className="relative overflow-hidden rounded-xl shadow-xl"
-            style={{ width: PREVIEW_W, height: PREVIEW_W }}
-          >
+          <div className="relative">
             <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                width: REAL_W,
-                height: REAL_H,
-                transformOrigin: 'top left',
-                transform: `scale(${PREVIEW_W / REAL_W})`,
-              }}
+              className="relative overflow-hidden rounded-xl shadow-xl"
+              style={{ width: PREVIEW_W, height: PREVIEW_W }}
             >
               <div
-                ref={captureRef}
-                style={{ width: REAL_W, height: REAL_H }}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: REAL_W,
+                  height: REAL_H,
+                  transformOrigin: 'top left',
+                  transform: `scale(${PREVIEW_W / REAL_W})`,
+                }}
               >
-                <TemplateComp {...active} aspect="square" />
+                <div
+                  ref={captureRef}
+                  style={{ width: REAL_W, height: REAL_H }}
+                >
+                  {/* key=activeIdx supaya React unmount template lama saat
+                      switch slide — preview update cleanly */}
+                  <TemplateComp
+                    key={`tpl-${activeIdx}-${active.templateId}`}
+                    headline={active.headline}
+                    body={active.body}
+                    badge={active.badge}
+                    brandLabel={active.brandLabel}
+                    cta={active.cta}
+                    accent={active.accent}
+                    background={active.background}
+                    aspect="square"
+                  />
+                </div>
               </div>
             </div>
+            {/* Big arrow nav overlay — kanan & kiri */}
+            <button
+              type="button"
+              onClick={goPrev}
+              disabled={activeIdx === 0}
+              className="absolute left-1 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 ring-warm-200 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Slide sebelumnya"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={activeIdx === slideStates.length - 1}
+              className="absolute right-1 top-1/2 translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 ring-warm-200 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Slide berikutnya"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+          </div>
+          {/* Page indicator dots */}
+          <div className="flex gap-1.5">
+            {slideStates.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setActiveIdx(i)}
+                className={`size-2 rounded-full transition-all ${
+                  i === activeIdx
+                    ? 'w-6 bg-primary-500'
+                    : 'bg-warm-300 hover:bg-warm-400'
+                }`}
+                aria-label={`Slide ${i + 1}`}
+              />
+            ))}
+          </div>
+          <div className="text-[11px] text-warm-500">
+            Resolusi export: {REAL_W}×{REAL_H}
           </div>
           <div className="flex gap-2">
             <Button
@@ -300,9 +364,12 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
             </div>
           </section>
 
-          <section className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
-              Konten slide ke-{activeIdx + 1}
+          {/* Force remount semua field saat slide switch — supaya value
+              terbaru selalu reflect state slide aktif (defensif terhadap
+              edge-case React reconciliation pada controlled input). */}
+          <section key={`fields-${activeIdx}`} className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-primary-700">
+              ✏️ Edit slide {activeIdx + 1}
             </Label>
             <div className="space-y-1">
               <Label className="text-[11px] text-warm-600">Headline</Label>
