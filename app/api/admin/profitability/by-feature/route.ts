@@ -17,6 +17,9 @@ interface RawRow {
   apiCostRp: number | null
   revenueRp: number | null
   profitRp: number | null
+  // Model paling sering dipakai di periode ini (dari AiGenerationLog.modelName,
+  // per-row aktual — bukan dari AiFeatureConfig snapshot).
+  topModelName: string | null
 }
 
 export async function GET(req: Request) {
@@ -30,25 +33,49 @@ export async function GET(req: Request) {
     const { from, to } = parseRange(searchParams)
     const settings = await getPricingSettings()
 
+    // Per-feature aggregate + top model dari AiGenerationLog.modelName aktual
+    // (bukan AiFeatureConfig snapshot). Subquery hitung per (featureKey,
+    // modelName), lalu pick yang count terbanyak dengan DISTINCT ON.
     const rows = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
-      SELECT
-        log."featureKey" AS "featureKey",
-        COUNT(*)::bigint AS "count",
-        SUM(log."apiCostRp") AS "apiCostRp",
-        SUM(log."revenueRp") AS "revenueRp",
-        SUM(log."profitRp") AS "profitRp"
-      FROM "AiGenerationLog" log
-      WHERE log."status" = 'OK'
-        AND log."createdAt" >= ${from} AND log."createdAt" < ${to}
-      GROUP BY log."featureKey"
-      ORDER BY SUM(log."profitRp") DESC NULLS LAST
+      WITH agg AS (
+        SELECT
+          log."featureKey" AS "featureKey",
+          COUNT(*)::bigint AS "count",
+          SUM(log."apiCostRp") AS "apiCostRp",
+          SUM(log."revenueRp") AS "revenueRp",
+          SUM(log."profitRp") AS "profitRp"
+        FROM "AiGenerationLog" log
+        WHERE log."status" = 'OK'
+          AND log."createdAt" >= ${from} AND log."createdAt" < ${to}
+        GROUP BY log."featureKey"
+      ),
+      top_model AS (
+        SELECT DISTINCT ON ("featureKey")
+          "featureKey",
+          "modelName" AS "topModelName"
+        FROM (
+          SELECT
+            log."featureKey",
+            log."modelName",
+            COUNT(*) AS uses
+          FROM "AiGenerationLog" log
+          WHERE log."status" = 'OK'
+            AND log."createdAt" >= ${from} AND log."createdAt" < ${to}
+          GROUP BY log."featureKey", log."modelName"
+        ) s
+        ORDER BY "featureKey", uses DESC
+      )
+      SELECT a.*, tm."topModelName"
+      FROM agg a
+      LEFT JOIN top_model tm USING ("featureKey")
+      ORDER BY a."profitRp" DESC NULLS LAST
     `)
 
     // Join displayName dari AiFeatureConfig untuk UI yg ramah.
     const featureKeys = rows.map((r) => r.featureKey)
     const configs = await prisma.aiFeatureConfig.findMany({
       where: { featureKey: { in: featureKeys } },
-      select: { featureKey: true, displayName: true, modelName: true },
+      select: { featureKey: true, displayName: true },
     })
     const byKey = new Map(configs.map((c) => [c.featureKey, c]))
 
@@ -61,7 +88,8 @@ export async function GET(req: Request) {
       return {
         featureKey: r.featureKey,
         displayName: cfg?.displayName ?? r.featureKey,
-        modelName: cfg?.modelName ?? null,
+        // Model paling sering dipakai di periode ini (real, bukan config).
+        modelName: r.topModelName,
         calls: Number(r.count),
         apiCostRp,
         revenueRp,
