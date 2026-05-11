@@ -45,6 +45,7 @@ interface CostEstimate {
   providerCostRp: number
   platformTokensCharge: number
   platformChargeRp: number
+  modelName?: string
   exceedsContextLimit?: boolean
   contextLimitMessage?: string
 }
@@ -309,19 +310,26 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
               )}
 
               <div className="rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
-                <div className="text-sm font-semibold text-purple-900">
-                  Estimasi Biaya
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-purple-900">
+                    Perkiraan Biaya
+                  </div>
+                  {estimate.estimate.modelName && (
+                    <div className="rounded-full bg-purple-100 px-2 py-0.5 font-mono text-[10px] text-purple-800">
+                      {estimate.estimate.modelName}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded border bg-white p-2">
-                    <div className="text-warm-500">Token AI provider</div>
+                    <div className="text-warm-500">Perkiraan token AI</div>
                     <div className="font-mono text-sm font-bold text-warm-900">
                       ~{estimate.estimate.estimatedInputTokens.toLocaleString('id-ID')} in
                       <br />~{estimate.estimate.estimatedOutputTokens.toLocaleString('id-ID')} out
                     </div>
                   </div>
                   <div className="rounded border bg-white p-2">
-                    <div className="text-warm-500">Biaya provider (Haiku 4.5)</div>
+                    <div className="text-warm-500">Perkiraan biaya provider</div>
                     <div className="font-mono text-sm font-bold text-warm-900">
                       ~${estimate.estimate.providerCostUsd.toFixed(4)}
                       <br />
@@ -331,12 +339,12 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                 </div>
                 <div className="mt-2 rounded bg-purple-600 p-2.5 text-white">
                   <div className="text-[11px] opacity-80">
-                    Token platform yang dipotong dari saldo:
+                    Perkiraan token yang akan dipotong:
                   </div>
                   <div className="font-mono text-lg font-bold">
-                    {estimate.estimate.platformTokensCharge.toLocaleString('id-ID')} token
+                    ~{estimate.estimate.platformTokensCharge.toLocaleString('id-ID')} token
                     <span className="ml-2 text-sm opacity-75">
-                      (Rp{' '}
+                      (~Rp{' '}
                       {Math.round(estimate.estimate.platformChargeRp).toLocaleString('id-ID')}
                       )
                     </span>
@@ -347,13 +355,19 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                   <strong className="tabular-nums">
                     {estimate.currentBalance.toLocaleString('id-ID')}
                   </strong>{' '}
-                  token. Setelah optimasi:{' '}
+                  token. Estimasi setelah optimasi:{' '}
                   <strong className="tabular-nums">
-                    {(
+                    ~{(
                       estimate.currentBalance - estimate.estimate.platformTokensCharge
                     ).toLocaleString('id-ID')}
                   </strong>{' '}
                   token.
+                </div>
+                <div className="mt-2 rounded bg-purple-100/60 p-2 text-[11px] leading-relaxed text-purple-900">
+                  <strong>Catatan:</strong> ini hanya perkiraan. Biaya
+                  sesungguhnya tergantung panjang prompt + output AI, dan akan
+                  ditampilkan setelah optimasi selesai. Bisa sedikit lebih
+                  besar atau lebih kecil dari estimasi.
                 </div>
               </div>
 
@@ -379,8 +393,8 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                     AI sedang analisa & generate perbaikan…
                   </div>
                   <div className="text-xs text-warm-500">
-                    Haiku 4.5 — biasanya 25-60 detik (LP besar bisa lebih lama).
-                    Jangan tutup tab ini.
+                    {estimate.estimate.modelName ?? 'AI'} — biasanya 25-90
+                    detik (LP besar bisa lebih lama). Jangan tutup tab ini.
                   </div>
                 </div>
               )}
@@ -611,12 +625,32 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                 </div>
               </div>
 
-              {/* Cost summary */}
-              <div className="rounded-lg border border-warm-200 bg-warm-50 p-2 text-[11px] text-warm-600">
-                Cost actual: {result.cost.inputTokens.toLocaleString('id-ID')} in +{' '}
-                {result.cost.outputTokens.toLocaleString('id-ID')} out token AI · Provider Rp{' '}
-                {Math.round(result.cost.providerCostRp).toLocaleString('id-ID')} ·
-                Token platform dipotong: {result.cost.platformTokensCharged.toLocaleString('id-ID')}
+              {/* Biaya aktual setelah AI selesai (vs estimasi sebelumnya) */}
+              <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900">
+                <div className="font-semibold">
+                  ✓ Biaya aktual (setelah AI selesai)
+                </div>
+                <div className="mt-1.5 grid gap-1.5 sm:grid-cols-3">
+                  <div>
+                    <div className="text-[10px] text-emerald-700">Token AI dipakai</div>
+                    <div className="font-mono font-bold">
+                      {result.cost.inputTokens.toLocaleString('id-ID')} in +{' '}
+                      {result.cost.outputTokens.toLocaleString('id-ID')} out
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-700">Biaya provider</div>
+                    <div className="font-mono font-bold">
+                      Rp {Math.round(result.cost.providerCostRp).toLocaleString('id-ID')}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-emerald-700">Token dipotong dari saldo</div>
+                    <div className="font-mono font-bold">
+                      {result.cost.platformTokensCharged.toLocaleString('id-ID')} token
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

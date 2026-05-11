@@ -86,6 +86,8 @@ export interface CostEstimate {
   platformChargeRp: number
   usdRate: number
   pricePerTokenRp: number
+  // Model yg akan dipakai (dari AiFeatureConfig['LP_OPTIMIZE'] saat estimate).
+  modelName: string
   exceedsContextLimit: boolean
   contextLimitMessage?: string
 }
@@ -138,6 +140,7 @@ export async function estimateOptimizationCost(input: {
     platformChargeRp: charge.revenueRp,
     usdRate: charge.pricingSnapshot.usdRate,
     pricePerTokenRp: charge.pricingSnapshot.pricePerToken,
+    modelName: charge.modelName,
     exceedsContextLimit,
     contextLimitMessage,
   }
