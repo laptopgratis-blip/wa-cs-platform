@@ -326,6 +326,32 @@ export function moveElement(
   return serializeFullDoc(doc, html)
 }
 
+// Pindah elemen ke posisi target (drag & drop). Source dipindah ke sebelum/sesudah
+// elemen target di parent target. Skip kalau source==target atau target descendant
+// dari source (drop ke dalam diri sendiri → noop biar tidak corrupt DOM).
+export function moveElementTo(
+  html: string,
+  fromIndex: number,
+  toIndex: number,
+  position: 'before' | 'after',
+): string {
+  if (typeof window === 'undefined') return html
+  if (fromIndex === toIndex) return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  tagElementsInDoc(doc)
+  const source = doc.body.querySelector(`[${EDIT_ATTR}="${fromIndex}"]`)
+  const target = doc.body.querySelector(`[${EDIT_ATTR}="${toIndex}"]`)
+  if (!source || !target) return html
+  if (source.contains(target)) return html
+
+  const ref = position === 'before' ? target : target.nextSibling
+  target.parentNode?.insertBefore(source, ref)
+  doc.querySelectorAll(`[${EDIT_ATTR}]`).forEach((el) =>
+    el.removeAttribute(EDIT_ATTR),
+  )
+  return serializeFullDoc(doc, html)
+}
+
 // Ambil outerHTML elemen by index — dipakai untuk clipboard saat cut.
 // Hasil sudah ter-strip dari data-lp-edit.
 export function getElementOuterHtml(
@@ -377,6 +403,77 @@ export function pasteElement(
   return serializeFullDoc(doc, html)
 }
 
+// Cari offset opening tag (dan closing tag kalau ada) untuk elemen editable
+// ke-N di raw HTML — dipakai HtmlEditor di mode "lanjutan" untuk highlight
+// range textarea saat user klik elemen di LivePreview.
+//
+// Cara: regex find all opening tag yang match editable selector, hitung urutan
+// per pre-order, skip yang ada di dalam <script>/<style>/komen. Untuk non-void,
+// cari matching closing tag dengan depth counter sederhana.
+//
+// Asumsi: HTML well-formed. Kalau parse meleset, return start..openEnd saja
+// (highlight cuma opening tag — tetap berguna sebagai indikasi posisi).
+export function findEditableTagOffset(
+  rawHtml: string,
+  editIndex: number,
+): { start: number; end: number } | null {
+  if (!rawHtml || editIndex < 0) return null
+
+  // Range yang harus di-skip: <!-- ... -->, <script>...</script>, <style>...</style>.
+  const skipRanges: Array<[number, number]> = []
+  const skipRe = /<!--[\s\S]*?-->|<script\b[^>]*>[\s\S]*?<\/script\s*>|<style\b[^>]*>[\s\S]*?<\/style\s*>/gi
+  let sm: RegExpExecArray | null
+  while ((sm = skipRe.exec(rawHtml)) !== null) {
+    skipRanges.push([sm.index, sm.index + sm[0].length])
+  }
+  const inSkip = (pos: number) =>
+    skipRanges.some(([s, e]) => pos >= s && pos < e)
+
+  // Cari opening tag editable ke-editIndex.
+  const openRe = /<(h[1-6]|p|a|button|li|span|img)\b([^>]*)>/gi
+  let counter = 0
+  let m: RegExpExecArray | null
+  while ((m = openRe.exec(rawHtml)) !== null) {
+    if (inSkip(m.index)) continue
+    if (counter === editIndex) {
+      const start = m.index
+      const openEnd = m.index + m[0].length
+      const tagName = m[1].toLowerCase()
+      const attrs = m[2] ?? ''
+      const isVoid = tagName === 'img'
+      const isSelfClosed = /\/\s*$/.test(attrs)
+      if (isVoid || isSelfClosed) return { start, end: openEnd }
+      // Find matching closing dengan depth counter — cari `<TAG...>` & `</TAG>`
+      // dari posisi openEnd, kembalikan posisi `>` setelah </TAG> yang seimbang.
+      const balRe = new RegExp(
+        `<${tagName}\\b[^>]*>|</${tagName}\\s*>`,
+        'gi',
+      )
+      balRe.lastIndex = openEnd
+      let depth = 1
+      let bm: RegExpExecArray | null
+      while ((bm = balRe.exec(rawHtml)) !== null) {
+        if (inSkip(bm.index)) continue
+        const isClose = bm[0].startsWith('</')
+        // Self-closing dalam balRe match untuk tag yang sama — treat sebagai close
+        const isSelfCloseHere = !isClose && /\/\s*>$/.test(bm[0])
+        if (isClose) {
+          depth--
+          if (depth === 0) {
+            return { start, end: bm.index + bm[0].length }
+          }
+        } else if (!isSelfCloseHere) {
+          depth++
+        }
+      }
+      // Closing tidak ketemu — fallback highlight opening saja.
+      return { start, end: openEnd }
+    }
+    counter++
+  }
+  return null
+}
+
 // Editable element snapshot — dipakai parent untuk render popover.
 export interface EditableSnapshot {
   editIndex: number
@@ -395,4 +492,65 @@ export interface EditableSnapshot {
   hasNext: boolean
   // Bounding rect dari iframe (relatif ke iframe viewport).
   rect: { top: number; left: number; width: number; height: number }
+  // Pixel tracking attributes (data-pixel-*) — dipakai popover untuk preset form.
+  // null kalau elemen belum ada attribute pixel.
+  pixelEvent: string | null
+  pixelValue: string | null
+  pixelCurrency: string | null
 }
+
+// Set/clear attribute pixel tracking ke elemen by edit index.
+// `null` di patch field artinya HAPUS attribute itu.
+// `undefined` artinya tidak diubah (preserve nilai existing).
+export function setElementPixel(
+  html: string,
+  editIndex: number,
+  patch: {
+    event?: string | null
+    value?: string | null
+    currency?: string | null
+  },
+): string {
+  if (typeof window === 'undefined') return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  tagElementsInDoc(doc)
+  const target = doc.body.querySelector(`[${EDIT_ATTR}="${editIndex}"]`)
+  if (!target) return html
+
+  const apply = (attr: string, val: string | null | undefined) => {
+    if (val === undefined) return
+    if (val === null || !String(val).trim()) {
+      target.removeAttribute(attr)
+    } else {
+      target.setAttribute(attr, String(val).trim())
+    }
+  }
+  apply('data-pixel-event', patch.event)
+  apply('data-pixel-value', patch.value)
+  apply('data-pixel-currency', patch.currency)
+
+  // Cleanup: kalau event kosong, hapus juga value & currency (mereka tidak
+  // bermakna tanpa event).
+  if (!target.getAttribute('data-pixel-event')) {
+    target.removeAttribute('data-pixel-value')
+    target.removeAttribute('data-pixel-currency')
+  }
+
+  doc.querySelectorAll(`[${EDIT_ATTR}]`).forEach((el) =>
+    el.removeAttribute(EDIT_ATTR),
+  )
+  return serializeFullDoc(doc, html)
+}
+
+// Standard pixel events — superset dari yang di-support semua platform.
+// Custom event bisa dimasukkan via input bebas di UI.
+export const PIXEL_EVENT_PRESETS = [
+  'ViewContent',
+  'Lead',
+  'Contact',
+  'InitiateCheckout',
+  'AddToCart',
+  'Purchase',
+  'CompleteRegistration',
+] as const
+export type PixelEventPreset = (typeof PIXEL_EVENT_PRESETS)[number]

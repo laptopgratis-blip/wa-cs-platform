@@ -18,11 +18,12 @@ import {
   Italic,
   Save,
   Scissors,
+  Target,
   Trash2,
   Underline,
   X,
 } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +38,7 @@ import {
 import {
   type EditableSnapshot,
   isSwappableTag,
+  PIXEL_EVENT_PRESETS,
   type SwappableTag,
 } from '@/lib/lp/html-mutation'
 import { cn } from '@/lib/utils'
@@ -63,10 +65,28 @@ interface Props {
     src?: string
     alt?: string
     newTag?: SwappableTag
+    // Pixel: null = hapus, undefined = tidak diubah, string = set.
+    pixelEvent?: string | null
+    pixelValue?: string | null
+    pixelCurrency?: string | null
   }) => void
   onAction: (action: PopoverAction) => void
   onClose: () => void
 }
+
+// Hint untuk masing-masing event ke awam — supaya user tahu kapan pakai mana.
+const PIXEL_EVENT_HINTS: Record<string, string> = {
+  ViewContent: 'Saat user lihat halaman/produk',
+  Lead: 'Submit form / minat (kontak WA, dst)',
+  Contact: 'Klik tombol kontak (WA/telpon/email)',
+  InitiateCheckout: 'Mulai proses order/checkout',
+  AddToCart: 'Tambah ke keranjang',
+  Purchase: 'Order selesai/dibayar',
+  CompleteRegistration: 'Daftar/signup berhasil',
+}
+
+// Currency umum untuk LP Indonesia + fallback international.
+const CURRENCY_OPTIONS = ['IDR', 'USD', 'SGD', 'MYR', 'EUR'] as const
 
 const POPOVER_WIDTH = 380
 const POPOVER_OFFSET = 8
@@ -148,6 +168,17 @@ export function InlineEditPopover({
   const [imgSrc, setImgSrc] = useState(snapshot.src ?? '')
   const [imgAlt, setImgAlt] = useState(snapshot.alt ?? '')
 
+  // Pixel tracking state — initial value dari attribute existing di elemen.
+  // Empty string di event = "tidak track" (hapus attribute saat save).
+  const [pixelEvent, setPixelEvent] = useState(snapshot.pixelEvent ?? '')
+  const [pixelValue, setPixelValue] = useState(snapshot.pixelValue ?? '')
+  const [pixelCurrency, setPixelCurrency] = useState(
+    snapshot.pixelCurrency ?? 'IDR',
+  )
+  const [pixelOpen, setPixelOpen] = useState(
+    Boolean(snapshot.pixelEvent && snapshot.pixelEvent.trim()),
+  )
+
   const [pos, setPos] = useState<{ top: number; left: number; placement: 'below' | 'above' }>(
     () => ({
       top: snapshot.absRect.top + snapshot.absRect.height + POPOVER_OFFSET,
@@ -162,23 +193,57 @@ export function InlineEditPopover({
     }
   }, [snapshot, isTextBearing])
 
-  useLayoutEffect(() => {
-    const popH = popRef.current?.offsetHeight ?? 320
+  // Re-compute posisi popover. Dipanggil saat snapshot berubah DAN saat tinggi
+  // popover berubah (mis. expand section "Tracking Pixel" yang menambah konten).
+  // Tanpa re-compute, popover yang awalnya cukup di bawah element bisa jadi
+  // overflow viewport setelah konten bertambah → bagian bawah ter-clip.
+  const reposition = useCallback(() => {
+    const popEl = popRef.current
+    if (!popEl) return
+    const popH = popEl.offsetHeight
     const vh = window.innerHeight
     const vw = window.innerWidth
     const r = snapshot.absRect
+    const MARGIN = 16
 
+    // Default: below element.
     let top = r.top + r.height + POPOVER_OFFSET
     let placement: 'below' | 'above' = 'below'
+
+    // Coba flip ke above kalau bawah overflow & atas cukup space.
     if (top + popH > vh - 20 && r.top - popH - POPOVER_OFFSET > 20) {
       top = r.top - popH - POPOVER_OFFSET
       placement = 'above'
     }
+
+    // Clamp top supaya popover tidak overflow viewport. Kalau popH lebih besar
+    // dari viewport (mis. expand section bikin tinggi > vh), popover akan
+    // scroll secara internal (lihat className body di JSX), bukan ter-clip.
+    if (top + popH > vh - MARGIN) {
+      top = Math.max(MARGIN, vh - MARGIN - popH)
+    }
+    if (top < MARGIN) top = MARGIN
+
     let left = r.left
-    if (left + POPOVER_WIDTH > vw - 16) left = vw - POPOVER_WIDTH - 16
-    if (left < 16) left = 16
+    if (left + POPOVER_WIDTH > vw - MARGIN) left = vw - POPOVER_WIDTH - MARGIN
+    if (left < MARGIN) left = MARGIN
     setPos({ top, left, placement })
   }, [snapshot])
+
+  useLayoutEffect(() => {
+    reposition()
+  }, [reposition])
+
+  // Re-position saat konten popover berubah ukurannya (mis. section expand,
+  // dropdown render in-flow). ResizeObserver lebih reliable daripada manual
+  // trigger di tiap onChange handler.
+  useEffect(() => {
+    const popEl = popRef.current
+    if (!popEl || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => reposition())
+    ro.observe(popEl)
+    return () => ro.disconnect()
+  }, [reposition])
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -192,7 +257,23 @@ export function InlineEditPopover({
     function onClick(e: MouseEvent) {
       const el = popRef.current
       if (!el) return
-      if (!el.contains(e.target as Node)) onClose()
+      const target = e.target as Element | null
+      if (!target) return
+      // Klik di dalam popover sendiri — abaikan.
+      if (el.contains(target)) return
+      // Klik di dalam Radix Select/Dropdown content yang di-render via Portal
+      // ke document.body (di luar popover). Tanpa pengecualian ini, klik
+      // <SelectItem> men-trigger onClose & popover tutup sebelum user sempat
+      // klik tombol Simpan. Radix tambahkan wrapper [data-radix-popper-content-wrapper]
+      // dan content ber-role="listbox" — kita exempt keduanya.
+      if (
+        target.closest('[data-radix-popper-content-wrapper]') ||
+        target.closest('[role="listbox"]') ||
+        target.closest('[role="dialog"]')
+      ) {
+        return
+      }
+      onClose()
     }
     const id = setTimeout(() => {
       window.addEventListener('mousedown', onClick)
@@ -236,6 +317,9 @@ export function InlineEditPopover({
       src?: string
       alt?: string
       newTag?: SwappableTag
+      pixelEvent?: string | null
+      pixelValue?: string | null
+      pixelCurrency?: string | null
     } = {}
 
     if (isTextBearing) {
@@ -262,6 +346,24 @@ export function InlineEditPopover({
       patch.newTag = currentTag
     }
 
+    // Pixel diff — kirim hanya kalau berubah dari snapshot.
+    const evTrim = pixelEvent.trim()
+    const vTrim = pixelValue.trim()
+    const cTrim = pixelCurrency.trim()
+    const oldEv = snapshot.pixelEvent ?? ''
+    const oldV = snapshot.pixelValue ?? ''
+    const oldC = snapshot.pixelCurrency ?? ''
+    if (evTrim !== oldEv) {
+      patch.pixelEvent = evTrim || null
+    }
+    if (vTrim !== oldV) {
+      // Cuma kirim value kalau ada event aktif — supaya tidak orphan.
+      patch.pixelValue = evTrim ? vTrim || null : null
+    }
+    if (cTrim !== oldC) {
+      patch.pixelCurrency = evTrim ? cTrim || null : null
+    }
+
     if (Object.keys(patch).length === 0) return onClose()
     onSubmit(patch)
   }
@@ -269,13 +371,13 @@ export function InlineEditPopover({
   return (
     <div
       ref={popRef}
-      className="fixed z-50 rounded-lg border border-warm-300 bg-card shadow-xl"
+      className="fixed z-50 flex max-h-[calc(100vh-32px)] flex-col rounded-lg border border-warm-300 bg-card shadow-xl"
       style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
       role="dialog"
       aria-label="Edit elemen"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-warm-200 px-3 py-2">
+      {/* Header (sticky atas — selalu visible) */}
+      <div className="flex shrink-0 items-center justify-between border-b border-warm-200 px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className="rounded-full bg-primary-50 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase text-primary-700">
             {snapshot.tagName}
@@ -298,9 +400,14 @@ export function InlineEditPopover({
         </button>
       </div>
 
+      {/* Body scrollable — semua section yang bisa expand masuk sini supaya
+          kalau total tinggi > viewport, content scroll internal & footer tetap
+          terlihat (tidak ter-clip di bawah). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+
       {/* Action bar — Move/Duplicate/Cut/Delete (selalu ada) */}
       <div
-        className="flex items-center gap-0.5 border-b border-warm-200 bg-warm-50/30 px-2 py-1.5"
+        className="flex shrink-0 items-center gap-0.5 border-b border-warm-200 bg-warm-50/30 px-2 py-1.5"
         onMouseDown={(e) => e.preventDefault()}
       >
         <ToolbarBtn
@@ -528,8 +635,117 @@ export function InlineEditPopover({
         </div>
       )}
 
-      {/* Footer */}
-      <div className="flex justify-end gap-1.5 border-t border-warm-200 px-3 py-2">
+      {/* Tracking Pixel section — collapse default, expand kalau sudah ada event */}
+      <div className="border-t border-warm-200">
+        <button
+          type="button"
+          onClick={() => setPixelOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-warm-50"
+          aria-expanded={pixelOpen}
+        >
+          <span className="flex items-center gap-1.5 text-xs font-medium text-warm-900">
+            <Target className="size-3.5 text-primary-600" />
+            Tracking Pixel
+            {pixelEvent.trim() && (
+              <span className="ml-1 rounded-full bg-primary-50 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-primary-700">
+                {pixelEvent.trim()}
+              </span>
+            )}
+          </span>
+          <span className="text-[10px] text-warm-500">
+            {pixelOpen ? 'Tutup' : 'Atur event'}
+          </span>
+        </button>
+        {pixelOpen && (
+          <div className="space-y-2 px-3 pb-3">
+            <p className="text-[10px] leading-relaxed text-warm-500">
+              Saat user klik elemen ini di LP live, event di-kirim ke pixel
+              Meta/TikTok/Google Ads yang aktif di akun kamu. Kosongkan untuk
+              non-aktifkan.
+            </p>
+            <div className="space-y-1">
+              <Label className="text-[10px] text-warm-500">Event</Label>
+              <Select
+                value={pixelEvent || '__none'}
+                onValueChange={(v) => setPixelEvent(v === '__none' ? '' : v)}
+              >
+                <SelectTrigger className="h-8 text-[11px]">
+                  <SelectValue placeholder="Pilih event…" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none" className="text-xs">
+                    <span className="text-warm-500">Tidak track</span>
+                  </SelectItem>
+                  {PIXEL_EVENT_PRESETS.map((ev) => (
+                    <SelectItem key={ev} value={ev} className="text-xs">
+                      <span className="font-mono font-semibold">{ev}</span>
+                      <span className="ml-2 text-[10px] text-warm-500">
+                        {PIXEL_EVENT_HINTS[ev]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={pixelEvent}
+                onChange={(e) => setPixelEvent(e.target.value)}
+                placeholder="Atau ketik event custom (mis. ChatStarted)"
+                className="h-7 font-mono text-[11px]"
+              />
+            </div>
+            {pixelEvent.trim() && (
+              <div className="grid grid-cols-[1fr_85px] gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-warm-500">
+                    Nilai (opsional)
+                  </Label>
+                  <Input
+                    value={pixelValue}
+                    onChange={(e) =>
+                      setPixelValue(e.target.value.replace(/[^\d.]/g, ''))
+                    }
+                    placeholder="100000"
+                    inputMode="decimal"
+                    className="h-7 font-mono text-[11px]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-warm-500">Mata uang</Label>
+                  <Select
+                    value={pixelCurrency}
+                    onValueChange={(v) => setPixelCurrency(v)}
+                  >
+                    <SelectTrigger className="h-7 text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">
+                          {c}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <p className="text-[10px] text-warm-500">
+              Tip: pakai{' '}
+              <span className="font-mono font-semibold">Lead</span> untuk tombol
+              WA/form,{' '}
+              <span className="font-mono font-semibold">InitiateCheckout</span>{' '}
+              untuk tombol order,{' '}
+              <span className="font-mono font-semibold">Purchase</span> di
+              halaman success.
+            </p>
+          </div>
+        )}
+      </div>
+
+      </div>{/* end scrollable body */}
+
+      {/* Footer (sticky bawah — selalu visible walaupun body scroll) */}
+      <div className="flex shrink-0 justify-end gap-1.5 border-t border-warm-200 bg-card px-3 py-2">
         <Button variant="ghost" size="sm" onClick={onClose} className="h-7 text-xs">
           Batal
         </Button>

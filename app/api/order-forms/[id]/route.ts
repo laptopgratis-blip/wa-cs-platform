@@ -61,6 +61,9 @@ export async function PATCH(
         ...(data.socialProofIntervalSec !== undefined && {
           socialProofIntervalSec: data.socialProofIntervalSec,
         }),
+        ...(data.socialProofShowTime !== undefined && {
+          socialProofShowTime: data.socialProofShowTime,
+        }),
         ...(data.enabledPixelIds !== undefined && {
           enabledPixelIds: data.enabledPixelIds,
         }),

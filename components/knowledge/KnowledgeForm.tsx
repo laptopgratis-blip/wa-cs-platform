@@ -155,7 +155,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
 
   async function handleSuggestKeywords() {
     if (!contentType || state.title.trim().length < 2) {
-      toast.error('Isi judul dulu sebelum minta saran AI')
+      toast.error('Isi judul dulu sebelum optimasi kata kunci')
       return
     }
     setSuggesting(true)
@@ -168,10 +168,18 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
           contentType,
           textContent: state.textContent || null,
           caption: state.caption || null,
+          existingKeywords: state.keywords,
         }),
       })
       const json = (await res.json().catch(() => null)) as
-        | { success: boolean; data?: { keywords: string[] }; error?: string }
+        | {
+            success: boolean
+            data?: {
+              keywords: string[]
+              charge?: { tokensCharged: number; modelName: string }
+            }
+            error?: string
+          }
         | null
       if (!res.ok || !json?.success || !json.data) {
         toast.error(json?.error ?? 'Gagal panggil AI')
@@ -181,10 +189,20 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
         new Set([...state.keywords, ...json.data.keywords.map((k) => k.toLowerCase())]),
       ).slice(0, 20)
       update('keywords', next)
+      const tokenInfo = json.data.charge
+        ? ` (−${json.data.charge.tokensCharged} token)`
+        : ''
       if (json.data.keywords.length === 0) {
-        toast.info('AI tidak memberi saran kata kunci, coba isi judul lebih spesifik')
+        toast.info(
+          (state.keywords.length > 0
+            ? 'AI tidak menemukan variasi baru — kata kunci sudah cukup lengkap'
+            : 'AI tidak memberi saran, coba isi judul/caption lebih spesifik') +
+            tokenInfo,
+        )
       } else {
-        toast.success(`${json.data.keywords.length} kata kunci ditambahkan`)
+        toast.success(
+          `${json.data.keywords.length} variasi kata kunci ditambahkan${tokenInfo}`,
+        )
       }
     } finally {
       setSuggesting(false)
@@ -209,6 +227,20 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
     if (contentType === 'LINK' && !state.linkUrl.trim()) {
       toast.error('URL tidak boleh kosong')
       return
+    }
+
+    // Auto-suggest hint: kalau keyword sedikit, tawarkan ke user untuk
+    // perluas pakai AI sebelum save. Hanya saat create — di edit user sudah
+    // pegang kontrol.
+    if (!isEdit && state.keywords.length < 3) {
+      const ok = confirm(
+        `Kata kunci baru ${state.keywords.length}. AI bisa tambah 10-15 variasi (sinonim, slang WA, typo) supaya trigger lebih luas.\n\nKlik OK untuk minta AI dulu, atau Cancel untuk simpan apa adanya.`,
+      )
+      if (ok) {
+        await handleSuggestKeywords()
+        // Setelah suggest, biarkan user lihat hasilnya dan klik Simpan lagi.
+        return
+      }
     }
 
     setSubmitting(true)
@@ -444,6 +476,8 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
             <Label>Kata kunci pemicu</Label>
             <p className="text-xs text-muted-foreground">
               AI akan kirim info ini saat customer tanya tentang kata-kata berikut.
+              Klik <strong>Optimasi AI</strong> untuk perluas variasi (sinonim, slang,
+              typo) supaya trigger tidak gampang luput.
             </p>
           </div>
           <Button
@@ -458,7 +492,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
             ) : (
               <Sparkles className="mr-2 size-4" />
             )}
-            Saran AI
+            {state.keywords.length > 0 ? 'Perluas dengan AI' : 'Optimasi AI'}
           </Button>
         </div>
 

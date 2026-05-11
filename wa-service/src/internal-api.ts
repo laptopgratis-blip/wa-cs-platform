@@ -31,9 +31,14 @@ export interface InternalSoulConfig {
     id: string
     modelId: string
     provider: 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
+    // Legacy: dipakai untuk pre-flight balance check sebagai rough floor.
+    // Charge real dihitung server via /charge-cs-reply dari real token usage.
     costPerMessage: number
     inputPricePer1M: number // USD per 1M token
     outputPricePer1M: number
+    // Estimate avg total token per balasan (untuk pre-flight). Server hitung
+    // charge real dari response.usage Anthropic.
+    avgTokensPerMessage: number
     isActive: boolean
   } | null
   // Snapshot pricing settings supaya wa-service bisa hitung profit per pesan
@@ -76,7 +81,16 @@ export interface InternalKnowledgeMatch {
     caption: string | null
   }>
   // Blok teks siap append ke system prompt — dibangun server-side.
+  // Sekarang include: bank accounts + knowledge info + default behavior rules.
   promptBlock: string
+  // File yang harus dikirim wa-manager OTOMATIS setelah balasan teks AI.
+  // Hanya items dengan contentType IMAGE/FILE & punya fileUrl yang dikumpulin.
+  attachments: Array<{
+    fileUrl: string
+    title: string
+    caption: string | null
+    contentType: string
+  }>
 }
 
 export interface InternalFlowResult {
@@ -200,6 +214,31 @@ export const internalApi = {
         body: JSON.stringify(input),
       },
     )
+  },
+
+  // Charge token untuk CS Reply WA dgn skema fair-pricing (token-based
+  // proporsional). Server compute tokensCharged dari (inputTokens, outputTokens)
+  // × harga AiModel × margin AiFeatureConfig['CS_REPLY']. Pakai SETELAH AI
+  // generate sukses dgn response.usage real.
+  chargeCsReply(input: {
+    userId: string
+    sessionId: string
+    aiModelId: string
+    inputTokens: number
+    outputTokens: number
+  }) {
+    return request<{
+      tokensCharged: number
+      apiCostUsd: number
+      apiCostRp: number
+      revenueRp: number
+      profitRp: number
+      marginPct: number
+      balance: number
+    }>('/api/internal/tokens/charge-cs-reply', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
   },
 
   reportBroadcastProgress(

@@ -19,6 +19,7 @@ import { LivePreview } from '@/components/lp/LivePreview'
 import { PublishDialog } from '@/components/lp/PublishDialog'
 import { SeoSettingsSheet } from '@/components/lp/SeoSettingsSheet'
 import { VisualEditor } from '@/components/lp/VisualEditor'
+import { findEditableTagOffset } from '@/lib/lp/html-mutation'
 import { cn } from '@/lib/utils'
 
 type EditorMode = 'visual' | 'lanjutan'
@@ -120,6 +121,21 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   // Modal/sheet open state
   const [seoOpen, setSeoOpen] = useState(false)
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+
+  // Highlight range untuk HtmlEditor — diset saat user klik elemen di LivePreview
+  // (mode lanjutan). Object baru tiap klik (walau index sama) supaya effect
+  // re-trigger untuk klik berulang ke elemen yang sama.
+  const [htmlHighlight, setHtmlHighlight] = useState<
+    { start: number; end: number } | null
+  >(null)
+
+  const handlePreviewElementClick = useCallback(
+    (editIndex: number) => {
+      const range = findEditableTagOffset(htmlContent, editIndex)
+      if (range) setHtmlHighlight({ ...range })
+    },
+    [htmlContent],
+  )
 
   const isDirty =
     title !== savedSnapshotRef.current.title ||
@@ -268,9 +284,14 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   return (
     <div className="flex h-full flex-col">
       <EditorTopbar
+        lpId={initial.id}
         title={title}
         onTitleChange={setTitle}
         slug={slug}
+        onSlugSaved={(next) => {
+          setSlug(next)
+          setLastSavedAt(new Date().toISOString())
+        }}
         isPublished={isPublished}
         saveStatus={saveStatus}
         lastSavedAt={lastSavedAt}
@@ -314,12 +335,17 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
                 value={htmlContent}
                 onChange={setHtmlContent}
                 onSaveNow={() => void performSave()}
+                highlightRange={htmlHighlight}
               />
             </div>
           </section>
 
           <section className="flex min-h-0 flex-col bg-warm-100/40">
-            <LivePreview htmlContent={htmlContent} viewport={viewport} />
+            <LivePreview
+              htmlContent={htmlContent}
+              viewport={viewport}
+              onElementClick={handlePreviewElementClick}
+            />
           </section>
         </div>
       )}

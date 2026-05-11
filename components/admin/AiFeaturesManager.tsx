@@ -209,15 +209,17 @@ export function AiFeaturesManager() {
       </header>
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-        <strong>Cara hitung token charge per call:</strong>
+        <strong>Cara hitung token charge per call (skema fair-pricing):</strong>
         <br />
         <code>
           (inputTokens × inputPricePer1M + outputTokens × outputPricePer1M) /
           1M × usdRate × platformMargin / pricePerToken → ceil
         </code>
         <br />
-        Floor min = floorTokens, cap max = capTokens. Lihat /admin/profitability
-        untuk monitor margin real per feature.
+        Default <strong>margin 2.0</strong> = user dipotong 2× cost provider.
+        Floor min = floorTokens (default 10) — anti-mikro charge. Tidak ada cap
+        atas: charge proporsional ke pemakaian (user yg generate output besar
+        akan kena potong lebih banyak — fair).
         <br />
         <strong>Sync dari preset:</strong> harga input/output otomatis
         ter-update saat admin save di /admin/ai-pricing. Klik tombol di atas
@@ -354,25 +356,18 @@ export function AiFeaturesManager() {
                     onChange={(v) => patchEdit(f.id, 'outputPricePer1M', v)}
                   />
                   <FieldNumber
-                    label="Platform margin multiplier (1.3 = +30%)"
+                    label="Platform margin multiplier (2.0 = 2× cost provider)"
                     value={
                       (draft?.platformMargin as number) ?? f.platformMargin
                     }
                     step={0.05}
                     onChange={(v) => patchEdit(f.id, 'platformMargin', v)}
                   />
-                  <div />
                   <FieldNumber
-                    label="Floor min token charge"
+                    label="Floor min token charge (default 10)"
                     value={(draft?.floorTokens as number) ?? f.floorTokens}
-                    step={10}
+                    step={1}
                     onChange={(v) => patchEdit(f.id, 'floorTokens', Math.floor(v))}
-                  />
-                  <FieldNumber
-                    label="Cap max token charge"
-                    value={(draft?.capTokens as number) ?? f.capTokens}
-                    step={1000}
-                    onChange={(v) => patchEdit(f.id, 'capTokens', Math.floor(v))}
                   />
                 </div>
 
@@ -450,9 +445,9 @@ function CreateFeatureForm({
     modelName: 'claude-haiku-4-5',
     inputPricePer1M: 1.0,
     outputPricePer1M: 5.0,
-    platformMargin: 1.3,
-    floorTokens: 100,
-    capTokens: 50_000,
+    platformMargin: 2.0,
+    floorTokens: 10,
+    capTokens: 0,
   })
   const [saving, setSaving] = useState(false)
 
@@ -514,26 +509,17 @@ function CreateFeatureForm({
             onChange={(v) => setData((d) => ({ ...d, outputPricePer1M: v }))}
           />
           <FieldNumber
-            label="Platform margin"
+            label="Platform margin (default 2.0)"
             value={data.platformMargin}
             step={0.05}
             onChange={(v) => setData((d) => ({ ...d, platformMargin: v }))}
           />
-          <div />
           <FieldNumber
-            label="Floor tokens"
+            label="Floor tokens (default 10)"
             value={data.floorTokens}
-            step={10}
+            step={1}
             onChange={(v) =>
               setData((d) => ({ ...d, floorTokens: Math.floor(v) }))
-            }
-          />
-          <FieldNumber
-            label="Cap tokens"
-            value={data.capTokens}
-            step={1000}
-            onChange={(v) =>
-              setData((d) => ({ ...d, capTokens: Math.floor(v) }))
             }
           />
         </div>

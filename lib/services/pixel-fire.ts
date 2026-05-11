@@ -27,10 +27,21 @@ export type PixelEventName =
   | 'ViewContent'
   | 'AddToCart'
 
+// Trigger origin untuk Purchase event — supaya pixel-fire bisa filter pixel
+// yang opt-in di trigger spesifik (lihat PixelIntegration.triggerOn*). Kalau
+// undefined, semua pixel aktif di-fire (legacy behavior untuk eventName lain).
+export type PurchaseTrigger =
+  | 'BUYER_PROOF_UPLOAD'
+  | 'ADMIN_PROOF_UPLOAD'
+  | 'ADMIN_MARK_PAID'
+
 interface FireParams {
   orderId: string
   eventName: PixelEventName
   source?: 'BROWSER' | 'SERVER'
+  // Hanya relevan saat eventName === 'Purchase'. Kalau diisi, pixel difilter
+  // dengan flag triggerOn* yang sesuai.
+  trigger?: PurchaseTrigger
 }
 
 // Stable eventId per (eventName, orderId) — match dengan browser side
@@ -87,12 +98,27 @@ export async function firePixelEventForOrder(
     })
     if (!form || form.enabledPixelIds.length === 0) return stats
 
+    // Filter trigger flag — hanya untuk Purchase + trigger spesified. Pixel
+     // yang opt-out di trigger ini di-skip total (tidak masuk loop & tidak
+     // create log "skipped"). Eventless query lebih efisien.
+    const triggerFilter =
+      params.eventName === 'Purchase' && params.trigger
+        ? params.trigger === 'BUYER_PROOF_UPLOAD'
+          ? { triggerOnBuyerProofUpload: true }
+          : params.trigger === 'ADMIN_PROOF_UPLOAD'
+            ? { triggerOnAdminProofUpload: true }
+            : params.trigger === 'ADMIN_MARK_PAID'
+              ? { triggerOnAdminMarkPaid: true }
+              : {}
+        : {}
+
     const pixels = await prisma.pixelIntegration.findMany({
       where: {
         id: { in: form.enabledPixelIds },
         userId: order.userId,
         isActive: true,
         serverSideEnabled: true,
+        ...triggerFilter,
       },
     })
 

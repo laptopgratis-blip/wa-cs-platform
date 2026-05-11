@@ -73,8 +73,9 @@ export default async function DashboardLayout({
         />
         {/* Padding diberikan per-halaman supaya halaman seperti /inbox bisa
             full-bleed (split panel) tanpa di-pad parent. Padding-bottom
-            untuk mobile supaya konten tidak ketutup BottomNav. */}
-        <main className="flex-1 overflow-hidden pb-16 md:pb-0">
+            untuk mobile = tinggi BottomNav + safe-area-inset-bottom (iPhone
+            home indicator) supaya konten paling bawah tidak ketutup nav. */}
+        <main className="flex-1 overflow-hidden pb-mobile-nav md:pb-0">
           {children}
         </main>
       </div>

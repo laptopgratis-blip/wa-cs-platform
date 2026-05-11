@@ -27,30 +27,77 @@ const cache = new Map<string, { value: AiFeatureConfigValues; cachedAt: number }
 
 // Default config kalau row di DB belum ada — fallback defensif supaya
 // service tidak crash kalau migration belum di-seed.
+//
+// Skema fair-pricing: SEMUA fitur pakai margin 2.0 (2× cost provider),
+// floor 10 (anti-mikro), capTokens 0 (tidak di-enforce). Editable per fitur
+// di /admin/ai-features.
+const COMMON_DEFAULTS = {
+  modelName: 'claude-haiku-4-5',
+  inputPricePer1M: 1.0,
+  outputPricePer1M: 5.0,
+  platformMargin: 2.0,
+  floorTokens: 10,
+  capTokens: 0,
+  isActive: true,
+} as const
+
 const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> = {
   CONTENT_IDEA: {
+    ...COMMON_DEFAULTS,
     featureKey: 'CONTENT_IDEA',
     displayName: 'Idea Generator',
-    modelName: 'claude-haiku-4-5',
-    inputPricePer1M: 1.0,
-    outputPricePer1M: 5.0,
-    platformMargin: 1.3,
-    floorTokens: 100,
-    capTokens: 50_000,
-    isActive: true,
     description: null,
   },
   CONTENT_GENERATE: {
+    ...COMMON_DEFAULTS,
     featureKey: 'CONTENT_GENERATE',
     displayName: 'Content Generation',
-    modelName: 'claude-haiku-4-5',
-    inputPricePer1M: 1.0,
-    outputPricePer1M: 5.0,
-    platformMargin: 1.3,
-    floorTokens: 200,
-    capTokens: 100_000,
-    isActive: true,
     description: null,
+  },
+  KNOWLEDGE_KEYWORD_SUGGEST: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KNOWLEDGE_KEYWORD_SUGGEST',
+    displayName: 'Optimasi Keyword Knowledge',
+    description:
+      'Generate 5 trigger keyword (sinonim, slang, keraguan customer) per klik. Dipanggil dari /knowledge form atau bulk optimasi.',
+  },
+  ADS_GENERATE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'ADS_GENERATE',
+    displayName: 'Ads Creative Generator',
+    description:
+      'Generate creative iklan Meta/TikTok/Google Ads (headline, primary text, CTA).',
+  },
+  LP_GENERATE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'LP_GENERATE',
+    displayName: 'LP Generate (HTML)',
+    description:
+      'Generate landing page HTML dari brief. Streaming response. Charge berdasarkan input/output token real.',
+  },
+  LP_OPTIMIZE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'LP_OPTIMIZE',
+    modelName: 'claude-sonnet-4-6',
+    inputPricePer1M: 3.0,
+    outputPricePer1M: 15.0,
+    displayName: 'LP Optimize (CRO)',
+    description:
+      'Optimasi CRO landing page pakai Claude Sonnet (model lebih besar). POWER tier only.',
+  },
+  SOUL_SIM: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'SOUL_SIM',
+    displayName: 'Soul Simulation',
+    description:
+      'Simulasi 2 AI (seller vs buyer) untuk test prompt. Multi-provider (Anthropic/OpenAI/Google) — pricing snapshot per-turn dari AiModel.',
+  },
+  CS_REPLY: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'CS_REPLY',
+    displayName: 'CS Reply WhatsApp',
+    description:
+      'Auto-balas chat customer di WhatsApp via AI. Charge proporsional input+output token real per balasan (bukan flat per-message).',
   },
 }
 

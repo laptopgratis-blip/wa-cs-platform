@@ -32,6 +32,7 @@ export async function GET(req: Request, { params }: Params) {
             costPerMessage: true,
             inputPricePer1M: true,
             outputPricePer1M: true,
+            avgTokensPerMessage: true,
             isActive: true,
           },
         },

@@ -2,6 +2,8 @@
 // dan server (API route handler).
 import { z } from 'zod'
 
+import { normalizePhone } from '@/lib/phone'
+
 export const registerSchema = z.object({
   name: z
     .string({ message: 'Nama wajib diisi' })
@@ -59,3 +61,62 @@ export const resetPasswordSchema = z
   })
 
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>
+
+// Nomor WA Indonesia — transform ke E.164 (+628…). Reject kalau format
+// invalid (bukan mobile Indonesia 8xx).
+export const phoneSchema = z
+  .string({ message: 'Nomor WhatsApp wajib diisi' })
+  .trim()
+  .transform((v, ctx) => {
+    const normalized = normalizePhone(v)
+    if (!normalized) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Format nomor WA tidak valid (contoh: 08123456789)',
+      })
+      return z.NEVER
+    }
+    return normalized
+  })
+
+// Request OTP — SIGNUP: butuh data lengkap; LOGIN: butuh identifier.
+export const otpRequestSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('SIGNUP'),
+    channel: z.enum(['EMAIL', 'PHONE']),
+    signup: z.object({
+      name: z
+        .string({ message: 'Nama wajib diisi' })
+        .trim()
+        .min(2, 'Nama minimal 2 karakter')
+        .max(80, 'Nama maksimal 80 karakter'),
+      email: z
+        .string({ message: 'Email wajib diisi' })
+        .trim()
+        .toLowerCase()
+        .email('Format email tidak valid'),
+      phone: phoneSchema,
+    }),
+  }),
+  z.object({
+    mode: z.literal('LOGIN'),
+    channel: z.enum(['EMAIL', 'PHONE']),
+    identifier: z
+      .string({ message: 'Email atau nomor WA wajib diisi' })
+      .trim()
+      .min(1, 'Email atau nomor WA wajib diisi'),
+  }),
+])
+
+export type OtpRequestInput = z.infer<typeof otpRequestSchema>
+
+// Verify OTP — dipakai client kirim ke signIn('otp', ...).
+export const otpVerifySchema = z.object({
+  otpId: z.string().min(1),
+  code: z
+    .string({ message: 'Kode OTP wajib diisi' })
+    .trim()
+    .regex(/^\d{6}$/, 'Kode OTP harus 6 digit angka'),
+})
+
+export type OtpVerifyInput = z.infer<typeof otpVerifySchema>

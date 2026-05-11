@@ -14,8 +14,12 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import {
+  executeAiWithCharge,
+  InsufficientBalanceError,
+} from '@/lib/services/ai-generation-log'
+import {
   estimateOptimizationCost,
-  OPTIMIZE_MODEL,
+  getOptimizeModel,
   runOptimization,
 } from '@/lib/services/lp-optimize'
 import { SIGNAL_LABELS, type SignalCategory } from '@/lib/services/lp-chat-signals'
@@ -122,11 +126,12 @@ export async function POST(_req: Request, { params }: Params) {
 
   // Insert pre-record dgn applied=false untuk audit kalau AI fail tetap ada
   // log. Update setelah AI sukses (charge tokens, attach suggestions).
+  const optimizeModel = await getOptimizeModel()
   const opt = await prisma.lpOptimization.create({
     data: {
       lpId,
       userId: session.user.id,
-      model: OPTIMIZE_MODEL,
+      model: optimizeModel,
       inputTokens: 0,
       outputTokens: 0,
       beforeHtml: lp.htmlContent,
@@ -137,63 +142,43 @@ export async function POST(_req: Request, { params }: Params) {
   })
 
   try {
-    const result = await runOptimization({
-      htmlContent: lp.htmlContent,
-      signals: signalsForPrompt,
-      analytics,
+    const { result, charge } = await executeAiWithCharge<
+      Awaited<ReturnType<typeof runOptimization>>
+    >({
+      featureKey: 'LP_OPTIMIZE',
+      userId: session.user.id,
+      ctx: {
+        referencePrefix: `lp_optimize:${opt.id}`,
+        description: 'LP AI Optimization',
+        subjectType: 'LP',
+        subjectId: lpId,
+        estimateInputTokens: estimate.estimatedInputTokens,
+        estimateOutputTokens: estimate.estimatedOutputTokens,
+        aiCall: async () => {
+          const r = await runOptimization({
+            htmlContent: lp.htmlContent,
+            signals: signalsForPrompt,
+            analytics,
+          })
+          return {
+            result: r,
+            inputTokens: r.inputTokens,
+            outputTokens: r.outputTokens,
+          }
+        },
+      },
     })
 
-    // Charge token atomic — kalau race saldo turun di antaranya, balikin error.
-    const charged = await prisma.$transaction(async (tx) => {
-      const updateResult = await tx.tokenBalance.updateMany({
-        where: {
-          userId: session.user.id,
-          balance: { gte: result.platformTokensCharge },
-        },
-        data: {
-          balance: { decrement: result.platformTokensCharge },
-          totalUsed: { increment: result.platformTokensCharge },
-        },
-      })
-      if (updateResult.count === 0) return null
-      await tx.tokenTransaction.create({
-        data: {
-          userId: session.user.id,
-          amount: -result.platformTokensCharge,
-          type: 'USAGE',
-          description: 'LP AI Optimization',
-          reference: opt.id,
-        },
-      })
-      return result.platformTokensCharge
-    })
-
-    if (charged === null) {
-      await prisma.lpOptimization.update({
-        where: { id: opt.id },
-        data: {
-          errorMessage: 'Saldo token habis di tengah proses (race). AI sudah sukses tapi tidak di-charge — tidak bisa apply.',
-        },
-      })
-      return jsonError(
-        'Saldo token habis selama proses AI. Top-up dulu lalu coba lagi.',
-        402,
-      )
-    }
-
-    // Update record dengan token + suggestions.
     await prisma.lpOptimization.update({
       where: { id: opt.id },
       data: {
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
-        // Snapshot harga saat call ini (Haiku 4.5). Audit historis tetap
-        // akurat kalau kelak switch ke Sonnet untuk "Quality mode".
-        inputPricePer1MUsd: 1,
-        outputPricePer1MUsd: 5,
-        providerCostUsd: result.providerCostUsd,
-        providerCostRp: result.providerCostRp,
-        platformTokensCharged: result.platformTokensCharge,
+        inputPricePer1MUsd: charge.pricingSnapshot.inputPricePer1M,
+        outputPricePer1MUsd: charge.pricingSnapshot.outputPricePer1M,
+        providerCostUsd: charge.apiCostUsd,
+        providerCostRp: charge.apiCostRp,
+        platformTokensCharged: charge.tokensCharged,
         suggestionsJson: result.suggestions,
         focusAreasJson: result.focusAreas,
         scoreBefore: result.scoreBefore,
@@ -212,9 +197,9 @@ export async function POST(_req: Request, { params }: Params) {
       cost: {
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
-        providerCostUsd: result.providerCostUsd,
-        providerCostRp: result.providerCostRp,
-        platformTokensCharged: result.platformTokensCharge,
+        providerCostUsd: charge.apiCostUsd,
+        providerCostRp: charge.apiCostRp,
+        platformTokensCharged: charge.tokensCharged,
       },
       preEstimate: estimate,
     })
@@ -227,6 +212,17 @@ export async function POST(_req: Request, { params }: Params) {
       })
       .catch(() => {})
 
+    if (err instanceof InsufficientBalanceError) {
+      return Response.json(
+        {
+          success: false,
+          error: 'INSUFFICIENT_TOKEN',
+          message: `Saldo token tidak cukup. Butuh ±${err.tokensRequired.toLocaleString('id-ID')} token.`,
+          required: err.tokensRequired,
+        },
+        { status: 402 },
+      )
+    }
     if (err instanceof Anthropic.RateLimitError) {
       return jsonError('AI service sedang sibuk, coba lagi sebentar.', 429)
     }

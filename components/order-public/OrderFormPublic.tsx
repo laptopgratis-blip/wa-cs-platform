@@ -90,6 +90,7 @@ interface FormProps {
   socialProofEnabled: boolean
   socialProofPosition: 'top' | 'bottom'
   socialProofIntervalSec: number
+  socialProofShowTime: boolean
   ownerName: string
 }
 
@@ -663,6 +664,7 @@ export function OrderFormPublic({
           slug={form.slug}
           position={form.socialProofPosition}
           intervalSec={form.socialProofIntervalSec}
+          showTime={form.socialProofShowTime}
         />
       )}
       {/* Header */}

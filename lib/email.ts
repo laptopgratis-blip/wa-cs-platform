@@ -30,6 +30,51 @@ function getTransporter(): Transporter {
   return cachedTransporter
 }
 
+// OTP auth (login/signup) — kode 6-digit, TTL 5 menit. Mode menentukan
+// subject + intro paragraph supaya user paham konteks.
+export async function sendAuthOtpEmail(
+  email: string,
+  code: string,
+  mode: 'LOGIN' | 'SIGNUP',
+): Promise<void> {
+  const transporter = getTransporter()
+  const subject =
+    mode === 'SIGNUP'
+      ? 'Verifikasi pendaftaran — Hulao'
+      : 'Kode OTP login — Hulao'
+  const intro =
+    mode === 'SIGNUP'
+      ? 'Gunakan kode di bawah untuk menyelesaikan pendaftaran akun Hulao kamu:'
+      : 'Gunakan kode di bawah untuk login ke akun Hulao kamu:'
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 480px; margin: 0 auto; padding: 24px; color: #1f1f1f;">
+      <h2 style="color: #ea580c; margin-bottom: 16px;">${
+        mode === 'SIGNUP' ? 'Verifikasi Pendaftaran' : 'Kode OTP Login'
+      }</h2>
+      <p>Halo,</p>
+      <p>${intro}</p>
+      <div style="margin: 24px 0; padding: 20px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; text-align: center;">
+        <div style="font-family: 'SFMono-Regular', Consolas, monospace; font-size: 32px; font-weight: 700; letter-spacing: 0.5em; color: #c2570a;">
+          ${code}
+        </div>
+      </div>
+      <p style="font-size: 14px; color: #666;">Kode berlaku <strong>5 menit</strong>. Jangan bagikan ke siapa pun, termasuk pihak yang mengaku dari Hulao.</p>
+      <p style="font-size: 14px; color: #666;">Kalau bukan kamu yang minta kode ini, abaikan email ini — akun kamu aman.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="font-size: 12px; color: #999;">Hulao — Email otomatis, jangan dibalas.</p>
+    </div>
+  `
+  await transporter.sendMail({
+    from: defaultFrom(),
+    to: email,
+    subject,
+    html,
+    text:
+      `${intro}\n\nKode OTP: ${code}\n\nBerlaku 5 menit. Jangan bagikan ke siapa pun.\n` +
+      `Kalau bukan kamu yang minta kode ini, abaikan email ini.`,
+  })
+}
+
 export async function sendPasswordResetEmail(email: string, resetUrl: string) {
   const from = process.env.EMAIL_FROM ?? 'Hulao <noreply@hulao.id>'
   const transporter = getTransporter()

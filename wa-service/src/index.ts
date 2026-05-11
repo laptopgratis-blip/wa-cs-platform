@@ -257,9 +257,21 @@ io.on('connection', (socket) => {
   socket.on('subscribe', (sessionId: string) => {
     if (typeof sessionId !== 'string' || !sessionId) return
     socket.join(`session:${sessionId}`)
-    // Kirim state terkini langsung supaya UI tidak kosong sebelum event berikut.
+    // Kirim state terkini langsung supaya UI tidak kosong sebelum event
+    // berikut. Termasuk QR kalau sudah ada — race-condition fix: kalau
+    // Baileys keburu generate QR sebelum client subscribe, client tetap
+    // dapat QR sekarang tanpa harus menunggu QR refresh ~20s.
     const state = manager.get(sessionId)
-    if (state) socket.emit('status', { sessionId, status: state.status })
+    if (state) {
+      socket.emit('status', { sessionId, status: state.status })
+      if (state.qr && state.qrDataUrl) {
+        socket.emit('qr', {
+          sessionId,
+          qr: state.qr,
+          qrDataUrl: state.qrDataUrl,
+        })
+      }
+    }
   })
   socket.on('unsubscribe', (sessionId: string) => {
     if (typeof sessionId !== 'string' || !sessionId) return

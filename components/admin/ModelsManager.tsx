@@ -382,7 +382,7 @@ export function ModelsManager() {
               <TableHead>Nama</TableHead>
               <TableHead>Provider</TableHead>
               <TableHead>Model ID</TableHead>
-              <TableHead className="text-right">Cost/pesan</TableHead>
+              <TableHead className="text-right" title="Legacy: dipakai sebagai pre-flight floor saja. CS Reply charge real dihitung server proporsional dari (input+output tokens) × margin AiFeatureConfig['CS_REPLY'].">Cost/pesan (legacy)</TableHead>
               <TableHead className="text-right">Dipakai</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Aksi</TableHead>

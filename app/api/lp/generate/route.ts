@@ -1,9 +1,9 @@
 // POST /api/lp/generate
 // Body: { lpId, description, imageUrls, style, ctaType, waNumber }
 //
-// Validasi LP owner + saldo token >= 10, panggil Claude (haiku) lewat
-// streaming untuk dapat HTML lengkap, potong 10 token sebagai USAGE,
-// return { html, tokensUsed }.
+// Validasi LP owner + saldo aktif minimal MIN_BALANCE_FOR_AI, panggil Claude
+// (haiku) lewat streaming untuk dapat HTML lengkap, charge user proporsional
+// (executeAiWithCharge dgn featureKey LP_GENERATE), return { html, tokensUsed }.
 import Anthropic from '@anthropic-ai/sdk'
 import type { NextResponse } from 'next/server'
 
@@ -11,37 +11,30 @@ import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { DEFAULT_MODEL, getAnthropicClient } from '@/lib/anthropic'
 import { prisma } from '@/lib/prisma'
 import {
+  executeAiWithCharge,
+  InsufficientBalanceError,
+} from '@/lib/services/ai-generation-log'
+import {
   LP_CTA_TYPES,
   LP_STYLES,
   lpGenerateSchema,
 } from '@/lib/validations/lp-generate'
 
-// Fixed cost per generation. User spec: "Potong 10 token dari balance".
-const TOKENS_PER_GENERATION = 10
 // Threshold minimal saldo token aktif untuk boleh akses AI generate.
 // User free dengan saldo di bawah ini di-block — diarahkan ke alur manual
 // (copy prompt template ke ChatGPT/Claude.ai gratis lalu paste). Tujuan:
-// hemat biaya AI provider untuk user yg tidak generate revenue.
+// hemat biaya AI provider untuk user yg tidak generate revenue. Gate ini
+// terpisah dari skema charge — charge per call proporsional via featureKey.
 const MIN_BALANCE_FOR_AI = 1000
 
 // Max output tokens — HTML landing page bisa panjang. Streaming aman sampai
 // 64K (cap Haiku 4.5).
 const MAX_OUTPUT_TOKENS = 16_000
 
-// Snapshot harga model — sengaja hardcoded supaya tidak butuh JOIN ke AiModel
-// table per call. Kalau Anthropic naikkan harga atau kita switch model,
-// update di sini + (untuk audit historis) row LpGeneration tetap simpan
-// snapshot saat call dilakukan.
-// Sumber: lib/ai-models-list.ts.
-const MODEL_PRICING_USD_PER_1M: Record<string, { input: number; output: number }> = {
-  'claude-haiku-4-5': { input: 1, output: 5 },
-  'claude-sonnet-4-6': { input: 3, output: 15 },
-  'claude-sonnet-4-5': { input: 3, output: 15 },
-  'claude-opus-4-7': { input: 15, output: 75 },
-  'claude-opus-4-5': { input: 15, output: 75 },
-}
-// Fallback rate kalau PricingSettings.usdRate kosong — kira-kira IDR per USD.
-const DEFAULT_USD_RATE = 16_000
+// Estimasi worst-case untuk pre-flight balance check di executeAiWithCharge.
+// Charge real dihitung dari response.usage Anthropic setelah AI sukses.
+const EST_INPUT_TOKENS = 1500
+const EST_OUTPUT_TOKENS = 6000
 
 const SYSTEM_PROMPT = `Kamu adalah expert web developer yang membuat landing page HTML yang indah dan konversi tinggi.
 
@@ -103,17 +96,15 @@ const STYLE_HINT: Record<string, string> = {
     'Casual Friendly — warna hangat & ramah (peach/mint/cream), tipografi rounded, ilustrasi atau emoji ringan, copy santai.',
 }
 
-// Build CTA instruction based on ctaType + waNumber
 function buildCtaInstruction(
   ctaType: string,
   waNumber: string | undefined,
-  description: string,
+  _description: string,
 ): string {
   const labelMap = Object.fromEntries(LP_CTA_TYPES.map((c) => [c.value, c.label]))
   const label = labelMap[ctaType] ?? 'Klik di Sini'
 
   if (ctaType === 'WHATSAPP' && waNumber) {
-    // wa.me link dengan pre-filled message yang singkat & generic.
     const preMsg = encodeURIComponent(
       `Halo, saya tertarik dengan produk Anda. Bisa info lebih lanjut?`,
     )
@@ -144,7 +135,6 @@ export async function POST(req: Request) {
   const { lpId, description, imageUrls, style, ctaType, waNumber } = parsed.data
 
   try {
-    // 1. Validasi owner LP
     const lp = await prisma.landingPage.findUnique({
       where: { id: lpId },
       select: { id: true, userId: true },
@@ -152,12 +142,7 @@ export async function POST(req: Request) {
     if (!lp) return jsonError('Landing page tidak ditemukan', 404)
     if (lp.userId !== session.user.id) return jsonError('Forbidden', 403)
 
-    // 2. Cek saldo token. Dua threshold:
-    //    - MIN_BALANCE_FOR_AI (1000): minimum untuk akses fitur AI generate.
-    //      Kalau di bawah ini, user diarahkan ke alur manual (copy prompt
-    //      template). Hemat biaya AI provider untuk user free yg low LTV.
-    //    - TOKENS_PER_GENERATION (10): biaya per panggilan; di-charge setelah
-    //      AI sukses respond.
+    // Gate: minimum saldo aktif untuk akses AI generate (UX, bukan charge).
     const balance = await prisma.tokenBalance.findUnique({
       where: { userId: session.user.id },
       select: { balance: true },
@@ -176,7 +161,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // 3. Build user prompt
     const styleLabel =
       LP_STYLES.find((s) => s.value === style)?.label ?? style
     const ctaInstruction = buildCtaInstruction(ctaType, waNumber, description)
@@ -199,37 +183,54 @@ export async function POST(req: Request) {
       `Mulai langsung dengan <!DOCTYPE html>. Tanpa penjelasan apapun.`,
     ].join('\n')
 
-    // 4. Panggil Claude pakai streaming (HTML bisa panjang).
-    //    .finalMessage() collect semua chunk jadi satu Message object.
     const client = getAnthropicClient()
-    let html = ''
-    let inputTokens = 0
-    let outputTokens = 0
 
+    let charge
+    let html: string
     try {
-      const stream = client.messages.stream({
-        model: DEFAULT_MODEL,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userPrompt }],
+      const result = await executeAiWithCharge<string>({
+        featureKey: 'LP_GENERATE',
+        userId: session.user.id,
+        ctx: {
+          referencePrefix: `lp_generate:${lpId}`,
+          description: 'Generate LP AI',
+          subjectType: 'LP',
+          subjectId: lpId,
+          estimateInputTokens: EST_INPUT_TOKENS,
+          estimateOutputTokens: EST_OUTPUT_TOKENS,
+          aiCall: async () => {
+            const stream = client.messages.stream({
+              model: DEFAULT_MODEL,
+              max_tokens: MAX_OUTPUT_TOKENS,
+              system: SYSTEM_PROMPT,
+              messages: [{ role: 'user', content: userPrompt }],
+            })
+            const final = await stream.finalMessage()
+            const text = final.content
+              .filter(
+                (b: Anthropic.ContentBlock): b is Anthropic.TextBlock =>
+                  b.type === 'text',
+              )
+              .map((b: Anthropic.TextBlock) => b.text)
+              .join('')
+              .trim()
+            return {
+              result: stripCodeFence(text),
+              inputTokens: final.usage.input_tokens,
+              outputTokens: final.usage.output_tokens,
+            }
+          },
+        },
       })
-
-      const final = await stream.finalMessage()
-
-      // Ambil teks dari content blocks (cuma type=text yang relevan).
-      html = final.content
-        .filter(
-          (b: Anthropic.ContentBlock): b is Anthropic.TextBlock =>
-            b.type === 'text',
-        )
-        .map((b: Anthropic.TextBlock) => b.text)
-        .join('')
-        .trim()
-
-      inputTokens = final.usage.input_tokens
-      outputTokens = final.usage.output_tokens
+      html = result.result
+      charge = result.charge
     } catch (err) {
-      // Pakai typed exception classes (anti string-matching error msg).
+      if (err instanceof InsufficientBalanceError) {
+        return jsonError(
+          `Saldo token tidak cukup. Butuh ±${err.tokensRequired} token.`,
+          402,
+        )
+      }
       if (err instanceof Anthropic.RateLimitError) {
         return jsonError(
           'AI service sedang sibuk, coba lagi sebentar lagi.',
@@ -247,74 +248,22 @@ export async function POST(req: Request) {
       return jsonError('AI tidak mengembalikan HTML, coba lagi.', 502)
     }
 
-    // 5. Bersihkan output — kadang AI tetap bungkus dengan ```html walau diminta tidak.
-    html = stripCodeFence(html)
-
-    // 6. Potong token user secara atomic. Kalau race condition saldo habis
-    //    di antara cek (step 2) dan sini, return 402 (HTML hilang — user bisa
-    //    retry setelah top-up).
-    const decrement = await prisma.$transaction(async (tx) => {
-      const updated = await tx.tokenBalance.updateMany({
-        where: {
-          userId: session.user.id,
-          balance: { gte: TOKENS_PER_GENERATION },
-        },
-        data: {
-          balance: { decrement: TOKENS_PER_GENERATION },
-          totalUsed: { increment: TOKENS_PER_GENERATION },
-        },
-      })
-      if (updated.count === 0) return null
-
-      await tx.tokenTransaction.create({
-        data: {
-          userId: session.user.id,
-          amount: -TOKENS_PER_GENERATION,
-          type: 'USAGE',
-          description: 'Generate LP AI',
-          reference: lpId,
-        },
-      })
-      return TOKENS_PER_GENERATION
-    })
-
-    if (decrement === null) {
-      // Sudah panggil AI tapi gak bisa charge. Beri tahu user.
-      return jsonError(
-        'Saldo token habis selama generasi. Top-up dulu lalu generate ulang.',
-        402,
-      )
-    }
-
-    // Audit cost — best-effort. Pakai snapshot harga supaya audit historis
-    // tetap akurat meski admin update harga model belakangan. Gagal di sini
-    // tidak boleh menggagalkan response (user sudah dapat HTML + sudah dipotong).
-    const pricing =
-      MODEL_PRICING_USD_PER_1M[DEFAULT_MODEL] ??
-      // Fallback ke Haiku — model kita dipakai sekarang. Cegah cost=0 kalau
-      // suatu hari DEFAULT_MODEL diganti tanpa update tabel di atas.
-      MODEL_PRICING_USD_PER_1M['claude-haiku-4-5']
-    const settings = await prisma.pricingSettings
-      .findFirst({ select: { usdRate: true } })
-      .catch(() => null)
-    const usdRate = settings?.usdRate ?? DEFAULT_USD_RATE
-    const providerCostUsd =
-      (inputTokens / 1_000_000) * pricing.input +
-      (outputTokens / 1_000_000) * pricing.output
-    const providerCostRp = providerCostUsd * usdRate
+    // Audit per-LP di LpGeneration — sumber untuk /api/lp/generate/stats &
+    // profitability summary. AiGenerationLog sudah jadi source of truth
+    // unified; LpGeneration tetap dipertahankan untuk LP-specific reporting.
     await prisma.lpGeneration
       .create({
         data: {
           lpId,
           userId: session.user.id,
-          model: DEFAULT_MODEL,
-          inputTokens,
-          outputTokens,
-          inputPricePer1MUsd: pricing.input,
-          outputPricePer1MUsd: pricing.output,
-          providerCostUsd,
-          providerCostRp,
-          platformTokensCharged: TOKENS_PER_GENERATION,
+          model: charge.modelName,
+          inputTokens: charge.inputTokens,
+          outputTokens: charge.outputTokens,
+          inputPricePer1MUsd: charge.pricingSnapshot.inputPricePer1M,
+          outputPricePer1MUsd: charge.pricingSnapshot.outputPricePer1M,
+          providerCostUsd: charge.apiCostUsd,
+          providerCostRp: charge.apiCostRp,
+          platformTokensCharged: charge.tokensCharged,
         },
       })
       .catch((err) => {
@@ -323,10 +272,12 @@ export async function POST(req: Request) {
 
     return jsonOk({
       html,
-      tokensUsed: TOKENS_PER_GENERATION,
-      // Token AI provider (untuk transparansi, bukan untuk billing).
-      aiUsage: { inputTokens, outputTokens },
-      providerCost: { usd: providerCostUsd, rp: providerCostRp },
+      tokensUsed: charge.tokensCharged,
+      aiUsage: {
+        inputTokens: charge.inputTokens,
+        outputTokens: charge.outputTokens,
+      },
+      providerCost: { usd: charge.apiCostUsd, rp: charge.apiCostRp },
     })
   } catch (err) {
     console.error('[POST /api/lp/generate] gagal:', err)
@@ -334,10 +285,8 @@ export async function POST(req: Request) {
   }
 }
 
-// Strip ```html ... ``` fence kalau AI bandel kasih markdown.
 function stripCodeFence(text: string): string {
   const t = text.trim()
-  // ```html\n...\n``` atau ```\n...\n```
   const match = t.match(/^```(?:html|HTML)?\s*\n([\s\S]*?)\n```\s*$/)
   if (match && match[1]) return match[1].trim()
   return t

@@ -88,6 +88,9 @@ export async function POST(req: Request) {
         conversionLabelPurchase: data.conversionLabelPurchase ?? null,
         testEventCode: data.testEventCode ?? null,
         isTestMode: data.isTestMode,
+        triggerOnBuyerProofUpload: data.triggerOnBuyerProofUpload,
+        triggerOnAdminProofUpload: data.triggerOnAdminProofUpload,
+        triggerOnAdminMarkPaid: data.triggerOnAdminMarkPaid,
         isActive: data.isActive,
       },
     })

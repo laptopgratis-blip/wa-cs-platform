@@ -24,14 +24,52 @@ import { internalApi, type InternalSoulConfig } from './internal-api.js'
 import { resolvePhoneNumber } from './lib/jid-resolver.js'
 import { tokenChecker } from './token-checker.js'
 
-// Hitung field cost untuk pesan AI dari usage provider + harga model +
-// snapshot pricing settings. Output langsung dipakai sebagai body
-// saveMessage. Kalau usage hilang (mis. provider tidak mengembalikan),
-// field tetap dikirim sebagai 0 supaya dashboard punya data yang konsisten.
+// Cache version Baileys di module-level. fetchLatestBaileysVersion() HTTP
+// ke GitHub setiap call — bisa 1-5s lat. Cache 1 jam, refresh background.
+// Kalau call pertama belum selesai, semua connect await Promise yang sama.
+const BAILEYS_VERSION_TTL_MS = 60 * 60 * 1000
+let cachedVersion: { value: number[] | undefined; fetchedAt: number } | null = null
+let inflightVersionFetch: Promise<number[] | undefined> | null = null
+
+async function getBaileysVersionCached(): Promise<number[] | undefined> {
+  const now = Date.now()
+  if (cachedVersion && now - cachedVersion.fetchedAt < BAILEYS_VERSION_TTL_MS) {
+    return cachedVersion.value
+  }
+  if (inflightVersionFetch) return inflightVersionFetch
+  inflightVersionFetch = (async () => {
+    try {
+      // Timeout 3 detik supaya tidak block ke koneksi WA — Baileys fallback ke
+      // versi bawaan kalau undefined.
+      const fetched = await Promise.race([
+        fetchLatestBaileysVersion().then((r) => r.version),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
+      ])
+      cachedVersion = { value: fetched, fetchedAt: Date.now() }
+      return fetched
+    } catch {
+      cachedVersion = { value: undefined, fetchedAt: Date.now() }
+      return undefined
+    } finally {
+      inflightVersionFetch = null
+    }
+  })()
+  return inflightVersionFetch
+}
+
+// Build cost fields untuk saveMessage dari real usage AI provider + hasil
+// chargeCsReply yang sudah dihitung server (tokensCharged, apiCostRp,
+// revenueRp, profitRp via skema fair-pricing AiFeatureConfig['CS_REPLY']).
+interface ChargeFields {
+  tokensCharged: number
+  apiCostRp: number
+  revenueRp: number
+  profitRp: number
+}
+
 function buildCostFields(
-  model: NonNullable<InternalSoulConfig['model']>,
-  pricing: InternalSoulConfig['pricing'],
   usage: AiUsage | undefined,
+  charge: ChargeFields,
 ): {
   apiInputTokens: number
   apiOutputTokens: number
@@ -40,22 +78,13 @@ function buildCostFields(
   revenueRp: number
   profitRp: number
 } {
-  const inputTokens = usage?.inputTokens ?? 0
-  const outputTokens = usage?.outputTokens ?? 0
-  const apiCostUsd =
-    (inputTokens * model.inputPricePer1M +
-      outputTokens * model.outputPricePer1M) /
-    1_000_000
-  const apiCostRp = apiCostUsd * pricing.usdRate
-  const tokensCharged = model.costPerMessage
-  const revenueRp = tokensCharged * pricing.pricePerToken
   return {
-    apiInputTokens: inputTokens,
-    apiOutputTokens: outputTokens,
-    apiCostRp,
-    tokensCharged,
-    revenueRp,
-    profitRp: revenueRp - apiCostRp,
+    apiInputTokens: usage?.inputTokens ?? 0,
+    apiOutputTokens: usage?.outputTokens ?? 0,
+    apiCostRp: charge.apiCostRp,
+    tokensCharged: charge.tokensCharged,
+    revenueRp: charge.revenueRp,
+    profitRp: charge.profitRp,
   }
 }
 import type {
@@ -134,11 +163,9 @@ export class WaManager {
     await fs.mkdir(folder, { recursive: true })
 
     const { state: authState, saveCreds } = await useMultiFileAuthState(folder)
-    // fetchLatestBaileysVersion bisa gagal kalau tidak ada internet — Baileys
-    // akan pakai fallback bawaan kalau `version` undefined.
-    const version = await fetchLatestBaileysVersion()
-      .then((r) => r.version)
-      .catch(() => undefined)
+    // Pakai cached version (lihat getBaileysVersionCached di atas). Hindari
+    // HTTP GitHub call setiap session baru — bottleneck utama QR latency.
+    const version = await getBaileysVersionCached()
 
     const entry: SessionEntry = existing ?? {
       state: this.makeInitialState(sessionId),
@@ -609,14 +636,20 @@ export class WaManager {
         console.error(`[wa-manager:${sessionId}] getSoul gagal:`, cfg.error)
         return
       }
-      const { soul, model, userId, pricing } = cfg.data
+      const { soul, model, userId } = cfg.data
       if (!soul || !model) {
         // Belum dikonfigurasi user — biarkan, tidak balas.
         return
       }
 
-      // 3. Cek saldo token sebelum panggil AI.
-      const enough = await tokenChecker.hasEnough(userId, model.costPerMessage)
+      // 3. Pre-flight balance check — rough estimate dari avgTokensPerMessage.
+      // Charge real dihitung server SETELAH AI sukses berdasarkan response.usage
+      // (skema fair-pricing: proporsional terhadap penggunaan token).
+      const preflightAmount = Math.max(
+        model.costPerMessage,
+        Math.ceil(model.avgTokensPerMessage / 50), // rough floor (1/50 of avg)
+      )
+      const enough = await tokenChecker.hasEnough(userId, preflightAmount)
       if (!enough) {
         this.updateState(entry, {
           status: 'PAUSED',
@@ -652,12 +685,15 @@ export class WaManager {
         return
       }
 
-      // 5. Potong token (atomic). Kalau gagal → pause & jangan kirim balasan.
-      const charge = await tokenChecker.charge({
+      // 5. Charge token proporsional — server hitung tokensCharged dari real
+      // (inputTokens, outputTokens) × harga AiModel × margin CS_REPLY config.
+      // Kalau gagal → pause & jangan kirim balasan.
+      const charge = await tokenChecker.chargeCsReply({
         userId,
-        amount: model.costPerMessage,
-        description: `Reply via ${model.modelId}`,
-        reference: sessionId,
+        sessionId,
+        aiModelId: model.id,
+        inputTokens: ai.usage?.inputTokens ?? 0,
+        outputTokens: ai.usage?.outputTokens ?? 0,
       })
       if (!charge.ok) {
         if (charge.insufficient) {
@@ -681,8 +717,29 @@ export class WaManager {
         console.error(`[wa-manager:${sessionId}] sendMessage gagal:`, err)
       }
 
+      // 6b. Kirim attachments dari knowledge IMAGE/FILE — fire-and-forget,
+      // jangan block flow. wa-manager auto-attach supaya AI tidak perlu
+      // request manual ke admin ("admin akan kirim foto/bukti").
+      const attachments = kb.success ? kb.data?.attachments ?? [] : []
+      console.log(
+        `[wa-manager:${sessionId}] reply done · attachments=${attachments.length}`,
+      )
+      if (attachments.length > 0 && entry.socket) {
+        void sendKnowledgeAttachments(
+          entry.socket,
+          remoteJid,
+          attachments,
+          sessionId,
+        )
+      }
+
       // 7. Simpan balasan AI ke DB (history untuk percakapan berikutnya).
-      const cost = buildCostFields(model, pricing, ai.usage)
+      const cost = buildCostFields(ai.usage, {
+        tokensCharged: charge.tokensCharged ?? 0,
+        apiCostRp: charge.apiCostRp ?? 0,
+        revenueRp: charge.revenueRp ?? 0,
+        profitRp: charge.profitRp ?? 0,
+      })
       await internalApi
         .saveMessage({
           sessionId,
@@ -691,7 +748,7 @@ export class WaManager {
           role: 'AI',
           source: 'AI',
           externalMsgId: aiMsgId,
-          tokensUsed: model.costPerMessage,
+          tokensUsed: cost.tokensCharged,
           ...cost,
         })
         .catch((err) =>
@@ -750,13 +807,17 @@ export class WaManager {
     if (!cfg.success || !cfg.data) {
       return { outcome: 'no_soul_or_model', error: cfg.error }
     }
-    const { soul, model, userId, pricing } = cfg.data
+    const { soul, model, userId } = cfg.data
     if (!soul || !model) {
       return { outcome: 'no_soul_or_model', error: 'Soul/model belum di-set' }
     }
 
-    // 3. Cek saldo token.
-    const enough = await tokenChecker.hasEnough(userId, model.costPerMessage)
+    // 3. Cek saldo token (pre-flight rough estimate).
+    const preflightAmount = Math.max(
+      model.costPerMessage,
+      Math.ceil(model.avgTokensPerMessage / 50),
+    )
+    const enough = await tokenChecker.hasEnough(userId, preflightAmount)
     if (!enough) {
       if (entry) {
         // Session ada di memory → updateState juga persist ke DB (lihat updateState).
@@ -807,12 +868,13 @@ export class WaManager {
       return { outcome: 'ai_error', error: ai.error }
     }
 
-    // 5. Potong token (atomic).
-    const charge = await tokenChecker.charge({
+    // 5. Charge token proporsional dari real usage AI.
+    const charge = await tokenChecker.chargeCsReply({
       userId,
-      amount: model.costPerMessage,
-      description: `Reply via ${model.modelId} (test)`,
-      reference: sessionId,
+      sessionId,
+      aiModelId: model.id,
+      inputTokens: ai.usage?.inputTokens ?? 0,
+      outputTokens: ai.usage?.outputTokens ?? 0,
     })
     if (!charge.ok) {
       if (charge.insufficient && entry) {
@@ -832,14 +894,19 @@ export class WaManager {
     }
 
     // 7. Save reply AI ke DB.
-    const cost = buildCostFields(model, pricing, ai.usage)
+    const cost = buildCostFields(ai.usage, {
+      tokensCharged: charge.tokensCharged ?? 0,
+      apiCostRp: charge.apiCostRp ?? 0,
+      revenueRp: charge.revenueRp ?? 0,
+      profitRp: charge.profitRp ?? 0,
+    })
     await internalApi
       .saveMessage({
         sessionId,
         phoneNumber: from,
         content: ai.reply,
         role: 'AI',
-        tokensUsed: model.costPerMessage,
+        tokensUsed: cost.tokensCharged,
         ...cost,
       })
       .catch((err) =>
@@ -849,7 +916,7 @@ export class WaManager {
     return {
       outcome: 'replied',
       reply: ai.reply,
-      tokensCharged: model.costPerMessage,
+      tokensCharged: cost.tokensCharged,
     }
   }
 
@@ -925,6 +992,89 @@ export class WaManager {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Resolve fileUrl jadi URL absolut yang bisa di-fetch Baileys. Knowledge file
+// disimpan sebagai path relative `/uploads/...` di Next.js; eksternal URL
+// (http/https) dilewatkan apa adanya.
+function resolveAttachmentUrl(fileUrl: string): string {
+  if (!fileUrl) return fileUrl
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl
+  const base = process.env.NEXTJS_URL || 'http://localhost:3000'
+  // Pastikan tidak double-slash.
+  return base.replace(/\/$/, '') + (fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl)
+}
+
+// Kirim list attachment knowledge ke customer setelah balasan teks AI.
+// Best-effort: kalau satu gagal, lanjut yang berikutnya. Tunda 600ms antar
+// kirim supaya WA tidak rate-limit & terkesan natural (bukan spam).
+async function sendKnowledgeAttachments(
+  socket: WASocket,
+  jid: string,
+  attachments: Array<{
+    fileUrl: string
+    title: string
+    caption: string | null
+    contentType: string
+  }>,
+  sessionId: string,
+): Promise<void> {
+  // Cap supaya tidak spam: max 3 attachment per balasan.
+  const list = attachments.slice(0, 3)
+  for (let i = 0; i < list.length; i++) {
+    const att = list[i]
+    if (!att?.fileUrl) continue
+    // Jeda kecil antar attachment & sebelum attachment pertama (kasih jeda
+    // dari teks AI yang baru terkirim).
+    await sleep(i === 0 ? 800 : 600)
+    try {
+      const url = resolveAttachmentUrl(att.fileUrl)
+      const caption = att.caption?.trim() || undefined
+      console.log(
+        `[wa-manager:${sessionId}] sending attachment "${att.title}" type=${att.contentType} url=${url}`,
+      )
+      if (att.contentType === 'IMAGE') {
+        await socket.sendMessage(jid, {
+          image: { url },
+          caption,
+        })
+      } else {
+        // FILE generic — kirim sebagai document.
+        // Tebak filename + mimetype dari extension URL.
+        const fname =
+          decodeURIComponent(url.split('/').pop() || 'file.bin').slice(0, 120) ||
+          att.title.slice(0, 60) ||
+          'attachment'
+        const ext = (fname.split('.').pop() || '').toLowerCase()
+        const mimeMap: Record<string, string> = {
+          pdf: 'application/pdf',
+          doc: 'application/msword',
+          docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          xls: 'application/vnd.ms-excel',
+          xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          ppt: 'application/vnd.ms-powerpoint',
+          pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          txt: 'text/plain',
+          csv: 'text/csv',
+          zip: 'application/zip',
+          mp3: 'audio/mpeg',
+          mp4: 'video/mp4',
+        }
+        const mimetype = mimeMap[ext] || 'application/octet-stream'
+        await socket.sendMessage(jid, {
+          document: { url },
+          fileName: fname,
+          mimetype,
+          caption,
+        })
+      }
+    } catch (err) {
+      console.error(
+        `[wa-manager:${sessionId}] sendKnowledgeAttachments "${att.title}" gagal:`,
+        err,
+      )
+    }
+  }
 }
 
 // Ambil teks dari pesan WA. Beberapa varian:

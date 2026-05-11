@@ -249,10 +249,11 @@ export function PricingCalculator({
         a.pricePerToken > 0
           ? Math.ceil(desiredCharge / a.pricePerToken)
           : f.floorTokens
-      const tokensCharged = Math.min(
-        f.capTokens,
-        Math.max(f.floorTokens, tokensRaw),
-      )
+      // capTokens 0 = tidak di-enforce (skema fair-pricing, charge proporsional
+      // ke atas tanpa batas). Backward compat: kalau > 0, tetap clamp.
+      const baseCharge = Math.max(f.floorTokens, tokensRaw)
+      const tokensCharged =
+        f.capTokens > 0 ? Math.min(f.capTokens, baseCharge) : baseCharge
       const revenueIdr = tokensCharged * a.pricePerToken
       const profitIdr = revenueIdr - rawCostIdr
       const marginPct = revenueIdr > 0 ? (profitIdr / revenueIdr) * 100 : 0

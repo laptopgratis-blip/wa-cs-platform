@@ -18,6 +18,11 @@ import OpenAI from 'openai'
 
 import { decrypt } from '@/lib/crypto'
 import {
+  executeAiWithCharge,
+  InsufficientBalanceError,
+  type ComputedCharge,
+} from '@/lib/services/ai-generation-log'
+import {
   formatKnowledgeForPrompt,
   type RetrievedKnowledge,
 } from '@/lib/services/knowledge-retriever'
@@ -386,11 +391,11 @@ function conversationToText(conversation: ConversationTurn[]): string {
     .join('\n\n')
 }
 
-export async function evaluateConversation(
+async function evaluateConversationRaw(
   conversation: ConversationTurn[],
   sellerLabel: string,
   sellerContext: string,
-): Promise<EvaluationResult> {
+): Promise<{ result: EvaluationResult; inputTokens: number; outputTokens: number }> {
   const client = await getAnthropic()
   const sellerSnippet = sellerLabel
 
@@ -443,30 +448,41 @@ export async function evaluateConversation(
     .join('')
     .trim()
 
+  const inputTokens = res.usage?.input_tokens ?? 0
+  const outputTokens = res.usage?.output_tokens ?? 0
+
   // Coba parse JSON langsung; kalau gagal, ekstrak object pertama.
   const json = extractJsonObject(raw)
   if (!json) {
     return {
-      score: 0,
-      strengths: [],
-      weaknesses: [],
-      suggestions: ['Evaluator tidak mengembalikan JSON yang valid. Cek log.'],
-      outcome: 'INCONCLUSIVE',
-      closingRound: null,
-      mainObjection: null,
-      summary: 'Evaluasi gagal di-parse — output evaluator tidak terstruktur.',
+      result: {
+        score: 0,
+        strengths: [],
+        weaknesses: [],
+        suggestions: ['Evaluator tidak mengembalikan JSON yang valid. Cek log.'],
+        outcome: 'INCONCLUSIVE',
+        closingRound: null,
+        mainObjection: null,
+        summary: 'Evaluasi gagal di-parse — output evaluator tidak terstruktur.',
+      },
+      inputTokens,
+      outputTokens,
     }
   }
 
   return {
-    score: clampScore(json.score),
-    strengths: toStringArray(json.strengths),
-    weaknesses: toStringArray(json.weaknesses),
-    suggestions: toStringArray(json.suggestions),
-    outcome: normalizeOutcome(json.outcome),
-    closingRound: typeof json.closingRound === 'number' ? json.closingRound : null,
-    mainObjection: typeof json.mainObjection === 'string' ? json.mainObjection : null,
-    summary: typeof json.summary === 'string' ? json.summary.slice(0, 250) : '',
+    result: {
+      score: clampScore(json.score),
+      strengths: toStringArray(json.strengths),
+      weaknesses: toStringArray(json.weaknesses),
+      suggestions: toStringArray(json.suggestions),
+      outcome: normalizeOutcome(json.outcome),
+      closingRound: typeof json.closingRound === 'number' ? json.closingRound : null,
+      mainObjection: typeof json.mainObjection === 'string' ? json.mainObjection : null,
+      summary: typeof json.summary === 'string' ? json.summary.slice(0, 250) : '',
+    },
+    inputTokens,
+    outputTokens,
   }
 }
 
@@ -695,10 +711,42 @@ export async function runSimulation(simulationId: string): Promise<void> {
       const messages = toAlternatingMessages(conversation, currentRole)
 
       let result: AiCallResult
+      let turnCharge: ComputedCharge
       try {
-        result = await callAi(model, systemPrompt, messages, pricing)
+        const exec = await executeAiWithCharge<AiCallResult>({
+          featureKey: 'SOUL_SIM',
+          userId: sim.triggeredBy,
+          ctx: {
+            referencePrefix: `soul_sim:${simulationId}:r${round}`,
+            description: `Soul Lab #${simulationId.slice(0, 8)} ronde ${round} (${currentRole})`,
+            subjectType: 'SOUL_SIM',
+            subjectId: simulationId,
+            estimateInputTokens: 800,
+            estimateOutputTokens: MAX_TOKENS_PER_TURN,
+            priceOverride: {
+              modelName: model.modelId,
+              inputPricePer1M: model.inputPricePer1M,
+              outputPricePer1M: model.outputPricePer1M,
+            },
+            aiCall: async () => {
+              const r = await callAi(model, systemPrompt, messages, pricing)
+              return {
+                result: r,
+                inputTokens: r.inputTokens,
+                outputTokens: r.outputTokens,
+              }
+            },
+          },
+        })
+        result = exec.result
+        turnCharge = exec.charge
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg =
+          err instanceof InsufficientBalanceError
+            ? `Saldo token habis di ronde ${round}. Top-up dulu lalu jalankan simulasi baru.`
+            : err instanceof Error
+              ? err.message
+              : String(err)
         await prisma.soulSimulation.update({
           where: { id: simulationId },
           data: {
@@ -724,7 +772,9 @@ export async function runSimulation(simulationId: string): Promise<void> {
           conversation: conversation as unknown as object,
           totalInputTokens: { increment: result.inputTokens },
           totalOutputTokens: { increment: result.outputTokens },
-          totalCostRp: { increment: result.costRp },
+          // totalCostRp = akumulasi provider cost (Rp). Charge user sudah
+          // dilakukan via executeAiWithCharge per turn.
+          totalCostRp: { increment: turnCharge.apiCostRp },
         },
       })
 
@@ -744,14 +794,43 @@ export async function runSimulation(simulationId: string): Promise<void> {
       return
     }
 
-    // Evaluasi pakai Claude Sonnet.
+    // Evaluasi pakai Claude Sonnet. Charge via executeAiWithCharge dgn
+    // priceOverride Sonnet pricing.
     const sellerLabel = `${sim.sellerPersonality.name} — ${sim.sellerStyle.name}`
     let evaluation: EvaluationResult
+    let evalCharge: ComputedCharge | null = null
     try {
-      evaluation = await evaluateConversation(conversation, sellerLabel, sim.sellerContext)
+      const exec = await executeAiWithCharge<EvaluationResult>({
+        featureKey: 'SOUL_SIM',
+        userId: sim.triggeredBy,
+        ctx: {
+          referencePrefix: `soul_sim:${simulationId}:eval`,
+          description: `Soul Lab #${simulationId.slice(0, 8)} evaluator`,
+          subjectType: 'SOUL_SIM',
+          subjectId: simulationId,
+          estimateInputTokens: 3000,
+          estimateOutputTokens: 600,
+          priceOverride: {
+            modelName: EVALUATOR_MODEL,
+            inputPricePer1M: 3,
+            outputPricePer1M: 15,
+          },
+          aiCall: async () => {
+            const { result, inputTokens, outputTokens } =
+              await evaluateConversationRaw(conversation, sellerLabel, sim.sellerContext)
+            return { result, inputTokens, outputTokens }
+          },
+        },
+      })
+      evaluation = exec.result
+      evalCharge = exec.charge
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      // Tetap mark COMPLETED supaya conversation bisa dilihat — evaluasi null.
+      const msg =
+        err instanceof InsufficientBalanceError
+          ? 'Saldo token habis sebelum evaluator selesai.'
+          : err instanceof Error
+            ? err.message
+            : String(err)
       await prisma.soulSimulation.update({
         where: { id: simulationId },
         data: {
@@ -763,14 +842,6 @@ export async function runSimulation(simulationId: string): Promise<void> {
       return
     }
 
-    // Tambah cost evaluator (perkiraan token — Sonnet tidak return usage di
-    // sini secara struktural; pakai estimasi panjang prompt).
-    const evalCostRp = calcCostRp(3000, 600, {
-      usdRate,
-      inputPricePer1M: 3,
-      outputPricePer1M: 15,
-    })
-
     await prisma.soulSimulation.update({
       where: { id: simulationId },
       data: {
@@ -779,14 +850,9 @@ export async function runSimulation(simulationId: string): Promise<void> {
         evaluationScore: evaluation.score,
         evaluationData: evaluation as unknown as object,
         outcome: evaluation.outcome,
-        totalCostRp: { increment: evalCostRp },
+        totalCostRp: { increment: evalCharge.apiCostRp },
       },
     })
-
-    // Deduct dari saldo admin yang trigger — pakai TokenBalance.totalUsed
-    // sebagai counter (tidak potong "balance" karena cost-nya Rp, bukan token
-    // platform). Catat di TokenTransaction sebagai ADJUSTMENT supaya audit.
-    await deductSimulationCost(sim.triggeredBy, simulationId)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error(`[soul-simulation] ${simulationId} unexpected error:`, err)
@@ -799,45 +865,6 @@ export async function runSimulation(simulationId: string): Promise<void> {
       },
     })
   }
-}
-
-// ─────────────────────────────────────────
-// Cost deduction — catat sebagai TokenTransaction tipe ADJUSTMENT (negatif).
-// Konversi Rp → token platform pakai PricingSettings.pricePerToken.
-// ─────────────────────────────────────────
-
-async function deductSimulationCost(userId: string, simulationId: string): Promise<void> {
-  const sim = await prisma.soulSimulation.findUnique({
-    where: { id: simulationId },
-    select: { totalCostRp: true },
-  })
-  if (!sim) return
-
-  const settings = await prisma.pricingSettings.findFirst()
-  const pricePerToken = settings?.pricePerToken ?? 2
-  // Konversi Rp ke token platform (round up supaya admin selalu bayar minimal).
-  const tokensToDeduct = Math.max(1, Math.ceil(sim.totalCostRp / pricePerToken))
-
-  await prisma.$transaction(async (tx) => {
-    const balance = await tx.tokenBalance.findUnique({ where: { userId } })
-    if (!balance) return // skip kalau admin tidak punya balance row
-    await tx.tokenBalance.update({
-      where: { userId },
-      data: {
-        balance: { decrement: tokensToDeduct },
-        totalUsed: { increment: tokensToDeduct },
-      },
-    })
-    await tx.tokenTransaction.create({
-      data: {
-        userId,
-        amount: -tokensToDeduct,
-        type: 'USAGE',
-        description: `Soul Lab simulation #${simulationId.slice(0, 8)}`,
-        reference: simulationId,
-      },
-    })
-  })
 }
 
 // ─────────────────────────────────────────

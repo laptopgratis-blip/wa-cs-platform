@@ -59,6 +59,9 @@ export interface CreateTransactionResult {
   paymentMethod: string
   paymentName: string // nama channel human-readable, mis. "BRI Virtual Account"
   payCode: string | null // VA number / kode bayar (DIRECT channels)
+  // Total Rupiah yg customer harus bayar (subtotal + fee_customer). Untuk VA
+  // statis, jumlah ini wajib persis — kalau transfer kurang, BCA tolak.
+  customerAmount: number
 }
 
 interface TripayApiResponse<T> {
@@ -167,6 +170,7 @@ export async function createTransaction(
       paymentMethod: body.data.payment_method,
       paymentName: body.data.payment_name,
       payCode: body.data.pay_code ?? null,
+      customerAmount: body.data.amount,
     }
   } catch (err) {
     unwrapAxiosError(err, 'createTransaction')

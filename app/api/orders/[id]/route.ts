@@ -147,19 +147,40 @@ export async function PATCH(req: Request, { params }: Params) {
       },
     })
 
-    // Pixel server-side fire saat transisi ke PAID — fire Purchase. Hanya
-    // untuk e-commerce orders (punya invoiceNumber + orderFormId). Best-
-    // effort, async, tidak block response.
-    if (
-      data.paymentStatus === 'PAID' &&
-      existing.paymentStatus !== 'PAID' &&
-      updated.invoiceNumber &&
-      updated.orderFormId
-    ) {
-      firePixelEventForOrder({
-        orderId: updated.id,
-        eventName: 'Purchase',
-      }).catch(() => {})
+    // Pixel server-side fire — Purchase event dgn granular trigger:
+    //   1. ADMIN_PROOF_UPLOAD: admin set paymentProofUrl dari kosong → ada URL
+    //      (admin input bukti sendiri via dialog, BUKAN dari buyer upload).
+    //      Distinguishing: buyer pakai endpoint terpisah /upload-proof yg tidak
+    //      sentuh PATCH ini. Jadi semua PATCH dgn proofUrl transisi = admin.
+    //   2. ADMIN_MARK_PAID: paymentStatus transisi → PAID via PATCH admin.
+    // Boleh keduanya fire untuk order yang sama dalam satu request kalau admin
+    // upload + mark paid sekaligus — dedup di pixel-fire pastikan tidak double.
+    // Hanya untuk e-commerce orders (invoiceNumber + orderFormId).
+    if (updated.invoiceNumber && updated.orderFormId) {
+      const proofAddedByAdmin =
+        data.paymentProofUrl !== undefined &&
+        data.paymentProofUrl &&
+        data.paymentProofUrl.trim() !== '' &&
+        (!existing.paymentProofUrl || existing.paymentProofUrl.trim() === '')
+
+      if (proofAddedByAdmin) {
+        firePixelEventForOrder({
+          orderId: updated.id,
+          eventName: 'Purchase',
+          trigger: 'ADMIN_PROOF_UPLOAD',
+        }).catch(() => {})
+      }
+
+      if (
+        data.paymentStatus === 'PAID' &&
+        existing.paymentStatus !== 'PAID'
+      ) {
+        firePixelEventForOrder({
+          orderId: updated.id,
+          eventName: 'Purchase',
+          trigger: 'ADMIN_MARK_PAID',
+        }).catch(() => {})
+      }
     }
 
     // LMS auto-enrollment — saat transisi ke PAID, cek items dan upsert

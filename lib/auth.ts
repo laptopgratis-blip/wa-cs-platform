@@ -8,6 +8,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import GoogleProvider from 'next-auth/providers/google'
 import { z } from 'zod'
 
+import { markOtpUsed, OtpError, verifyOtp } from '@/lib/otp/auth-otp'
 import { prisma } from '@/lib/prisma'
 
 const credentialsSchema = z.object({
@@ -53,6 +54,81 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           image: user.image,
           role: user.role,
+        }
+      },
+    }),
+    // OTP login/signup via email atau WA. OTP sudah di-create + dikirim
+    // di POST /api/auth/otp/request; client tinggal kasih otpId+code.
+    // SIGNUP mode: user row dibuat di sini, dengan password=null & email/
+    // phone ditandai verified.
+    CredentialsProvider({
+      id: 'otp',
+      name: 'OTP via Email/WhatsApp',
+      credentials: {
+        otpId: { label: 'OTP ID', type: 'text' },
+        code: { label: 'Kode OTP', type: 'text' },
+      },
+      async authorize(credentials) {
+        const otpId = credentials?.otpId
+        const code = credentials?.code
+        if (!otpId || !code || !/^\d{6}$/.test(code)) {
+          throw new Error('INVALID_INPUT')
+        }
+        try {
+          const otp = await verifyOtp(otpId, code)
+          let user
+          if (otp.mode === 'SIGNUP') {
+            if (!otp.pendingEmail || !otp.pendingPhone) {
+              throw new Error('SIGNUP_DATA_MISSING')
+            }
+            // Race guard: kalau email/phone keburu dipakai akun lain
+            // antara request OTP dan verify, gagal anggun.
+            const conflict = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  { email: otp.pendingEmail },
+                  { phoneNumber: otp.pendingPhone },
+                ],
+              },
+              select: { id: true },
+            })
+            if (conflict) throw new Error('ALREADY_REGISTERED')
+            const now = new Date()
+            user = await prisma.user.create({
+              data: {
+                email: otp.pendingEmail,
+                name: otp.pendingName,
+                phoneNumber: otp.pendingPhone,
+                emailVerified: now,
+                phoneVerified: now,
+                // password=null — user OTP-only. Bisa set password dari
+                // settings nanti kalau mau punya backup login.
+              },
+            })
+            // TokenBalance otomatis dibuat oleh events.createUser di
+            // bawah.
+          } else {
+            if (!otp.userId) throw new Error('USER_MISSING')
+            user = await prisma.user.findUnique({ where: { id: otp.userId } })
+            if (!user) throw new Error('USER_MISSING')
+          }
+          await markOtpUsed(otp.id)
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            role: user.role,
+          }
+        } catch (err) {
+          if (err instanceof OtpError) {
+            // OtpError.code di-expose ke client lewat signIn({redirect:false})
+            // .error supaya UI bisa decide: tampil "kode salah" / "expired" /
+            // "kirim ulang".
+            throw new Error(err.code)
+          }
+          if (err instanceof Error) throw err
+          throw new Error('UNKNOWN_ERROR')
         }
       },
     }),

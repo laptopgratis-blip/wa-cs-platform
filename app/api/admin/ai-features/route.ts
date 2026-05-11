@@ -30,7 +30,8 @@ const createSchema = z.object({
   outputPricePer1M: z.number().min(0).max(1000),
   platformMargin: z.number().min(0.5).max(10).optional(),
   floorTokens: z.number().int().min(0).max(1_000_000).optional(),
-  capTokens: z.number().int().min(100).max(10_000_000).optional(),
+  // capTokens 0 = tidak di-enforce (default skema fair-pricing).
+  capTokens: z.number().int().min(0).max(10_000_000).optional(),
   isActive: z.boolean().optional(),
   description: z.string().max(500).optional(),
 })
@@ -52,9 +53,9 @@ export async function POST(req: Request) {
         modelName: parsed.data.modelName,
         inputPricePer1M: parsed.data.inputPricePer1M,
         outputPricePer1M: parsed.data.outputPricePer1M,
-        platformMargin: parsed.data.platformMargin ?? 1.3,
-        floorTokens: parsed.data.floorTokens ?? 100,
-        capTokens: parsed.data.capTokens ?? 50_000,
+        platformMargin: parsed.data.platformMargin ?? 2.0,
+        floorTokens: parsed.data.floorTokens ?? 10,
+        capTokens: parsed.data.capTokens ?? 0,
         isActive: parsed.data.isActive ?? true,
         description: parsed.data.description,
       },
@@ -77,7 +78,7 @@ const patchSchema = z.object({
   outputPricePer1M: z.number().min(0).max(1000).optional(),
   platformMargin: z.number().min(0.5).max(10).optional(),
   floorTokens: z.number().int().min(0).max(1_000_000).optional(),
-  capTokens: z.number().int().min(100).max(10_000_000).optional(),
+  capTokens: z.number().int().min(0).max(10_000_000).optional(),
   isActive: z.boolean().optional(),
   description: z.string().max(500).nullable().optional(),
 })

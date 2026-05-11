@@ -50,3 +50,6 @@ wa-service/dist/
 secrets/
 .build.log
 .mcp.json
+
+# bank scraper debug screenshots (large binary, rotated)
+bank-scraper/screenshots/

@@ -66,12 +66,17 @@ const baseSchema = z.object({
   serverSideEnabled: z.boolean().default(false),
   // Saat update, accessToken === '' artinya HAPUS / pertahankan existing? Kita
   // pakai konvensi: undefined = tidak diubah, null = hapus, string = set baru.
-  accessToken: z.string().min(1).max(500).nullable().optional(),
+  // Max 2000 — Meta system user / app tokens bisa cukup panjang; 2000 safe.
+  accessToken: z.string().min(1).max(2000).nullable().optional(),
   conversionLabelInitiateCheckout: z.string().max(50).nullable().optional(),
   conversionLabelLead: z.string().max(50).nullable().optional(),
   conversionLabelPurchase: z.string().max(50).nullable().optional(),
   testEventCode: z.string().max(50).nullable().optional(),
   isTestMode: z.boolean().default(false),
+  // Purchase trigger granularity — default: cuma AdminMarkPaid yang true.
+  triggerOnBuyerProofUpload: z.boolean().default(false),
+  triggerOnAdminProofUpload: z.boolean().default(false),
+  triggerOnAdminMarkPaid: z.boolean().default(true),
   isActive: z.boolean().default(true),
 })
 

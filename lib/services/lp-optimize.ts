@@ -1,34 +1,25 @@
-// LP AI Optimization service — orchestrate Sonnet call dengan context dari
+// LP AI Optimization service — orchestrate AI call dengan context dari
 // analytics + chat signals + current HTML, return suggestions + rewritten HTML.
 //
-// Cost charging dinamis: estimate dulu (untuk confirm dialog), execute kemudian.
-// Token charge platform: ceil(providerCostRp × 1.3 / pricePerToken) → 30% margin.
-// Charge dilakukan AKHIR (setelah AI sukses respond) supaya kalau gagal,
-// user tidak dipotong.
+// Pricing: pakai featureKey 'LP_OPTIMIZE' di AiFeatureConfig (admin-tunable).
+// Charge dilakukan via executeAiWithCharge di route handler — service ini
+// fokus ke AI call + parsing saja.
 import Anthropic from '@anthropic-ai/sdk'
 
 import { getAnthropicClient } from '@/lib/anthropic'
 import { prisma } from '@/lib/prisma'
+import { estimateCharge } from '@/lib/services/ai-generation-log'
+import { getAiFeatureConfig } from '@/lib/services/ai-feature-config'
 
-// Haiku 4.5 — DEFAULT untuk LP optimization karena ~2-3x lebih cepat dari
-// Sonnet (200-300 tok/sec vs 50-100) + 3x lebih murah ($1/$5 vs $3/$15).
-// Quality drop kecil untuk HTML rewrite + simple suggestions; suitable untuk
-// majority case. Switch ke Sonnet kalau butuh deep reasoning (Phase berikutnya
-// add toggle "Quality mode" di UI).
+const LP_OPTIMIZE_FEATURE_KEY = 'LP_OPTIMIZE'
+
+// Default fallback kalau AiFeatureConfig belum di-seed (defensive).
 export const OPTIMIZE_MODEL = 'claude-haiku-4-5'
-const MODEL_INPUT_USD_PER_1M = 1
-const MODEL_OUTPUT_USD_PER_1M = 5
 
 // Estimasi token: rough rule chars/4 untuk Indonesian/English campuran.
 const CHARS_PER_TOKEN = 4
 // Output buffer: rewritten HTML ≈ input HTML × 1.0 + suggestions JSON ~2K char.
 const OUTPUT_OVERHEAD_CHARS = 2000
-
-// Margin untuk platform — 30% di atas provider cost.
-const PLATFORM_MARGIN = 1.3
-// Default fallback rates kalau setting kosong.
-const DEFAULT_USD_RATE = 16_000
-const DEFAULT_PRICE_PER_TOKEN_RP = 2
 
 // Haiku output dynamic cap — Haiku 4.5 support up to 64K output token.
 // Floor 32K supaya LP kecil/sedang tetap punya breathing room generous,
@@ -104,12 +95,6 @@ export async function estimateOptimizationCost(input: {
   signalsCount: number
   hasAnalytics: boolean
 }): Promise<CostEstimate> {
-  const settings = await prisma.pricingSettings
-    .findFirst({ select: { usdRate: true, pricePerToken: true } })
-    .catch(() => null)
-  const usdRate = settings?.usdRate ?? DEFAULT_USD_RATE
-  const pricePerToken = settings?.pricePerToken ?? DEFAULT_PRICE_PER_TOKEN_RP
-
   // Strip base64 image dulu — itulah yang akan benar2 dikirim ke AI.
   const originalHtmlChars = input.htmlContent.length
   const { stripped, map } = stripBase64ImagesForPrompt(input.htmlContent)
@@ -123,8 +108,7 @@ export async function estimateOptimizationCost(input: {
 
   const estimatedInputTokens = Math.ceil((htmlChars + contextChars) / CHARS_PER_TOKEN)
   // Output expansion realistic ×1.5 (kompromi antara compact rewrite dan
-  // ambitious rewrite). Selaras dengan OUTPUT_MULTIPLIER di runOptimization
-  // tapi sedikit lebih konservatif supaya estimasi cost tidak over-quote.
+  // ambitious rewrite).
   const estimatedOutputTokens = Math.ceil(
     (htmlChars * 1.5 + OUTPUT_OVERHEAD_CHARS) / CHARS_PER_TOKEN,
   )
@@ -134,15 +118,12 @@ export async function estimateOptimizationCost(input: {
     ? `LP terlalu besar untuk AI optimization (~${estimatedInputTokens.toLocaleString('id-ID')} token, batas ${MAX_INPUT_TOKENS_HARD_LIMIT.toLocaleString('id-ID')}). Coba kurangi panjang HTML atau hapus konten yg tidak perlu.`
     : undefined
 
-  const providerCostUsd =
-    (estimatedInputTokens / 1_000_000) * MODEL_INPUT_USD_PER_1M +
-    (estimatedOutputTokens / 1_000_000) * MODEL_OUTPUT_USD_PER_1M
-  const providerCostRp = providerCostUsd * usdRate
-  const platformChargeRp = providerCostRp * PLATFORM_MARGIN
-  const platformTokensCharge = Math.max(
-    100, // minimum 100 token supaya ada pricing floor (mencegah pajak terlalu kecil)
-    Math.ceil(platformChargeRp / pricePerToken),
-  )
+  // Hitung charge via skema unified (margin/floor/cap dari AiFeatureConfig).
+  const charge = await estimateCharge({
+    featureKey: LP_OPTIMIZE_FEATURE_KEY,
+    estimatedInputTokens,
+    estimatedOutputTokens,
+  })
 
   return {
     htmlChars,
@@ -151,12 +132,12 @@ export async function estimateOptimizationCost(input: {
     contextChars,
     estimatedInputTokens,
     estimatedOutputTokens,
-    providerCostUsd,
-    providerCostRp,
-    platformTokensCharge,
-    platformChargeRp: platformTokensCharge * pricePerToken,
-    usdRate,
-    pricePerTokenRp: pricePerToken,
+    providerCostUsd: charge.apiCostUsd,
+    providerCostRp: charge.apiCostRp,
+    platformTokensCharge: charge.tokensCharged,
+    platformChargeRp: charge.revenueRp,
+    usdRate: charge.pricingSnapshot.usdRate,
+    pricePerTokenRp: charge.pricingSnapshot.pricePerToken,
     exceedsContextLimit,
     contextLimitMessage,
   }
@@ -304,9 +285,6 @@ export interface OptimizationOutput {
   rewrittenHtml: string
   inputTokens: number
   outputTokens: number
-  providerCostUsd: number
-  providerCostRp: number
-  platformTokensCharge: number
 }
 
 export async function runOptimization(input: BuildPromptInput): Promise<OptimizationOutput> {
@@ -327,6 +305,7 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
 
   const userPrompt = buildUserPrompt({ ...input, htmlContent: strippedHtml })
   const client = getAnthropicClient()
+  const model = await getOptimizeModel()
 
   // Dynamic output budget. AI sering ekspansi HTML 1.2-1.8x (tambah testimoni,
   // social-proof per CRO advice). Multiplier ×2 + 5K marker/meta overhead +
@@ -340,7 +319,7 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
   )
 
   const stream = client.messages.stream({
-    model: OPTIMIZE_MODEL,
+    model,
     max_tokens: dynamicMaxOutput,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userPrompt }],
@@ -390,21 +369,6 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
   // Restore base64 images yg di-strip sebelum kirim ke AI.
   parsed.rewrittenHtml = restoreBase64Images(parsed.rewrittenHtml, base64Map)
 
-  // Provider cost actual.
-  const providerCostUsd =
-    (inputTokens / 1_000_000) * MODEL_INPUT_USD_PER_1M +
-    (outputTokens / 1_000_000) * MODEL_OUTPUT_USD_PER_1M
-  const settings = await prisma.pricingSettings
-    .findFirst({ select: { usdRate: true, pricePerToken: true } })
-    .catch(() => null)
-  const usdRate = settings?.usdRate ?? DEFAULT_USD_RATE
-  const pricePerToken = settings?.pricePerToken ?? DEFAULT_PRICE_PER_TOKEN_RP
-  const providerCostRp = providerCostUsd * usdRate
-  const platformTokensCharge = Math.max(
-    100,
-    Math.ceil((providerCostRp * PLATFORM_MARGIN) / pricePerToken),
-  )
-
   return {
     suggestions: parsed.suggestions,
     focusAreas: parsed.focusAreas,
@@ -413,9 +377,18 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
     rewrittenHtml: parsed.rewrittenHtml,
     inputTokens,
     outputTokens,
-    providerCostUsd,
-    providerCostRp,
-    platformTokensCharge,
+  }
+}
+
+// Resolve model name dari AiFeatureConfig (admin-tunable). Dipakai di route
+// untuk pass model ke client.messages.stream — fallback ke OPTIMIZE_MODEL
+// kalau config belum di-seed.
+export async function getOptimizeModel(): Promise<string> {
+  try {
+    const cfg = await getAiFeatureConfig(LP_OPTIMIZE_FEATURE_KEY)
+    return cfg.modelName || OPTIMIZE_MODEL
+  } catch {
+    return OPTIMIZE_MODEL
   }
 }
 

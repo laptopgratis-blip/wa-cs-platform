@@ -38,6 +38,7 @@ export async function GET(
       socialProofEnabled: true,
       socialProofPosition: true,
       socialProofIntervalSec: true,
+      socialProofShowTime: true,
     },
   })
   if (!form || !form.isActive || !form.socialProofEnabled) {
@@ -86,6 +87,7 @@ export async function GET(
         entries,
         intervalSec: form.socialProofIntervalSec,
         position: form.socialProofPosition,
+        showTime: form.socialProofShowTime,
       },
     },
     { headers: { 'cache-control': `public, max-age=${CACHE_MAX_AGE_SEC}` } },

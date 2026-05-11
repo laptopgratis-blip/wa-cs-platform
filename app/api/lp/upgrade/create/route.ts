@@ -80,7 +80,13 @@ export async function POST(req: Request) {
           reference: tx.reference,
           paymentUrl: tx.paymentUrl,
           paymentMethod: tx.paymentMethod,
+          paymentName: tx.paymentName,
+          payCode: tx.payCode,
           expiredAt: tx.expiredAt,
+          // Sama spt /api/payment/create: overwrite amount jadi total customer
+          // (sudah include fee_customer Tripay) supaya UI /checkout cocok dgn
+          // tagihan VA / kode bayar.
+          amount: tx.customerAmount,
         },
       })
 

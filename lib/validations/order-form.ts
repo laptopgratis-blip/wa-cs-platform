@@ -19,6 +19,10 @@ export const orderFormCreateSchema = z.object({
   socialProofEnabled: z.boolean().default(false),
   socialProofPosition: z.enum(['top', 'bottom']).default('bottom'),
   socialProofIntervalSec: z.number().int().min(3).max(30).default(8),
+  // Toggle tampilkan timestamp pembelian. Off → hilangkan "X hari lalu"
+  // supaya pembeli lama tetap berfungsi sebagai social proof tanpa counter-
+  // productive sense of staleness.
+  socialProofShowTime: z.boolean().default(true),
   isActive: z.boolean().default(true),
   // Pixel tracking (Phase 2 Pixel) — PixelIntegration.id yg aktif untuk form.
   enabledPixelIds: z.array(z.string()).default([]),

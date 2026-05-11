@@ -95,6 +95,7 @@ export default async function PublicOrderPage({ params }: PageProps) {
         socialProofEnabled: form.socialProofEnabled,
         socialProofPosition: form.socialProofPosition as 'top' | 'bottom',
         socialProofIntervalSec: form.socialProofIntervalSec,
+        socialProofShowTime: form.socialProofShowTime,
         ownerName: form.user.name ?? 'Penjual',
       }}
       isAvailable={isAvailable}

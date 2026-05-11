@@ -24,10 +24,14 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   emailVerified DateTime?
-  password      String? // null kalau login via Google
+  password      String? // null kalau login via Google atau OTP-only
   name          String?
   image         String?
   role          Role      @default(USER)
+  // E.164 mis. "+628123456789". Unique untuk login via WA OTP. Nullable
+  // supaya user lama yg signup sebelum fitur OTP belum punya nomor.
+  phoneNumber   String?   @unique
+  phoneVerified DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -149,6 +153,33 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// OTP untuk auth via email/WhatsApp. Mode LOGIN (user existing) atau
+// SIGNUP (data user pending, baru di-create saat verify). Disimpan
+// dengan codeHash (sha256) — never plaintext. TTL 5 menit, max 5 attempts,
+// dibersihkan cron auth-otp-cleanup setelah expired/used.
+model AuthOtp {
+  id           String   @id @default(cuid())
+  identifier   String // email atau phone yang dipakai user untuk minta OTP
+  ipAddress    String?
+  codeHash     String // sha256 hex dari 6-digit code
+  mode         String // "LOGIN" | "SIGNUP"
+  channel      String // "EMAIL" | "PHONE" — yang dipilih user di UI
+  pendingEmail String? // SIGNUP: data user yg akan dibuat saat verify
+  pendingPhone String?
+  pendingName  String?
+  userId       String? // LOGIN: pointer langsung ke user yg sudah ada
+  expiresAt    DateTime
+  attempts     Int      @default(0)
+  used         Boolean  @default(false)
+  emailSent    Boolean  @default(false)
+  waSent       Boolean  @default(false)
+  waError      String?
+  createdAt    DateTime @default(now())
+
+  @@index([identifier, createdAt])
+  @@index([expiresAt])
 }
 
 // Token sekali pakai untuk reset password lewat email.
@@ -1855,6 +1886,11 @@ model OrderForm {
   socialProofEnabled     Boolean @default(false)
   socialProofPosition    String  @default("bottom")
   socialProofIntervalSec Int     @default(8)
+  // Tampilkan timestamp pembelian ("X hari lalu")? Kalau false, popup hanya
+  // tampil "Nama dari Kota telah melakukan pembelian" tanpa waktu. Default
+  // true (backward compat). User yang pembeli terakhirnya sudah lama bisa
+  // matikan supaya tidak counter-productive untuk konversi.
+  socialProofShowTime    Boolean @default(true)
 
   // PixelIntegration ID yang aktif untuk form ini (Phase 1 Pixel Tracking,
   // 2026-05-07). Multi-pixel — user bisa pakai 3 platform sekaligus per form.
@@ -1960,6 +1996,20 @@ model PixelIntegration {
   // Test mode — Meta test events code untuk debug tanpa pollute prod data.
   testEventCode String?
   isTestMode    Boolean @default(false)
+
+  // Purchase trigger granularity untuk e-commerce orders dari OrderForm.
+  // 3 momen yang valid untuk fire Purchase:
+  //   - Pembeli upload bukti transfer (paling cepat, attribution paling baik
+  //     tapi belum diverifikasi admin)
+  //   - Admin upload bukti transfer sendiri (admin terima bukti via WA/email
+  //     lalu input manual ke order)
+  //   - Admin tandai PAID (paling konservatif, sudah diverifikasi)
+  // Default: cuma "AdminMarkPaid" yg true — preserve behavior pre-migration.
+  // Dedup di pixel-fire.ts pastikan tidak double-fire kalau 2-3 trigger aktif
+  // di order yang sama (eventId stable per orderId+eventName).
+  triggerOnBuyerProofUpload Boolean @default(false)
+  triggerOnAdminProofUpload Boolean @default(false)
+  triggerOnAdminMarkPaid    Boolean @default(true)
 
   isActive Boolean @default(true)
 
@@ -2667,12 +2717,13 @@ model AiFeatureConfig {
   // Provider rate (USD per 1M token). Admin update saat Anthropic naik harga.
   inputPricePer1M  Float
   outputPricePer1M Float
-  // Margin multiplier — 1.3 = +30% margin platform.
-  platformMargin   Float    @default(1.3)
+  // Margin multiplier — 2.0 = 2× cost provider (skema fair-pricing).
+  platformMargin   Float    @default(2.0)
   // Floor minimum token charge per call (anti-mikro-call).
-  floorTokens      Int      @default(100)
-  // Cap maksimum token charge per call (sanity guard kalau outlier cost).
-  capTokens        Int      @default(50000)
+  floorTokens      Int      @default(10)
+  // Cap maksimum token charge per call. 0 = tidak di-enforce (pure
+  // proportional ke atas, supaya platform tidak rugi saat output besar).
+  capTokens        Int      @default(0)
   isActive         Boolean  @default(true)
   description      String?
   createdAt        DateTime @default(now())

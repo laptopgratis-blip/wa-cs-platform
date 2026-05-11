@@ -3,10 +3,14 @@
 // LivePreview — render HTML editor langsung ke iframe via srcDoc.
 // Debounce 800ms supaya iframe tidak rerender setiap keystroke (mahal).
 // Toggle viewport di-pass dari shell (state ada di topbar).
+//
+// Tambahan: klik elemen di preview kirim postMessage ke parent supaya HtmlEditor
+// bisa highlight range tag tersebut (mirip Chrome DevTools inspect element).
 import { Eye, RotateCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { tagEditableElements } from '@/lib/lp/html-mutation'
 import { cn } from '@/lib/utils'
 import type { Viewport } from '@/components/lp/EditorTopbar'
 
@@ -18,9 +22,101 @@ const IFRAME_SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbo
 interface Props {
   htmlContent: string
   viewport: Viewport
+  // Klik elemen di preview → kirim editIndex ke parent. Optional supaya komponen
+  // tetap bisa dipakai tanpa interaksi (mis. di tempat read-only).
+  onElementClick?: (editIndex: number) => void
 }
 
-export function LivePreview({ htmlContent, viewport }: Props) {
+// Script ringan untuk deteksi klik & hover — kirim editIndex ke parent.
+// Lebih simple dari injected script VisualEditor: tidak ada drag/popover,
+// cuma highlight hover + report click.
+function injectedInspectScript(): string {
+  return `
+(function () {
+  if (window.__lpInspectWired) return;
+  window.__lpInspectWired = true;
+  var EDIT_ATTR = 'data-lp-edit';
+  var lastHover = null;
+  var lastSelected = null;
+
+  function findEditable(el) {
+    while (el && el !== document.body) {
+      if (el.nodeType === 1 && el.hasAttribute && el.hasAttribute(EDIT_ATTR)) return el;
+      el = el.parentNode;
+    }
+    return null;
+  }
+
+  function clearHover() {
+    if (lastHover && lastHover !== lastSelected) {
+      lastHover.style.removeProperty('outline');
+      lastHover.style.removeProperty('outline-offset');
+    }
+    lastHover = null;
+  }
+
+  document.addEventListener('mouseover', function (e) {
+    var t = findEditable(e.target);
+    if (t === lastHover) return;
+    clearHover();
+    if (t && t !== lastSelected) {
+      t.style.setProperty('outline', '1.5px dashed #2563eb', 'important');
+      t.style.setProperty('outline-offset', '2px', 'important');
+      t.style.setProperty('cursor', 'pointer', 'important');
+      lastHover = t;
+    }
+  }, true);
+
+  document.addEventListener('mouseout', function (e) {
+    if (!e.relatedTarget) clearHover();
+  }, true);
+
+  document.addEventListener('click', function (e) {
+    var t = findEditable(e.target);
+    if (!t) {
+      // Klik di luar editable → clear selection.
+      if (lastSelected) {
+        lastSelected.style.removeProperty('outline');
+        lastSelected.style.removeProperty('outline-offset');
+        lastSelected = null;
+      }
+      parent.postMessage({ __lpInspect: true, type: 'dismiss' }, '*');
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    // Pindah selection outline.
+    if (lastSelected && lastSelected !== t) {
+      lastSelected.style.removeProperty('outline');
+      lastSelected.style.removeProperty('outline-offset');
+    }
+    t.style.setProperty('outline', '2px solid #2563eb', 'important');
+    t.style.setProperty('outline-offset', '2px', 'important');
+    lastSelected = t;
+    // Mencegah hover-clear menghapus outline elemen yang dipilih.
+    if (lastHover === t) lastHover = null;
+    var idxStr = t.getAttribute(EDIT_ATTR);
+    var editIndex = parseInt(idxStr || '-1', 10);
+    parent.postMessage({
+      __lpInspect: true,
+      type: 'click',
+      payload: { editIndex: editIndex, tagName: t.tagName.toLowerCase() }
+    }, '*');
+  }, true);
+})();
+`.trim()
+}
+
+function wrapForIframe(taggedHtml: string): string {
+  const script = `<script>${injectedInspectScript()}</script>`
+  if (/<\/body>/i.test(taggedHtml)) {
+    return taggedHtml.replace(/<\/body>/i, `${script}</body>`)
+  }
+  return taggedHtml + script
+}
+
+export function LivePreview({ htmlContent, viewport, onElementClick }: Props) {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [debouncedHtml, setDebouncedHtml] = useState(htmlContent)
   // refreshKey — naikkan untuk force iframe remount saat user klik refresh.
   const [refreshKey, setRefreshKey] = useState(0)
@@ -31,6 +127,32 @@ export function LivePreview({ htmlContent, viewport }: Props) {
     return () => clearTimeout(id)
   }, [htmlContent])
 
+  // Tag HTML supaya tiap elemen editable dapat data-lp-edit index — ini yang
+  // jadi handshake ke HtmlEditor untuk highlight posisi tag.
+  const iframeSrcDoc = useMemo(() => {
+    if (!debouncedHtml.trim()) return ''
+    const tagged = tagEditableElements(debouncedHtml)
+    return wrapForIframe(tagged)
+  }, [debouncedHtml])
+
+  // Listen postMessage dari iframe.
+  useEffect(() => {
+    if (!onElementClick) return
+    function onMessage(e: MessageEvent) {
+      const data = e.data
+      if (!data || typeof data !== 'object' || !data.__lpInspect) return
+      if (e.source !== iframeRef.current?.contentWindow) return
+      if (data.type === 'click') {
+        const p = data.payload as { editIndex: number }
+        if (typeof p?.editIndex === 'number' && p.editIndex >= 0) {
+          onElementClick?.(p.editIndex)
+        }
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [onElementClick])
+
   const isMobile = viewport === 'mobile'
 
   return (
@@ -40,6 +162,9 @@ export function LivePreview({ htmlContent, viewport }: Props) {
           <Eye className="size-4 text-warm-600" />
           <span className="font-display text-sm font-bold text-warm-900">
             Preview
+          </span>
+          <span className="hidden text-[10px] text-warm-500 sm:inline">
+            Klik bagian untuk lompat ke posisinya di HTML
           </span>
           <span className="text-[10px] text-warm-500">
             {isMobile ? 'Mobile · 375px' : 'Desktop · 100%'}
@@ -77,11 +202,12 @@ export function LivePreview({ htmlContent, viewport }: Props) {
             isMobile ? 'w-[375px] flex-shrink-0' : 'w-full',
           )}
         >
-          {debouncedHtml.trim() ? (
+          {iframeSrcDoc ? (
             <iframe
               key={refreshKey}
+              ref={iframeRef}
               title="Live preview LP"
-              srcDoc={debouncedHtml}
+              srcDoc={iframeSrcDoc}
               sandbox={IFRAME_SANDBOX}
               className="h-full w-full border-0"
             />

@@ -6,6 +6,10 @@ export const SETTING_KEYS = {
   WA_ADMIN: 'WA_ADMIN',
   PLATFORM_NAME: 'PLATFORM_NAME',
   SUPPORT_EMAIL: 'SUPPORT_EMAIL',
+  // ID WhatsappSession yang dipakai kirim OTP auth (login/signup).
+  // Kosong = fallback ke admin's CONNECTED session. Diset via UI picker
+  // di /admin/settings, override env OTP_WA_SESSION_ID.
+  OTP_WA_SESSION_ID: 'OTP_WA_SESSION_ID',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
@@ -15,6 +19,7 @@ const DEFAULTS: Record<SettingKey, string> = {
   WA_ADMIN: '',
   PLATFORM_NAME: 'Hulao',
   SUPPORT_EMAIL: '',
+  OTP_WA_SESSION_ID: '',
 }
 
 export async function getSetting(key: SettingKey): Promise<string> {

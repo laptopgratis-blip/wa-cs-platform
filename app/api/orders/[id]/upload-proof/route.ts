@@ -9,6 +9,7 @@ import sharp from 'sharp'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { notifyProofUploaded } from '@/lib/services/order-notif'
+import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 
 const MAX_RAW_BYTES = 4 * 1024 * 1024  // 4 MB raw input
@@ -31,6 +32,7 @@ export async function POST(
       userId: true,
       paymentMethod: true,
       paymentStatus: true,
+      orderFormId: true,
     },
   })
   if (!order) return jsonError('Invoice tidak ditemukan', 404)
@@ -98,6 +100,18 @@ export async function POST(
 
     // Notif WA owner — fire-and-forget.
     notifyProofUploaded(order.id).catch(() => {})
+
+    // Pixel Purchase fire (granular trigger: BUYER_PROOF_UPLOAD) — hanya untuk
+    // e-commerce orders dgn orderFormId. Pixel-fire filter dgn flag
+    // triggerOnBuyerProofUpload=true. Dedup-aware: kalau Purchase order ini
+    // sudah fired di mana pun, skip.
+    if (order.orderFormId) {
+      firePixelEventForOrder({
+        orderId: order.id,
+        eventName: 'Purchase',
+        trigger: 'BUYER_PROOF_UPLOAD',
+      }).catch(() => {})
+    }
 
     return jsonOk({ url, status: 'WAITING_CONFIRMATION' })
   } catch (err) {

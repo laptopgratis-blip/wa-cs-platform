@@ -1,66 +1,99 @@
 'use client'
 
-// Form pendaftaran akun baru. Setelah berhasil, otomatis login pakai credentials.
+// Daftar akun baru via OTP — wajib isi email + nomor WA. OTP dikirim ke
+// kedua channel, user verifikasi salah satu untuk aktivasi akun. Tidak
+// pakai password — user OTP-only.
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
-import { signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
+import { OtpForm, type OtpRequestPayload } from '@/components/auth/OtpForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { registerSchema, type RegisterInput } from '@/lib/validations/auth'
+import { phoneSchema } from '@/lib/validations/auth'
+
+const signupFormSchema = z.object({
+  name: z
+    .string({ message: 'Nama wajib diisi' })
+    .trim()
+    .min(2, 'Nama minimal 2 karakter')
+    .max(80, 'Nama maksimal 80 karakter'),
+  email: z
+    .string({ message: 'Email wajib diisi' })
+    .trim()
+    .toLowerCase()
+    .email('Format email tidak valid'),
+  phone: phoneSchema,
+})
+
+type SignupFormInput = z.input<typeof signupFormSchema>
 
 export function RegisterForm() {
-  const router = useRouter()
-  const [isSubmitting, setSubmitting] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [otpPayload, setOtpPayload] = useState<OtpRequestPayload | null>(null)
+  // Simpan data signup terakhir supaya bisa di-resend tanpa user isi ulang.
+  const [lastSignup, setLastSignup] = useState<{
+    name: string
+    email: string
+    phone: string
+  } | null>(null)
 
-  const form = useForm<RegisterInput>({
-    resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', password: '' },
+  const form = useForm<SignupFormInput>({
+    resolver: zodResolver(signupFormSchema),
+    defaultValues: { name: '', email: '', phone: '' },
   })
 
-  async function onSubmit(values: RegisterInput) {
+  async function requestOtp(signup: {
+    name: string
+    email: string
+    phone: string
+  }): Promise<OtpRequestPayload> {
+    const res = await fetch('/api/auth/otp/request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'SIGNUP', channel: 'EMAIL', signup }),
+    })
+    const json = (await res.json().catch(() => null)) as
+      | { success: boolean; data?: OtpRequestPayload; error?: string }
+      | null
+    if (!res.ok || !json?.success || !json.data) {
+      throw new Error(json?.error ?? 'Gagal kirim OTP')
+    }
+    return json.data
+  }
+
+  async function onSubmit(values: SignupFormInput) {
     setSubmitting(true)
     try {
-      const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
-      })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
-
-      if (!res.ok || !json?.success) {
-        toast.error(json?.error ?? 'Pendaftaran gagal, coba lagi')
-        return
-      }
-
-      toast.success('Akun berhasil dibuat, sedang masuk...')
-      const login = await signIn('credentials', {
-        email: values.email,
-        password: values.password,
-        redirect: false,
-        callbackUrl: '/dashboard',
-      })
-      if (login?.error) {
-        // Sangat jarang — fallback ke halaman login.
-        router.push('/login')
-        return
-      }
-      router.push(login?.url || '/dashboard')
-      router.refresh()
+      // Re-parse via Zod schema biar phone ter-normalize ke +62…
+      const parsed = signupFormSchema.parse(values)
+      const payload = await requestOtp(parsed)
+      setLastSignup(parsed)
+      setOtpPayload(payload)
     } catch (err) {
-      console.error(err)
-      toast.error('Terjadi kesalahan jaringan')
+      const msg = err instanceof Error ? err.message : 'Pendaftaran gagal'
+      toast.error(msg)
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (otpPayload && lastSignup) {
+    return (
+      <OtpForm
+        initial={otpPayload}
+        onResend={() => requestOtp(lastSignup)}
+        onBack={() => {
+          setOtpPayload(null)
+        }}
+        callbackUrl="/onboarding"
+      />
+    )
   }
 
   return (
@@ -95,29 +128,30 @@ export function RegisterForm() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="phone">Nomor WhatsApp</Label>
         <Input
-          id="password"
-          type="password"
-          autoComplete="new-password"
-          placeholder="Minimal 6 karakter"
-          aria-invalid={Boolean(form.formState.errors.password)}
-          {...form.register('password')}
+          id="phone"
+          type="tel"
+          autoComplete="tel"
+          placeholder="08123456789"
+          aria-invalid={Boolean(form.formState.errors.phone)}
+          {...form.register('phone')}
         />
-        {form.formState.errors.password && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.password.message}
-          </p>
+        {form.formState.errors.phone && (
+          <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p>
         )}
+        <p className="text-xs text-warm-500">
+          Kami kirim OTP verifikasi ke email + WhatsApp. Pastikan keduanya aktif.
+        </p>
       </div>
 
       <Button
         type="submit"
         className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
-        disabled={isSubmitting}
+        disabled={submitting}
       >
-        {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-        Buat Akun
+        {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+        Daftar &amp; Kirim OTP
       </Button>
 
       <p className="text-center text-sm text-muted-foreground">

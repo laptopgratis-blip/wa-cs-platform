@@ -204,6 +204,10 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body), 'Inter', sans-serif;
+    /* Matikan iOS rubber-band di dokumen — fixed BottomNav jadi tidak
+       terlihat "tergelincir" relatif konten saat over-scroll. Scroll di
+       child container tetap berfungsi. */
+    overscroll-behavior-y: none;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display), 'Plus Jakarta Sans', sans-serif;
@@ -211,6 +215,7 @@
   }
   html {
     @apply font-sans;
+    overscroll-behavior-y: none;
   }
 }
 
@@ -256,6 +261,13 @@
   .stagger-2 { animation-delay: 100ms; }
   .stagger-3 { animation-delay: 150ms; }
   .stagger-4 { animation-delay: 200ms; }
+
+  /* Padding-bottom = tinggi BottomNav (h-16 = 4rem) + safe-area inset iPhone.
+     Tanpa ini, konten 64px terakhir nutup oleh BottomNav + home-indicator
+     iPhone — terlihat saat user over-scroll (rubber-band). */
+  .pb-mobile-nav {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  }
 }
 
 /* Dot grid pattern untuk hero section */

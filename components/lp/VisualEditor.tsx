@@ -19,7 +19,9 @@ import {
   type EditableSnapshot,
   getElementOuterHtml,
   moveElement,
+  moveElementTo,
   pasteElement,
+  setElementPixel,
   type SwappableTag,
   tagEditableElements,
   updateElement,
@@ -48,6 +50,9 @@ function injectedClickScript(): string {
   window.__lpEditorWired = true;
   var EDIT_ATTR = 'data-lp-edit';
   var lastHover = null;
+  var dragSource = null;
+  var lastDropTarget = null;
+  var lastDropPosition = null;
 
   function findEditable(el) {
     while (el && el !== document.body) {
@@ -66,6 +71,14 @@ function injectedClickScript(): string {
     }
   }
 
+  function clearDropIndicator() {
+    if (lastDropTarget) {
+      lastDropTarget.style.removeProperty('box-shadow');
+      lastDropTarget = null;
+      lastDropPosition = null;
+    }
+  }
+
   document.addEventListener('mouseover', function (e) {
     var t = findEditable(e.target);
     if (t === lastHover) return;
@@ -73,7 +86,12 @@ function injectedClickScript(): string {
     if (t) {
       t.style.setProperty('outline', '2px dashed #f97316', 'important');
       t.style.setProperty('outline-offset', '2px', 'important');
-      t.style.setProperty('cursor', 'pointer', 'important');
+      t.style.setProperty('cursor', 'grab', 'important');
+      // Pastikan elemen draggable. Kalau elemen <img>, draggable default true
+      // tapi kita perlu pastikan event handler dipasang di document.
+      if (t.getAttribute('draggable') !== 'true') {
+        t.setAttribute('draggable', 'true');
+      }
       lastHover = t;
     }
   }, true);
@@ -86,18 +104,20 @@ function injectedClickScript(): string {
   document.addEventListener('click', function (e) {
     var t = findEditable(e.target);
     if (!t) return;
+    // Kalau baru drop, jangan trigger popover (browser kadang fire click setelah drag).
+    if (dragSource !== null) return;
     e.preventDefault();
     e.stopPropagation();
     var rect = t.getBoundingClientRect();
     var href = t.getAttribute('href');
     var src = t.getAttribute('src');
     var alt = t.getAttribute('alt');
+    var pixelEvent = t.getAttribute('data-pixel-event');
+    var pixelValue = t.getAttribute('data-pixel-value');
+    var pixelCurrency = t.getAttribute('data-pixel-currency');
     var idxStr = t.getAttribute(EDIT_ATTR);
-    // Cek saudara element sebelum/sesudah (sama parent) untuk disable Move.
     var hasPrev = !!t.previousElementSibling;
     var hasNext = !!t.nextElementSibling;
-    // Bersihkan attribute data-lp-edit dari innerHTML supaya popover tidak
-    // melihat tag internal kita. Clone supaya tidak mutate target asli.
     var clone = t.cloneNode(true);
     var taggedDescendants = clone.querySelectorAll('[' + EDIT_ATTR + ']');
     taggedDescendants.forEach(function (el) { el.removeAttribute(EDIT_ATTR); });
@@ -115,7 +135,10 @@ function injectedClickScript(): string {
         alt: alt,
         hasPrev: hasPrev,
         hasNext: hasNext,
-        rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+        rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+        pixelEvent: pixelEvent,
+        pixelValue: pixelValue,
+        pixelCurrency: pixelCurrency
       }
     }, '*');
   }, true);
@@ -129,6 +152,82 @@ function injectedClickScript(): string {
   // Notify parent saat scroll supaya popover bisa update posisi atau hilang.
   document.addEventListener('scroll', function () {
     parent.postMessage({ __lpEditor: true, type: 'scroll' }, '*');
+  }, true);
+
+  // ── Drag & drop reorder ──
+  // Native HTML5 drag — elemen punya draggable=true via mouseover handler.
+  // dragstart simpan source index, dragover tentukan posisi (atas/bawah)
+  // relatif terhadap target, drop kirim postMessage ke parent.
+  document.addEventListener('dragstart', function (e) {
+    var t = findEditable(e.target);
+    if (!t) return;
+    var idxStr = t.getAttribute(EDIT_ATTR);
+    if (!idxStr) return;
+    dragSource = parseInt(idxStr, 10);
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox butuh setData supaya drag jalan.
+      try { e.dataTransfer.setData('text/plain', idxStr); } catch (_err) {}
+    }
+    t.style.setProperty('opacity', '0.5', 'important');
+    // Tutup popover supaya tidak menghalangi gesture.
+    parent.postMessage({ __lpEditor: true, type: 'dismiss' }, '*');
+  }, true);
+
+  document.addEventListener('dragover', function (e) {
+    if (dragSource === null) return;
+    var t = findEditable(e.target);
+    if (!t) return;
+    var idxStr = t.getAttribute(EDIT_ATTR);
+    if (!idxStr) return;
+    var targetIdx = parseInt(idxStr, 10);
+    if (targetIdx === dragSource) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    var rect = t.getBoundingClientRect();
+    var position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after';
+    if (lastDropTarget !== t || lastDropPosition !== position) {
+      if (lastDropTarget) lastDropTarget.style.removeProperty('box-shadow');
+      var shadow = position === 'before'
+        ? 'inset 0 4px 0 0 #2563eb'
+        : 'inset 0 -4px 0 0 #2563eb';
+      t.style.setProperty('box-shadow', shadow, 'important');
+      lastDropTarget = t;
+      lastDropPosition = position;
+    }
+  }, true);
+
+  document.addEventListener('dragleave', function (e) {
+    // Hapus indicator kalau cursor keluar dari area target (related null = leave iframe).
+    if (!e.relatedTarget) clearDropIndicator();
+  }, true);
+
+  document.addEventListener('drop', function (e) {
+    if (dragSource === null) return;
+    var t = findEditable(e.target);
+    if (!t) { clearDropIndicator(); return; }
+    var idxStr = t.getAttribute(EDIT_ATTR);
+    if (!idxStr) { clearDropIndicator(); return; }
+    var targetIdx = parseInt(idxStr, 10);
+    if (targetIdx === dragSource) { clearDropIndicator(); return; }
+    e.preventDefault();
+    var rect = t.getBoundingClientRect();
+    var position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after';
+    parent.postMessage({
+      __lpEditor: true,
+      type: 'reorder',
+      payload: { from: dragSource, to: targetIdx, position: position }
+    }, '*');
+    clearDropIndicator();
+  }, true);
+
+  document.addEventListener('dragend', function (e) {
+    var t = findEditable(e.target);
+    if (t) t.style.removeProperty('opacity');
+    clearDropIndicator();
+    // Reset di tick berikutnya supaya click handler (yang mungkin fire setelah drop)
+    // tahu kita baru saja drag — guard click trigger popover yang tidak diinginkan.
+    setTimeout(function () { dragSource = null; }, 0);
   }, true);
 })();
 `.trim()
@@ -190,13 +289,22 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
             height: p.rect.height,
           },
         })
+      } else if (data.type === 'reorder') {
+        const p = data.payload as {
+          from: number
+          to: number
+          position: 'before' | 'after'
+        }
+        const next = moveElementTo(htmlContent, p.from, p.to, p.position)
+        if (next !== htmlContent) onChange(next)
+        setSelected(null)
       } else if (data.type === 'dismiss' || data.type === 'scroll') {
         setSelected(null)
       }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [])
+  }, [htmlContent, onChange])
 
   // Saat htmlContent berubah dari luar (mis. AI generate), close popover.
   useEffect(() => {
@@ -209,6 +317,11 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
     src?: string
     alt?: string
     newTag?: SwappableTag
+    // Pixel tracking: `null` artinya hapus attribute, `undefined` artinya tidak
+    // diubah. Empty string juga di-treat sebagai hapus.
+    pixelEvent?: string | null
+    pixelValue?: string | null
+    pixelCurrency?: string | null
   }) {
     if (!selected) return
     let next = htmlContent
@@ -230,6 +343,18 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
 
     if (patch.newTag) {
       next = changeElementTag(next, selected.editIndex, patch.newTag)
+    }
+
+    if (
+      patch.pixelEvent !== undefined ||
+      patch.pixelValue !== undefined ||
+      patch.pixelCurrency !== undefined
+    ) {
+      next = setElementPixel(next, selected.editIndex, {
+        event: patch.pixelEvent,
+        value: patch.pixelValue,
+        currency: patch.pixelCurrency,
+      })
     }
 
     onChange(next)
@@ -295,7 +420,7 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
           </span>
           <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 sm:flex">
             <Info className="size-3" />
-            Klik teks/tombol untuk ubah
+            Klik untuk ubah · drag untuk pindah urutan
           </span>
           <span className="text-[10px] text-warm-500">
             {isMobile ? 'Mobile · 375px' : 'Desktop · 100%'}

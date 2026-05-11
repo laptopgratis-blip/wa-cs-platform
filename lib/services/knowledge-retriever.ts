@@ -49,7 +49,7 @@ export async function retrieveRelevantKnowledge(
   for (const kb of all) {
     if (matched.length >= MAX_RESULTS) break
     const hit = kb.triggerKeywords.some((kw) =>
-      msg.includes(kw.toLowerCase().trim()),
+      keywordMatches(kw, msg),
     )
     if (hit) {
       matched.push({
@@ -64,6 +64,67 @@ export async function retrieveRelevantKnowledge(
     }
   }
   return matched
+}
+
+// Stopword Indonesia + Inggris yang umum & tidak distinctive — supaya tidak
+// jadi pemicu false positive saat relaxed match.
+const STOPWORDS = new Set([
+  'untuk',
+  'dengan',
+  'yang',
+  'adalah',
+  'tidak',
+  'sudah',
+  'masih',
+  'lihat',
+  'punya',
+  'sangat',
+  'kalau',
+  'tetapi',
+  'tapi',
+  'bagaimana',
+  'gimana',
+  'saya',
+  'kamu',
+  'kalian',
+  'mereka',
+  'kakak',
+  'admin',
+  'mohon',
+  'tolong',
+  'gimana',
+  'about',
+  'please',
+  'where',
+  'which',
+])
+
+const MIN_TOKEN_LEN = 5
+
+function tokenizeKeyword(kw: string): string[] {
+  return kw
+    .toLowerCase()
+    .trim()
+    .split(/[\s,;]+/)
+    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+    .filter((w) => w.length >= MIN_TOKEN_LEN && !STOPWORDS.has(w))
+}
+
+// Match keyword vs pesan customer dengan dua tier:
+//   1. Exact phrase substring (lossless — current behavior, high confidence)
+//   2. Relaxed token: kalau exact phrase tidak match, anggap match kalau ada
+//      MIN. 1 kata distinctive (>=5 chars, bukan stopword) dari keyword muncul
+//      di msg. Solusi untuk knowledge yg keyword-nya "testimoni cleanoz" tapi
+//      customer bilang "ada testimoni?" — masih relevan.
+// Trade-off: bisa over-trigger kalau keyword pakai kata umum. User bisa
+// narrow keyword (mis. tambah unique brand name) kalau itu jadi masalah.
+export function keywordMatches(rawKw: string, msg: string): boolean {
+  const kw = rawKw.toLowerCase().trim()
+  if (!kw) return false
+  if (msg.includes(kw)) return true
+  const tokens = tokenizeKeyword(kw)
+  if (tokens.length === 0) return false
+  return tokens.some((t) => msg.includes(t))
 }
 
 // Bump triggerCount + lastTriggeredAt untuk entry yang dipakai.
@@ -85,18 +146,90 @@ export async function incrementTriggerCount(ids: string[]): Promise<void> {
 
 // Bangun blok teks yang siap di-append ke system prompt.
 // Format: heading + bullet per entry. Caption / textContent dipakai isi info.
+//
+// PENTING: instruksi explicit supaya AI tidak escalate ke admin saat ada file
+// yang relevan — sistem (wa-manager) AKAN otomatis kirim file IMAGE/FILE
+// setelah balasan teks AI. AI cuma perlu confirm "saya kirim ya".
 export function formatKnowledgeForPrompt(items: RetrievedKnowledge[]): string {
   if (items.length === 0) return ''
   const lines: string[] = ['', '## Info Pendukung']
   lines.push(
-    'Pakai info berikut untuk menjawab. Kalau ada file/link yang relevan, sebutkan kalau kamu bisa kirim referensinya.',
+    'Pakai info berikut untuk menjawab pertanyaan customer.',
     '',
   )
+
+  const hasFile = items.some(
+    (kb) =>
+      kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE'),
+  )
+
   for (const kb of items) {
-    const body = kb.textContent || kb.caption || '(tidak ada deskripsi)'
+    const body = kb.textContent || kb.caption || '(lihat file/link terlampir)'
     lines.push(`- **${kb.title}**: ${body}`)
-    if (kb.fileUrl) lines.push(`  (Tersedia file pendukung: ${kb.title})`)
-    if (kb.linkUrl) lines.push(`  (Link: ${kb.linkUrl})`)
+    if (kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE')) {
+      lines.push(
+        `  → File "${kb.title}" akan OTOMATIS dikirim setelah balasan teks kamu. JANGAN bilang "admin akan kirim" — cukup bilang "ini saya kirim ya" atau "berikut bukti/gambarnya".`,
+      )
+    }
+    if (kb.linkUrl) lines.push(`  (Link untuk customer: ${kb.linkUrl})`)
   }
+
+  if (hasFile) {
+    lines.push(
+      '',
+      '**PENTING**: Kalau ada knowledge IMAGE/FILE yang akan dikirim sistem, JANGAN tulis "tunggu admin", "nanti admin balas", atau "saya hubungi admin". Cukup bilang seperti "Berikut bukti/foto/testimoninya ya kak 👇" lalu sistem akan attach file otomatis setelah balasan kamu.',
+    )
+  }
+
   return lines.join('\n')
+}
+
+// Bangun blok teks untuk daftar rekening pembayaran user. Pakai untuk
+// melengkapi system prompt supaya AI bisa langsung kasih nomor rekening saat
+// customer minta — tanpa harus minta admin.
+export async function formatBankAccountsForPrompt(
+  userId: string,
+): Promise<string> {
+  try {
+    const accounts = await prisma.userBankAccount.findMany({
+      where: { userId, isActive: true },
+      select: {
+        bankName: true,
+        accountNumber: true,
+        accountName: true,
+      },
+      orderBy: [{ isDefault: 'desc' }, { order: 'asc' }, { createdAt: 'asc' }],
+    })
+    if (accounts.length === 0) return ''
+
+    const lines: string[] = ['', '## Rekening Pembayaran']
+    lines.push(
+      'Saat customer minta nomor rekening / cara transfer, sebutkan info berikut langsung — JANGAN minta admin. Kamu bisa kasih satu (default) atau semua, sesuai konteks:',
+      '',
+    )
+    for (const a of accounts) {
+      lines.push(
+        `- **${a.bankName}**: \`${a.accountNumber}\` a.n. ${a.accountName}`,
+      )
+    }
+    return lines.join('\n')
+  } catch (err) {
+    console.error('[formatBankAccountsForPrompt] gagal:', err)
+    return ''
+  }
+}
+
+// Aturan default tambahan supaya AI lebih proaktif & tidak terus-terusan
+// escalate ke admin manual. Selalu di-append ke promptBlock — bypass cache
+// Soul.systemPrompt di DB, jadi user existing langsung dapat behavior baru
+// tanpa harus re-save soul.
+export function defaultBehaviorRules(): string {
+  return [
+    '',
+    '## Aturan Tambahan (Auto-Service)',
+    '- **Jangan escalate berlebihan**: Hanya bilang "saya teruskan ke admin" kalau pertanyaan benar-benar di luar konteks bisnis & knowledge yang ada. Untuk testimoni, bukti foto, nomor rekening, cara order, harga — JAWAB SENDIRI dari konteks/knowledge.',
+    '- **Tutup percakapan natural**: Kalau customer sudah puas / sudah konfirmasi order / sudah mengerti, ucapkan terima kasih singkat dan selesaikan. Tidak perlu selalu ajak ngobrol lagi.',
+    '- **Kirim asset sendiri**: Sistem otomatis attach file IMAGE/FILE dari knowledge yang relevan setelah balasan kamu. JANGAN pakai kalimat seperti "admin akan kirim foto/bukti/testimoni" — cukup bilang "ini saya kirim ya" atau "berikut gambarnya 👇".',
+    '- **Nomor rekening**: Kalau ada section "Rekening Pembayaran" di atas, sebutkan langsung saat customer minta cara transfer. Format jelas: nama bank + nomor + a.n.',
+  ].join('\n')
 }

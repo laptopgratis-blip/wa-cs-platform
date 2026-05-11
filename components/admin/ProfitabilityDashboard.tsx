@@ -27,6 +27,12 @@ import {
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+interface SourceBreakdown {
+  calls: number
+  cost: number
+  revenue: number
+}
+
 interface Summary {
   from: string
   to: string
@@ -36,7 +42,22 @@ interface Summary {
   profitRp: number
   marginPct: number
   status: 'AMAN' | 'TIPIS' | 'RUGI'
+  bySource: {
+    messageAi: SourceBreakdown
+    aiGenerationLog: SourceBreakdown
+    lpGeneration: SourceBreakdown
+    lpOptimization: SourceBreakdown
+    soulSimulation: SourceBreakdown
+  }
   previous: { profitRp: number; deltaPct: number | null }
+}
+
+const SOURCE_LABEL: Record<keyof Summary['bySource'], string> = {
+  messageAi: 'AI CS WA',
+  aiGenerationLog: 'Content Studio',
+  lpGeneration: 'LP Generate',
+  lpOptimization: 'LP Optimize',
+  soulSimulation: 'Soul Lab',
 }
 
 interface ByModel {
@@ -268,6 +289,54 @@ export function ProfitabilityDashboard() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Memuat...</p>
+          )}
+          {summary && (
+            <div className="mt-6">
+              <div className="mb-2 text-sm font-medium">Breakdown per Sumber</div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sumber</TableHead>
+                      <TableHead className="text-right">Calls</TableHead>
+                      <TableHead className="text-right">Cost API</TableHead>
+                      <TableHead className="text-right">Pendapatan</TableHead>
+                      <TableHead className="text-right">Profit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(Object.keys(summary.bySource) as Array<keyof Summary['bySource']>).map(
+                      (k) => {
+                        const row = summary.bySource[k]
+                        const profit = row.revenue - row.cost
+                        return (
+                          <TableRow key={k}>
+                            <TableCell>{SOURCE_LABEL[k]}</TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatNumber(row.calls)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatRupiah(row.cost)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums">
+                              {formatRupiah(row.revenue)}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                'text-right tabular-nums',
+                                profit < 0 && 'text-red-600',
+                              )}
+                            >
+                              {formatRupiah(profit)}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      },
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

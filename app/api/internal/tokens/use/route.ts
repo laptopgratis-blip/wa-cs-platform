@@ -1,6 +1,8 @@
 // POST /api/internal/tokens/use
 // Potong token user. Atomic — kalau saldo kurang, response 402 dan tidak
 // memotong apapun. Sukses → return saldo baru.
+import { randomUUID } from 'node:crypto'
+
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -42,13 +44,21 @@ export async function POST(req: Request) {
       })
       if (updated.count === 0) return { ok: false as const }
 
+      // TokenTransaction punya unique constraint (userId, reference, type)
+      // untuk idempotency webhook PURCHASE. Untuk USAGE charge AI reply,
+      // caller (wa-service) kirim reference=sessionId yang berulang per
+      // session — append UUID supaya tetap unique tapi sessionId masih
+      // bisa di-grep di prefix untuk audit.
+      const usageReference = body.reference
+        ? `${body.reference}:${randomUUID()}`
+        : undefined
       await tx.tokenTransaction.create({
         data: {
           userId: body.userId,
           amount: -body.amount,
           type: 'USAGE',
           description: body.description ?? 'AI reply',
-          reference: body.reference,
+          reference: usageReference,
         },
       })
       const balance = await tx.tokenBalance.findUnique({

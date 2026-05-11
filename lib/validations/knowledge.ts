@@ -110,5 +110,6 @@ export const suggestKeywordsSchema = z.object({
   contentType: z.enum(KNOWLEDGE_TYPES),
   textContent: z.string().trim().max(2000).optional().nullable(),
   caption: z.string().trim().max(1000).optional().nullable(),
+  existingKeywords: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
 })
 export type SuggestKeywordsInput = z.infer<typeof suggestKeywordsSchema>

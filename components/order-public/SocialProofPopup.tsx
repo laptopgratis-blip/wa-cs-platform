@@ -23,6 +23,10 @@ interface SocialProofPopupProps {
   slug: string
   position: 'top' | 'bottom'
   intervalSec: number
+  // Tampilkan timestamp "X hari lalu". Kalau false, popup cuma "Nama dari Kota
+  // telah melakukan pembelian" — berguna kalau pembeli terakhir sudah lama
+  // supaya tetap berfungsi sebagai social proof tanpa kasih kesan stale.
+  showTime?: boolean
 }
 
 const VISIBLE_DURATION_MS = 4500
@@ -45,6 +49,7 @@ export function SocialProofPopup({
   slug,
   position,
   intervalSec,
+  showTime = true,
 }: SocialProofPopupProps) {
   const [entries, setEntries] = useState<ProofEntry[]>([])
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
@@ -172,7 +177,8 @@ export function SocialProofPopup({
               <span className="font-bold">{entry.city}</span>
             </p>
             <p className="text-xs text-warm-600">
-              telah melakukan pembelian · {relativeTime(entry.ts)}
+              telah melakukan pembelian
+              {showTime && ` · ${relativeTime(entry.ts)}`}
             </p>
           </div>
           <button

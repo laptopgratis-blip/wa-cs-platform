@@ -85,6 +85,11 @@ export async function POST(req: Request) {
           paymentName: tx.paymentName,
           payCode: tx.payCode,
           expiredAt: tx.expiredAt,
+          // Tripay tambah fee_customer di atas pkg.price; VA statis BCA dll
+          // tolak kalau customer transfer kurang. Simpan total customer
+          // supaya halaman checkout tampilin angka yang sama dgn yang
+          // ditagih bank/merchant.
+          amount: tx.customerAmount,
         },
       })
 

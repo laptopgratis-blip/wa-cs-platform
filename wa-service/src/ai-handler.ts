@@ -137,7 +137,18 @@ async function replyViaAnthropic(
     .join('')
     .trim()
 
-  if (!reply) return { ok: false, error: 'AI tidak mengembalikan teks' }
+  if (!reply) {
+    // Diagnostic: log full response untuk debug kenapa reply kosong.
+    // Kemungkinan: stop_reason=refusal, content cuma thinking/tool_use, atau
+    // text block muncul tapi isinya whitespace. Log ini disengaja verbose
+    // supaya cepat diagnose di prod tanpa restart-debug loop.
+    console.error(
+      `[ai-handler:anthropic] empty reply — stop_reason=${res.stop_reason}, blocks=${JSON.stringify(
+        res.content.map((b) => ({ type: b.type, ...(b.type === 'text' ? { textLen: (b as Anthropic.TextBlock).text.length, preview: (b as Anthropic.TextBlock).text.slice(0, 100) } : {}) })),
+      )}, model=${input.modelId}, input_tokens=${res.usage?.input_tokens}, output_tokens=${res.usage?.output_tokens}`,
+    )
+    return { ok: false, error: 'AI tidak mengembalikan teks' }
+  }
   return {
     ok: true,
     reply,

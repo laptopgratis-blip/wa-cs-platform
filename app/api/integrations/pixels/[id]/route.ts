@@ -89,6 +89,15 @@ export async function PATCH(
           testEventCode: data.testEventCode,
         }),
         ...(data.isTestMode !== undefined && { isTestMode: data.isTestMode }),
+        ...(data.triggerOnBuyerProofUpload !== undefined && {
+          triggerOnBuyerProofUpload: data.triggerOnBuyerProofUpload,
+        }),
+        ...(data.triggerOnAdminProofUpload !== undefined && {
+          triggerOnAdminProofUpload: data.triggerOnAdminProofUpload,
+        }),
+        ...(data.triggerOnAdminMarkPaid !== undefined && {
+          triggerOnAdminMarkPaid: data.triggerOnAdminMarkPaid,
+        }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
     })

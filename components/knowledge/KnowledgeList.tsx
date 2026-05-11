@@ -7,8 +7,10 @@ import {
   FileText,
   Image as ImageIcon,
   Link as LinkIcon,
+  Loader2,
   Pencil,
   Plus,
+  Sparkles,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -58,13 +60,24 @@ const TYPE_META: Record<
   LINK: { icon: LinkIcon, label: 'Link', emoji: '🔗' },
 }
 
+// Ambang batas entry "kurang keyword" — kalau <= angka ini, ikut bulk optimize.
+const BULK_OPTIMIZE_THRESHOLD = 5
+
 export function KnowledgeList({ items, limit }: KnowledgeListProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<KnowledgeListItem | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [bulkState, setBulkState] = useState<{
+    running: boolean
+    done: number
+    total: number
+  }>({ running: false, done: 0, total: 0 })
 
   const isFull = items.length >= limit
+  const optimizeCandidates = items.filter(
+    (it) => it.isActive && it.triggerKeywords.length <= BULK_OPTIMIZE_THRESHOLD,
+  )
 
   function openCreate() {
     setEditing(null)
@@ -74,6 +87,104 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
   function openEdit(item: KnowledgeListItem) {
     setEditing(item)
     setOpen(true)
+  }
+
+  async function handleBulkOptimize() {
+    if (optimizeCandidates.length === 0) {
+      toast.info('Semua pengetahuan sudah punya >5 kata kunci.')
+      return
+    }
+    const ok = confirm(
+      `Optimasi keyword pakai AI untuk ${optimizeCandidates.length} entry yang triggernya minim? AI akan tambah variasi (sinonim, slang, typo) supaya match lebih luas.`,
+    )
+    if (!ok) return
+
+    setBulkState({ running: true, done: 0, total: optimizeCandidates.length })
+    let updated = 0
+    let added = 0
+    let totalTokens = 0
+    let failed = 0
+    let stoppedReason: string | null = null
+
+    for (let i = 0; i < optimizeCandidates.length; i++) {
+      const it = optimizeCandidates[i]
+      try {
+        const sugRes = await fetch('/api/knowledge/suggest-keywords', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: it.title,
+            contentType: it.contentType,
+            textContent: it.textContent,
+            caption: it.caption,
+            existingKeywords: it.triggerKeywords,
+          }),
+        })
+        const sugJson = (await sugRes.json().catch(() => null)) as
+          | {
+              success: boolean
+              data?: {
+                keywords: string[]
+                charge?: { tokensCharged: number }
+              }
+              error?: string
+            }
+          | null
+        // 402 = saldo kurang. Stop bulk, kasih pesan.
+        if (sugRes.status === 402) {
+          stoppedReason = sugJson?.error ?? 'Saldo token habis.'
+          break
+        }
+        if (!sugRes.ok || !sugJson?.success || !sugJson.data) {
+          failed++
+        } else {
+          totalTokens += sugJson.data.charge?.tokensCharged ?? 0
+          const newKws = sugJson.data.keywords.map((k) => k.toLowerCase())
+          const merged = Array.from(
+            new Set([...it.triggerKeywords, ...newKws]),
+          ).slice(0, 20)
+          const addedCount = merged.length - it.triggerKeywords.length
+          if (addedCount > 0) {
+            const patchRes = await fetch(`/api/knowledge/${it.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ triggerKeywords: merged }),
+            })
+            if (patchRes.ok) {
+              updated++
+              added += addedCount
+            } else {
+              failed++
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[bulk-optimize] gagal untuk', it.id, err)
+        failed++
+      }
+      setBulkState((s) => ({ ...s, done: i + 1 }))
+      // Throttle 800ms supaya tidak hit rate-limit Anthropic.
+      if (i < optimizeCandidates.length - 1) {
+        await new Promise((r) => setTimeout(r, 800))
+      }
+    }
+
+    setBulkState({ running: false, done: 0, total: 0 })
+    if (stoppedReason) {
+      toast.error(
+        `${stoppedReason} Sebelum berhenti: ${updated} entry diperbarui (+${added} keyword, −${totalTokens} token).`,
+      )
+      if (updated > 0) router.refresh()
+    } else if (updated > 0) {
+      toast.success(
+        `${updated} entry diperbarui (+${added} keyword, −${totalTokens} token)${failed > 0 ? `, ${failed} gagal` : ''}.`,
+      )
+      router.refresh()
+    } else if (failed > 0) {
+      toast.error(`Semua ${failed} request gagal. Coba beberapa saat lagi.`)
+    } else {
+      toast.info('AI tidak menemukan variasi baru — keyword sudah cukup.')
+    }
   }
 
   async function toggleActive(item: KnowledgeListItem, next: boolean) {
@@ -112,14 +223,36 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
             Terpakai {items.length} dari {limit} entry
           </p>
         </div>
-        <Button
-          onClick={openCreate}
-          disabled={isFull}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" />
-          Tambah Pengetahuan
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {optimizeCandidates.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={handleBulkOptimize}
+              disabled={bulkState.running}
+              title={`${optimizeCandidates.length} entry punya ≤${BULK_OPTIMIZE_THRESHOLD} keyword`}
+            >
+              {bulkState.running ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  {bulkState.done}/{bulkState.total}…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 size-4" />
+                  Optimasi Keyword AI ({optimizeCandidates.length})
+                </>
+              )}
+            </Button>
+          )}
+          <Button
+            onClick={openCreate}
+            disabled={isFull}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" />
+            Tambah Pengetahuan
+          </Button>
+        </div>
       </div>
 
       {isFull && (

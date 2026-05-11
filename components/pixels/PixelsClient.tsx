@@ -51,6 +51,9 @@ interface PixelItem {
   conversionLabelPurchase: string | null
   testEventCode: string | null
   isTestMode: boolean
+  triggerOnBuyerProofUpload: boolean
+  triggerOnAdminProofUpload: boolean
+  triggerOnAdminMarkPaid: boolean
   isActive: boolean
   totalEvents: number
   lastEventAt: string | null
@@ -80,6 +83,9 @@ interface FormState {
   conversionLabelPurchase: string
   testEventCode: string
   isTestMode: boolean
+  triggerOnBuyerProofUpload: boolean
+  triggerOnAdminProofUpload: boolean
+  triggerOnAdminMarkPaid: boolean
   isActive: boolean
 }
 
@@ -94,6 +100,10 @@ const EMPTY_FORM: FormState = {
   conversionLabelPurchase: '',
   testEventCode: '',
   isTestMode: false,
+  // Default: hanya AdminMarkPaid yang true — preserve behavior pre-fitur.
+  triggerOnBuyerProofUpload: false,
+  triggerOnAdminProofUpload: false,
+  triggerOnAdminMarkPaid: true,
   isActive: true,
 }
 
@@ -148,6 +158,9 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
       conversionLabelPurchase: p.conversionLabelPurchase ?? '',
       testEventCode: p.testEventCode ?? '',
       isTestMode: p.isTestMode,
+      triggerOnBuyerProofUpload: p.triggerOnBuyerProofUpload,
+      triggerOnAdminProofUpload: p.triggerOnAdminProofUpload,
+      triggerOnAdminMarkPaid: p.triggerOnAdminMarkPaid,
       isActive: p.isActive,
     })
     setDialogOpen(true)
@@ -189,6 +202,9 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
         conversionLabelPurchase: form.conversionLabelPurchase.trim() || null,
         testEventCode: form.testEventCode.trim() || null,
         isTestMode: form.isTestMode,
+        triggerOnBuyerProofUpload: form.triggerOnBuyerProofUpload,
+        triggerOnAdminProofUpload: form.triggerOnAdminProofUpload,
+        triggerOnAdminMarkPaid: form.triggerOnAdminMarkPaid,
         isActive: form.isActive,
       }
       // accessToken: only include kalau user isi (atau create baru).
@@ -210,7 +226,10 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
-        toast.error(data.error ?? 'Gagal menyimpan')
+        // Toast durasi panjang supaya user sempat baca pesan error
+        // (mis. validation Zod / format pixel ID).
+        toast.error(data.error ?? 'Gagal menyimpan', { duration: 8_000 })
+        console.error('[pixel save]', { status: res.status, body: data })
         return
       }
       await refreshList()
@@ -421,9 +440,12 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
             tidak hilang saat customer block cookies.
           </li>
           <li>
-            • <strong>COD</strong> fire Purchase saat order dibuat.{' '}
-            <strong>Transfer</strong> fire Lead saat dibuat, lalu Purchase
-            saat kamu konfirmasi PAID.
+            • <strong>COD</strong>: Purchase fire saat order dibuat.
+          </li>
+          <li>
+            • <strong>Transfer</strong>: Lead fire saat order dibuat. Purchase
+            fire sesuai trigger yang kamu pilih per-pixel (upload bukti
+            pembeli, upload bukti admin, atau saat di-tandai PAID).
           </li>
         </ul>
       </div>
@@ -504,8 +526,35 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
               {form.serverSideEnabled && (
                 <div className="space-y-1.5">
                   <Label htmlFor="px-token" className="text-emerald-900">
-                    Access Token{editingId && ' (kosongkan jika tidak diubah)'}
+                    Access Token
                   </Label>
+                  {/* Status badge — kasih user kepastian token sudah ke-save atau belum.
+                      Ini menghilangkan kebingungan "kok field kosong, berarti tidak tersimpan?"
+                      Field SENGAJA kosong saat edit supaya tidak overwrite kalau user tidak isi. */}
+                  {editingId &&
+                    (() => {
+                      const existing = items.find((i) => i.id === editingId)
+                      if (existing?.accessTokenSet) {
+                        return (
+                          <div className="flex items-center justify-between rounded-md border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs text-emerald-900">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="size-3.5" />
+                              <strong>Token sudah tersimpan</strong> (terenkripsi)
+                            </span>
+                            <span className="text-emerald-700">
+                              Kosongkan field di bawah jika tidak ingin diganti
+                            </span>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          <AlertCircle className="size-3.5" />
+                          <strong>Token belum di-set</strong> — server-side belum
+                          akan jalan tanpa token
+                        </div>
+                      )
+                    })()}
                   <Input
                     id="px-token"
                     type="password"
@@ -513,7 +562,11 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                     onChange={(e) =>
                       setForm((f) => ({ ...f, accessToken: e.target.value }))
                     }
-                    placeholder={editingId ? '•••• (existing)' : 'Paste token di sini'}
+                    placeholder={
+                      editingId
+                        ? 'Paste token BARU di sini (atau kosongkan untuk pertahankan yang lama)'
+                        : 'Paste token di sini'
+                    }
                     autoComplete="off"
                   />
                   <p className="text-xs text-emerald-800">
@@ -613,6 +666,98 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                 </div>
               </div>
             )}
+
+            <div className="space-y-3 rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
+              <div>
+                <p className="text-sm font-semibold text-purple-900">
+                  Kapan event <span className="font-mono">Purchase</span> di-fire?
+                </p>
+                <p className="mt-0.5 text-xs text-purple-800">
+                  Untuk metode TRANSFER, pilih satu atau lebih momen di bawah.
+                  Order COD selalu fire Purchase saat dibuat (tidak terpengaruh).
+                  Dedup otomatis — order yang sama tidak di-fire dobel.
+                </p>
+              </div>
+
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+                <input
+                  type="checkbox"
+                  checked={form.triggerOnBuyerProofUpload}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      triggerOnBuyerProofUpload: e.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warm-900">
+                    Bukti transfer diupload oleh pembeli
+                  </p>
+                  <p className="text-xs text-warm-600">
+                    Paling cepat — fire saat pembeli upload bukti via halaman
+                    invoice (status jadi WAITING_CONFIRMATION). Belum
+                    diverifikasi admin.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+                <input
+                  type="checkbox"
+                  checked={form.triggerOnAdminProofUpload}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      triggerOnAdminProofUpload: e.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warm-900">
+                    Bukti transfer diupload oleh admin sendiri
+                  </p>
+                  <p className="text-xs text-warm-600">
+                    Saat admin terima bukti via WA/email lalu input manual URL
+                    bukti di dialog detail order.
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+                <input
+                  type="checkbox"
+                  checked={form.triggerOnAdminMarkPaid}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      triggerOnAdminMarkPaid: e.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-warm-900">
+                    Order ditandai PAID oleh admin
+                  </p>
+                  <p className="text-xs text-warm-600">
+                    Paling akurat — fire saat admin konfirmasi pembayaran
+                    valid & ubah status ke PAID. <span className="font-semibold">Default direkomendasikan.</span>
+                  </p>
+                </div>
+              </label>
+
+              {!form.triggerOnBuyerProofUpload &&
+                !form.triggerOnAdminProofUpload &&
+                !form.triggerOnAdminMarkPaid && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    ⚠ Tidak ada trigger aktif — Purchase TIDAK akan pernah
+                    di-fire ke pixel ini untuk order TRANSFER.
+                  </div>
+                )}
+            </div>
 
             <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
               <Label className="cursor-pointer text-sm">

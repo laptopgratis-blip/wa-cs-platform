@@ -18,6 +18,7 @@ import crypto from 'node:crypto'
 
 import { NextResponse } from 'next/server'
 
+import { buildPixelSnippet } from '@/lib/lp/pixel-snippets'
 import { prisma } from '@/lib/prisma'
 import { parseUa } from '@/lib/ua-parse'
 
@@ -123,6 +124,29 @@ function injectTrackerScript(html: string, lpId: string): string {
   return html + '\n' + tag
 }
 
+// Inject pixel SDK snippets (Meta/TikTok/GA4/Google Ads) tepat sebelum </head>.
+// Snippet sudah berisi browser SDK loader + click dispatcher untuk
+// data-pixel-event. Kalau snippet kosong (user tidak punya pixel aktif), noop.
+function injectPixelSnippet(html: string, snippet: string): string {
+  if (!snippet) return html
+  const closingHead = html.match(/<\/head\s*>/i)
+  if (closingHead && closingHead.index !== undefined) {
+    return (
+      html.slice(0, closingHead.index) +
+      snippet +
+      '\n' +
+      html.slice(closingHead.index)
+    )
+  }
+  // Fallback: prepend di awal body kalau tidak ada </head>.
+  const bodyOpen = html.match(/<body[^>]*>/i)
+  if (bodyOpen && bodyOpen.index !== undefined) {
+    const end = bodyOpen.index + bodyOpen[0].length
+    return html.slice(0, end) + '\n' + snippet + '\n' + html.slice(end)
+  }
+  return snippet + '\n' + html
+}
+
 // Wrap HTML kalau user kasih fragment (jarang — AI kita instruct kasih
 // dokumen lengkap, tapi defensive).
 function wrapAsDocument(content: string, metaBlock: string): string {
@@ -152,6 +176,7 @@ export async function GET(req: Request, { params }: Params) {
       metaDesc: true,
       isPublished: true,
       // userId + plan-derived maxVisitorMonth untuk cek cap bulanan.
+      userId: true,
       user: {
         select: {
           lpQuota: { select: { maxVisitorMonth: true } },
@@ -281,6 +306,23 @@ export async function GET(req: Request, { params }: Params) {
   let finalHtml = isFullDoc
     ? injectMeta(html, metaBlock)
     : wrapAsDocument(html, metaBlock)
+
+  // Inject pixel SDK + dispatcher untuk semua pixel aktif milik owner LP.
+  // Dispatcher pasang listener click — saat elemen ber-data-pixel-event di-klik,
+  // fire ke semua platform. Aman kalau user belum ada pixel: buildPixelSnippet
+  // return '' & injectPixelSnippet noop.
+  const activePixels = await prisma.pixelIntegration.findMany({
+    where: { userId: lp.userId, isActive: true },
+    select: {
+      platform: true,
+      pixelId: true,
+      conversionLabelInitiateCheckout: true,
+      conversionLabelLead: true,
+      conversionLabelPurchase: true,
+    },
+  })
+  const pixelBlob = buildPixelSnippet(activePixels)
+  finalHtml = injectPixelSnippet(finalHtml, pixelBlob)
 
   // LP Lab Phase 1 — inject tracker JS sebelum </body>. Async + non-blocking.
   // data-lp attribute dipakai tracker untuk identify lpId (tidak via URL

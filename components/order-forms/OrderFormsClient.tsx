@@ -53,6 +53,7 @@ interface OrderForm {
   // saat openEdit() — selain dua nilai itu jatuh ke 'bottom'.
   socialProofPosition: string
   socialProofIntervalSec: number
+  socialProofShowTime: boolean
   enabledPixelIds: string[]
   isActive: boolean
   views: number
@@ -101,6 +102,7 @@ const EMPTY_FORM = {
   socialProofEnabled: false,
   socialProofPosition: 'bottom' as 'top' | 'bottom',
   socialProofIntervalSec: 8,
+  socialProofShowTime: true,
   enabledPixelIds: [] as string[],
   isActive: true,
 }
@@ -138,6 +140,7 @@ export function OrderFormsClient({
       socialProofEnabled: f.socialProofEnabled,
       socialProofPosition: f.socialProofPosition === 'top' ? 'top' : 'bottom',
       socialProofIntervalSec: f.socialProofIntervalSec,
+      socialProofShowTime: f.socialProofShowTime,
       enabledPixelIds: f.enabledPixelIds,
       isActive: f.isActive,
     })
@@ -195,6 +198,7 @@ export function OrderFormsClient({
         socialProofEnabled: form.socialProofEnabled,
         socialProofPosition: form.socialProofPosition,
         socialProofIntervalSec: form.socialProofIntervalSec,
+        socialProofShowTime: form.socialProofShowTime,
         enabledPixelIds: form.enabledPixelIds,
         isActive: form.isActive,
       }
@@ -649,6 +653,34 @@ export function OrderFormsClient({
                       Range 3-30 detik. Lebih kecil = lebih sering muncul.
                       Recommended: 6-10 detik supaya tidak mengganggu.
                     </p>
+                  </div>
+
+                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2">
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.socialProofShowTime}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            socialProofShowTime: e.target.checked,
+                          }))
+                        }
+                        className="mt-0.5 size-4 cursor-pointer accent-emerald-600"
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-emerald-900">
+                          Tampilkan waktu pembelian
+                        </p>
+                        <p className="text-xs text-emerald-800">
+                          Saat <strong>ON</strong>: muncul &quot;… ·{' '}
+                          <span className="font-mono">2 hari lalu</span>&quot;.
+                          Saat <strong>OFF</strong>: tanpa timestamp — cocok
+                          kalau pembeli terakhirnya sudah lama (supaya tidak
+                          counter-productive untuk konversi).
+                        </p>
+                      </div>
+                    </label>
                   </div>
 
                   <p className="rounded border border-dashed border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-800">
