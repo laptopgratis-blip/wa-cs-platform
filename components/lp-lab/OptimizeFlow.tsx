@@ -320,21 +320,10 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                     </div>
                   )}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded border bg-white p-2">
-                    <div className="text-warm-500">Perkiraan token AI</div>
-                    <div className="font-mono text-sm font-bold text-warm-900">
-                      ~{estimate.estimate.estimatedInputTokens.toLocaleString('id-ID')} in
-                      <br />~{estimate.estimate.estimatedOutputTokens.toLocaleString('id-ID')} out
-                    </div>
-                  </div>
-                  <div className="rounded border bg-white p-2">
-                    <div className="text-warm-500">Perkiraan biaya provider</div>
-                    <div className="font-mono text-sm font-bold text-warm-900">
-                      ~${estimate.estimate.providerCostUsd.toFixed(4)}
-                      <br />
-                      ~Rp {Math.round(estimate.estimate.providerCostRp).toLocaleString('id-ID')}
-                    </div>
+                <div className="mt-2 rounded border bg-white p-2 text-xs">
+                  <div className="text-warm-500">Perkiraan token AI yang akan diproses</div>
+                  <div className="font-mono text-sm font-bold text-warm-900">
+                    ~{estimate.estimate.estimatedInputTokens.toLocaleString('id-ID')} input + ~{estimate.estimate.estimatedOutputTokens.toLocaleString('id-ID')} output
                   </div>
                 </div>
                 <div className="mt-2 rounded bg-purple-600 p-2.5 text-white">
@@ -630,18 +619,12 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                 <div className="font-semibold">
                   ✓ Biaya aktual (setelah AI selesai)
                 </div>
-                <div className="mt-1.5 grid gap-1.5 sm:grid-cols-3">
+                <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
                   <div>
-                    <div className="text-[10px] text-emerald-700">Token AI dipakai</div>
+                    <div className="text-[10px] text-emerald-700">Token AI diproses</div>
                     <div className="font-mono font-bold">
                       {result.cost.inputTokens.toLocaleString('id-ID')} in +{' '}
                       {result.cost.outputTokens.toLocaleString('id-ID')} out
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-emerald-700">Biaya provider</div>
-                    <div className="font-mono font-bold">
-                      Rp {Math.round(result.cost.providerCostRp).toLocaleString('id-ID')}
                     </div>
                   </div>
                   <div>

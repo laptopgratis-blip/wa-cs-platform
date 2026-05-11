@@ -214,9 +214,7 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                         {r.focusAreas.slice(0, 4).join(' · ') || 'Tidak ada focus area'}
                       </div>
                       <div className="mt-0.5 text-[11px] text-warm-400">
-                        {r.model} · Rp{' '}
-                        {Math.round(r.providerCostRp).toLocaleString('id-ID')} provider
-                        · {r.platformTokensCharged} token
+                        {r.model} · {r.platformTokensCharged.toLocaleString('id-ID')} token kepake
                       </div>
                     </div>
                     {isExpanded ? (

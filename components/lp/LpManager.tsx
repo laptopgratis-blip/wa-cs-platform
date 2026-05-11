@@ -280,12 +280,7 @@ export function LpManager() {
           {aiStats && aiStats.totalGenerations > 0 && (
             <Card
               className="rounded-xl border-purple-200 bg-purple-50/40"
-              title={
-                aiStats.legacy.count > 0
-                  ? `${aiStats.audited.count} kali tercatat akurat dari log + ${aiStats.legacy.count} kali estimasi (data sebelum 2026-05-09).`
-                  : 'Biaya provider AI (Claude). Token platform yg dipotong: ' +
-                    `${aiStats.audited.platformTokensCharged}/generate × Rp${(2).toLocaleString('id-ID')} (default).`
-              }
+              title={`Total ${aiStats.totalGenerations} kali AI generate untuk landing page kamu.`}
             >
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
@@ -296,20 +291,10 @@ export function LpManager() {
                     AI Generate · {aiStats.totalGenerations}×
                   </div>
                   <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
-                    Rp{' '}
-                    {formatNumber(
-                      Math.round(
-                        aiStats.audited.providerCostRp +
-                          aiStats.legacy.estimatedProviderCostRp,
-                      ),
-                    )}
+                    {formatNumber(aiStats.audited.platformTokensCharged)}
                   </div>
                   <div className="mt-0.5 text-[10px] text-warm-500">
-                    biaya provider · ~$
-                    {(
-                      aiStats.audited.providerCostUsd +
-                      aiStats.legacy.estimatedProviderCostUsd
-                    ).toFixed(4)}
+                    token kepake total
                     {aiStats.legacy.count > 0 && (
                       <span className="ml-0.5 text-amber-700">*</span>
                     )}
@@ -323,8 +308,7 @@ export function LpManager() {
       {aiStats && aiStats.legacy.count > 0 && (
         <p className="-mt-2 text-[11px] text-warm-500">
           *{aiStats.legacy.count} dari {aiStats.totalGenerations} generasi adalah
-          data lama (sebelum 2026-05-09) — token tidak tercatat per-call, biaya
-          dihitung pakai estimasi rata-rata Haiku 4.5.
+          data lama (sebelum 2026-05-09) — token tidak tercatat per-call.
         </p>
       )}
 
