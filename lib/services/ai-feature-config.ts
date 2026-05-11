@@ -78,12 +78,9 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
   LP_OPTIMIZE: {
     ...COMMON_DEFAULTS,
     featureKey: 'LP_OPTIMIZE',
-    modelName: 'claude-sonnet-4-6',
-    inputPricePer1M: 3.0,
-    outputPricePer1M: 15.0,
     displayName: 'LP Optimize (CRO)',
     description:
-      'Optimasi CRO landing page pakai Claude Sonnet (model lebih besar). POWER tier only.',
+      'Optimasi CRO landing page. Pakai Haiku (cepat 200-300 tok/s) — Sonnet 3-5x lebih lambat untuk LP besar (output 15-30K token), UX buruk.',
   },
   SOUL_SIM: {
     ...COMMON_DEFAULTS,
