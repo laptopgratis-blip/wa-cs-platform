@@ -41,7 +41,6 @@ interface DashboardOrderPopupProps {
 
 const POLL_INTERVAL_MS = 30_000
 const VISIBLE_DURATION_MS = 6000
-const QUEUE_GAP_MS = 800
 const SESSION_KEY = 'hulao_dashboard_last_seen_order'
 
 function formatRupiah(n: number): string {
@@ -131,34 +130,36 @@ export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps
     }
   }, [enabled])
 
-  // Queue worker: pop satu, tampilkan, hide setelah VISIBLE_DURATION_MS,
-  // jeda QUEUE_GAP_MS, ambil berikutnya.
+  // Effect A: pick next dari queue kalau slot aktif kosong. Cleanup TIDAK
+  // di-return supaya re-run effect ini (akibat state changes oleh effect ini
+  // sendiri) tidak ngebatalin timer dari Effect B.
   useEffect(() => {
-    if (active !== null || queue.length === 0) return
+    if (active !== null) return
+    if (queue.length === 0) return
     const next = queue[0]
     setActive(next)
     setQueue((q) => q.slice(1))
-    // Sound play (kalau enabled + sound bukan 'off').
     if (sound !== 'off') {
       playNotificationSound(sound)
     }
+  }, [queue, active, sound])
+
+  // Effect B: auto-hide setelah VISIBLE_DURATION_MS. Dep cuma `active` —
+  // timer set saat active jadi non-null, cleared saat active jadi null
+  // (unmount atau hide manual). Pisah dari Effect A supaya re-render karena
+  // queue updates tidak ngebatalin timer ini.
+  useEffect(() => {
+    if (active === null) return
     const hideTimer = window.setTimeout(() => {
       setActive(null)
     }, VISIBLE_DURATION_MS)
     return () => window.clearTimeout(hideTimer)
-  }, [queue, active, sound])
+  }, [active])
 
-  // Setelah hide, tunggu QUEUE_GAP_MS sebelum next (queue worker akan re-run
-  // saat active jadi null + queue ada isi).
-  useEffect(() => {
-    if (active !== null) return
-    if (queue.length === 0) return
-    const gapTimer = window.setTimeout(() => {
-      // trigger re-run via state — no-op set tapi memicu useEffect di atas.
-      setQueue((q) => [...q])
-    }, QUEUE_GAP_MS)
-    return () => window.clearTimeout(gapTimer)
-  }, [active, queue.length])
+  // Catatan: tidak ada Effect C untuk gap antar popup — Effect A langsung
+  // pick next saat active=null. Total: 5 popup × 6 detik = 30 detik, dengan
+  // transisi langsung. Cukup terlihat user; gap explisit malah bikin logic
+  // ribet (infinite re-render loop kalau pakai setQueue([...q])).
 
   function dismiss() {
     setActive(null)
