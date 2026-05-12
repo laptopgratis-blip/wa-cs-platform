@@ -655,32 +655,29 @@ export function OrderFormsClient({
                     </p>
                   </div>
 
-                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2">
-                    <label className="flex cursor-pointer items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={form.socialProofShowTime}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            socialProofShowTime: e.target.checked,
-                          }))
-                        }
-                        className="mt-0.5 size-4 cursor-pointer accent-emerald-600"
-                      />
+                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <p className="text-sm font-medium text-emerald-900">
                           Tampilkan waktu pembelian
                         </p>
-                        <p className="text-xs text-emerald-800">
-                          Saat <strong>ON</strong>: muncul &quot;… ·{' '}
+                        <p className="mt-0.5 text-xs text-emerald-800">
+                          Saat <strong>ON</strong>: popup tampil &quot;Adnan dari
+                          Bandung telah melakukan pembelian ·{' '}
                           <span className="font-mono">2 hari lalu</span>&quot;.
-                          Saat <strong>OFF</strong>: tanpa timestamp — cocok
-                          kalau pembeli terakhirnya sudah lama (supaya tidak
+                          Saat <strong>OFF</strong>: tanpa timestamp — cocok kalau
+                          pembeli terakhirnya sudah lama (supaya tidak
                           counter-productive untuk konversi).
                         </p>
                       </div>
-                    </label>
+                      <Switch
+                        checked={form.socialProofShowTime}
+                        onCheckedChange={(v) =>
+                          setForm((f) => ({ ...f, socialProofShowTime: v }))
+                        }
+                        className="mt-0.5"
+                      />
+                    </div>
                   </div>
 
                   <p className="rounded border border-dashed border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-800">
