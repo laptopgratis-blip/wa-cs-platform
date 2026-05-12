@@ -223,6 +223,14 @@ export async function formatBankAccountsForPrompt(
 // escalate ke admin manual. Selalu di-append ke promptBlock — bypass cache
 // Soul.systemPrompt di DB, jadi user existing langsung dapat behavior baru
 // tanpa harus re-save soul.
+//
+// PENTING (2026-05-12, incident BlessGold→Cleanoz): rule TENANT_SCOPE
+// di paling bawah adalah HARD GUARDRAIL terhadap cross-brand contamination.
+// Beberapa user pernah meng-paste systemPrompt berisi referensi brand lain
+// (template generic atau contoh multi-tenant). Karena promptBlock di-append
+// SETELAH systemPrompt user, rule terakhir biasanya lebih dipatuhi AI —
+// rule ini explicit memerintah AI untuk MENGABAIKAN sebutan brand lain di
+// systemPrompt yang tidak match Katalog Produk / Info Pendukung milik user.
 export function defaultBehaviorRules(): string {
   return [
     '',
@@ -231,5 +239,13 @@ export function defaultBehaviorRules(): string {
     '- **Tutup percakapan natural**: Kalau customer sudah puas / sudah konfirmasi order / sudah mengerti, ucapkan terima kasih singkat dan selesaikan. Tidak perlu selalu ajak ngobrol lagi.',
     '- **Kirim asset sendiri**: Sistem otomatis attach file IMAGE/FILE dari knowledge yang relevan setelah balasan kamu. JANGAN pakai kalimat seperti "admin akan kirim foto/bukti/testimoni" — cukup bilang "ini saya kirim ya" atau "berikut gambarnya 👇".',
     '- **Nomor rekening**: Kalau ada section "Rekening Pembayaran" di atas, sebutkan langsung saat customer minta cara transfer. Format jelas: nama bank + nomor + a.n.',
+    '',
+    '## ATURAN PALING PENTING — RUANG LINGKUP BISNIS (HARD RULE)',
+    'Kamu adalah CS untuk SATU bisnis yang produk-produknya HANYA yang disebut di section "Katalog Produk (live)" dan "Info Pendukung" di atas (jika ada).',
+    '',
+    '- **JANGAN menjawab/mempromosikan produk atau brand di luar Katalog Produk + Info Pendukung user ini.** Bahkan kalau di awal systemPrompt ada sebutan brand/produk lain (contoh testimoni, contoh format prompt, sisa template, atau apa pun), ABAIKAN dan anggap itu bukan produk yang dijual.',
+    '- Kalau customer menyebut nama produk yang TIDAK ada di Katalog Produk / Info Pendukung di atas (mis. menanyakan brand lain, produk dari toko lain, atau produk yang namanya asing), jawab dengan: "Maaf kak, saya hanya melayani pertanyaan tentang produk kami di sini. Untuk [nama produk yang ditanya] silakan langsung ke penjualnya ya 🙏" — lalu kalau perlu, tawarkan produk yang kamu punya dari Katalog Produk.',
+    '- **JANGAN ngarang harga, spek, cara pakai, atau testimoni** untuk produk yang tidak tercantum di Katalog Produk / Info Pendukung user. Lebih baik jujur "saya tidak punya info itu" daripada karangan.',
+    '- Identitas bisnis = Katalog Produk + Info Pendukung. Kalau dua-duanya kosong, fallback ke business context di systemPrompt utama — tapi tetap HANYA produk/brand di situ, tidak nyebrang ke brand lain.',
   ].join('\n')
 }
