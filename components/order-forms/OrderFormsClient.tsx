@@ -54,6 +54,8 @@ interface OrderForm {
   socialProofPosition: string
   socialProofIntervalSec: number
   socialProofShowTime: boolean
+  // 'PAID' (default) = filter paymentStatus=PAID. 'ALL' = semua status order.
+  socialProofSource: string
   enabledPixelIds: string[]
   isActive: boolean
   views: number
@@ -103,6 +105,7 @@ const EMPTY_FORM = {
   socialProofPosition: 'bottom' as 'top' | 'bottom',
   socialProofIntervalSec: 8,
   socialProofShowTime: true,
+  socialProofSource: 'PAID' as 'PAID' | 'ALL',
   enabledPixelIds: [] as string[],
   isActive: true,
 }
@@ -141,6 +144,7 @@ export function OrderFormsClient({
       socialProofPosition: f.socialProofPosition === 'top' ? 'top' : 'bottom',
       socialProofIntervalSec: f.socialProofIntervalSec,
       socialProofShowTime: f.socialProofShowTime,
+      socialProofSource: f.socialProofSource === 'ALL' ? 'ALL' : 'PAID',
       enabledPixelIds: f.enabledPixelIds,
       isActive: f.isActive,
     })
@@ -199,6 +203,7 @@ export function OrderFormsClient({
         socialProofPosition: form.socialProofPosition,
         socialProofIntervalSec: form.socialProofIntervalSec,
         socialProofShowTime: form.socialProofShowTime,
+        socialProofSource: form.socialProofSource,
         enabledPixelIds: form.enabledPixelIds,
         isActive: form.isActive,
       }
@@ -680,9 +685,55 @@ export function OrderFormsClient({
                     </div>
                   </div>
 
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-emerald-900">
+                      Sumber Data Popup
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({ ...f, socialProofSource: 'PAID' }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                          form.socialProofSource === 'PAID'
+                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
+                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                        }`}
+                      >
+                        <span className="block">Hanya order lunas</span>
+                        <span className="mt-0.5 block text-[10px] font-normal text-emerald-700">
+                          Paling jujur (recommended)
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((f) => ({ ...f, socialProofSource: 'ALL' }))
+                        }
+                        className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                          form.socialProofSource === 'ALL'
+                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
+                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                        }`}
+                      >
+                        <span className="block">Semua order</span>
+                        <span className="mt-0.5 block text-[10px] font-normal text-emerald-700">
+                          Termasuk pending — cocok form baru
+                        </span>
+                      </button>
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      <strong>Hanya order lunas</strong>: cuma tampilkan pembeli
+                      yang sudah bayar. <strong>Semua order</strong>: termasuk
+                      yang belum bayar — popup punya konten meski form baru.
+                    </p>
+                  </div>
+
                   <p className="rounded border border-dashed border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-800">
                     Privacy: hanya nama depan + nama kota yang ditampilkan.
-                    Order yang tampil: status PAID dari 60 hari terakhir.
+                    Order yang tampil: dari 60 hari terakhir, sesuai pilihan
+                    sumber data di atas.
                   </p>
                 </div>
               )}

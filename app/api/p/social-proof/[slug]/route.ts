@@ -39,6 +39,7 @@ export async function GET(
       socialProofPosition: true,
       socialProofIntervalSec: true,
       socialProofShowTime: true,
+      socialProofSource: true,
     },
   })
   if (!form || !form.isActive || !form.socialProofEnabled) {
@@ -50,10 +51,18 @@ export async function GET(
 
   const sinceDate = new Date(Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000)
 
+  // Filter status sesuai pilihan seller. 'PAID' (default) → cuma order
+  // sudah dibayar. 'ALL' → semua submission termasuk PENDING/CANCELLED,
+  // berguna untuk form baru atau seller yang mau tampilkan volume tinggi.
+  const statusFilter =
+    form.socialProofSource === 'ALL'
+      ? {} // tidak ada filter — semua paymentStatus
+      : { paymentStatus: 'PAID' }
+
   const orders = await prisma.userOrder.findMany({
     where: {
       userId: form.userId,
-      paymentStatus: 'PAID',
+      ...statusFilter,
       createdAt: { gte: sinceDate },
       // City/customerName harus terisi supaya entry useful. Order tanpa city
       // (mis. produk digital) di-skip — popup bilang "Budi - Jakarta - …",
@@ -76,6 +85,8 @@ export async function GET(
       name: firstName(o.customerName),
       city: (o.shippingCityName ?? '').trim(),
       // Timestamp ditampilkan sebagai relative time di UI ("2 jam lalu").
+      // Pakai paidAt kalau ada, jatuh ke createdAt (untuk ALL mode, banyak
+      // entry PENDING yang paidAt-nya null).
       ts: (o.paidAt ?? o.createdAt).toISOString(),
     }))
     .filter((e) => e.city.length > 0)

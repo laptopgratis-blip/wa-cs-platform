@@ -23,6 +23,10 @@ export const orderFormCreateSchema = z.object({
   // supaya pembeli lama tetap berfungsi sebagai social proof tanpa counter-
   // productive sense of staleness.
   socialProofShowTime: z.boolean().default(true),
+  // Source data popup. PAID = hanya order yang sudah lunas (paling jujur).
+  // ALL = semua status order termasuk PENDING. Cocok untuk form baru yang
+  // belum punya order PAID supaya popup tetap punya konten.
+  socialProofSource: z.enum(['PAID', 'ALL']).default('PAID'),
   isActive: z.boolean().default(true),
   // Pixel tracking (Phase 2 Pixel) — PixelIntegration.id yg aktif untuk form.
   enabledPixelIds: z.array(z.string()).default([]),

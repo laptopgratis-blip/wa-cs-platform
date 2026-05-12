@@ -1902,6 +1902,12 @@ model OrderForm {
   // true (backward compat). User yang pembeli terakhirnya sudah lama bisa
   // matikan supaya tidak counter-productive untuk konversi.
   socialProofShowTime    Boolean @default(true)
+  // Source data popup: "PAID" hanya order yang sudah dibayar (default —
+  // most truthful social proof), atau "ALL" semua submission termasuk
+  // PENDING + CANCELLED. ALL berguna untuk form baru yang belum punya
+  // pembeli, atau seller yang mau tampilkan volume submission tinggi
+  // sebagai social proof (trade-off: kurang truthful).
+  socialProofSource      String  @default("PAID")
 
   // PixelIntegration ID yang aktif untuk form ini (Phase 1 Pixel Tracking,
   // 2026-05-07). Multi-pixel — user bisa pakai 3 platform sekaligus per form.
