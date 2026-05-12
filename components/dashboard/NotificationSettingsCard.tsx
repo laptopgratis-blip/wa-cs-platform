@@ -7,10 +7,11 @@
 // Sound preview pakai utility yang sama dengan SocialProofPopup public,
 // jadi sound yang seller dengar di sini = sound yang akan play saat ada
 // order baru waktu dashboard terbuka.
-import { Bell, Loader2, Volume2 } from 'lucide-react'
+import { Bell, Loader2, PlayCircle, Volume2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
   type NotificationSound,
@@ -145,6 +146,36 @@ export function NotificationSettingsCard() {
           </p>
         </div>
       )}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => {
+          // Reset baseline supaya order recent muncul sebagai "fresh" pada
+          // poll berikutnya. Kalau user buka di tab ini = popup akan tampil
+          // dalam max 30 detik (next poll cycle).
+          try {
+            sessionStorage.setItem(
+              'hulao_dashboard_last_seen_order',
+              'test-trigger-' + Date.now(),
+            )
+            toast.success(
+              'OK! Popup akan muncul max 30 detik. Reload halaman supaya langsung trigger sekarang.',
+            )
+          } catch {
+            toast.error('Gagal akses sessionStorage')
+          }
+        }}
+      >
+        <PlayCircle className="mr-2 size-4" />
+        Test Popup Sekarang
+      </Button>
+      <p className="-mt-2 text-[10px] text-muted-foreground">
+        Tombol reset baseline → popup order recent (60 menit terakhir) akan
+        muncul sebagai fresh. Reload halaman supaya langsung trigger.
+      </p>
     </div>
   )
 }

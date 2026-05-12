@@ -18,12 +18,16 @@ export const SOUND_PRESETS: { value: NotificationSound; label: string; descripti
 // Singleton AudioContext supaya tidak bikin new context tiap call (browser
 // limit ~30 active contexts). Lazy init pada first play attempt.
 let ctxInstance: AudioContext | null = null
+let gestureListenerAttached = false
 
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null
   if (!ctxInstance) {
     try {
-      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext
       if (!AC) return null
       ctxInstance = new AC()
     } catch {
@@ -31,6 +35,31 @@ function getCtx(): AudioContext | null {
     }
   }
   return ctxInstance
+}
+
+// Browser autoplay policy: AudioContext baru di-create akan suspended sampai
+// ada user gesture (click/keydown/touch). Kalau popup auto-trigger SEBELUM
+// user interaksi, sound silent. Fix: pasang listener global yang resume
+// ctx pada gesture pertama — sehingga popup berikutnya bisa bersuara.
+// Dipanggil dari komponen popup saat mount (idempotent — flag attached).
+export function attachAutoplayUnlocker(): void {
+  if (typeof window === 'undefined' || gestureListenerAttached) return
+  gestureListenerAttached = true
+  const unlock = () => {
+    const ctx = getCtx()
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {
+        // Browser tetap block — ignore. Sound bukan kritis.
+      })
+    }
+  }
+  // Tangkap event yang AKAN counted sebagai gesture user di Chrome:
+  // pointerdown, keydown, touchstart. once:true → auto-cleanup setelah
+  // pertama, supaya tidak nempel selamanya.
+  const opts = { once: true, capture: true, passive: true } as const
+  window.addEventListener('pointerdown', unlock, opts)
+  window.addEventListener('keydown', unlock, opts)
+  window.addEventListener('touchstart', unlock, opts)
 }
 
 // Helper: play satu sine wave dengan envelope ADSR sederhana (attack

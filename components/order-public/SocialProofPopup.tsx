@@ -14,6 +14,7 @@ import { CheckCircle2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  attachAutoplayUnlocker,
   type NotificationSound,
   playNotificationSound,
 } from '@/lib/utils/notification-sound'
@@ -73,8 +74,11 @@ export function SocialProofPopup({
   const cycleRef = useRef<number>(0)
 
   // Cek session-level dismiss saat mount supaya popup off kalau user sudah
-  // tutup di pageview ini.
+  // tutup di pageview ini. Sekalian pasang unlocker AudioContext supaya
+  // gesture user pertama (klik/scroll/tap) resume audio — fix sound silent
+  // pada popup pertama yang auto-muncul sebelum user interaksi.
   useEffect(() => {
+    attachAutoplayUnlocker()
     try {
       if (sessionStorage.getItem(SESSION_DISMISS_KEY) === slug) {
         setDismissed(true)

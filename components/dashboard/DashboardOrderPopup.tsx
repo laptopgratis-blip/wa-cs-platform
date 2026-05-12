@@ -21,6 +21,7 @@ import { CheckCircle2, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  attachAutoplayUnlocker,
   type NotificationSound,
   playNotificationSound,
 } from '@/lib/utils/notification-sound'
@@ -53,10 +54,11 @@ export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps
   const lastSeenRef = useRef<string | null>(null)
   const dismissedRef = useRef(false)
 
-  // Init: ambil lastSeen dari sessionStorage (kalau navigate antar halaman,
-  // tidak re-popup order lama).
+  // Init: ambil lastSeen dari sessionStorage + pasang unlocker autoplay
+  // audio (resume ctx pada user gesture pertama).
   useEffect(() => {
     if (!enabled) return
+    attachAutoplayUnlocker()
     try {
       const stored = sessionStorage.getItem(SESSION_KEY)
       if (stored) lastSeenRef.current = stored
