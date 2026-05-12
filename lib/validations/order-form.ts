@@ -27,6 +27,9 @@ export const orderFormCreateSchema = z.object({
   // ALL = semua status order termasuk PENDING. Cocok untuk form baru yang
   // belum punya order PAID supaya popup tetap punya konten.
   socialProofSource: z.enum(['PAID', 'ALL']).default('PAID'),
+  // Sound notif saat popup tampil. Off default supaya tidak kaget customer.
+  socialProofSoundEnabled: z.boolean().default(false),
+  socialProofSound: z.enum(['bell', 'ding', 'chime', 'pop']).default('bell'),
   isActive: z.boolean().default(true),
   // Pixel tracking (Phase 2 Pixel) — PixelIntegration.id yg aktif untuk form.
   enabledPixelIds: z.array(z.string()).default([]),

@@ -56,6 +56,9 @@ interface OrderForm {
   socialProofShowTime: boolean
   // 'PAID' (default) = filter paymentStatus=PAID. 'ALL' = semua status order.
   socialProofSource: string
+  socialProofSoundEnabled: boolean
+  // 'bell' | 'ding' | 'chime' | 'pop' — preset Web Audio API tone.
+  socialProofSound: string
   enabledPixelIds: string[]
   isActive: boolean
   views: number
@@ -106,6 +109,8 @@ const EMPTY_FORM = {
   socialProofIntervalSec: 8,
   socialProofShowTime: true,
   socialProofSource: 'PAID' as 'PAID' | 'ALL',
+  socialProofSoundEnabled: false,
+  socialProofSound: 'bell' as 'bell' | 'ding' | 'chime' | 'pop',
   enabledPixelIds: [] as string[],
   isActive: true,
 }
@@ -145,6 +150,10 @@ export function OrderFormsClient({
       socialProofIntervalSec: f.socialProofIntervalSec,
       socialProofShowTime: f.socialProofShowTime,
       socialProofSource: f.socialProofSource === 'ALL' ? 'ALL' : 'PAID',
+      socialProofSoundEnabled: f.socialProofSoundEnabled,
+      socialProofSound: (['bell', 'ding', 'chime', 'pop'].includes(f.socialProofSound)
+        ? f.socialProofSound
+        : 'bell') as 'bell' | 'ding' | 'chime' | 'pop',
       enabledPixelIds: f.enabledPixelIds,
       isActive: f.isActive,
     })
@@ -204,6 +213,8 @@ export function OrderFormsClient({
         socialProofIntervalSec: form.socialProofIntervalSec,
         socialProofShowTime: form.socialProofShowTime,
         socialProofSource: form.socialProofSource,
+        socialProofSoundEnabled: form.socialProofSoundEnabled,
+        socialProofSound: form.socialProofSound,
         enabledPixelIds: form.enabledPixelIds,
         isActive: form.isActive,
       }
@@ -683,6 +694,74 @@ export function OrderFormsClient({
                         className="mt-0.5"
                       />
                     </div>
+                  </div>
+
+                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-emerald-900">
+                          Sound notif popup
+                        </p>
+                        <p className="mt-0.5 text-xs text-emerald-800">
+                          Bunyi pendek saat popup muncul — supaya customer
+                          notice. Default OFF (banyak pengunjung tidak suka
+                          sound otomatis di mobile).
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.socialProofSoundEnabled}
+                        onCheckedChange={(v) =>
+                          setForm((f) => ({
+                            ...f,
+                            socialProofSoundEnabled: v,
+                          }))
+                        }
+                        className="mt-0.5"
+                      />
+                    </div>
+                    {form.socialProofSoundEnabled && (
+                      <div className="mt-2 space-y-2 border-t border-emerald-100 pt-2">
+                        <Label className="text-xs text-emerald-900">
+                          Pilih nada
+                        </Label>
+                        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                          {(
+                            [
+                              { v: 'bell', label: 'Bell' },
+                              { v: 'ding', label: 'Ding' },
+                              { v: 'chime', label: 'Chime' },
+                              { v: 'pop', label: 'Pop' },
+                            ] as const
+                          ).map((opt) => (
+                            <button
+                              key={opt.v}
+                              type="button"
+                              onClick={() => {
+                                setForm((f) => ({
+                                  ...f,
+                                  socialProofSound: opt.v,
+                                }))
+                                // Test play sound saat dipilih.
+                                void import('@/lib/utils/notification-sound').then(
+                                  (m) => m.playNotificationSound(opt.v),
+                                )
+                              }}
+                              className={`rounded-md border px-2 py-1.5 text-xs transition-colors ${
+                                form.socialProofSound === opt.v
+                                  ? 'border-emerald-500 bg-emerald-50 font-semibold text-emerald-900'
+                                  : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50/50'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-emerald-700">
+                          Klik untuk preview sound. Bunyi disintesis browser
+                          (Web Audio API), tidak butuh download file.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

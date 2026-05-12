@@ -13,9 +13,19 @@
 import { CheckCircle2, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import {
+  type NotificationSound,
+  playNotificationSound,
+} from '@/lib/utils/notification-sound'
+
 interface ProofEntry {
   name: string
   city: string
+  // paymentStatus string: 'PAID' / 'PENDING' / 'CANCELLED'. Dipakai untuk
+  // pilih kalimat: PAID → "melakukan pembayaran", lainnya → "melakukan
+  // pemesanan". Opsional supaya backward-compat dengan response lama
+  // (sebelum API include status).
+  status?: string
   ts: string
 }
 
@@ -27,6 +37,10 @@ interface SocialProofPopupProps {
   // telah melakukan pembelian" — berguna kalau pembeli terakhir sudah lama
   // supaya tetap berfungsi sebagai social proof tanpa kasih kesan stale.
   showTime?: boolean
+  // Sound notif saat popup muncul. Default off — bunyi otomatis di public
+  // page bisa kaget customer kalau tidak expect.
+  soundEnabled?: boolean
+  sound?: NotificationSound
 }
 
 const VISIBLE_DURATION_MS = 4500
@@ -50,6 +64,8 @@ export function SocialProofPopup({
   position,
   intervalSec,
   showTime = true,
+  soundEnabled = false,
+  sound = 'bell',
 }: SocialProofPopupProps) {
   const [entries, setEntries] = useState<ProofEntry[]>([])
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
@@ -115,6 +131,11 @@ export function SocialProofPopup({
     function showNext() {
       if (!mounted) return
       setActiveIdx(pickIdx())
+      if (soundEnabled) {
+        // Best-effort — browser autoplay policy bisa block. Sound bukan
+        // kritis, popup tetap tampil meski silent.
+        playNotificationSound(sound)
+      }
       hideTimer = setTimeout(() => {
         if (!mounted) return
         setActiveIdx(null)
@@ -177,7 +198,9 @@ export function SocialProofPopup({
               <span className="font-bold">{entry.city}</span>
             </p>
             <p className="text-xs text-warm-600">
-              telah melakukan pembelian
+              {entry.status === 'PAID'
+                ? 'telah melakukan pembayaran'
+                : 'telah melakukan pemesanan'}
               {showTime && ` · ${relativeTime(entry.ts)}`}
             </p>
           </div>

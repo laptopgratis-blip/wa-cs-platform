@@ -67,6 +67,12 @@ export async function PATCH(
         ...(data.socialProofSource !== undefined && {
           socialProofSource: data.socialProofSource,
         }),
+        ...(data.socialProofSoundEnabled !== undefined && {
+          socialProofSoundEnabled: data.socialProofSoundEnabled,
+        }),
+        ...(data.socialProofSound !== undefined && {
+          socialProofSound: data.socialProofSound,
+        }),
         ...(data.enabledPixelIds !== undefined && {
           enabledPixelIds: data.enabledPixelIds,
         }),

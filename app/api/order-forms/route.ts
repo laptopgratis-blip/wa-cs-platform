@@ -103,6 +103,8 @@ export async function POST(req: Request) {
         socialProofIntervalSec: data.socialProofIntervalSec,
         socialProofShowTime: data.socialProofShowTime,
         socialProofSource: data.socialProofSource,
+        socialProofSoundEnabled: data.socialProofSoundEnabled,
+        socialProofSound: data.socialProofSound,
         enabledPixelIds: data.enabledPixelIds,
         isActive: data.isActive,
       },

@@ -40,6 +40,8 @@ export async function GET(
       socialProofIntervalSec: true,
       socialProofShowTime: true,
       socialProofSource: true,
+      socialProofSoundEnabled: true,
+      socialProofSound: true,
     },
   })
   if (!form || !form.isActive || !form.socialProofEnabled) {
@@ -73,6 +75,7 @@ export async function GET(
     select: {
       customerName: true,
       shippingCityName: true,
+      paymentStatus: true,
       paidAt: true,
       createdAt: true,
     },
@@ -84,6 +87,10 @@ export async function GET(
     .map((o) => ({
       name: firstName(o.customerName),
       city: (o.shippingCityName ?? '').trim(),
+      // Status di-pass ke client supaya popup render kalimat berbeda:
+      // PAID → "melakukan pembayaran", lainnya → "melakukan pemesanan".
+      // Lebih jujur — order PENDING/CANCELLED tidak boleh diklaim sudah bayar.
+      status: o.paymentStatus,
       // Timestamp ditampilkan sebagai relative time di UI ("2 jam lalu").
       // Pakai paidAt kalau ada, jatuh ke createdAt (untuk ALL mode, banyak
       // entry PENDING yang paidAt-nya null).
@@ -99,6 +106,8 @@ export async function GET(
         intervalSec: form.socialProofIntervalSec,
         position: form.socialProofPosition,
         showTime: form.socialProofShowTime,
+        soundEnabled: form.socialProofSoundEnabled,
+        sound: form.socialProofSound,
       },
     },
     { headers: { 'cache-control': `public, max-age=${CACHE_MAX_AGE_SEC}` } },

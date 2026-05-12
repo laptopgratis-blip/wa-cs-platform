@@ -91,6 +91,8 @@ interface FormProps {
   socialProofPosition: 'top' | 'bottom'
   socialProofIntervalSec: number
   socialProofShowTime: boolean
+  socialProofSoundEnabled: boolean
+  socialProofSound: 'bell' | 'ding' | 'chime' | 'pop'
   ownerName: string
 }
 
@@ -665,6 +667,8 @@ export function OrderFormPublic({
           position={form.socialProofPosition}
           intervalSec={form.socialProofIntervalSec}
           showTime={form.socialProofShowTime}
+          soundEnabled={form.socialProofSoundEnabled}
+          sound={form.socialProofSound}
         />
       )}
       {/* Header */}

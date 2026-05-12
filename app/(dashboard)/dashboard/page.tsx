@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation'
 import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
 import { LpGratisHero } from '@/components/dashboard/LpGratisHero'
 import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
+import { NotificationSettingsCard } from '@/components/dashboard/NotificationSettingsCard'
 import { EmbeddedOnboardingGuide } from '@/components/onboarding/EmbeddedOnboardingGuide'
 import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
 import {
@@ -198,6 +199,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <MessagesChart data={stats.chart} />
         </CardContent>
       </Card>
+
+      <NotificationSettingsCard />
 
       {/* Goal selector: compact mode supaya tidak kompetisi dengan hero LP
           gratis di atas. Default collapsed kalau user belum pilih goal apa

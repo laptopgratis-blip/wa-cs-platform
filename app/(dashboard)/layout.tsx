@@ -5,9 +5,11 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
+import { DashboardOrderPopup } from '@/components/dashboard/DashboardOrderPopup'
 import { Sidebar } from '@/components/dashboard/Sidebar'
 import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
+import { MainWelcomeWizard } from '@/components/onboarding/MainWelcomeWizard'
 import { authOptions } from '@/lib/auth'
 import type { OnboardingGoal } from '@/lib/navigation'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
@@ -30,6 +32,9 @@ export default async function DashboardLayout({
       createdAt: true,
       onboardingGoal: true,
       onboardingDismissedAt: true,
+      welcomeWizardDismissedAt: true,
+      dashboardOrderPopupEnabled: true,
+      dashboardOrderPopupSound: true,
     },
   })
   if (
@@ -55,6 +60,10 @@ export default async function DashboardLayout({
   const onboardingGoal = (userMeta?.onboardingGoal ?? null) as
     | OnboardingGoal
     | null
+  // Welcome wizard utama: tampil setiap login selama user belum klik
+  // "Jangan tampilkan lagi". Client component handle sessionStorage flag
+  // supaya nggak nongol pas navigate antar halaman.
+  const showWelcomeWizard = !userMeta?.welcomeWizardDismissedAt
 
   return (
     <div className="flex min-h-svh w-full">
@@ -90,6 +99,18 @@ export default async function DashboardLayout({
         tokenBalance={tokenBalance}
         hasOrderSystemAccess={hasOrderSystemAccess}
         onboardingGoal={onboardingGoal}
+      />
+      {showWelcomeWizard && <MainWelcomeWizard initialOpen />}
+      <DashboardOrderPopup
+        enabled={userMeta?.dashboardOrderPopupEnabled ?? true}
+        sound={
+          (userMeta?.dashboardOrderPopupSound ?? 'chime') as
+            | 'bell'
+            | 'ding'
+            | 'chime'
+            | 'pop'
+            | 'off'
+        }
       />
     </div>
   )

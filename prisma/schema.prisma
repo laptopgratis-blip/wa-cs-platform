@@ -107,6 +107,16 @@ model User {
   // CS AI Integrations (2026-05-12). Sekali-klik aktifkan AI bisa akses
   // katalog produk + hitung ongkir otomatis dengan rule subsidi/flash sale.
   csAiIntegration              CsAiIntegration?
+
+  // Dashboard order notification popup — saat seller buka dashboard, tiap
+  // ada order baru muncul popup ala "ka-ching" untuk motivasi. Setting
+  // per-user (tidak per-form). Default enabled supaya seller langsung dapat
+  // feedback positif kalau ada order saat dashboard terbuka.
+  dashboardOrderPopupEnabled   Boolean   @default(true)
+  // 'bell' | 'ding' | 'chime' | 'pop' | 'off'. 'off' = popup tampil tanpa
+  // suara (visual only). Sound preset sama dengan SocialProofPopup biar
+  // reusable.
+  dashboardOrderPopupSound     String    @default("chime")
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -1908,6 +1918,13 @@ model OrderForm {
   // pembeli, atau seller yang mau tampilkan volume submission tinggi
   // sebagai social proof (trade-off: kurang truthful).
   socialProofSource      String  @default("PAID")
+  // Sound notif saat popup tampil. Off default (silent — backward compat
+  // + customer tidak kaget). Kalau ON, browser play tone via Web Audio API
+  // (lib/utils/notification-sound.ts).
+  socialProofSoundEnabled Boolean @default(false)
+  // Pilihan preset sound: 'bell' | 'ding' | 'chime' | 'pop'. Lihat
+  // SOUND_PRESETS di notification-sound.ts.
+  socialProofSound        String  @default("bell")
 
   // PixelIntegration ID yang aktif untuk form ini (Phase 1 Pixel Tracking,
   // 2026-05-07). Multi-pixel — user bisa pakai 3 platform sekaligus per form.
