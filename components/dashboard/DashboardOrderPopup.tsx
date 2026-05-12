@@ -67,6 +67,22 @@ export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps
     }
   }, [enabled])
 
+  // Demo trigger: listen ke window event `hulao:demo-popup` yang dikirim
+  // oleh tombol "Show Demo Popup" di NotificationSettingsCard. Bypass
+  // polling sepenuhnya — useful untuk diagnose apakah masalah di
+  // rendering atau di polling/auth pipeline.
+  useEffect(() => {
+    if (!enabled) return
+    function handleDemo(ev: Event) {
+      const customEv = ev as CustomEvent<RecentOrder>
+      if (customEv.detail) {
+        setQueue((q) => [...q, customEv.detail])
+      }
+    }
+    window.addEventListener('hulao:demo-popup', handleDemo)
+    return () => window.removeEventListener('hulao:demo-popup', handleDemo)
+  }, [enabled])
+
   // Polling cycle. Setiap 30 detik fetch recent order. Order yang id-nya
   // lebih baru dari lastSeen → masuk queue tampil.
   useEffect(() => {

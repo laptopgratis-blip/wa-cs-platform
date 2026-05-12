@@ -147,35 +147,61 @@ export function NotificationSettingsCard() {
         </div>
       )}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-full"
-        onClick={() => {
-          // Reset baseline supaya order recent muncul sebagai "fresh" pada
-          // poll berikutnya. Kalau user buka di tab ini = popup akan tampil
-          // dalam max 30 detik (next poll cycle).
-          try {
-            sessionStorage.setItem(
-              'hulao_dashboard_last_seen_order',
-              'test-trigger-' + Date.now(),
+      <div className="space-y-1.5 border-t pt-3">
+        <p className="text-xs font-medium text-warm-700">Diagnostic test</p>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          className="w-full bg-emerald-600 hover:bg-emerald-700"
+          onClick={() => {
+            // Bypass polling — dispatch custom event langsung ke popup
+            // component. Kalau popup MUNCUL → component working, masalah di
+            // polling/auth. Kalau TIDAK MUNCUL → component itself broken.
+            const demoOrder = {
+              id: 'demo-' + Date.now(),
+              name: 'Demo Customer',
+              city: 'JAKARTA',
+              status: 'PAID',
+              totalRp: 199000,
+              ts: new Date().toISOString(),
+            }
+            window.dispatchEvent(
+              new CustomEvent('hulao:demo-popup', { detail: demoOrder }),
             )
-            toast.success(
-              'OK! Popup akan muncul max 30 detik. Reload halaman supaya langsung trigger sekarang.',
-            )
-          } catch {
-            toast.error('Gagal akses sessionStorage')
-          }
-        }}
-      >
-        <PlayCircle className="mr-2 size-4" />
-        Test Popup Sekarang
-      </Button>
-      <p className="-mt-2 text-[10px] text-muted-foreground">
-        Tombol reset baseline → popup order recent (60 menit terakhir) akan
-        muncul sebagai fresh. Reload halaman supaya langsung trigger.
-      </p>
+            toast.success('Demo popup di-trigger — cek pojok kanan atas!')
+          }}
+        >
+          <PlayCircle className="mr-2 size-4" />
+          Show Demo Popup (bypass polling)
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            try {
+              sessionStorage.setItem(
+                'hulao_dashboard_last_seen_order',
+                'test-trigger-' + Date.now(),
+              )
+              toast.success(
+                'Baseline reset. Reload halaman → popup order recent akan muncul.',
+              )
+            } catch {
+              toast.error('Gagal akses sessionStorage')
+            }
+          }}
+        >
+          Reset baseline → reload
+        </Button>
+        <p className="text-[10px] text-muted-foreground">
+          <strong>Demo Popup</strong> bypass polling — kalau muncul = render
+          OK, masalah di poll/auth. <strong>Reset baseline</strong> + reload
+          → popup dari 5 order test akan muncul beruntun.
+        </p>
+      </div>
     </div>
   )
 }
