@@ -4,7 +4,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireAdmin } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { soulOptionUpdateSchema } from '@/lib/validations/admin'
+import { soulPersonalityUpdateSchema } from '@/lib/validations/admin'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return res as NextResponse
   }
   const { id } = await params
-  const parsed = soulOptionUpdateSchema.safeParse(await req.json().catch(() => null))
+  const parsed = soulPersonalityUpdateSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Body tidak valid')
   }

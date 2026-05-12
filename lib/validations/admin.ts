@@ -81,6 +81,16 @@ export const soulOptionCreateSchema = z.object({
 export const soulOptionUpdateSchema = soulOptionCreateSchema.partial()
 export type SoulOptionCreateInput = z.infer<typeof soulOptionCreateSchema>
 
+// SoulPersonality punya field tambahan `isTester` (Soul Lab only) yang
+// TIDAK ada di SoulStyle — schema khusus supaya admin endpoint
+// /api/admin/soul-personalities bisa toggle field ini, sedangkan
+// /api/admin/soul-styles tetap pakai shared `soulOptionCreateSchema`.
+export const soulPersonalityCreateSchema = soulOptionCreateSchema.extend({
+  isTester: z.boolean().optional(),
+})
+export const soulPersonalityUpdateSchema = soulPersonalityCreateSchema.partial()
+export type SoulPersonalityCreateInput = z.infer<typeof soulPersonalityCreateSchema>
+
 export const lpUpgradePackageCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(80),
   description: z.string().trim().max(300).nullable().optional(),

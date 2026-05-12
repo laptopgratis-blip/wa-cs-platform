@@ -7,7 +7,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireAdmin } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { soulOptionCreateSchema } from '@/lib/validations/admin'
+import { soulPersonalityCreateSchema } from '@/lib/validations/admin'
 
 export async function GET() {
   try {
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   } catch (res) {
     return res as NextResponse
   }
-  const parsed = soulOptionCreateSchema.safeParse(await req.json().catch(() => null))
+  const parsed = soulPersonalityCreateSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Body tidak valid')
   }

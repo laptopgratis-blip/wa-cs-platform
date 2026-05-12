@@ -41,6 +41,8 @@ interface SoulOptionRow {
   description: string
   systemPromptSnippet: string
   isActive: boolean
+  // Hanya untuk SoulPersonality. SoulStyle tidak punya field ini.
+  isTester?: boolean
   order: number
 }
 
@@ -103,6 +105,8 @@ function SoulOptionTable({
   const [description, setDescription] = useState('')
   const [snippet, setSnippet] = useState('')
   const [isActive, setIsActive] = useState(true)
+  // isTester hanya untuk personality. Field ini akan diabaikan kalau kind=style.
+  const [isTester, setIsTester] = useState(false)
   const [order, setOrder] = useState('0')
   const [isSaving, setSaving] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
@@ -127,6 +131,7 @@ function SoulOptionTable({
     setDescription('')
     setSnippet('')
     setIsActive(true)
+    setIsTester(false)
     setOrder(String(rows.length))
     setOpen(true)
   }
@@ -137,6 +142,7 @@ function SoulOptionTable({
     setDescription(r.description)
     setSnippet(r.systemPromptSnippet)
     setIsActive(r.isActive)
+    setIsTester(r.isTester ?? false)
     setOrder(String(r.order))
     setOpen(true)
   }
@@ -144,12 +150,15 @@ function SoulOptionTable({
   async function save() {
     setSaving(true)
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         name: name.trim(),
         description: description.trim(),
         systemPromptSnippet: snippet.trim(),
         isActive,
         order: Number(order) || 0,
+      }
+      if (kind === 'personality') {
+        body.isTester = isTester
       }
       const url = editing ? `${ENDPOINTS[kind]}/${editing.id}` : ENDPOINTS[kind]
       const res = await fetch(url, {
@@ -241,7 +250,14 @@ function SoulOptionTable({
             ) : (
               rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {r.name}
+                    {r.isTester && (
+                      <Badge variant="outline" className="ml-2 border-amber-300 bg-amber-50 text-amber-700">
+                        Tester
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="max-w-md text-sm text-muted-foreground">
                     <span className="line-clamp-2">{r.description}</span>
                   </TableCell>
@@ -343,6 +359,18 @@ function SoulOptionTable({
                 <Switch checked={isActive} onCheckedChange={setIsActive} />
               </div>
             </div>
+            {kind === 'personality' && (
+              <div className="flex items-start justify-between rounded-md border border-amber-200 bg-amber-50/50 p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-amber-900">Khusus Tester (Soul Lab)</Label>
+                  <p className="text-xs text-amber-800/70">
+                    Kalau aktif, kepribadian ini disembunyikan dari dropdown SoulBuilder user.
+                    Hanya admin yang bisa pilih di Soul Lab untuk simulasi efektivitas prompt.
+                  </p>
+                </div>
+                <Switch checked={isTester} onCheckedChange={setIsTester} />
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 border-t pt-3">
             <Button variant="ghost" onClick={() => setOpen(false)}>

@@ -16,7 +16,9 @@ export async function GET() {
   try {
     const [personalities, styles] = await Promise.all([
       prisma.soulPersonality.findMany({
-        where: { isActive: true },
+        // isTester=true di-exclude — itu kepribadian khusus admin (Soul Lab
+        // testing/simulation), tidak relevan untuk soul produksi user.
+        where: { isActive: true, isTester: false },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, name: true, description: true },
       }),

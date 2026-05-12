@@ -101,6 +101,12 @@ model User {
   onboardingChecklist          Json?
   onboardingDismissedAt        DateTime?
   onboardingEvents             OnboardingEvent[]
+  // Welcome Wizard utama (2026-05-11). Modal perkenalan platform yang tampil
+  // setiap login sampai user explicit "Jangan tampilkan lagi" → set timestamp.
+  welcomeWizardDismissedAt     DateTime?
+  // CS AI Integrations (2026-05-12). Sekali-klik aktifkan AI bisa akses
+  // katalog produk + hitung ongkir otomatis dengan rule subsidi/flash sale.
+  csAiIntegration              CsAiIntegration?
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -310,6 +316,11 @@ model SoulPersonality {
   description         String // teks publik yang user lihat di dropdown
   systemPromptSnippet String   @db.Text // RAHASIA — instruksi AI, hanya admin
   isActive            Boolean  @default(true)
+  // Tester-only: kalau true, kepribadian ini disembunyikan dari dropdown
+  // user (`/api/soul/options`) — hanya muncul untuk admin di Soul Lab.
+  // Dipakai untuk "buyer persona" simulasi efektivitas soul prompt (mis.
+  // "Tester - Pembeli Korporat") yang tidak relevan untuk soul produksi.
+  isTester            Boolean  @default(false)
   order               Int      @default(0)
   createdAt           DateTime @default(now())
 
@@ -2939,4 +2950,25 @@ model ContentSlide {
 
   @@unique([pieceId, slideIndex])
   @@index([pieceId])
+}
+
+// CS AI Integrations — 1:1 ke User. Sekali-klik aktifkan supaya CS AI bisa:
+//   - productCatalogEnabled: tahu detail produk aktif (nama/harga/stok/varian)
+//   - shippingCalcEnabled  : hitung ongkir otomatis berdasarkan kota tujuan
+//     yang customer sebut. Pakai UserShippingProfile.originCityId sebagai asal.
+//
+// Saat shippingCalcEnabled aktif, semua rule existing (ShippingZone subsidy &
+// gratis ongkir, Product.flashSale*) otomatis diaplikasikan — tidak perlu
+// setup ulang. Toggle apply* disediakan kalau user mau opt-out specific rule.
+model CsAiIntegration {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productCatalogEnabled Boolean  @default(false)
+  shippingCalcEnabled   Boolean  @default(false)
+  // Toggle rule auto-apply. Default true → user POWER tidak perlu touch.
+  applySubsidyRules     Boolean  @default(true)
+  applyFlashSaleDiscount Boolean @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
