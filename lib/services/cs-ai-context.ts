@@ -19,11 +19,61 @@ import {
 import {
   calculateShippingCost,
   searchDestinations,
+  type RajaongkirDestination,
   type ShippingService,
 } from '@/lib/services/rajaongkir'
 
 const PRODUCT_LIMIT = 20
 const DEFAULT_COURIERS = ['jne', 'sicepat', 'jnt', 'anteraja']
+
+// Komerce search return level subdistrict, di-rank by full-text terhadap
+// SEMUA field (subdistrict_name, city_name, province_name). Akibatnya untuk
+// query nama kota umum, kelurahan-kelurahan di provinsi LAIN bisa rank lebih
+// dulu daripada kota target. Contoh: search "surabaya" → "Surabaya Baru,
+// Lampung Tengah" (kelurahan) rank #1 sebelum "Surabaya, Jawa Timur" (kota).
+//
+// SEARCH_LIMIT besar supaya kota target ada di hasil; pickBestDestination
+// kemudian filter pakai city_name match.
+const DESTINATION_SEARCH_LIMIT = 30
+
+// Alias nama kota populer yang sering dipanggil dengan nickname.
+// Saat candidate dari extractCityCandidates match key, kita pakai value
+// untuk search ke Komerce (yang pakai nama resmi).
+const CITY_ALIASES: Record<string, string> = {
+  jogja: 'yogyakarta',
+  yogya: 'yogyakarta',
+  solo: 'surakarta',
+  dki: 'jakarta',
+  jakpus: 'jakarta pusat',
+  jaksel: 'jakarta selatan',
+  jakbar: 'jakarta barat',
+  jaktim: 'jakarta timur',
+  jakut: 'jakarta utara',
+  bandar: 'bandar lampung',
+}
+
+// Pilih destinasi terbaik dari list hasil Komerce. Prioritas:
+//   1. city_name match exact (case-insensitive) — paling pas dengan intent.
+//   2. city_name startsWith query (cover "Jakarta" vs "Jakarta Selatan"
+//      atau "Bandar Lampung" vs "Bandar").
+//   3. Subdistrict yang masih di-PROVINSI yg city_name-nya match (edge case).
+//   4. Fallback: hasil pertama.
+//
+// Tujuan: hindari kasus search "surabaya" terpilih ke kelurahan "Surabaya"
+// di Lampung Tengah, padahal user maksud Surabaya, Jawa Timur.
+function pickBestDestination(
+  query: string,
+  destinations: RajaongkirDestination[],
+): RajaongkirDestination | null {
+  if (destinations.length === 0) return null
+  const q = query.toUpperCase().trim()
+  return (
+    destinations.find((d) => d.city_name?.toUpperCase() === q) ??
+    destinations.find((d) => d.city_name?.toUpperCase().startsWith(q)) ??
+    destinations.find((d) => d.city_name?.toUpperCase().includes(q)) ??
+    destinations[0]
+  )
+}
 
 // ─── PRODUCT CATALOG ────────────────────────────────────────────────────
 
@@ -356,12 +406,24 @@ export async function resolveShippingFromMessage(
       ? profile.enabledCouriers
       : DEFAULT_COURIERS
 
-  // Coba candidate satu per satu. Ambil yang pertama match destinationnya.
+  // Coba candidate satu per satu. Ambil yang match terbaik destinationnya.
   for (const candidate of candidates) {
-    const destinations = await searchDestinations(candidate, 3)
+    // Resolve alias dulu — "jogja" → "yogyakarta" supaya search ke Komerce
+    // pakai nama resmi (city_name resmi yang akan kita match).
+    const searchQuery = CITY_ALIASES[candidate] ?? candidate
+
+    const destinations = await searchDestinations(
+      searchQuery,
+      DESTINATION_SEARCH_LIMIT,
+    )
     if (destinations.length === 0) continue
 
-    const dest = destinations[0]
+    // Pakai pickBestDestination supaya tidak nyasar ke kelurahan beda
+    // provinsi yang kebetulan punya nama mirip (mis. "Surabaya, Lampung
+    // Tengah" untuk query "surabaya").
+    const dest = pickBestDestination(searchQuery, destinations)
+    if (!dest) continue
+
     const services = await calculateShippingCost({
       origin: Number(profile.originCityId),
       destination: dest.id,
