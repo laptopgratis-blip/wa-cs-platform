@@ -14,17 +14,22 @@
 // dilakukan dalam satu wizard linear di /onboarding/lp-gratis.
 
 import {
+  ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   Camera,
   Check,
   CheckCircle2,
   Copy,
   ExternalLink,
+  Grid3x3,
   ImagePlus,
+  ListOrdered,
   Loader2,
   MessageSquareQuote,
   Pencil,
+  Plus,
   Rocket,
   Sparkles,
   Trash2,
@@ -62,6 +67,11 @@ interface LpImageRow {
   createdAt: string
 }
 
+// Extended (local-only) — caption diisi user di mode advanced Step 2,
+// nggak dipersist ke server karena cuma dipakai buat ngebantu prompt AI
+// di step 3. Urutan dipertahankan oleh posisi di array.
+type LpImage = LpImageRow & { caption?: string }
+
 const TOTAL_STEPS = 4
 const STEP_LABELS = [
   'Siapkan foto',
@@ -79,7 +89,7 @@ function generateSlug(): string {
 }
 
 interface PromptPayload {
-  images: LpImageRow[]
+  images: LpImage[]
   productName: string
   price: string
   description: string
@@ -90,11 +100,20 @@ interface PromptPayload {
 }
 
 // Bangun prompt template dari isian form. Field opsional yang kosong di-skip
-// supaya prompt tidak penuh placeholder bracket.
+// supaya prompt tidak penuh placeholder bracket. Kalau image punya caption
+// (dari mode advanced Step 2), sertakan supaya AI tahu peran tiap gambar
+// (mis. "hero", "testimoni Budi", "foto detail jahitan").
 function buildPromptTemplate(p: PromptPayload): string {
   const imageLines =
     p.images.length > 0
-      ? p.images.map((img, i) => `Gambar ${i + 1}: ${img.url}`).join('\n')
+      ? p.images
+          .map((img, i) => {
+            const caption = img.caption?.trim()
+            return caption
+              ? `Gambar ${i + 1}: ${img.url} — Keterangan: ${caption}`
+              : `Gambar ${i + 1}: ${img.url}`
+          })
+          .join('\n')
       : '(Belum ada gambar yang di-upload)'
 
   // Susun bagian "DETAIL BISNIS" — selalu sertakan field utama, sertakan
@@ -159,7 +178,7 @@ export function LpGratisWizard({ onCompleted }: LpGratisWizardProps = {}) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [lpId, setLpId] = useState<string | null>(null)
   const [creatingDraft, setCreatingDraft] = useState(false)
-  const [images, setImages] = useState<LpImageRow[]>([])
+  const [images, setImages] = useState<LpImage[]>([])
   const [htmlContent, setHtmlContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -442,11 +461,12 @@ function Step2Upload({
   lpId: string | null
   ensureDraft: () => Promise<string | null>
   creatingDraft: boolean
-  images: LpImageRow[]
-  onImagesChange: (next: LpImageRow[]) => void
+  images: LpImage[]
+  onImagesChange: (next: LpImage[]) => void
 }) {
   const [uploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [advancedMode, setAdvancedMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Initial fetch — kalau lpId sudah ada (mis. user back-navigate), reload
@@ -481,7 +501,7 @@ function Step2Upload({
     if (!id) return
 
     setUploading(true)
-    const newOnes: LpImageRow[] = []
+    const newOnes: LpImage[] = []
     try {
       for (const file of Array.from(files)) {
         const fd = new FormData()
@@ -529,55 +549,323 @@ function Step2Upload({
     }
   }
 
+  function handleCaptionChange(imgId: string, caption: string) {
+    onImagesChange(
+      images.map((img) =>
+        img.id === imgId ? { ...img, caption } : img,
+      ),
+    )
+  }
+
+  function handleMove(fromIdx: number, direction: -1 | 1) {
+    const toIdx = fromIdx + direction
+    if (toIdx < 0 || toIdx >= images.length) return
+    const next = [...images]
+    ;[next[fromIdx], next[toIdx]] = [next[toIdx], next[fromIdx]]
+    onImagesChange(next)
+  }
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-lg font-extrabold text-warm-900">
-          Step 2 — Upload foto-foto kamu
-        </h2>
-        <p className="mt-1 text-sm text-warm-600">
-          Klik area di bawah atau drag-drop file. Bisa upload banyak sekaligus.
-        </p>
+      {/* Header + tombol toggle advanced mode */}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-extrabold text-warm-900">
+            Step 2 — Upload foto-foto kamu
+          </h2>
+          <p className="mt-1 text-sm text-warm-600">
+            {advancedMode ? (
+              <>
+                Mode lanjutan: atur urutan & isi keterangan tiap foto. AI akan
+                pakai info ini supaya hasil landing page lebih akurat.
+              </>
+            ) : (
+              <>
+                Klik area di bawah atau drag-drop file. Bisa upload banyak
+                sekaligus.
+              </>
+            )}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAdvancedMode((v) => !v)}
+          aria-label={
+            advancedMode
+              ? 'Kembali ke tampilan sederhana'
+              : 'Mode lanjutan: atur urutan & keterangan'
+          }
+          title={
+            advancedMode
+              ? 'Kembali ke tampilan sederhana'
+              : 'Mode lanjutan: atur urutan & keterangan'
+          }
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-lg border transition',
+            advancedMode
+              ? 'border-primary-500 bg-primary-50 text-primary-700 hover:bg-primary-100'
+              : 'border-warm-300 bg-card text-warm-600 hover:border-primary-400 hover:text-primary-600',
+          )}
+        >
+          {advancedMode ? (
+            <Grid3x3 className="size-4" />
+          ) : (
+            <ListOrdered className="size-4" />
+          )}
+        </button>
       </div>
 
-      {/* Upload zone */}
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploading || creatingDraft}
-        className={cn(
-          'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-warm-50 px-6 py-10 transition',
-          uploading
-            ? 'cursor-wait border-primary-300'
-            : 'border-warm-300 hover:border-primary-400 hover:bg-primary-50',
-        )}
-      >
-        {uploading ? (
-          <>
-            <Loader2 className="size-8 animate-spin text-primary-500" />
-            <span className="text-sm font-medium text-warm-700">
-              Mengupload…
-            </span>
-          </>
-        ) : creatingDraft ? (
-          <>
-            <Loader2 className="size-8 animate-spin text-primary-500" />
-            <span className="text-sm font-medium text-warm-700">
-              Menyiapkan…
-            </span>
-          </>
-        ) : (
-          <>
-            <ImagePlus className="size-8 text-primary-500" />
-            <span className="text-sm font-semibold text-warm-900">
-              Klik untuk pilih foto
-            </span>
-            <span className="text-[11px] text-warm-500">
-              JPG / PNG / WebP, max 4 MB per foto
-            </span>
-          </>
-        )}
-      </button>
+      {/* Mode sederhana: dropzone besar + grid thumbnail */}
+      {!advancedMode && (
+        <>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || creatingDraft}
+            className={cn(
+              'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-warm-50 px-6 py-10 transition',
+              uploading
+                ? 'cursor-wait border-primary-300'
+                : 'border-warm-300 hover:border-primary-400 hover:bg-primary-50',
+            )}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="size-8 animate-spin text-primary-500" />
+                <span className="text-sm font-medium text-warm-700">
+                  Mengupload…
+                </span>
+              </>
+            ) : creatingDraft ? (
+              <>
+                <Loader2 className="size-8 animate-spin text-primary-500" />
+                <span className="text-sm font-medium text-warm-700">
+                  Menyiapkan…
+                </span>
+              </>
+            ) : (
+              <>
+                <ImagePlus className="size-8 text-primary-500" />
+                <span className="text-sm font-semibold text-warm-900">
+                  Klik untuk pilih foto
+                </span>
+                <span className="text-[11px] text-warm-500">
+                  JPG / PNG / WebP, max 4 MB per foto
+                </span>
+              </>
+            )}
+          </button>
+
+          {images.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-warm-700">
+                {images.length} foto sudah terupload:
+              </p>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {images.map((img) => (
+                  <div
+                    key={img.id}
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-warm-200 bg-warm-100"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={img.url}
+                      alt={img.originalName}
+                      className="size-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(img.id)}
+                      disabled={deletingId === img.id}
+                      className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600 group-hover:flex"
+                      aria-label="Hapus foto"
+                    >
+                      {deletingId === img.id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3" />
+                      )}
+                    </button>
+                    {img.caption?.trim() && (
+                      <span className="absolute bottom-0 left-0 right-0 truncate bg-black/60 px-1.5 py-0.5 text-[9px] text-white">
+                        {img.caption}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] text-warm-500">
+                💡 Mau atur urutan / kasih keterangan tiap foto? Klik tombol{' '}
+                <ListOrdered className="inline size-3 align-text-bottom" /> di
+                kanan atas.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Mode lanjutan: list vertikal + caption + reorder */}
+      {advancedMode && (
+        <div className="space-y-3">
+          {images.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || creatingDraft}
+              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-warm-300 bg-warm-50 px-6 py-10 transition hover:border-primary-400 hover:bg-primary-50"
+            >
+              {uploading || creatingDraft ? (
+                <>
+                  <Loader2 className="size-8 animate-spin text-primary-500" />
+                  <span className="text-sm font-medium text-warm-700">
+                    {uploading ? 'Mengupload…' : 'Menyiapkan…'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="size-8 text-primary-500" />
+                  <span className="text-sm font-semibold text-warm-900">
+                    Klik untuk upload foto pertama
+                  </span>
+                </>
+              )}
+            </button>
+          ) : (
+            <>
+              <ol className="space-y-2.5">
+                {images.map((img, idx) => {
+                  const isFirst = idx === 0
+                  const isLast = idx === images.length - 1
+                  return (
+                    <li
+                      key={img.id}
+                      className="flex gap-3 rounded-xl border border-warm-200 bg-card p-2.5 sm:p-3"
+                    >
+                      {/* Kolom kiri: panah reorder + nomor */}
+                      <div className="flex shrink-0 flex-col items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleMove(idx, -1)}
+                          disabled={isFirst}
+                          aria-label="Pindah ke atas"
+                          title="Pindah ke atas"
+                          className={cn(
+                            'flex size-7 items-center justify-center rounded-md border transition',
+                            isFirst
+                              ? 'cursor-not-allowed border-warm-200 text-warm-300'
+                              : 'border-warm-300 text-warm-700 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-600',
+                          )}
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </button>
+                        <span className="flex size-7 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
+                          {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleMove(idx, 1)}
+                          disabled={isLast}
+                          aria-label="Pindah ke bawah"
+                          title="Pindah ke bawah"
+                          className={cn(
+                            'flex size-7 items-center justify-center rounded-md border transition',
+                            isLast
+                              ? 'cursor-not-allowed border-warm-200 text-warm-300'
+                              : 'border-warm-300 text-warm-700 hover:border-primary-400 hover:bg-primary-50 hover:text-primary-600',
+                          )}
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Thumbnail */}
+                      <div className="size-20 shrink-0 overflow-hidden rounded-lg border border-warm-200 bg-warm-100 sm:size-24">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.url}
+                          alt={img.originalName}
+                          className="size-full object-cover"
+                        />
+                      </div>
+
+                      {/* Caption + meta + delete */}
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <Label
+                            htmlFor={`caption-${img.id}`}
+                            className="text-[11px] font-semibold text-warm-700"
+                          >
+                            Keterangan foto ke-{idx + 1}
+                          </Label>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(img.id)}
+                            disabled={deletingId === img.id}
+                            aria-label="Hapus foto"
+                            title="Hapus foto"
+                            className="flex size-6 shrink-0 items-center justify-center rounded-md text-warm-500 transition hover:bg-rose-50 hover:text-rose-600"
+                          >
+                            {deletingId === img.id ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-3.5" />
+                            )}
+                          </button>
+                        </div>
+                        <Textarea
+                          id={`caption-${img.id}`}
+                          value={img.caption ?? ''}
+                          onChange={(e) =>
+                            handleCaptionChange(img.id, e.target.value)
+                          }
+                          rows={2}
+                          maxLength={200}
+                          placeholder='Contoh: "Foto utama produk", "Testimoni dari Bu Ani", "Detail jahitan", "Foto pemakaian"'
+                          className="resize-none text-xs"
+                        />
+                      </div>
+                    </li>
+                  )
+                })}
+              </ol>
+
+              {/* Tombol tambah foto */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading || creatingDraft}
+                className={cn(
+                  'flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-4 text-sm font-semibold transition',
+                  uploading || creatingDraft
+                    ? 'cursor-wait border-primary-300 text-warm-500'
+                    : 'border-primary-300 bg-primary-50/30 text-primary-700 hover:border-primary-500 hover:bg-primary-50',
+                )}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Mengupload…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="size-4" />
+                    Tambah foto
+                  </>
+                )}
+              </button>
+
+              <p className="rounded-md bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-900">
+                💡 <strong>Tips:</strong> isi keterangan singkat tiap foto (mis.
+                &ldquo;foto utama produk&rdquo;, &ldquo;testimoni Bu Ani&rdquo;,
+                &ldquo;detail jahitan&rdquo;). Keterangan ini ikut dipakai saat
+                generate prompt — AI jadi tahu mana foto produk, mana testimoni,
+                mana yang dipakai sebagai hero.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -589,44 +877,7 @@ function Step2Upload({
         }}
       />
 
-      {/* Grid preview */}
-      {images.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs font-semibold text-warm-700">
-            {images.length} foto sudah terupload:
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {images.map((img) => (
-              <div
-                key={img.id}
-                className="group relative aspect-square overflow-hidden rounded-lg border border-warm-200 bg-warm-100"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={img.url}
-                  alt={img.originalName}
-                  className="size-full object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleDelete(img.id)}
-                  disabled={deletingId === img.id}
-                  className="absolute right-1 top-1 hidden size-6 items-center justify-center rounded-full bg-rose-500 text-white shadow-md hover:bg-rose-600 group-hover:flex"
-                  aria-label="Hapus foto"
-                >
-                  {deletingId === img.id ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-3" />
-                  )}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {images.length === 0 && (
+      {images.length === 0 && !advancedMode && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
           Upload minimal 1 foto untuk lanjut ke step berikut. Idealnya 3-6 foto
           (campuran produk + testimoni).
@@ -641,7 +892,7 @@ function Step2Upload({
 const TONE_OPTIONS = ['Friendly', 'Profesional', 'Santai', 'Sales-y'] as const
 type Tone = (typeof TONE_OPTIONS)[number]
 
-function Step3Prompt({ images }: { images: LpImageRow[] }) {
+function Step3Prompt({ images }: { images: LpImage[] }) {
   // Form state — bertahan kalau user toggle generated → edit ulang.
   const [productName, setProductName] = useState('')
   const [price, setPrice] = useState('')
@@ -939,7 +1190,7 @@ function Step3Prompt({ images }: { images: LpImageRow[] }) {
               <span className="flex-1 text-left">
                 <span className="block font-semibold">Gemini (Google)</span>
                 <span className="block text-[10px] text-warm-500">
-                  gemini.google.com
+                  wajib pakai mode <strong className="text-primary-600">Canvas</strong>
                 </span>
               </span>
               <ExternalLink className="ml-auto size-4 text-warm-400" />
@@ -986,11 +1237,24 @@ function Step3Prompt({ images }: { images: LpImageRow[] }) {
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-bold text-primary-700">
             3
           </span>
-          Paste prompt → kirim, tunggu AI generate HTML
+          <span>
+            <strong>Khusus Gemini</strong>: di bawah kolom ketik, klik tombol{' '}
+            <span className="inline-flex items-center gap-1 rounded-md border border-primary-300 bg-primary-50 px-1.5 py-0.5 text-[11px] font-semibold text-primary-700">
+              <Sparkles className="size-3" /> Canvas
+            </span>{' '}
+            dulu — supaya hasilnya berupa preview HTML, bukan teks panjang.
+            (Kalau pakai Claude.ai, langsung paste saja, tidak perlu setting apa-apa.)
+          </span>
         </li>
         <li className="flex gap-2">
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-bold text-primary-700">
             4
+          </span>
+          Paste prompt → kirim, tunggu AI generate HTML
+        </li>
+        <li className="flex gap-2">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-bold text-primary-700">
+            5
           </span>
           Copy SELURUH HTML (mulai{' '}
           <code className="rounded bg-warm-100 px-1 text-[10px]">
@@ -1004,7 +1268,7 @@ function Step3Prompt({ images }: { images: LpImageRow[] }) {
         </li>
         <li className="flex gap-2">
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-700">
-            5
+            6
           </span>
           Klik <strong>Lanjut</strong> di bawah, paste HTML-nya
         </li>
