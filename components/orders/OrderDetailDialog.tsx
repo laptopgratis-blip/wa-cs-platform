@@ -233,6 +233,39 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
               </section>
             )}
 
+            {/* Bukti transfer — preview thumbnail + link buka full size. Sebelumnya
+                dialog tidak punya section ini sama sekali, admin harus buka tab
+                browser baru dgn URL bukti dari API/list view. */}
+            {data.paymentProofUrl && (
+              <section className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Bukti transfer</p>
+                  <a
+                    href={data.paymentProofUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary-600 underline-offset-2 hover:underline"
+                  >
+                    Buka ukuran asli ↗
+                  </a>
+                </div>
+                <a
+                  href={data.paymentProofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block overflow-hidden rounded-md border"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={data.paymentProofUrl}
+                    alt="Bukti transfer"
+                    className="max-h-72 w-full bg-warm-50 object-contain dark:bg-warm-950"
+                    loading="lazy"
+                  />
+                </a>
+              </section>
+            )}
+
             {/* Status edit */}
             <section className="grid gap-3 rounded-lg border p-3 sm:grid-cols-2">
               <div className="space-y-1">
