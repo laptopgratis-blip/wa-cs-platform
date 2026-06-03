@@ -19,6 +19,11 @@ export interface AiFeatureConfigValues {
   capTokens: number
   isActive: boolean
   description: string | null
+  // Unit dasar charge — 'TOKEN' (default, AI text), 'IMAGE' (Gemini Nano
+  // Banana per image), 'VIDEO_SECOND' (Kling per detik). Lihat helper
+  // computeChargeFromUsage — semantik shift di caller, rumus identik.
+  unitType: 'TOKEN' | 'IMAGE' | 'VIDEO_SECOND'
+  unitLabel: string | null
   updatedAt: Date
 }
 
@@ -39,6 +44,8 @@ const COMMON_DEFAULTS = {
   floorTokens: 10,
   capTokens: 0,
   isActive: true,
+  unitType: 'TOKEN' as const,
+  unitLabel: null,
 } as const
 
 const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> = {
@@ -96,6 +103,113 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
     description:
       'Auto-balas chat customer di WhatsApp via AI. Charge proporsional input+output token real per balasan (bukan flat per-message).',
   },
+  // CS Live AI host generation — Gemini Nano Banana 2 per image.
+  // inputPricePer1M = USD per 1 image × 1_000_000 (Nano Banana 2 ≈ $0.045).
+  HOST_IMAGE_GEMINI_NANO: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'HOST_IMAGE_GEMINI_NANO',
+    displayName: 'CS Live AI — Host Image (Gemini Nano Banana 2)',
+    modelName: 'gemini-3.1-flash-image-preview',
+    inputPricePer1M: 45_000, // $0.045/image × 1M
+    outputPricePer1M: 0,
+    floorTokens: 200,
+    unitType: 'IMAGE' as const,
+    unitLabel: 'image',
+    description:
+      'Generate gambar host (avatar) untuk CS Live AI. 1 call = 1 image. Cost ≈ $0.045/image (Nano Banana 2, 1K res).',
+  },
+  // Kling video generation — biaya per detik.
+  // inputPricePer1M = USD per 1 detik × 1_000_000 (Kling v2.1 master ≈ $0.10/sec via Fal.ai).
+  HOST_VIDEO_KLING_V3: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'HOST_VIDEO_KLING_V3',
+    displayName: 'CS Live AI — Host Video (Kling)',
+    modelName: 'fal-ai/kling-video/v2.1/master/image-to-video',
+    inputPricePer1M: 100_000, // $0.10/sec × 1M
+    outputPricePer1M: 0,
+    floorTokens: 500,
+    unitType: 'VIDEO_SECOND' as const,
+    unitLabel: 'detik',
+    description:
+      'Animasikan gambar host jadi MP4 looping. Biaya per detik video. Async — submit → poll → download (24h URL expiry).',
+  },
+  // KLIP LIVE MODE (Sprint 5+, 2026-06-02) — per-stage billing pipeline.
+  // Kalkulator + profitability page otomatis pickup ini via AiFeatureConfig table.
+  KLIP_LIVE_LIPSYNC: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_LIPSYNC',
+    displayName: 'Klip Live — Kling Lip-Sync',
+    modelName: 'kling-lip-sync',
+    inputPricePer1M: 100_000, // $0.10/sec output × 1M
+    outputPricePer1M: 0,
+    floorTokens: 200,
+    unitType: 'VIDEO_SECOND' as const,
+    unitLabel: 'detik',
+    description:
+      'Kling lipsync video per detik output. Pakai baseline videoId existing (gak charge image2video lagi).',
+  },
+  KLIP_LIVE_TTS_ELEVENLABS: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_TTS_ELEVENLABS',
+    displayName: 'Klip Live — ElevenLabs TTS',
+    modelName: 'eleven_multilingual_v2',
+    inputPricePer1M: 30, // $30/1M char = $0.00003/char
+    outputPricePer1M: 0,
+    floorTokens: 30,
+    unitType: 'TOKEN' as const,
+    unitLabel: 'character',
+    description:
+      'ElevenLabs TTS Indonesian native. Cost ~$0.015/1k char. Per klip 50-150 char.',
+  },
+  KLIP_LIVE_VISION: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_VISION',
+    displayName: 'Klip Live — Vision Analyzer',
+    modelName: 'claude-haiku-4-5',
+    inputPricePer1M: 1, // input price Claude Haiku 4.5
+    outputPricePer1M: 5,
+    floorTokens: 100,
+    unitType: 'TOKEN' as const,
+    description:
+      'Claude Haiku Vision analyze host image — sekali per host setup, dipakai untuk adaptive Kling prompt.',
+  },
+  KLIP_LIVE_SCRIPT_SUGGEST: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_SCRIPT_SUGGEST',
+    displayName: 'Klip Live — Script Suggester (AI)',
+    modelName: 'claude-haiku-4-5',
+    inputPricePer1M: 1,
+    outputPricePer1M: 5,
+    floorTokens: 100,
+    unitType: 'TOKEN' as const,
+    description:
+      'Claude Haiku bulk suggest scripts (5-20 per call). User edit lalu approve sebelum generate.',
+  },
+  KLIP_LIVE_TRIGGER_SUGGEST: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_TRIGGER_SUGGEST',
+    displayName: 'Klip Live — Trigger Suggester (AI)',
+    modelName: 'claude-haiku-4-5',
+    inputPricePer1M: 1,
+    outputPricePer1M: 5,
+    floorTokens: 50,
+    unitType: 'TOKEN' as const,
+    description:
+      'Claude Haiku generate 5-10 trigger phrase per klip (literal + keraguan customer). Owner klik "Optimasi AI" di Edit Klip.',
+  },
+  KLIP_LIVE_EMBED: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'KLIP_LIVE_EMBED',
+    displayName: 'Klip Live — Embedding (OpenAI)',
+    modelName: 'text-embedding-3-small',
+    inputPricePer1M: 20, // $0.02/1M token = $20/1M
+    outputPricePer1M: 0,
+    floorTokens: 5,
+    unitType: 'TOKEN' as const,
+    unitLabel: 'token',
+    description:
+      'OpenAI embedding per klip transcript untuk cosine match saat live. Negligible cost.',
+  },
 }
 
 export async function getAiFeatureConfig(
@@ -123,6 +237,8 @@ export async function getAiFeatureConfig(
       capTokens: row.capTokens,
       isActive: row.isActive,
       description: row.description,
+      unitType: (row.unitType as 'TOKEN' | 'IMAGE' | 'VIDEO_SECOND') ?? 'TOKEN',
+      unitLabel: row.unitLabel ?? null,
       updatedAt: row.updatedAt,
     }
     cache.set(featureKey, { value, cachedAt: now })

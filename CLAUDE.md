@@ -89,6 +89,49 @@ wa-cs-platform/
 - **Message**: id, contactId, waSessionId, content, role (AI/HUMAN/USER), createdAt
 - **Broadcast**: id, userId, waSessionId, message, targetTags, status, scheduledAt
 
+## CS Live AI — Dual Mode HostTemplate (2026-06-02)
+
+HostTemplate.mode menentukan cara host bicara saat live:
+
+**TTS_GENERATIVE (default, legacy)** — 1 video loop silent + scenes per kategori.
+Customer chat → Claude generate text → OpenAI TTS realtime → audio queue di client.
+Pros: jawab apa saja. Cons: TTS latency 2-5dtk, suara robot.
+
+**NATIVE_LIBRARY (Klip Live, 2026-06-02)** — library MP4 dengan audio bonded.
+Customer chat → embed question (text-embedding-3-small) → cosine match vs LiveClip → klip menang play.
+Pipeline klip:
+1. Owner ketik script per kategori (GREETING/PRICE/PRODUCT_DEMO/dll)
+2. Backend: ElevenLabs TTS → audio MP3
+3. Adaptive Kling motion prompt (dari `host-gen/vision-analyzer.ts` analisis sourceImage)
+4. Kling lip-sync endpoint (`/v1/videos/lip-sync`) audio2video → MP4 dengan lip-sync presisi
+5. OpenAI embed transcript → simpan ke LiveClip.embedding
+Pros: suara natural, lip-sync presisi, no realtime TTS latency. Cons: jawaban terbatas library.
+
+**Mode selection**: `/host-templates` → "Bikin Host Baru" → modal mode picker.
+Wizard sama persis untuk dua mode, cuma flag mode beda di create payload.
+
+**Pre-req per mode:**
+- TTS: HostTemplate.videoLoopUrl harus ada (generate via Kling image2video).
+- Klip Live: minimal 1 klip kategori IDLE atau isDefaultIdle=true untuk loop sepi.
+
+**Live integration** (`/api/live/[slug]/chat/route.ts`):
+- room.hostTemplate.mode === 'NATIVE_LIBRARY' → matchClip → return `{mode:'clip', clip:{...}}`
+- Else: existing TTS flow → `{mode:'tts', reply, sentences}`
+- Client `LiveRoomView` branch berdasarkan response.mode:
+  - clip: swap video src ke clip.videoUrl, audio inline, transcript di chat overlay
+  - tts: existing scene swap + audio queue
+
+**Provider keys needed:**
+- ANTHROPIC (vision analyzer + clip suggester + chat)
+- OPENAI (Whisper admin upload, embedding, TTS legacy mode)
+- KLING (image2video + lip-sync endpoint)
+- ELEVENLABS (TTS untuk Klip Live audio gen)
+
+**Foundation tables (Sprint 1):**
+- HostMode enum, LiveClip, LiveClipUsage, BackgroundPreset, VisualHookPreset
+- Migration: `20260602001138_klip_live_foundation`
+- Seed: `prisma/seeds/backgrounds-and-hooks.ts` (25 backgrounds + 50 hooks)
+
 ## Konvensi Kode
 - Semua kode TypeScript strict mode
 - Komentar dalam Bahasa Indonesia

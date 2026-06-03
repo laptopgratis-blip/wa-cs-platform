@@ -10,7 +10,7 @@ import { decrypt, encrypt, maskKey } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
 
 const upsertSchema = z.object({
-  provider: z.enum(['ANTHROPIC', 'OPENAI', 'GOOGLE']),
+  provider: z.enum(['ANTHROPIC', 'OPENAI', 'GOOGLE', 'KLING', 'ELEVENLABS']),
   apiKey: z.string().trim().min(8).max(500),
 })
 

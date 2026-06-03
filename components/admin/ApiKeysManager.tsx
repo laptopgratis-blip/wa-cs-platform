@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
-type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
+type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
 
 interface KeyRow {
   provider: Provider
@@ -44,18 +44,22 @@ interface KeyRow {
   lastTestError: string | null
 }
 
-const PROVIDERS: Provider[] = ['ANTHROPIC', 'OPENAI', 'GOOGLE']
+const PROVIDERS: Provider[] = ['ANTHROPIC', 'OPENAI', 'GOOGLE', 'KLING', 'ELEVENLABS']
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   ANTHROPIC: 'Anthropic',
   OPENAI: 'OpenAI',
   GOOGLE: 'Google',
+  KLING: 'Kling (Official)',
+  ELEVENLABS: 'ElevenLabs (Audio Klip Live)',
 }
 
 const PROVIDER_EMOJI: Record<Provider, string> = {
   ANTHROPIC: '🟠',
   OPENAI: '🟢',
   GOOGLE: '🔵',
+  KLING: '🟣',
+  ELEVENLABS: '🎙️',
 }
 
 const ONE_HOUR_MS = 60 * 60 * 1_000
@@ -93,15 +97,22 @@ export function ApiKeysManager() {
     ANTHROPIC: '',
     OPENAI: '',
     GOOGLE: '',
+    KLING: '',
+    ELEVENLABS: '',
   })
   const [showKey, setShowKey] = useState<Record<Provider, boolean>>({
     ANTHROPIC: false,
     OPENAI: false,
     GOOGLE: false,
+    KLING: false,
+    ELEVENLABS: false,
   })
   const [savingId, setSavingId] = useState<Provider | null>(null)
   const [testingId, setTestingId] = useState<Provider | null>(null)
   const [refreshingAll, setRefreshingAll] = useState(false)
+  // KLING punya format khusus (AccessKey + SecretKey, di-join colon).
+  const [klingAccess, setKlingAccess] = useState('')
+  const [klingSecret, setKlingSecret] = useState('')
 
   const fetchKeys = useCallback(async () => {
     const res = await fetch('/api/admin/api-keys')
@@ -151,10 +162,22 @@ export function ApiKeysManager() {
   }, [refreshAll])
 
   async function saveKey(provider: Provider) {
-    const value = draft[provider].trim()
-    if (!value) {
-      toast.error('Isi API key dulu')
-      return
+    // KLING ambil dari 2 input terpisah, di-join colon sebelum kirim.
+    let value: string
+    if (provider === 'KLING') {
+      const a = klingAccess.trim()
+      const s = klingSecret.trim()
+      if (!a || !s) {
+        toast.error('Isi AccessKey dan SecretKey dulu')
+        return
+      }
+      value = `${a}:${s}`
+    } else {
+      value = draft[provider].trim()
+      if (!value) {
+        toast.error('Isi API key dulu')
+        return
+      }
     }
     setSavingId(provider)
     try {
@@ -168,7 +191,12 @@ export function ApiKeysManager() {
         toast.error(json.error || 'Gagal menyimpan')
         return
       }
-      setDraft((prev) => ({ ...prev, [provider]: '' }))
+      if (provider === 'KLING') {
+        setKlingAccess('')
+        setKlingSecret('')
+      } else {
+        setDraft((prev) => ({ ...prev, [provider]: '' }))
+      }
       toast.success(`Key ${PROVIDER_LABEL[provider]} disimpan`)
       await fetchKeys()
     } finally {
@@ -267,44 +295,94 @@ export function ApiKeysManager() {
                     {row.lastTestError}
                   </p>
                 )}
-                <div className="space-y-1.5">
-                  <Label htmlFor={`key-${p}`}>API Key baru</Label>
-                  <div className="relative">
-                    <Input
-                      id={`key-${p}`}
-                      type={isShown ? 'text' : 'password'}
-                      value={draft[p]}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, [p]: e.target.value }))
-                      }
-                      placeholder={
-                        row?.maskedKey
-                          ? row.maskedKey
-                          : 'sk-... / AIza... / sk-ant-...'
-                      }
-                      autoComplete="off"
-                      className="pr-9 font-mono text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setShowKey((prev) => ({ ...prev, [p]: !prev[p] }))
-                      }
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      aria-label={isShown ? 'Sembunyikan' : 'Tampilkan'}
-                    >
-                      {isShown ? (
-                        <EyeOff className="size-4" />
-                      ) : (
-                        <Eye className="size-4" />
-                      )}
-                    </button>
+                {p === 'KLING' ? (
+                  <div className="space-y-3">
+                    <p className="rounded-md bg-violet-50 px-2 py-1.5 text-[11px] leading-snug text-violet-800 dark:bg-violet-950/40 dark:text-violet-200">
+                      Kling pakai <strong>2 key</strong>: AccessKey + SecretKey.
+                      Dapat dari <span className="font-mono">platform.klingai.com</span> → Account Management → API Key.
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`klingAccess`}>AccessKey</Label>
+                      <Input
+                        id="klingAccess"
+                        type={isShown ? 'text' : 'password'}
+                        value={klingAccess}
+                        onChange={(e) => setKlingAccess(e.target.value)}
+                        placeholder="AccessKey..."
+                        autoComplete="off"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`klingSecret`}>SecretKey</Label>
+                      <div className="relative">
+                        <Input
+                          id="klingSecret"
+                          type={isShown ? 'text' : 'password'}
+                          value={klingSecret}
+                          onChange={(e) => setKlingSecret(e.target.value)}
+                          placeholder="SecretKey..."
+                          autoComplete="off"
+                          className="pr-9 font-mono text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShowKey((prev) => ({ ...prev, [p]: !prev[p] }))
+                          }
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={isShown ? 'Sembunyikan' : 'Tampilkan'}
+                        >
+                          {isShown ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`key-${p}`}>API Key baru</Label>
+                    <div className="relative">
+                      <Input
+                        id={`key-${p}`}
+                        type={isShown ? 'text' : 'password'}
+                        value={draft[p]}
+                        onChange={(e) =>
+                          setDraft((prev) => ({ ...prev, [p]: e.target.value }))
+                        }
+                        placeholder={
+                          row?.maskedKey
+                            ? row.maskedKey
+                            : 'sk-... / AIza... / sk-ant-...'
+                        }
+                        autoComplete="off"
+                        className="pr-9 font-mono text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowKey((prev) => ({ ...prev, [p]: !prev[p] }))
+                        }
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        aria-label={isShown ? 'Sembunyikan' : 'Tampilkan'}
+                      >
+                        {isShown ? (
+                          <EyeOff className="size-4" />
+                        ) : (
+                          <Eye className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Button
                     onClick={() => saveKey(p)}
-                    disabled={isSaving || !draft[p].trim()}
+                    disabled={
+                      isSaving ||
+                      (p === 'KLING'
+                        ? !klingAccess.trim() || !klingSecret.trim()
+                        : !draft[p].trim())
+                    }
                     className="flex-1"
                   >
                     {isSaving && (

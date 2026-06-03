@@ -175,10 +175,18 @@ async function replyViaOpenai(
     ...alternating,
   ]
 
+  // GPT-5 family: reasoning_effort=minimal kurangi reasoning token invisible
+  // 80% — fix kasus mini sering timeout/no-response di Hulao.
+  const modelId = input.modelId || DEFAULT_MODEL_BY_PROVIDER.OPENAI
+  const isGpt5 = modelId.startsWith('gpt-5')
+  const extraOpts: Record<string, unknown> = isGpt5
+    ? { reasoning_effort: 'minimal' }
+    : {}
   const res = await client.chat.completions.create({
-    model: input.modelId || DEFAULT_MODEL_BY_PROVIDER.OPENAI,
+    model: modelId,
     max_completion_tokens: MAX_TOKENS,
     messages,
+    ...extraOpts,
   })
 
   const reply = res.choices[0]?.message?.content?.trim() ?? ''
@@ -248,13 +256,18 @@ async function replyViaGoogle(
 // supaya AI paham bahwa balasan tersebut datang dari customer service manusia,
 // bukan dari dirinya sendiri. Penting saat kontak di-resume dari mode takeover
 // — AI butuh konteks apa yang sudah dijawab CS untuk lanjut natural.
+// Hard cap history: ambil 20 turn terakhir (~10 round) max. WA history bisa
+// numpuk ratusan pesan kalau customer balas terus — fix bloat token GPT-5 mini.
+const MAX_HISTORY_TURNS = 20
+
 function toAlternatingMessages(
   history: InternalMessageHistoryItem[],
   latestUserMessage: string,
 ): { role: 'user' | 'assistant'; content: string }[] {
   const out: { role: 'user' | 'assistant'; content: string }[] = []
-
-  for (const m of history) {
+  // Slice last N (newest) — preserve recent context, drop old chatter.
+  const recent = history.slice(-MAX_HISTORY_TURNS)
+  for (const m of recent) {
     const role: 'user' | 'assistant' = m.role === 'USER' ? 'user' : 'assistant'
     if (!m.content) continue
     const isCs = m.role === 'AGENT' || m.role === 'HUMAN'

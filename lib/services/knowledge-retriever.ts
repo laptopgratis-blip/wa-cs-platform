@@ -163,21 +163,25 @@ export function formatKnowledgeForPrompt(items: RetrievedKnowledge[]): string {
       kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE'),
   )
 
+  // Hard cap per entry 500 char (was unbounded) — entry panjang bisa habisin
+  // context untuk GPT-5 mini. 500 char cukup untuk gist + key facts.
+  const MAX_BODY_PER_ENTRY = 500
   for (const kb of items) {
-    const body = kb.textContent || kb.caption || '(lihat file/link terlampir)'
+    const rawBody = kb.textContent || kb.caption || '(lihat file/link terlampir)'
+    const body = rawBody.length > MAX_BODY_PER_ENTRY
+      ? rawBody.slice(0, MAX_BODY_PER_ENTRY) + '…'
+      : rawBody
     lines.push(`- **${kb.title}**: ${body}`)
     if (kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE')) {
-      lines.push(
-        `  → File "${kb.title}" akan OTOMATIS dikirim setelah balasan teks kamu. JANGAN bilang "admin akan kirim" — cukup bilang "ini saya kirim ya" atau "berikut bukti/gambarnya".`,
-      )
+      lines.push(`  → File "${kb.title}" auto-kirim setelah balasanmu. Bilang "ini saya kirim ya".`)
     }
-    if (kb.linkUrl) lines.push(`  (Link untuk customer: ${kb.linkUrl})`)
+    if (kb.linkUrl) lines.push(`  (Link: ${kb.linkUrl})`)
   }
 
   if (hasFile) {
     lines.push(
       '',
-      '**PENTING**: Kalau ada knowledge IMAGE/FILE yang akan dikirim sistem, JANGAN tulis "tunggu admin", "nanti admin balas", atau "saya hubungi admin". Cukup bilang seperti "Berikut bukti/foto/testimoninya ya kak 👇" lalu sistem akan attach file otomatis setelah balasan kamu.',
+      'CATATAN file: file IMAGE/FILE auto-attach setelah balasanmu — jangan tulis "tunggu admin", bilang "Berikut foto/buktinya kak".',
     )
   }
 

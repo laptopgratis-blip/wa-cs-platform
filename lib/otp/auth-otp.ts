@@ -141,6 +141,11 @@ export async function createOtp(input: CreateOtpInput): Promise<CreatedOtp> {
     },
     select: { id: true },
   })
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(
+      `[auth-otp][DEV] identifier=${input.identifier} mode=${input.mode} channel=${input.channel} code=${code} id=${row.id}`,
+    )
+  }
   return { id: row.id, code }
 }
 

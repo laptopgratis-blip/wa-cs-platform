@@ -101,6 +101,22 @@ model User {
   onboardingChecklist          Json?
   onboardingDismissedAt        DateTime?
   onboardingEvents             OnboardingEvent[]
+  // CS Live AI — Phase 0a (2026-06-01). Host templates + generation jobs
+  // (Gemini Nano Banana 2 + Kling video). User=tenant; admin's templates
+  // (role=ADMIN) jadi library publik untuk semua user.
+  hostTemplates                HostTemplate[]
+  generationJobs               GenerationJob[]
+  // CS Live AI — Phase 0b (2026-06-01). Live rooms milik user — terikat ke
+  // 1 host template + product set. Public URL `/live/<slug>`.
+  liveRooms                    LiveRoom[]
+  // CS Live AI — Phase 0c (2026-06-01). Tangkap layer.
+  liveSessions                 LiveSession[]
+  liveLeads                    LiveLead[]
+  // CS Live AI — Phase 3 (2026-06-01). Objection auto-tag dari transkrip.
+  liveObjections               LiveObjection[]
+  // CS Live AI — Phase 4 (2026-06-01). AI proposal perubahan systemPrompt
+  // / greeting dengan human approval loop.
+  liveProposals                LiveOptimizationProposal[]
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -2726,6 +2742,14 @@ model AiFeatureConfig {
   capTokens        Int      @default(0)
   isActive         Boolean  @default(true)
   description      String?
+  // Unit dasar charge: TOKEN = pakai inputTokens/outputTokens biasa.
+  // IMAGE = inputPricePer1M jadi (USD per 1 image × 1_000_000); caller pass
+  // inputTokens = jumlah image. VIDEO_SECOND = inputPricePer1M jadi (USD per
+  // 1 detik × 1_000_000); caller pass inputTokens = durasi detik. Helper
+  // computeCharge rumusnya identik — semantik shift di caller.
+  unitType         String   @default("TOKEN")
+  // Label tampilan unit (mis. "image", "detik"). Display-only.
+  unitLabel        String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -2939,4 +2963,606 @@ model ContentSlide {
 
   @@unique([pieceId, slideIndex])
   @@index([pieceId])
+}
+
+// ─────────────────────────────────────────
+// CS LIVE AI — HOST TEMPLATES (PR-0a, 2026-06-01)
+// ─────────────────────────────────────────
+// Pipeline pembuatan host AI (avatar live shopping):
+//   1. Admin upload referensi (opsional: logo brand, foto produk).
+//   2. Gemini Nano Banana 2 (sync) → gambar host.
+//   3. Kling AI image-to-video (async, poll cron kling-poll) → MP4 looping.
+//   4. Simpan MP4 ke public/uploads/host-videos/ → ready dipakai live room.
+//
+// Multi-tenant: user=tenant. ADMIN's template (isPublic=true) = library
+// publik. USER's template = milik tenant sendiri. Token deduction pakai
+// TokenBalance existing via media-charge helper.
+
+enum HostTemplateStatus {
+  DRAFT // Belum mulai generate
+  GENERATING_IMAGE // Gemini call jalan
+  IMAGE_READY // Gambar siap, video belum
+  GENERATING_VIDEO // Kling submit, menunggu poll
+  READY // MP4 tersimpan, siap dipakai
+  FAILED // Salah satu step error (cek errorMessage)
+  REJECTED // Admin moderation (UGC) tolak
+}
+
+// HostMode — mode bicara host:
+//   TTS_GENERATIVE = existing flow. 1 video loop silent + scenes + TTS realtime per reply Claude.
+//   NATIVE_LIBRARY = "Klip Live" baru. Library klip dengan audio inline (ElevenLabs → Kling lipsync).
+//                    AI match customer Q → pilih klip. Pre-baked, no realtime TTS.
+enum HostMode {
+  TTS_GENERATIVE
+  NATIVE_LIBRARY
+}
+
+model HostTemplate {
+  id             String             @id @default(cuid())
+  userId         String // owner. ADMIN+isPublic=true → library publik.
+  name           String
+  visualStyle    String? // free-form: "korean female 25yo casual", dll
+  // Mode bicara — default TTS untuk backward compat.
+  mode           HostMode           @default(TTS_GENERATIVE)
+  // Voice TTS preference — diisi di PR-0b live room. Sementara nullable.
+  voiceId        String?
+  // Visual hook (kostum/aksesori menarik perhatian) — pakai preset ATAU custom.
+  visualHookId   String? // FK ke VisualHookPreset
+  visualHookCustom String?          @db.Text // owner-typed kalau no preset cocok
+  // Background scene — pakai preset (gudang/pabrik/studio/dll).
+  backgroundId   String? // FK ke BackgroundPreset
+  // Foto produk yang akan composite ke scene host. URLs absolute.
+  productImageUrls String[]         @default([])
+  productPlacement String? // "auto" | "table" | "hand" | "shelf"
+  // Vision analysis hasil Claude 4 Vision atas sourceImageUrl — dipakai
+  // adaptive Kling prompt builder. Schema lihat ImageVisionAnalysis di
+  // lib/services/host-gen/vision-analyzer.ts. JSON loose.
+  visionAnalysis Json?
+  visionAnalyzedAt DateTime?
+  // Owner approve image sebelum lanjut generate klip (Klip Live mode).
+  imageApprovedAt DateTime?
+  promptImage    String             @db.Text // prompt ke Gemini
+  promptVideo    String             @db.Text // prompt gerakan ke Kling (TTS mode), default motion (Klip Live mode)
+  refImageUrls   String[]           @default([]) // referensi produk (sampai 14, dipakai Gemini)
+  sourceImageUrl String? // hasil Gemini, path lokal
+  videoLoopUrl   String? // hasil Kling sudah di-download, path lokal (TTS mode)
+  videoSeconds   Int? // durasi video final (5 / 10)
+  status         HostTemplateStatus @default(DRAFT)
+  errorMessage   String?            @db.Text
+  isPublic       Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs           GenerationJob[]
+  liveRooms      LiveRoom[]
+  scenes         HostScene[]
+  clips          LiveClip[]
+  background     BackgroundPreset? @relation(fields: [backgroundId], references: [id], onDelete: SetNull)
+  visualHook     VisualHookPreset? @relation(fields: [visualHookId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([isPublic, status])
+  @@index([mode])
+}
+
+// ─────────────────────────────────────────
+// KLIP LIVE — Library klip dengan audio inline (Phase 6, 2026-06-02)
+// ─────────────────────────────────────────
+// LiveClip = 1 MP4 dengan audio bonded (hasil ElevenLabs TTS → Kling lipsync).
+// AI match customer Q → cosine similarity vs clip embeddings → pilih top-1.
+// Sumber:
+//   GENERATED = user generate via pipeline (Kling cost ditagih)
+//   UPLOADED  = admin upload manual (skip Kling cost)
+
+enum ClipCategory {
+  GREETING // sapaan awal customer masuk
+  PRODUCT_DEMO // demo / penjelasan produk spesifik
+  PRICE // jawab pertanyaan harga
+  OBJECTION // handle keberatan ("mahal", "mikir dulu")
+  CLOSING // push checkout
+  IDLE // loop saat sepi (host diam senyum, no speech)
+  GENERAL // umum / fallback
+}
+
+enum ClipSource {
+  GENERATED
+  UPLOADED
+}
+
+enum LiveClipStatus {
+  DRAFT
+  GENERATING_AUDIO // ElevenLabs call
+  GENERATING_VIDEO // Kling lipsync
+  PROCESSING_EMBEDDING // OpenAI embed
+  READY
+  FAILED
+}
+
+model LiveClip {
+  id              String       @id @default(cuid())
+  hostTemplateId  String
+  userId          String // denormalisasi owner
+  hostTemplate    HostTemplate @relation(fields: [hostTemplateId], references: [id], onDelete: Cascade)
+
+  // Konten
+  scriptOriginal  String       @db.Text // input user (= transcript saat GENERATED)
+  transcript      String       @db.Text // sama dgn scriptOriginal (GENERATED) atau Whisper output (UPLOADED)
+  summary         String? // 1-line auto-gen Claude untuk display ringkas
+  category        ClipCategory @default(GENERAL)
+  tags            String[]     @default([])
+  productId       String? // link ke Product kalau category=PRODUCT_DEMO
+
+  // File (semua path lokal /uploads/clips/...)
+  audioUrl        String? // ElevenLabs MP3 (intermediate, retain untuk retry lipsync)
+  videoUrl        String? // final MP4 dgn audio bonded (Kling lipsync output)
+  thumbnailUrl    String? // poster frame 0:02
+  durationMs      Int?
+
+  // Matching
+  embedding       Json? // float[1536] sementara — migrasi pgvector di Sprint 4 kalau perlu
+  embeddingModel  String? // "text-embedding-3-small"
+
+  // Provenance + retry
+  source          ClipSource @default(GENERATED)
+  klingJobId      String?
+  status          LiveClipStatus @default(DRAFT)
+  errorMessage    String?    @db.Text
+
+  // Owner controls
+  isActive        Boolean    @default(true)
+  isEvergreen     Boolean    @default(false) // klip serbaguna fallback low-confidence
+  isDefaultIdle   Boolean    @default(false) // satu klip per host = idle loop saat sepi
+
+  // Manual routing — supervisor control override (lebih prioritas dari cosine).
+  // triggerKeywords: array frasa exact (case-insensitive). Kalau customer message
+  //   include salah satu → force pick clip ini dengan confidence=1.0.
+  // matchMode: COSINE (default, AI only) | KEYWORD_FIRST (keywords prioritas
+  //   tapi cosine masih fallback) | KEYWORD_ONLY (cuma keywords match) |
+  //   BOOST (keywords boost score +0.2 di cosine).
+  // manualConfidence: kalau ter-set, override hasil cosine score (force pick).
+  triggerKeywords String[]   @default([])
+  matchMode       String     @default("COSINE")
+  manualConfidence Float?
+
+  // Analytics
+  useCount        Int        @default(0)
+  lastUsedAt      DateTime?
+  avgConfidence   Float?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  usages          LiveClipUsage[]
+
+  @@index([hostTemplateId, isActive, status])
+  @@index([userId, createdAt])
+  @@index([category, isActive])
+}
+
+model LiveClipUsage {
+  id             String   @id @default(cuid())
+  clipId         String
+  clip           LiveClip @relation(fields: [clipId], references: [id], onDelete: Cascade)
+  liveSessionId  String? // null kalau dari test-match panel admin
+  question       String   @db.Text
+  confidence     Float
+  matchedAt      DateTime @default(now())
+
+  @@index([clipId, matchedAt])
+}
+
+// ─────────────────────────────────────────
+// PRESETS — Background scene (25) + Visual Hook (50)
+// ─────────────────────────────────────────
+// Seed via prisma/seeds/backgrounds.ts + prisma/seeds/visual-hooks.ts.
+// Admin bisa add/edit preset di /admin/host-presets nanti (Phase 2).
+
+model BackgroundPreset {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  category        String // "trust-scale" | "production" | "premium" | "lifestyle" | "specialty"
+  nameId          String // display name Bahasa Indonesia
+  nameEn          String?
+  description     String   @db.Text
+  promptFragment  String   @db.Text // di-inject ke Gemini prompt
+  motionHint      String?  @db.Text // hint adaptive Kling prompt — "conveyor moves L→R continuous"
+  thumbnailUrl    String // sample preview
+  vibeTags        String[] @default([])
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hostTemplates   HostTemplate[]
+
+  @@index([category, isActive, sortOrder])
+}
+
+model VisualHookPreset {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  category        String // "costume" | "headwear" | "prop" | "accessory" | "cosplay"
+  nameId          String
+  description     String   @db.Text
+  promptFragment  String   @db.Text // di-inject ke Gemini prompt
+  stabilityHints  String[] @default([]) // constraint ke Kling: "brim topi tidak shift"
+  vibeTags        String[] @default([])
+  cautionFlags    String[] @default([]) // ["seasonal-only", "potential-blur", "face-coverage"]
+  thumbnailUrl    String
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  hostTemplates   HostTemplate[]
+
+  @@index([category, isActive, sortOrder])
+}
+
+// ─────────────────────────────────────────
+// CS LIVE AI — HOST SCENES (Phase 5, 2026-06-01)
+// ─────────────────────────────────────────
+// 1 HostTemplate = 1 image base + N HostScene = N Kling videos.
+// Tiap scene = variasi gerakan (idle joget, lompat, kungfu, sapaan, dll).
+// Live room pakai scene yang isPrimary=true (cache ke HostTemplate.videoLoopUrl).
+
+enum HostSceneStatus {
+  DRAFT
+  GENERATING
+  READY
+  FAILED
+}
+
+model HostScene {
+  id              String          @id @default(cuid())
+  hostTemplateId  String
+  userId          String // denormalisasi owner
+  name            String // mis: "Idle - Joget Kecil"
+  description     String?         @db.Text
+  promptVideo     String          @db.Text
+  // Source: 'TEMPLATE:<templateId>' kalau dari preset, 'CUSTOM' kalau prompt user.
+  source          String          @default("CUSTOM")
+  // Kategori untuk state machine orchestration di live room.
+  // Values: 'idle' | 'greeting' | 'listening' | 'thinking' | 'talking' | 'excited' | 'product'.
+  // Default 'idle' supaya scene apa pun bisa jadi default kalau gak ada
+  // mapping spesifik.
+  category        String          @default("idle")
+  videoUrl        String?
+  videoSeconds    Int?
+  status          HostSceneStatus @default(DRAFT)
+  errorMessage    String?         @db.Text
+  generationJobId String? // link ke GenerationJob terakhir untuk scene ini
+  // Hanya 1 scene yang isPrimary=true per host (di-enforce di service).
+  isPrimary       Boolean         @default(false)
+  // Toggle owner: kalau false, scene di-skip oleh state machine live room
+  // (gak masuk rotation walau status READY). Default true.
+  isEnabled       Boolean         @default(true)
+  sortOrder       Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  hostTemplate HostTemplate @relation(fields: [hostTemplateId], references: [id], onDelete: Cascade)
+
+  @@index([hostTemplateId, sortOrder])
+  @@index([userId, createdAt])
+}
+
+enum GenerationJobType {
+  HOST_IMAGE // Gemini Nano Banana 2 (sync)
+  HOST_VIDEO // Kling image-to-video (async)
+}
+
+enum GenerationJobStatus {
+  QUEUED // Job baru dibuat, belum mulai
+  RUNNING // Submitted ke provider, menunggu hasil
+  DONE // Hasil ter-download, sukses
+  FAILED // Error dari provider atau internal
+}
+
+model GenerationJob {
+  id             String              @id @default(cuid())
+  userId         String
+  hostTemplateId String?
+  type           GenerationJobType
+  provider       String // "GOOGLE" (Gemini) | "KLING" (lewat Fal.ai)
+  model          String // mis. "gemini-3.1-flash-image-preview" | "fal-ai/kling-video/v2.1/master/image-to-video"
+  inputPayload   Json // prompt, ref images, durations, etc — audit trail
+  providerTaskId String? // Fal.ai request_id (untuk poll)
+  status         GenerationJobStatus @default(QUEUED)
+  outputUrl      String? // path lokal hasil
+  errorMessage   String?             @db.Text
+  apiCostUsd     Float? // cost real provider (snapshot saat selesai)
+  tokensCharged  Int? // token platform di-deduct (link ke TokenTransaction)
+  createdAt      DateTime            @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hostTemplate HostTemplate? @relation(fields: [hostTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([status, provider])
+  @@index([userId, createdAt])
+  @@index([hostTemplateId])
+}
+
+
+// ─────────────────────────────────────────
+// CS LIVE AI — LIVE ROOMS (PR-0b, 2026-06-01)
+// ─────────────────────────────────────────
+// 1 user = N live rooms. Tiap room terikat ke:
+//   - 1 HostTemplate (avatar yg di-loop)
+//   - N Product (kartu produk di sidebar, simpan sebagai productIds[])
+// Public URL: /live/<slug>. Customer akhir akses tanpa login.
+// Token deduction tiap balasan AI = pakai feature key CS_REPLY (existing),
+// dibebankan ke owner (room.userId).
+
+model LiveRoom {
+  id             String   @id @default(cuid())
+  userId         String
+  // Slug unik global. Mis. "siska-cleanoz". Public URL /live/<slug>.
+  slug           String   @unique
+  name           String
+  description    String?  @db.Text
+  hostTemplateId String
+  // Array productId — order menentukan urutan tampil di sidebar.
+  productIds     String[] @default([])
+  // System prompt persona host untuk Claude. Default di-generate dari
+  // host.name + product context, admin/user boleh override.
+  systemPrompt   String   @db.Text
+  // Greeting message yg di-display saat customer pertama buka room.
+  greeting       String?  @db.Text
+  // Voice TTS preference — default 'alloy'. Editable per room.
+  ttsVoice       String   @default("nova")
+  // Instruksi gaya/nada untuk TTS (gpt-4o-mini-tts mendukung field
+  // `instructions`). Bikin suara dinamis — bisa atur emosi, kecepatan,
+  // aksen, dll lewat natural language. Null = pakai default.
+  ttsInstructions String? @db.Text
+  // Speed bicara — OpenAI TTS native param (0.25-4.0, default 1.0).
+  ttsSpeed        Float   @default(1.0)
+  // Pitch offset (-1 ke +1). Diterjemahkan ke natural-language instruction
+  // (lower/higher pitch) karena OpenAI belum punya parameter pitch eksplisit.
+  ttsPitchOffset  Float   @default(0.0)
+  // Expressiveness (0-1). 0 = flat monotone, 1 = sangat ekspresif.
+  ttsExpressiveness Float @default(0.5)
+  // Pause antar kalimat (ms) di client audio queue — 0 (langsung) - 800 (ada jeda).
+  ttsPauseMs      Int     @default(150)
+  // Model AI untuk balas chat. Default Haiku (cepat + murah). Sonnet = lebih
+  // pintar tapi 3x lebih mahal.
+  chatModel      String   @default("claude-haiku-4-5")
+  // Temperature Claude 0-1. Lower = jawaban konsisten/predictable, higher =
+  // variasi/kreatif. 0.7 default cocok untuk live shopping (sopan tapi gak kaku).
+  chatTemperature Float   @default(0.7)
+  // Link ke OrderForm publik — kalau set, klik produk di live room buka
+  // /order/<slug>?product=<productId>. Null = chat fill saja (gak ada checkout direct).
+  orderFormSlug  String?
+  // Bot penonton: post pertanyaan random tiap interval supaya host tetap
+  // aktif walau customer beneran lagi diam. Customer real selalu prioritas
+  // — bot di-pause 60dtk setelah real customer message.
+  botEnabled         Boolean  @default(false)
+  botIntervalMinSec  Int      @default(25)
+  botIntervalMaxSec  Int      @default(45)
+  botPrompts         String[] @default([])
+  // Active toggle — kalau false, customer lihat halaman "live sedang offline".
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hostTemplate HostTemplate               @relation(fields: [hostTemplateId], references: [id], onDelete: Restrict)
+  sessions     LiveSession[]
+  leads        LiveLead[]
+  proposals    LiveOptimizationProposal[]
+
+  @@index([userId, createdAt])
+  @@index([slug])
+}
+
+// ─────────────────────────────────────────
+// CS LIVE AI — TANGKAP LAYER (PR-0c, 2026-06-01)
+// ─────────────────────────────────────────
+// LiveSession = 1 customer visit di 1 room. Identified by clientSessionId
+// (random uuid di client sessionStorage). Ends on tab close (we never know
+// for sure) → endedAt = NULL kalau belum ada outcome.
+//
+// LiveEvent = atomic interaction. Pattern: append-only log. Analisa
+// (Fase 3 brief) makan dari sini untuk objection tagging + funnel.
+//
+// LiveLead = saat customer kasih nama + WA. Trigger handoff ke wa-service.
+
+enum LiveOutcome {
+  OPEN // belum closing/lost — masih bisa diapa-apain
+  CLOSED_WON // beli (manual mark by owner)
+  CLOSED_LOST // tidak jadi
+  DROPPED // ditinggal di tengah jalan
+}
+
+model LiveSession {
+  id              String   @id @default(cuid())
+  userId          String // owner room — denormalisasi supaya query per-tenant cepat
+  liveRoomId      String
+  // Client-generated UUID disimpan di sessionStorage browser. Pakai untuk
+  // re-attach session kalau customer refresh.
+  clientSessionId String   @unique
+  // Hash IP + UA — bukan PII, untuk dedup analytics tanpa simpan IP mentah.
+  fingerprint     String?
+  customerName    String?
+  customerPhone   String?
+  startedAt       DateTime @default(now())
+  endedAt         DateTime?
+  // Outcome — OPEN saat customer masih aktif, di-update saat lead capture
+  // (otomatis tetap OPEN sampai owner manual mark).
+  outcome         LiveOutcome @default(OPEN)
+  outcomeReason   String?     @db.Text
+  // Snapshot agregat untuk dashboard cepat (avoid count events tiap render):
+  messageCount    Int      @default(0)
+  productClicks   Int      @default(0)
+  // Fase 3 (2026-06-01) — flag idempotency untuk objection analyzer. Cron
+  // skip session yg sudah analyzed kecuali force=1.
+  objectionsAnalyzedAt DateTime?
+  updatedAt       DateTime @updatedAt
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  liveRoom   LiveRoom        @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
+  events     LiveEvent[]
+  lead       LiveLead?
+  objections LiveObjection[]
+
+  @@index([userId, startedAt])
+  @@index([liveRoomId, startedAt])
+  @@index([outcome])
+  @@index([objectionsAnalyzedAt])
+}
+
+enum LiveEventType {
+  SESSION_START
+  USER_MESSAGE
+  AI_MESSAGE
+  PRODUCT_CLICK
+  LEAD_CAPTURE
+  HANDOFF_WA
+  AI_INSUFFICIENT_BALANCE
+  AI_ERROR
+  SESSION_END
+}
+
+model LiveEvent {
+  id              String        @id @default(cuid())
+  liveSessionId   String
+  type            LiveEventType
+  // Payload spesifik per type:
+  //   USER_MESSAGE / AI_MESSAGE: { text, tokensCharged? }
+  //   PRODUCT_CLICK: { productId, productName }
+  //   LEAD_CAPTURE:  { name, phone, productId? }
+  //   HANDOFF_WA:    { phoneNumber, sessionId, success, error? }
+  payload         Json?
+  createdAt       DateTime      @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([liveSessionId, createdAt])
+  @@index([type, createdAt])
+}
+
+enum LiveLeadStatus {
+  NEW
+  HANDOFF_SENT // sudah send WA ke customer
+  HANDOFF_FAILED // wa-service error
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+model LiveLead {
+  id              String         @id @default(cuid())
+  userId          String // owner — denormalisasi
+  liveRoomId      String
+  liveSessionId   String         @unique
+  customerName    String
+  customerPhone   String // E.164 atau +62 format
+  // Produk yg di-klik / disebut paling banyak — best-effort, owner edit nanti.
+  productInterest String?
+  // Transkrip percakapan saat lead capture — owner reference cepat tanpa
+  // klik ke /inbox.
+  transcript      String         @db.Text
+  status          LiveLeadStatus @default(NEW)
+  // Linked Contact di CRM Hulao — kalau handoff sukses + upsert berhasil.
+  contactId       String?
+  handoffError    String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  liveRoom    LiveRoom    @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([liveRoomId, createdAt])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────
+// CS LIVE AI — OBJECTION TAGGING (Fase 3, 2026-06-01)
+// ─────────────────────────────────────────
+// Taksonomi dari Lampiran B brief (~10 kategori). Tiap LiveSession bisa
+// punya N LiveObjection (multi-tag). Source of truth untuk dashboard
+// peta objection per-room dan Fase 4 proposal engine.
+
+enum ObjectionCategory {
+  HARGA_MAHAL
+  RAGU_KUALITAS
+  TAKUT_PENIPUAN
+  BUTUH_IZIN
+  NANTI_DULU
+  KURANG_PAHAM
+  BANDING_KOMPETITOR
+  TIDAK_BUTUH
+  MASALAH_TEKNIS
+  TIDAK_COCOK
+  LAINNYA
+}
+
+model LiveObjection {
+  id            String            @id @default(cuid())
+  liveSessionId String
+  userId        String // denormalisasi owner — query per-tenant cepat
+  category      ObjectionCategory
+  // Confidence Claude (0-1). Threshold display di dashboard ≥0.5.
+  confidence    Float             @default(0.7)
+  // Snippet kata-kata customer yang trigger tag — bukti ke owner.
+  evidence      String            @db.Text
+  // Free-text catatan AI: kenapa tag ini, opsional rebuttal recommendation.
+  aiNotes       String?           @db.Text
+  createdAt     DateTime          @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, category, createdAt])
+  @@index([liveSessionId])
+}
+
+// ─────────────────────────────────────────
+// CS LIVE AI — OPTIMIZATION LOOP (Fase 4, 2026-06-01)
+// ─────────────────────────────────────────
+// AI ngusulin perubahan ke 3 aset (system prompt, greeting, persona kalimat
+// spesifik). Owner approve → apply ke LiveRoom. Snapshot before disimpan
+// untuk rollback.
+
+enum ProposalTargetAsset {
+  SYSTEM_PROMPT // LiveRoom.systemPrompt
+  GREETING // LiveRoom.greeting
+  REBUTTAL_NOTE // free-form text — owner copy manual (untuk pengetahuan)
+}
+
+enum ProposalStatus {
+  PENDING // sedang nunggu owner approve/reject
+  APPROVED // di-approve tapi belum apply
+  APPLIED // sudah apply ke LiveRoom (atau dicatat untuk REBUTTAL_NOTE)
+  REJECTED // ditolak owner
+  ROLLED_BACK // pernah apply, lalu di-rollback ke beforeSnapshot
+}
+
+model LiveOptimizationProposal {
+  id          String              @id @default(cuid())
+  userId      String
+  liveRoomId  String
+  targetAsset ProposalTargetAsset
+  title       String // ringkasan 1 baris untuk list
+  proposalText String             @db.Text // text baru yg di-usulkan
+  rationale   String              @db.Text // kenapa AI usul ini
+  // Bukti — array session ID yg AI rujuk sebagai pattern.
+  evidenceSessionIds String[]     @default([])
+  // Snapshot nilai LiveRoom field sebelum di-apply. Pakai untuk rollback.
+  beforeSnapshot String?          @db.Text
+  status      ProposalStatus      @default(PENDING)
+  createdAt   DateTime            @default(now())
+  decidedAt   DateTime?
+  appliedAt   DateTime?
+  decidedNote String?             @db.Text
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  liveRoom LiveRoom @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([liveRoomId, status, createdAt])
 }

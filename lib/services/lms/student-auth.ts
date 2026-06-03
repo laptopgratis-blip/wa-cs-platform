@@ -108,6 +108,11 @@ export async function requestOtp(
       expiresAt,
     },
   })
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(
+      `[student-otp][DEV] phone=${phone} code=${plain} id=${row.id}`,
+    )
+  }
   return {
     ok: true,
     otpId: row.id,
