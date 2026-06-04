@@ -24,7 +24,18 @@ export const authOptions: NextAuthOptions = {
   // Adapter tetap dipakai supaya akun Google tersimpan di tabel Account/User,
   // tapi session di-handle JWT (lihat session.strategy di bawah).
   adapter: PrismaAdapter(prisma),
-  session: { strategy: 'jwt' },
+  session: {
+    strategy: 'jwt',
+    // 60 hari supaya user tidak sering diminta OTP ulang. Rolling: tiap user
+    // request, JWT di-refresh kalau sudah lewat updateAge → window 60 hari
+    // di-reset selama user aktif (default behaviour NextAuth).
+    maxAge: 60 * 24 * 60 * 60, // 60 hari
+    updateAge: 24 * 60 * 60, // refresh signature tiap 24 jam aktif
+  },
+  // JWT cookie expiry samain dgn session supaya browser pegang cookie 60 hari.
+  jwt: {
+    maxAge: 60 * 24 * 60 * 60,
+  },
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: '/login',

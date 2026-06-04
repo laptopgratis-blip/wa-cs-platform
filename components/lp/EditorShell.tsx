@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 
 import { AiGenerator } from '@/components/lp/AiGenerator'
 import { ColorsPanel } from '@/components/lp/ColorsPanel'
+import { CtaLinkPanel } from '@/components/lp/CtaLinkPanel'
 import { EditorTopbar, type SaveStatus, type Viewport } from '@/components/lp/EditorTopbar'
 import { HtmlEditor } from '@/components/lp/HtmlEditor'
 import { ImageManager } from '@/components/lp/ImageManager'
@@ -140,6 +141,11 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   const isDirty =
     title !== savedSnapshotRef.current.title ||
     htmlContent !== savedSnapshotRef.current.htmlContent
+
+  // hasContent dipakai untuk smart default-collapse panel atas:
+  // kalau LP sudah ada konten substansial, AiGenerator/ColorsPanel default
+  // tertutup → user langsung fokus ke preview, panel buka by-need.
+  const hasContent = htmlContent.trim().length > 100
 
   useEffect(() => {
     if (isDirty && saveStatus === 'saved') setSaveStatus('unsaved')
@@ -310,10 +316,23 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
             <ImageManager lpId={initial.id} />
           </aside>
 
-          <section className="flex min-h-0 flex-col bg-warm-50/30">
-            <AiGenerator lpId={initial.id} onGenerated={handleGeneratedHtml} />
-            <ColorsPanel html={htmlContent} onChange={setHtmlContent} />
-            <div className="flex min-h-0 flex-1 flex-col">
+          {/* Section scroll-able: panel atas (AiGenerator/Warna/Link) bisa
+              menumpuk tinggi tanpa "menelan" preview di bawah. Min height
+              500px di preview area memastikan preview tetap kelihatan
+              walaupun di laptop dengan layar kecil. */}
+          <section className="flex min-h-0 flex-col overflow-y-auto bg-warm-50/30">
+            <AiGenerator
+              lpId={initial.id}
+              onGenerated={handleGeneratedHtml}
+              initialOpen={!hasContent}
+            />
+            <ColorsPanel
+              html={htmlContent}
+              onChange={setHtmlContent}
+              initialOpen={!hasContent}
+            />
+            <CtaLinkPanel html={htmlContent} onChange={setHtmlContent} />
+            <div className="flex min-h-[500px] flex-1 flex-col">
               <VisualEditor
                 htmlContent={htmlContent}
                 viewport={viewport}
@@ -329,7 +348,11 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
           </aside>
 
           <section className="flex min-h-0 flex-col border-r border-warm-200 bg-warm-50/30">
-            <AiGenerator lpId={initial.id} onGenerated={handleGeneratedHtml} />
+            <AiGenerator
+              lpId={initial.id}
+              onGenerated={handleGeneratedHtml}
+              initialOpen={!hasContent}
+            />
             <div className="flex min-h-0 flex-1 flex-col border-t border-warm-200">
               <HtmlEditor
                 value={htmlContent}
@@ -362,7 +385,9 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
         open={publishDialogOpen}
         onOpenChange={setPublishDialogOpen}
         mode={isPublished ? 'unpublish' : 'publish'}
+        lpId={initial.id}
         slug={slug}
+        lpTitle={title}
         htmlLength={htmlContent.length}
         onConfirm={confirmPublishToggle}
       />

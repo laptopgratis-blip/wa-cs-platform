@@ -16,6 +16,9 @@ import { extractColors, replaceColor } from '@/lib/lp/html-mutation'
 interface Props {
   html: string
   onChange: (next: string) => void
+  // Override default open state — caller bisa default-collapse panel pas
+  // LP sudah ada konten supaya preview punya ruang lebih.
+  initialOpen?: boolean
 }
 
 // Untuk memberikan indikator label "kemungkinan dipakai untuk apa".
@@ -48,8 +51,8 @@ function toHexInput(color: string): string {
   return '#000000'
 }
 
-export function ColorsPanel({ html, onChange }: Props) {
-  const [open, setOpen] = useState(true)
+export function ColorsPanel({ html, onChange, initialOpen = true }: Props) {
+  const [open, setOpen] = useState(initialOpen)
   const colors = useMemo(() => extractColors(html), [html])
 
   // Hidden input color refs per swatch untuk trigger native picker.

@@ -35,6 +35,9 @@ services:
       dockerfile: Dockerfile
     container_name: hulao-nextjs
     restart: unless-stopped
+    # Batas memori (host shared, swap 4G) — cegah satu service meng-OOM host.
+    mem_limit: 768m
+    memswap_limit: 1280m
     env_file:
       - .env.production
     environment:
@@ -76,6 +79,9 @@ services:
       dockerfile: Dockerfile
     container_name: hulao-wa-service
     restart: unless-stopped
+    # Batas memori (host shared, swap 4G) — Baileys WA cenderung tumbuh.
+    mem_limit: 1500m
+    memswap_limit: 2500m
     env_file:
       - .env.production
     volumes:
@@ -85,6 +91,10 @@ services:
       postgres:
         condition: service_healthy
     networks:
+      # WAJIB di traefik-public juga — Traefik (host network) merutekan
+      # /socket.io ke container IP di network ini. Tanpa ini → 502 Bad Gateway
+      # dan QR (yang dikirim via Socket.io) tidak pernah sampai ke browser.
+      - traefik-public
       - internal
     labels:
       - "traefik.enable=true"
@@ -92,7 +102,9 @@ services:
       - "traefik.http.routers.wa-socket.entrypoints=websecure"
       - "traefik.http.routers.wa-socket.tls=true"
       - "traefik.http.routers.wa-socket.tls.certresolver=letsencrypt"
-      - "traefik.http.services.wa-socket.loadbalancer.server.url=http://127.0.0.1:3001"
+      # Docker-provider Traefik: pakai .server.port (bukan .server.url yang
+      # cuma valid di file-provider & diabaikan di sini). Rute ke wa-service:3001.
+      - "traefik.http.services.wa-socket.loadbalancer.server.port=3001"
       - "traefik.docker.network=traefik-public"
 
   uploads-server:

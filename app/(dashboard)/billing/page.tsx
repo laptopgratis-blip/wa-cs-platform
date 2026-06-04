@@ -33,8 +33,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { OnboardingGoalCard } from '@/components/onboarding/OnboardingGoalCard'
+import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { authOptions } from '@/lib/auth'
+import { computeValueUnits } from '@/lib/billing/value-units'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { getPricingSettings } from '@/lib/pricing-settings'
 import { prisma } from '@/lib/prisma'
 import { cn } from '@/lib/utils'
 
@@ -99,7 +102,16 @@ export default async function BillingPage({
   // dari 3 hari terakhir (biar user lihat konfirmasi terbaru sekilas).
   const manualSince = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
 
-  const [tokenBalance, packages, transactions, txCount, manualPayments, userMeta] = await Promise.all([
+  const [
+    tokenBalance,
+    packages,
+    transactions,
+    txCount,
+    manualPayments,
+    userMeta,
+    lpPlansRaw,
+    pricingSettings,
+  ] = await Promise.all([
     prisma.tokenBalance.findUnique({ where: { userId: session.user.id } }),
     prisma.tokenPackage.findMany({
       where: { isActive: true },
@@ -135,7 +147,18 @@ export default async function BillingPage({
       where: { id: session.user.id },
       select: { onboardingGoal: true },
     }),
+    prisma.lpUpgradePackage.findMany({
+      where: { isActive: true, priceMonthly: { gt: 0 } },
+      select: { name: true, priceMonthly: true, canUseOrderSystem: true },
+      orderBy: { priceMonthly: 'asc' },
+    }),
+    getPricingSettings(),
   ])
+  const lpPlans = lpPlansRaw.map((p) => ({
+    name: p.name,
+    priceMonthly: p.priceMonthly,
+    canUseOrderSystem: p.canUseOrderSystem,
+  }))
 
   const balance = tokenBalance?.balance ?? 0
   const totalPurchased = tokenBalance?.totalPurchased ?? 0
@@ -153,12 +176,15 @@ export default async function BillingPage({
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <div>
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Billing & Token
+          Billing & Saldo Token
         </h1>
         <p className="mt-1 text-sm text-warm-500">
-          Kelola saldo token dan beli paket untuk balas pesan WhatsApp pakai AI.
+          Saldo token kamu = bahan bakar semua fitur Hulao. Berlangganan paket,
+          generate konten, balas WA pakai AI — semua potong dari saldo.
         </p>
       </div>
+
+      <PostPublishReturnBanner />
 
       <OnboardingGoalCard currentGoal={onboardingGoal ?? null} />
 
@@ -182,9 +208,9 @@ export default async function BillingPage({
             <div className="font-medium">{formatNumber(totalUsed)} token</div>
           </div>
           <div>
-            <div className="text-muted-foreground">1 token = 1 balasan AI*</div>
-            <div className="text-xs text-muted-foreground/80">
-              *tergantung model yang dipilih
+            <div className="text-muted-foreground">Tarif normal</div>
+            <div className="font-medium tabular-nums">
+              {formatRupiah(Math.round(pricingSettings.pricePerToken))} / token
             </div>
           </div>
         </CardContent>
@@ -360,8 +386,13 @@ export default async function BillingPage({
 
       <div>
         <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
-          Paket Token
+          Top-up Saldo Token
         </h2>
+        <p className="mb-4 text-sm text-warm-500">
+          Token = bahan bakar semua fitur Hulao. Saldo dipakai untuk berlangganan
+          paket Landing Page, Order System, AI konten, balas WA otomatis, dst.
+          Tanpa expired.
+        </p>
         {packages.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -372,19 +403,25 @@ export default async function BillingPage({
           <div className="grid gap-4 md:grid-cols-3">
             {packages.map((pkg) => {
               const pricePerToken = pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
+              const valueUnits = computeValueUnits({
+                tokenAmount: pkg.tokenAmount,
+                pricePerToken: pricingSettings.pricePerToken,
+                lpPlans,
+              })
+              const isHighlight = pkg.isPopular
               return (
                 <Card
                   key={pkg.id}
                   className={cn(
                     'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
-                    pkg.isPopular &&
+                    isHighlight &&
                       'scale-[1.02] border-2 border-primary-400 shadow-orange',
                   )}
                 >
-                  {pkg.isPopular && (
+                  {isHighlight && (
                     <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
                       <Sparkles className="size-3" />
-                      Paling Populer
+                      Paling Hemat
                     </span>
                   )}
                   <CardHeader>
@@ -400,29 +437,53 @@ export default async function BillingPage({
                       <div className="font-display text-3xl font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
                         {formatRupiah(pkg.price)}
                       </div>
-                      <div className="text-xs text-warm-500">
-                        ≈ {formatRupiah(Math.round(pricePerToken))} per token
+                      <div
+                        className={cn(
+                          'text-xs',
+                          isHighlight
+                            ? 'font-semibold text-primary-600'
+                            : 'text-warm-500',
+                        )}
+                      >
+                        {formatRupiah(Math.round(pricePerToken))} / token
+                        {isHighlight && ' · termurah'}
                       </div>
                     </div>
 
-                    <ul className="space-y-2.5 text-sm text-warm-600">
-                      <li className="flex items-start gap-2.5">
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
-                          <Check className="size-3" strokeWidth={3} />
-                        </span>
-                        <span>{formatNumber(pkg.tokenAmount)} token siap pakai</span>
+                    {valueUnits.length > 0 && (
+                      <div className="rounded-lg border border-warm-200 bg-warm-50/60 p-3">
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-warm-500">
+                          Cukup buat
+                        </div>
+                        <ul className="space-y-1.5 text-sm">
+                          {valueUnits.map((unit, idx) => (
+                            <li
+                              key={idx}
+                              className="flex items-start gap-2 text-warm-700"
+                            >
+                              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                                <Check className="size-3" strokeWidth={3} />
+                              </span>
+                              <span className="flex-1">
+                                {unit.label}
+                                <span className="ml-1 font-semibold text-warm-900">
+                                  {unit.value}
+                                </span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <ul className="space-y-1.5 text-xs text-warm-500">
+                      <li className="flex items-start gap-2">
+                        <span className="text-primary-500">·</span>
+                        <span>Bisa dipakai untuk semua fitur Hulao</span>
                       </li>
-                      <li className="flex items-start gap-2.5">
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
-                          <Check className="size-3" strokeWidth={3} />
-                        </span>
-                        <span>Akses semua model AI yang aktif</span>
-                      </li>
-                      <li className="flex items-start gap-2.5">
-                        <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
-                          <Check className="size-3" strokeWidth={3} />
-                        </span>
-                        <span>Tanpa expired</span>
+                      <li className="flex items-start gap-2">
+                        <span className="text-primary-500">·</span>
+                        <span>Tanpa masa kedaluwarsa</span>
                       </li>
                     </ul>
 
@@ -430,14 +491,14 @@ export default async function BillingPage({
                       <Button
                         asChild
                         className={
-                          pkg.isPopular
+                          isHighlight
                             ? 'w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600'
                             : 'w-full rounded-full border border-warm-200 bg-card font-semibold text-warm-800 hover:bg-warm-50'
                         }
-                        variant={pkg.isPopular ? 'default' : 'outline'}
+                        variant={isHighlight ? 'default' : 'outline'}
                       >
                         <Link href={`/checkout/select/${pkg.id}`}>
-                          Beli
+                          {isHighlight ? 'Top-up Sekarang' : 'Pilih Paket'}
                         </Link>
                       </Button>
                     </div>

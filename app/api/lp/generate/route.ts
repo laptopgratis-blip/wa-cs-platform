@@ -1,5 +1,5 @@
 // POST /api/lp/generate
-// Body: { lpId, description, imageUrls, style, ctaType, waNumber }
+// Body: { lpId, description, imageUrls, style, ctaType, waNumber, checkoutUrl? }
 //
 // Validasi LP owner + saldo aktif minimal MIN_BALANCE_FOR_AI, panggil Claude
 // (haiku) lewat streaming untuk dapat HTML lengkap, charge user proporsional
@@ -99,6 +99,7 @@ const STYLE_HINT: Record<string, string> = {
 function buildCtaInstruction(
   ctaType: string,
   waNumber: string | undefined,
+  checkoutUrl: string | undefined,
   _description: string,
 ): string {
   const labelMap = Object.fromEntries(LP_CTA_TYPES.map((c) => [c.value, c.label]))
@@ -110,11 +111,22 @@ function buildCtaInstruction(
     )
     return `Tombol CTA utama: text "${label}", link \`https://wa.me/${waNumber}?text=${preMsg}\`, target _blank.`
   }
+  const externalUrl = checkoutUrl?.trim()
   if (ctaType === 'BUY') {
+    if (externalUrl) {
+      return `Tombol CTA utama: text "${label}", link \`${externalUrl}\`, target _blank, rel "noopener noreferrer". JANGAN buat form order inline — semua CTA "Beli Sekarang" harus mengarah ke URL di atas.`
+    }
     return `Tombol CTA utama: text "${label}", link \`#order\` atau anchor ke bagian order/form (boleh kasih form sederhana).`
   }
   if (ctaType === 'SIGNUP') {
+    if (externalUrl) {
+      return `Tombol CTA utama: text "${label}", link \`${externalUrl}\`, target _blank, rel "noopener noreferrer". JANGAN buat form pendaftaran inline — semua CTA "Daftar Gratis" harus mengarah ke URL di atas.`
+    }
     return `Tombol CTA utama: text "${label}", buat form pendaftaran sederhana (nama + email/WA) inline atau di section terpisah.`
+  }
+  // LEARN_MORE / fallback
+  if (externalUrl) {
+    return `Tombol CTA utama: text "${label}", link \`${externalUrl}\`, target _blank, rel "noopener noreferrer". Semua CTA "Pelajari Lebih Lanjut" arahkan ke URL di atas, jangan cuma anchor internal.`
   }
   return `Tombol CTA utama: text "${label}", anchor ke section info detail di bawahnya.`
 }
@@ -132,7 +144,8 @@ export async function POST(req: Request) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Body tidak valid')
   }
 
-  const { lpId, description, imageUrls, style, ctaType, waNumber } = parsed.data
+  const { lpId, description, imageUrls, style, ctaType, waNumber, checkoutUrl } =
+    parsed.data
 
   try {
     const lp = await prisma.landingPage.findUnique({
@@ -163,7 +176,12 @@ export async function POST(req: Request) {
 
     const styleLabel =
       LP_STYLES.find((s) => s.value === style)?.label ?? style
-    const ctaInstruction = buildCtaInstruction(ctaType, waNumber, description)
+    const ctaInstruction = buildCtaInstruction(
+      ctaType,
+      waNumber,
+      checkoutUrl,
+      description,
+    )
 
     const userPrompt = [
       `# Deskripsi Produk / Bisnis`,

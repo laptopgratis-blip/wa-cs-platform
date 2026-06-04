@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
+import { CsAiPromoBanner } from '@/components/products/CsAiPromoBanner'
 import { ProductsClient } from '@/components/products/ProductsClient'
 import { UpgradeRequired } from '@/components/order-system/UpgradeRequired'
 import { authOptions } from '@/lib/auth'
@@ -32,27 +33,32 @@ export default async function ProductsPage() {
   })
 
   return (
-    <ProductsClient
-      initialProducts={products.map((p) => ({
-        ...p,
-        images: p.images ?? [],
-        flashSaleStartAt: p.flashSaleStartAt?.toISOString() ?? null,
-        flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
-        createdAt: p.createdAt.toISOString(),
-        updatedAt: p.updatedAt.toISOString(),
-        variants: p.variants.map((v) => ({
-          id: v.id,
-          name: v.name,
-          sku: v.sku,
-          price: v.price,
-          weightGrams: v.weightGrams,
-          stock: v.stock,
-          imageUrl: v.imageUrl,
-          isActive: v.isActive,
-          sortOrder: v.sortOrder,
-        })),
-      }))}
-      limit={PRODUCT_LIMIT_PER_USER}
-    />
+    <>
+      <div className="container mx-auto max-w-5xl px-4 pt-6 md:pt-8">
+        <CsAiPromoBanner userId={session.user.id} />
+      </div>
+      <ProductsClient
+        initialProducts={products.map((p) => ({
+          ...p,
+          images: p.images ?? [],
+          flashSaleStartAt: p.flashSaleStartAt?.toISOString() ?? null,
+          flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
+          createdAt: p.createdAt.toISOString(),
+          updatedAt: p.updatedAt.toISOString(),
+          variants: p.variants.map((v) => ({
+            id: v.id,
+            name: v.name,
+            sku: v.sku,
+            price: v.price,
+            weightGrams: v.weightGrams,
+            stock: v.stock,
+            imageUrl: v.imageUrl,
+            isActive: v.isActive,
+            sortOrder: v.sortOrder,
+          })),
+        }))}
+        limit={PRODUCT_LIMIT_PER_USER}
+      />
+    </>
   )
 }

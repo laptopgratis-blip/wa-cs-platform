@@ -542,6 +542,59 @@ export function setElementPixel(
   return serializeFullDoc(doc, html)
 }
 
+// ─── Anchor / CTA link helpers ─────────────────────────────────────────────
+// Untuk panel "Link Tombol Default" di editor LP. WA links (wa.me /
+// api.whatsapp.com) di-skip — diasumsikan user maintain via inline editor.
+
+const ANCHOR_OPEN_RE = /<a\b([^>]*)>/gi
+const HREF_ATTR_RE = /href\s*=\s*(?:"([^"]*)"|'([^']*)')/i
+
+function isWaHref(href: string): boolean {
+  return /wa\.me|api\.whatsapp\.com/i.test(href)
+}
+
+// Hitung anchor non-WA yang punya href — termasuk href="#" / anchor internal.
+// Anchor tanpa href (mis. `<a name="...">`) di-skip.
+export function countNonWaAnchors(html: string): number {
+  if (!html) return 0
+  let count = 0
+  const matches = html.matchAll(ANCHOR_OPEN_RE)
+  for (const m of matches) {
+    const attrs = m[1] ?? ''
+    const hrefMatch = attrs.match(HREF_ATTR_RE)
+    if (!hrefMatch) continue
+    const href = hrefMatch[1] ?? hrefMatch[2] ?? ''
+    if (!isWaHref(href)) count++
+  }
+  return count
+}
+
+// Replace href dari semua anchor non-WA dengan URL baru. Tambah
+// target="_blank" + rel="noopener noreferrer" kalau belum ada (URL eksternal
+// best practice). WA anchor tidak di-touch.
+export function replaceAllNonWaAnchorHrefs(
+  html: string,
+  newHref: string,
+): string {
+  if (!html || !newHref) return html
+  const safeHref = newHref.replace(/"/g, '&quot;')
+  return html.replace(ANCHOR_OPEN_RE, (full, rawAttrs: string) => {
+    const attrs = rawAttrs ?? ''
+    const hrefMatch = attrs.match(HREF_ATTR_RE)
+    if (!hrefMatch) return full
+    const currentHref = hrefMatch[1] ?? hrefMatch[2] ?? ''
+    if (isWaHref(currentHref)) return full
+    let nextAttrs = attrs.replace(HREF_ATTR_RE, `href="${safeHref}"`)
+    if (!/\btarget\s*=/i.test(nextAttrs)) {
+      nextAttrs = `${nextAttrs} target="_blank"`
+    }
+    if (!/\brel\s*=/i.test(nextAttrs)) {
+      nextAttrs = `${nextAttrs} rel="noopener noreferrer"`
+    }
+    return `<a${nextAttrs}>`
+  })
+}
+
 // Standard pixel events — superset dari yang di-support semua platform.
 // Custom event bisa dimasukkan via input bebas di UI.
 export const PIXEL_EVENT_PRESETS = [

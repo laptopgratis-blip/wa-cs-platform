@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
 import { PaymentMethodPicker } from '@/components/dashboard/PaymentMethodPicker'
+import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -55,6 +56,8 @@ export default async function SelectPaymentPage({
           Pilih cara bayar yang paling nyaman untuk kamu.
         </p>
       </div>
+
+      <PostPublishReturnBanner />
 
       {/* Ringkasan paket */}
       <Card className="relative overflow-visible rounded-xl border-warm-200 shadow-sm">

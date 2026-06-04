@@ -71,16 +71,20 @@ interface Props {
   lpId: string
   // Hasil HTML masuk ke HTML editor di shell.
   onGenerated: (html: string) => void
+  // Override default open state — caller (EditorShell) pakai untuk smart
+  // collapse panel pas LP sudah ada konten.
+  initialOpen?: boolean
 }
 
-export function AiGenerator({ lpId, onGenerated }: Props) {
+export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
   const router = useRouter()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(initialOpen)
   const [description, setDescription] = useState('')
   const [imageUrls, setImageUrls] = useState('')
   const [style, setStyle] = useState<LpStyle>('MODERN_MINIMALIS')
   const [ctaType, setCtaType] = useState<LpCtaType>('WHATSAPP')
   const [waNumber, setWaNumber] = useState('')
+  const [checkoutUrl, setCheckoutUrl] = useState('')
   const [isGenerating, setGenerating] = useState(false)
   const [lastUsage, setLastUsage] = useState<{
     tokensUsed: number
@@ -122,6 +126,7 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
           style,
           ctaType,
           waNumber: waNumber.trim(),
+          checkoutUrl: checkoutUrl.trim(),
         }),
       })
       const json = (await res.json()) as {
@@ -298,6 +303,38 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
             </div>
           )}
 
+          {ctaType !== 'WHATSAPP' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-checkout-url" className="text-xs">
+                Link tujuan tombol{' '}
+                <span className="text-warm-500">(opsional)</span>
+              </Label>
+              <Input
+                id="ai-checkout-url"
+                type="url"
+                placeholder={
+                  ctaType === 'BUY'
+                    ? 'https://checkout.contoh.com/produk-x'
+                    : ctaType === 'SIGNUP'
+                      ? 'https://contoh.com/daftar'
+                      : 'https://contoh.com/info'
+                }
+                value={checkoutUrl}
+                onChange={(e) => setCheckoutUrl(e.target.value)}
+                maxLength={500}
+                className="h-9 font-mono text-[11px]"
+              />
+              <p className="text-[10px] text-warm-500">
+                {ctaType === 'BUY' &&
+                  'URL halaman checkout/order eksternal (mis. Tokopedia, Shopee, atau order form Hulao). Kosongkan kalau mau AI buat form order inline.'}
+                {ctaType === 'SIGNUP' &&
+                  'URL halaman pendaftaran eksternal. Kosongkan kalau mau AI buat form daftar inline.'}
+                {ctaType === 'LEARN_MORE' &&
+                  'URL halaman info detail (artikel, blog, dst). Kosongkan kalau mau anchor ke section info di bawah.'}
+              </p>
+            </div>
+          )}
+
           <Button
             type="submit"
             disabled={isGenerating || description.trim().length < 20}
@@ -311,10 +348,13 @@ export function AiGenerator({ lpId, onGenerated }: Props) {
             ) : (
               <>
                 <Sparkles className="mr-2 size-4" />
-                Generate dengan AI · 10 token
+                Generate dengan AI
               </>
             )}
           </Button>
+          <p className="-mt-2 text-center text-[10px] text-warm-500">
+            Token dipotong sesuai pemakaian AI (otomatis dihitung setelah selesai)
+          </p>
 
           {lastUsage && (
             <div className="rounded-md border border-warm-200 bg-warm-50 p-2 text-[10px] text-warm-600">

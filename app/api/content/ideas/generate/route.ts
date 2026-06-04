@@ -79,13 +79,20 @@ export async function POST(req: Request) {
       )
     }
 
-    if (result.ideas.length === 0) {
+    if (result.status === 'AI_FAILED') {
+      // AI gagal — JANGAN charge user. Sampaikan error tanpa expose kredensial
+      // provider, plus hint kalau itu issue infrastruktur (credit Anthropic
+      // habis, dll) → user retry nanti, atau admin segera topup.
+      const detail = (result.errorMessage ?? '').toLowerCase()
+      const isProviderLimit =
+        detail.includes('credit balance') ||
+        detail.includes('rate limit') ||
+        detail.includes('429')
       return jsonError(
-        `AI gagal generate ide. Detail: ${result.methodResults
-          .filter((r) => !r.ok)
-          .map((r) => `${r.method}: ${r.error}`)
-          .join('; ')}`,
-        500,
+        isProviderLimit
+          ? 'Sistem AI sedang penuh / kuota habis di sisi server. Token kamu TIDAK dipotong. Coba lagi 5-10 menit, atau hubungi admin Hulao.'
+          : `AI tidak menghasilkan ide kali ini. Token kamu TIDAK dipotong. Coba lagi sebentar.`,
+        503,
       )
     }
 

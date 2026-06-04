@@ -524,7 +524,8 @@ export async function generateIdeas(input: {
   ideas: (GeneratedIdea & { isFreePreview: boolean })[]
   charge: ComputedCharge | null
   methodResults: { method: IdeaMethod; ok: boolean; error?: string }[]
-  status: 'OK' | 'INSUFFICIENT_BALANCE'
+  status: 'OK' | 'INSUFFICIENT_BALANCE' | 'AI_FAILED'
+  errorMessage?: string
 }> {
   const { contextSummary, seedContext } = await buildContext(input)
 
@@ -706,6 +707,41 @@ export async function generateIdeas(input: {
     inputTokens: totalInput,
     outputTokens: totalOutput,
   })
+
+  // SEMUA method gagal (Anthropic API down / credit habis / dll) — jangan
+  // charge user untuk hasil 0 ide. Log FAILED dengan tokensCharged=0 buat
+  // audit. Caller akan kasih error message ke user.
+  if (allIdeas.length === 0) {
+    const firstError = orderedResults.find((r) => r.error)?.error
+    await logGeneration({
+      featureKey: FEATURE_KEY,
+      userId: input.userId,
+      subjectType: input.lpId ? 'LP' : 'BRIEF_MANUAL',
+      subjectId: input.lpId,
+      charge: {
+        ...charge,
+        inputTokens: 0,
+        outputTokens: 0,
+        apiCostUsd: 0,
+        apiCostRp: 0,
+        tokensCharged: 0,
+        revenueRp: 0,
+        profitRp: 0,
+        marginPct: 0,
+      },
+      status: 'FAILED',
+      errorMessage: firstError
+        ? `Semua AI method gagal. Sample error: ${firstError.slice(0, 180)}`
+        : 'Semua AI method gagal (no ideas generated)',
+    })
+    return {
+      ideas: [],
+      charge: null,
+      methodResults,
+      status: 'AI_FAILED',
+      errorMessage: firstError ?? 'AI tidak menghasilkan ide. Coba lagi nanti.',
+    }
+  }
 
   if (input.mode === 'preview') {
     // Preview-only: log charge=0 (gratis), tapi tetap save aktivitas.

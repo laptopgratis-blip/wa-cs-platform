@@ -14,6 +14,12 @@ export const submitOrderItemSchema = z.object({
 })
 
 export const submitOrderSchema = z
+  // Catatan: validasi `requireShipping`-aware (TRANSFER butuh
+  // destination+courier+service) DITANGANI di server `/api/orders/submit`
+  // sesudah load OrderForm — karena refine() di sini tidak tahu apakah form
+  // tersebut requireShipping. Sebelumnya ada refine() yang selalu mewajibkan
+  // shippingCourier untuk TRANSFER → bug saat requireShipping=false (form
+  // pickup di lokasi / produk digital).
   .object({
     slug: z.string().min(1, 'Slug form tidak valid'),
 
@@ -67,22 +73,5 @@ export const submitOrderSchema = z
     utmMedium: z.string().max(200).nullable().optional(),
     utmCampaign: z.string().max(200).nullable().optional(),
   })
-  .refine(
-    (v) => {
-      // Untuk TRANSFER, butuh destination + courier + service.
-      if (v.paymentMethod === 'TRANSFER') {
-        return (
-          !!v.shippingDestinationId &&
-          !!v.shippingCourier &&
-          !!v.shippingService
-        )
-      }
-      return true
-    },
-    {
-      message: 'Untuk Transfer Bank, pilih kurir dulu',
-      path: ['shippingCourier'],
-    },
-  )
 
 export type SubmitOrderInput = z.infer<typeof submitOrderSchema>

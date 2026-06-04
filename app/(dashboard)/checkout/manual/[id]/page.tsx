@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
 import { ManualCheckoutDetail } from '@/components/dashboard/ManualCheckoutDetail'
+import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -60,6 +61,18 @@ export default async function ManualCheckoutPage({
           diverifikasi.
         </p>
       </div>
+
+      <PostPublishReturnBanner
+        paymentStatus={
+          payment.status === 'CONFIRMED'
+            ? 'COMPLETED'
+            : payment.status === 'PENDING' && payment.proofUrl
+              ? 'AWAITING_REVIEW'
+              : payment.status === 'PENDING'
+                ? 'PENDING'
+                : null
+        }
+      />
 
       <ManualCheckoutDetail
         payment={{

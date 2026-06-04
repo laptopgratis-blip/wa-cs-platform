@@ -997,12 +997,21 @@ function sleep(ms: number): Promise<void> {
 // Resolve fileUrl jadi URL absolut yang bisa di-fetch Baileys. Knowledge file
 // disimpan sebagai path relative `/uploads/...` di Next.js; eksternal URL
 // (http/https) dilewatkan apa adanya.
+//
+// PENTING: untuk path `/uploads/*` kita pakai UPLOADS_URL (nginx container
+// `hulao-uploads`) — BUKAN NEXTJS_URL. Next.js standalone mode punya bug:
+// file di /public yang di-tambah runtime (semua knowledge upload pasti
+// runtime) return 404. nginx serve langsung dari filesystem.
+// Lihat docker-compose.yml line 99-103 untuk konteks.
 function resolveAttachmentUrl(fileUrl: string): string {
   if (!fileUrl) return fileUrl
   if (/^https?:\/\//i.test(fileUrl)) return fileUrl
-  const base = process.env.NEXTJS_URL || 'http://localhost:3000'
-  // Pastikan tidak double-slash.
-  return base.replace(/\/$/, '') + (fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl)
+  const normalized = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl
+  const isUpload = normalized.startsWith('/uploads/')
+  const base = isUpload
+    ? process.env.UPLOADS_URL || 'http://hulao-uploads'
+    : process.env.NEXTJS_URL || 'http://localhost:3000'
+  return base.replace(/\/$/, '') + normalized
 }
 
 // Kirim list attachment knowledge ke customer setelah balasan teks AI.

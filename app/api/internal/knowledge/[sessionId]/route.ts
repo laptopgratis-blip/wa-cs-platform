@@ -17,6 +17,11 @@ import { NextResponse } from 'next/server'
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
 import {
+  formatProductCatalogForPrompt,
+  formatShippingInstructionForPrompt,
+  resolveShippingFromMessage,
+} from '@/lib/services/cs-ai-context'
+import {
   defaultBehaviorRules,
   formatBankAccountsForPrompt,
   formatKnowledgeForPrompt,
@@ -53,7 +58,32 @@ export async function POST(req: Request, { params }: Params) {
       )
     }
 
-    const items = await retrieveRelevantKnowledge(wa.userId, message)
+    // Ambil setting integrasi CS AI (katalog produk, hitung ongkir) +
+    // knowledge dalam satu paralel batch supaya tidak nambah RTT serial.
+    const integration = await prisma.csAiIntegration.findUnique({
+      where: { userId: wa.userId },
+    })
+
+    const [items, bankBlock, productBlock, shippingInstrBlock, shippingResolved] =
+      await Promise.all([
+        retrieveRelevantKnowledge(wa.userId, message),
+        formatBankAccountsForPrompt(wa.userId),
+        integration?.productCatalogEnabled
+          ? formatProductCatalogForPrompt(wa.userId, {
+              applyFlashSale: integration.applyFlashSaleDiscount,
+            })
+          : Promise.resolve(''),
+        integration?.shippingCalcEnabled
+          ? formatShippingInstructionForPrompt(wa.userId, {
+              applySubsidyRules: integration.applySubsidyRules,
+            })
+          : Promise.resolve(''),
+        integration?.shippingCalcEnabled && message
+          ? resolveShippingFromMessage(wa.userId, message, {
+              applySubsidyRules: integration.applySubsidyRules,
+            })
+          : Promise.resolve(null),
+      ])
 
     // Kumpulkan attachments: knowledge IMAGE/FILE yang match → wa-manager
     // akan kirim otomatis setelah balasan teks AI.
@@ -71,13 +101,20 @@ export async function POST(req: Request, { params }: Params) {
       }))
 
     const knowledgeBlock = formatKnowledgeForPrompt(items)
-    const bankBlock = await formatBankAccountsForPrompt(wa.userId)
     const rulesBlock = defaultBehaviorRules()
 
-    // Urutan: bank > knowledge > rules. Bank di atas supaya AI prioritas pakai
-    // info ini saat customer minta transfer. Rules di paling bawah supaya
-    // jadi guard rail terakhir setelah konteks.
-    const promptBlock = [bankBlock, knowledgeBlock, rulesBlock]
+    // Urutan: bank > katalog produk > knowledge user > ongkir (instruksi +
+    // resolved kalau ada) > rules. Bank di atas karena pertanyaan transfer
+    // sering muncul; produk & ongkir konteks domain spesifik; rules di paling
+    // bawah sebagai guard rail terakhir.
+    const promptBlock = [
+      bankBlock,
+      productBlock,
+      knowledgeBlock,
+      shippingInstrBlock,
+      shippingResolved ?? '',
+      rulesBlock,
+    ]
       .filter((s) => s.trim().length > 0)
       .join('\n')
 

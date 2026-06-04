@@ -39,6 +39,15 @@ export const lpGenerateSchema = z
       .regex(/^\d{10,15}$/, 'Nomor WA harus 10-15 digit (mis. 6281234567890)')
       .optional()
       .or(z.literal('')),
+    // URL tujuan untuk CTA non-WhatsApp (BUY/SIGNUP/LEARN_MORE). Optional —
+    // kalau kosong, AI fallback ke anchor #order / form inline / anchor section.
+    checkoutUrl: z
+      .string()
+      .trim()
+      .max(500, 'URL terlalu panjang (max 500 karakter)')
+      .url('Format URL tidak valid (harus http://… atau https://…)')
+      .optional()
+      .or(z.literal('')),
   })
   .refine(
     (d) => {

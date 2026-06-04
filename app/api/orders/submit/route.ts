@@ -85,7 +85,11 @@ export async function POST(req: Request) {
         return jsonError('Alamat lengkap minimal 5 karakter', 400)
       }
       if (data.paymentMethod === 'TRANSFER') {
-        if (!data.shippingDestinationId || !data.shippingCourier) {
+        if (
+          !data.shippingDestinationId ||
+          !data.shippingCourier ||
+          !data.shippingService
+        ) {
           return jsonError('Pilih kota tujuan & kurir dulu', 400)
         }
       }

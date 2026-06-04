@@ -11,7 +11,10 @@ import {
   Globe,
   Loader2,
   PackageOpen,
+  Send,
+  Sparkles,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -32,7 +35,9 @@ interface Props {
   onOpenChange: (open: boolean) => void
   // Mode: publish (currently draft → going live) atau unpublish (live → draft)
   mode: 'publish' | 'unpublish'
+  lpId: string
   slug: string
+  lpTitle: string
   htmlLength: number
   onConfirm: () => Promise<boolean> // return true kalau sukses
 }
@@ -46,7 +51,9 @@ export function PublishDialog({
   open,
   onOpenChange,
   mode,
+  lpId,
   slug,
+  lpTitle,
   htmlLength,
   onConfirm,
 }: Props) {
@@ -87,24 +94,31 @@ export function PublishDialog({
     }
   }
 
-  // Success state setelah publish berhasil
-  if (showSuccess && mode === 'publish') {
+  // Success state setelah publish berhasil — celebration + push ke post-publish.
+  // NB: jangan re-check `mode === 'publish'` di sini. Setelah `confirmPublishToggle`
+  // sukses, parent re-render dgn `isPublished=true` sehingga prop `mode` flip ke
+  // 'unpublish' sebelum render success ini sempat tampil. `showSuccess` sendiri
+  // hanya pernah di-set true di `handleConfirm` saat mode masih 'publish', jadi
+  // cukup gate di flag itu saja.
+  if (showSuccess) {
     return (
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
-                <Check className="size-5" />
+            <DialogTitle className="flex items-center gap-2.5 text-xl">
+              <span className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+                <Check className="size-5" strokeWidth={3} />
               </span>
-              LP berhasil dipublish!
+              <span>Selamat! LP Kamu Live</span>
             </DialogTitle>
-            <DialogDescription>
-              Landing page kamu sekarang live & bisa diakses publik.
+            <DialogDescription className="text-sm">
+              Landing page <strong>{lpTitle}</strong> sekarang bisa dipakai
+              jualan. Tinggal datengin pembeli.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {/* URL public */}
             <div className="rounded-lg border border-warm-200 bg-warm-50 p-3">
               <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
                 URL Public
@@ -112,31 +126,82 @@ export function PublishDialog({
               <div className="mt-1 break-all font-mono text-sm font-semibold text-warm-900">
                 {fullUrl}
               </div>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs"
+                  onClick={copyUrl}
+                >
+                  <Copy className="mr-1.5 size-3.5" />
+                  Copy
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs"
+                >
+                  <a href={fullUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="mr-1.5 size-3.5" />
+                    Buka LP
+                  </a>
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
+
+            {/* CTA utama: topup token → otomatis dibawa ke generator setelah berhasil */}
+            <div className="overflow-hidden rounded-xl border-2 border-primary-300 bg-gradient-to-br from-primary-50 via-white to-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white shadow-orange">
+                  <Sparkles className="size-5" />
+                </span>
+                <div className="flex-1">
+                  <div className="font-display text-base font-bold text-warm-900">
+                    Mau saya bantu datengin pembeli?
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-warm-700">
+                    Saya buatkan <strong>15 status WhatsApp siap pakai</strong>{' '}
+                    dari LP kamu — tinggal salin, posting Status, chat masuk
+                    dalam hitungan jam. Butuh saldo token dulu.
+                  </p>
+                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    Setelah top-up berhasil, kamu langsung dibawa ke generator
+                  </div>
+                </div>
+              </div>
               <Button
-                variant="outline"
-                className="flex-1"
-                onClick={copyUrl}
+                asChild
+                size="lg"
+                className="mt-3 w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
               >
-                <Copy className="mr-2 size-4" />
-                Copy URL
+                <Link
+                  href={`/billing?from=post-publish&lpId=${lpId}`}
+                  onClick={handleClose}
+                >
+                  <Send className="mr-2 size-4" />
+                  Top-up Token & Lanjut
+                </Link>
               </Button>
               <Button
                 asChild
-                className="flex-1 bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+                variant="ghost"
+                size="sm"
+                className="mt-1.5 w-full text-xs text-warm-600 hover:text-primary-700"
               >
-                <a href={fullUrl} target="_blank" rel="noopener noreferrer">
-                  Buka LP
-                  <ExternalLink className="ml-2 size-4" />
-                </a>
+                <Link
+                  href={`/content/post-publish/${lpId}`}
+                  onClick={handleClose}
+                >
+                  Coba 3 sample gratis dulu →
+                </Link>
               </Button>
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={handleClose}>
-              Tutup
+          <DialogFooter className="sm:justify-start">
+            <Button variant="ghost" size="sm" onClick={handleClose}>
+              Lain kali saja
             </Button>
           </DialogFooter>
         </DialogContent>

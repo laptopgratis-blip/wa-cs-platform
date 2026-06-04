@@ -9,6 +9,7 @@ import { notFound, redirect } from 'next/navigation'
 import { CheckoutStatusPoller } from '@/components/dashboard/CheckoutStatusPoller'
 import { PaymentInfoCard } from '@/components/dashboard/PaymentInfoCard'
 import { PaymentInstructions } from '@/components/dashboard/PaymentInstructions'
+import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -105,6 +106,16 @@ export default async function CheckoutPage({
           Selesaikan pembayaran untuk menambah saldo token.
         </p>
       </div>
+
+      <PostPublishReturnBanner
+        paymentStatus={
+          displayStatus === 'SUCCESS'
+            ? 'COMPLETED'
+            : displayStatus === 'PENDING'
+              ? 'PENDING'
+              : null
+        }
+      />
 
       {/* Auto-polling banner */}
       {displayStatus === 'PENDING' && (
