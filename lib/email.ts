@@ -37,6 +37,17 @@ export async function sendAuthOtpEmail(
   code: string,
   mode: 'LOGIN' | 'SIGNUP',
 ): Promise<void> {
+  // Dev fallback: kalau SMTP belum diset, log OTP ke server console supaya
+  // developer bisa login tanpa setup Mailtrap. Production tetap wajib SMTP.
+  if (process.env.NODE_ENV !== 'production' && !process.env.EMAIL_HOST) {
+    console.log(
+      `\n  ╔══════════════════════════════════════════╗\n` +
+      `  ║  [DEV OTP]  ${mode.padEnd(6)}  →  ${email}\n` +
+      `  ║  CODE: ${code}   (berlaku 5 menit)\n` +
+      `  ╚══════════════════════════════════════════╝\n`,
+    )
+    return
+  }
   const transporter = getTransporter()
   const subject =
     mode === 'SIGNUP'

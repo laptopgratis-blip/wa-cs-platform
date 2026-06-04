@@ -38,6 +38,7 @@ import {
   Sparkles,
   TrendingUp,
   Users,
+  Video,
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
@@ -79,6 +80,12 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Cara Jualan', href: '/cara-jualan', icon: ShoppingBag },
       { label: 'Kontak', href: '/contacts', icon: Users },
       { label: 'Broadcast', href: '/broadcast', icon: Send },
+      // CS Live AI rooms (PR-0b, 2026-06-01). Avatar live shopping dengan
+      // chat AI + TTS. Customer akses URL publik /live/<slug>.
+      { label: 'Live Rooms', href: '/live-rooms', icon: Video },
+      // Phase 2 brief — user bikin host AI sendiri (Gemini+Kling). Token
+      // dipotong dari saldo user.
+      { label: 'Host AI', href: '/host-templates', icon: Sparkles },
     ],
   },
   // Order System — hanya tampil untuk user paket POWER. Filter di komponen
@@ -258,6 +265,14 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         label: 'Soul Lab',
         href: '/admin/soul-lab',
         icon: FlaskConical,
+        roles: ['ADMIN'],
+      },
+      // CS Live AI host library (PR-0a, 2026-06-01). Pipeline Gemini → Kling
+      // untuk avatar live shopping. Live room ada di PR-0b.
+      {
+        label: 'CS Live Host',
+        href: '/admin/host-templates',
+        icon: Video,
         roles: ['ADMIN'],
       },
     ],

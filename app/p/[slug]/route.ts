@@ -124,6 +124,22 @@ function injectTrackerScript(html: string, lpId: string): string {
   return html + '\n' + tag
 }
 
+// Inject Hulao Live AI Embed widget loader. Dipanggil hanya kalau LP punya
+// LpLiveEmbed aktif. Owner tidak perlu paste apapun manual.
+function injectLiveEmbedScript(html: string, lpId: string): string {
+  const tag = `<script src="/hulao-live-embed.js" data-lp-id="${lpId}" async></script>`
+  const closingBody = html.match(/<\/body\s*>/i)
+  if (closingBody && closingBody.index !== undefined) {
+    return (
+      html.slice(0, closingBody.index) +
+      tag +
+      '\n' +
+      html.slice(closingBody.index)
+    )
+  }
+  return html + '\n' + tag
+}
+
 // Inject pixel SDK snippets (Meta/TikTok/GA4/Google Ads) tepat sebelum </head>.
 // Snippet sudah berisi browser SDK loader + click dispatcher untuk
 // data-pixel-event. Kalau snippet kosong (user tidak punya pixel aktif), noop.
@@ -182,6 +198,8 @@ export async function GET(req: Request, { params }: Params) {
           lpQuota: { select: { maxVisitorMonth: true } },
         },
       },
+      // LP × Live AI Embed (2026-06-04) — inject widget loader kalau aktif.
+      liveEmbed: { select: { isActive: true } },
     },
   })
 
@@ -328,6 +346,13 @@ export async function GET(req: Request, { params }: Params) {
   // data-lp attribute dipakai tracker untuk identify lpId (tidak via URL
   // supaya cache CDN tetap satu file untuk semua LP).
   finalHtml = injectTrackerScript(finalHtml, lp.id)
+
+  // LP × Live AI Embed (2026-06-04) — inject widget loader kalau LP punya
+  // LpLiveEmbed.isActive=true. Widget JS akan fetch config sendiri & mount
+  // iframe sesuai position (inline marker atau floating).
+  if (lp.liveEmbed?.isActive) {
+    finalHtml = injectLiveEmbedScript(finalHtml, lp.id)
+  }
 
   return new NextResponse(finalHtml, {
     status: 200,

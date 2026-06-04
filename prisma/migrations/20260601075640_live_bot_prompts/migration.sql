@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "LiveRoom" ADD COLUMN     "botEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "botIntervalMaxSec" INTEGER NOT NULL DEFAULT 45,
+ADD COLUMN     "botIntervalMinSec" INTEGER NOT NULL DEFAULT 25,
+ADD COLUMN     "botPrompts" TEXT[] DEFAULT ARRAY[]::TEXT[];

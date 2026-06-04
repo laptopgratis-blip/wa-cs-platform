@@ -17,16 +17,30 @@ export interface OrderSystemAccess {
 
 // Cek apakah user boleh akses Order System. Tidak throw — caller boleh
 // render UpgradeModal kalau hasAccess=false.
+//
+// ADMIN bypass: role=ADMIN selalu hasAccess=true (untuk testing + ops),
+// supaya admin Hulao bisa lihat & test semua fitur Order System tanpa harus
+// subscribe ke paket POWER duluan.
 export async function checkOrderSystemAccess(
   userId: string,
 ): Promise<OrderSystemAccess> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
+      role: true,
       currentSubscriptionId: true,
       currentPlanExpiresAt: true,
     },
   })
+
+  if (user?.role === 'ADMIN') {
+    return {
+      hasAccess: true,
+      currentTier: 'ADMIN',
+      requiredTier: 'POWER',
+      packageName: 'Admin Bypass',
+    }
+  }
 
   if (!user?.currentSubscriptionId) {
     return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POWER' }
