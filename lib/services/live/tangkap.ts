@@ -4,7 +4,7 @@
 // Idempotent: ensureSession aman dipanggil tiap chat (upsert by clientSessionId).
 import { createHash } from 'node:crypto'
 
-import type { LiveEventType } from '@prisma/client'
+import { Prisma, type LiveEventType } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
@@ -89,7 +89,9 @@ export async function logLiveEvent(input: {
     data: {
       liveSessionId: input.liveSessionId,
       type: input.type,
-      payload: (input.payload as object | null | undefined) ?? null,
+      payload: input.payload
+        ? (input.payload as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
     },
   })
 }

@@ -50,7 +50,6 @@ export async function POST(
       await prisma.liveClip.update({
         where: { id: c.id },
         data: {
-          // @ts-expect-error JSON column number[]
           embedding: vec,
           embeddingModel: EMBED_MODEL,
         },

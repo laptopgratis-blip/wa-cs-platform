@@ -140,7 +140,9 @@ export async function generateHostImage(input: {
   }
 
   const buf = Buffer.from(inline.data, 'base64')
-  const ext = inferExt((inline.mimeType ?? inline.mime_type ?? 'image/png'))
+  const ext = inferExt(
+    ('mimeType' in inline ? inline.mimeType : inline.mime_type) ?? 'image/png',
+  )
   const filename = `${randomBytes(12).toString('hex')}.${ext}`
   const dir = path.join(process.cwd(), HOST_IMAGES_DIR_REL, input.userId)
   await mkdir(dir, { recursive: true })

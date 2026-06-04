@@ -125,7 +125,6 @@ export async function POST(
       durationMs: null,
       isEvergreen,
       isDefaultIdle,
-      // @ts-expect-error JSON column accepts number[]
       embedding: embedding ?? undefined,
       embeddingModel: embedding ? EMBED_MODEL : null,
     },

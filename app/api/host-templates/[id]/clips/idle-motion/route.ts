@@ -115,7 +115,7 @@ export async function POST(
     // Poll sampai DONE
     const deadline = Date.now() + POLL_TIMEOUT_MS
     let videoUrl: string | null = null
-    let durationSec = motion.durationSec
+    let durationSec: number = motion.durationSec
     while (Date.now() < deadline) {
       const status = await pollKlingStatus({ requestId: submission.requestId })
       if (status.status === 'COMPLETED' && status.videoUrl) {

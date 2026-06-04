@@ -701,8 +701,9 @@ export function LiveRoomView({
       }
       return
     }
-    const minMs = Math.max(10, botConfig.intervalMinSec) * 1000
-    const maxMs = Math.max(minMs, botConfig.intervalMaxSec * 1000)
+    const cfg = botConfig
+    const minMs = Math.max(10, cfg.intervalMinSec) * 1000
+    const maxMs = Math.max(minMs, cfg.intervalMaxSec * 1000)
     const PAUSE_AFTER_REAL_USER_MS = 60_000
 
     function scheduleNext() {
@@ -712,9 +713,7 @@ export function LiveRoomView({
         const ok = sinceReal > PAUSE_AFTER_REAL_USER_MS
         if (ok && !sending) {
           const prompt =
-            botConfig.prompts[
-              Math.floor(Math.random() * botConfig.prompts.length)
-            ]
+            cfg.prompts[Math.floor(Math.random() * cfg.prompts.length)]
           if (prompt) {
             void dispatchChat({ text: prompt, isBot: true })
           }
@@ -1014,7 +1013,7 @@ export function LiveRoomView({
         ) : null}
 
         {showOrderCta ? (
-          leadStatus === 'HANDOFF_SENT' ? (
+          (leadStatus as string) === 'HANDOFF_SENT' ? (
             <div
               className="flex items-center gap-1.5 rounded-full bg-emerald-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
               role="status"

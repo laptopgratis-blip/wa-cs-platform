@@ -70,7 +70,7 @@ function parseTags(raw: string): ParsedTag[] {
   return parsed.tags ?? []
 }
 
-const VALID_KEYS = new Set(TAXONOMY.map((t) => t.key))
+const VALID_KEYS = new Set<string>(TAXONOMY.map((t) => t.key))
 
 // Analyze 1 session. Idempotent — kalau objectionsAnalyzedAt sudah ter-set,
 // skip kecuali force=true.

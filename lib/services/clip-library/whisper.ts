@@ -37,7 +37,7 @@ export async function transcribeAudio(
   // Build multipart manually — File API + FormData di Node 22 OK untuk fetch.
   const form = new FormData()
   // Web Blob untuk multipart body.
-  const blob = new Blob([fileBuffer])
+  const blob = new Blob([new Uint8Array(fileBuffer)])
   form.append('file', blob, filename)
   form.append('model', 'whisper-1')
   form.append('response_format', 'verbose_json')

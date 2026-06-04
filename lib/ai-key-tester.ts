@@ -265,7 +265,7 @@ async function testElevenLabs(apiKey: string): Promise<TestResult> {
           return settle({
             ok: false,
             httpStatus: status,
-            error: friendlyHttp(status) ?? body.slice(0, 200),
+            error: interpretStatus(status) || body.slice(0, 200),
           })
         })
       },

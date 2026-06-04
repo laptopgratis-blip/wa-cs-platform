@@ -308,7 +308,6 @@ export async function generateClip(
     await prisma.liveClip.update({
       where: { id: clipId },
       data: {
-        // @ts-expect-error JSON column terima number[]
         embedding: vec,
         embeddingModel: EMBED_MODEL,
         status: 'READY' as LiveClipStatus,
