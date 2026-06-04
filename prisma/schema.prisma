@@ -117,6 +117,8 @@ model User {
   // CS Live AI — Phase 4 (2026-06-01). AI proposal perubahan systemPrompt
   // / greeting dengan human approval loop.
   liveProposals                LiveOptimizationProposal[]
+  // LP × Live AI Embed (2026-06-04).
+  lpLiveEmbeds                 LpLiveEmbed[]
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -711,6 +713,8 @@ model LandingPage {
   scores        LpScore[]
   contentIdeas  ContentIdea[]
   contentBriefs ContentBrief[]
+  // LP × Live AI Embed (2026-06-04). 1:1 — 1 LP punya 1 live embed config.
+  liveEmbed     LpLiveEmbed?
 
   @@index([userId, isPublished])
 }
@@ -3353,6 +3357,8 @@ model LiveRoom {
   sessions     LiveSession[]
   leads        LiveLead[]
   proposals    LiveOptimizationProposal[]
+  // LP × Live AI Embed (2026-06-04). 1:N — 1 room bisa di-embed di banyak LP.
+  lpEmbeds     LpLiveEmbed[]
 
   @@index([userId, createdAt])
   @@index([slug])
@@ -3565,4 +3571,68 @@ model LiveOptimizationProposal {
 
   @@index([userId, status, createdAt])
   @@index([liveRoomId, status, createdAt])
+}
+
+// ─────────────────────────────────────────
+// LP × LIVE AI EMBED (2026-06-04)
+// ─────────────────────────────────────────
+// Konfigurasi embed Live AI Room di dalam LandingPage.
+// Owner buat 1 LiveRoom + 1 LandingPage, lalu hubungkan via LpLiveEmbed.
+// Public renderer /p/[slug] inject widget JS yg mount iframe ke embed page.
+//
+// Gate mode menentukan kapan viewer harus isi nama+WA:
+// - REQUIRED: form blocking, harus isi dulu baru bisa nonton
+// - OPTIONAL: form muncul tapi ada tombol "skip & tonton dulu"
+// - HYBRID: auto-play muted, gate trigger setelah N detik atau saat klik chat
+// - OFF: tidak ada gate, pure tontonan (cocok showcase / SEO)
+
+enum LpLiveGateMode {
+  REQUIRED
+  OPTIONAL
+  HYBRID
+  OFF
+}
+
+model LpLiveEmbed {
+  id            String   @id @default(cuid())
+  // 1:1 — 1 LP punya 1 embed config. Kalau perlu multi nanti, ubah ke 1:N.
+  landingPageId String   @unique
+  liveRoomId    String
+  // Owner — denormalisasi untuk query per-tenant cepat & permission check.
+  userId        String
+
+  // Gate config.
+  gateMode          LpLiveGateMode @default(HYBRID)
+  // Field yg di-capture di form gate. Default ["name","phone"].
+  // Bisa: name, phone, email, city, productInterest.
+  gateFields        Json           @default("[\"name\",\"phone\"]")
+  // Hanya untuk mode HYBRID — auto-trigger gate setelah N detik tonton.
+  gateTriggerSec    Int            @default(30)
+  // Hanya untuk mode HYBRID — trigger gate saat viewer klik tombol chat.
+  gateTriggerOnChat Boolean        @default(true)
+
+  // Tombol CTA yg owner customize di LP — text di tombol "tonton/chat".
+  ctaLabel          String         @default("Tanya host live")
+  // Layout placement: 'inline' = di marker [data-hulao-live-embed],
+  // 'floating-br' / 'floating-bl' / 'floating-tr' / 'floating-tl' = pojok.
+  position          String         @default("inline")
+  // Auto-play saat halaman load (muted by default untuk Chrome policy).
+  autoplay          Boolean        @default(true)
+  mutedDefault      Boolean        @default(true)
+  // Width iframe inline (px). Floating selalu 360px.
+  widthPx           Int            @default(420)
+  heightPx          Int            @default(720)
+
+  // Aktif toggle — owner bisa pause embed tanpa hapus config.
+  isActive          Boolean        @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  landingPage LandingPage @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  liveRoom    LiveRoom    @relation(fields: [liveRoomId], references: [id], onDelete: Restrict)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([liveRoomId])
+  @@index([userId])
 }
