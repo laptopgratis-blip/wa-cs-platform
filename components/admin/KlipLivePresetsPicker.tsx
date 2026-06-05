@@ -8,6 +8,12 @@
 //
 // Dipakai dari OrchestratedHostWizard step 1 ketika mode=NATIVE_LIBRARY.
 // Owner pilih → preset ID di-pass ke orchestrate API → server inject promptFragment.
+//
+// CATATAN (2026-06-05): preset punya kolom thumbnailUrl tapi file gambarnya
+// belum di-generate (folder /uploads/presets/* tidak ada → 404). Daripada
+// nampilin placeholder ikon yang kelihatan seperti gambar gagal load (bikin
+// owner bingung), kartu render TEXT-ONLY: nama + vibe tag. Kalau nanti thumbnail
+// di-generate, ganti blok teks dgn <img src={thumbnailUrl} onError=fallback>.
 
 import { Check, Sparkles, Image as ImageIcon } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
@@ -102,8 +108,8 @@ export function KlipLivePresetsPicker({
               Visual Hook — daya tarik visual host
             </div>
             <p className="text-[10px] text-muted-foreground">
-              Kostum/aksesoris/prop yang bikin host eye-catching di scroll. Pilih 1
-              atau skip (no hook).
+              Kostum/aksesoris/prop yang bikin host eye-catching di scroll. Pilih
+              berdasarkan nama (arahkan kursor untuk deskripsi), atau skip (no hook).
             </p>
           </div>
           {selection.visualHookId ? (
@@ -162,7 +168,7 @@ export function KlipLivePresetsPicker({
                   type="button"
                   onClick={() => onChange({ ...selection, visualHookId: h.id })}
                   title={h.description}
-                  className={`relative flex aspect-square flex-col items-center justify-center overflow-hidden rounded-lg border-2 p-2 text-center transition ${
+                  className={`relative flex aspect-square flex-col justify-end gap-0.5 overflow-hidden rounded-lg border-2 p-2 text-left transition ${
                     active
                       ? 'border-orange-500 bg-orange-50 shadow-md'
                       : 'border-warm-200 bg-white hover:border-orange-300'
@@ -176,10 +182,17 @@ export function KlipLivePresetsPicker({
                       SEASONAL
                     </span>
                   ) : null}
-                  <ImageIcon className="h-5 w-5 text-warm-400" />
-                  <div className="mt-1 line-clamp-2 text-[9px] font-semibold leading-tight">
+                  {/* Text-only — thumbnail preset belum di-generate (lihat catatan
+                      di header file). Tampilkan nama + vibe tag, bukan placeholder
+                      gambar yang menyesatkan. */}
+                  <div className="line-clamp-3 text-[10px] font-semibold leading-tight text-warm-800">
                     {h.nameId}
                   </div>
+                  {h.vibeTags.length > 0 ? (
+                    <div className="line-clamp-1 text-[8px] text-warm-500">
+                      {h.vibeTags.slice(0, 2).join(' · ')}
+                    </div>
+                  ) : null}
                 </button>
               )
             })}
@@ -247,12 +260,16 @@ export function KlipLivePresetsPicker({
                   {active ? (
                     <Check className="absolute right-1 top-1 h-3 w-3 text-sky-600" />
                   ) : null}
-                  <div className="flex flex-1 items-center justify-center">
-                    <ImageIcon className="h-6 w-6 text-warm-400" />
-                  </div>
-                  <div className="line-clamp-1 text-[10px] font-semibold">{b.nameId}</div>
-                  <div className="line-clamp-1 text-[8px] text-warm-500">
-                    {b.vibeTags.slice(0, 2).join(' · ')}
+                  {/* Text-only — thumbnail preset belum tersedia. */}
+                  <div className="flex flex-1 flex-col justify-end">
+                    <div className="line-clamp-2 text-[11px] font-semibold leading-tight text-warm-800">
+                      {b.nameId}
+                    </div>
+                    {b.vibeTags.length > 0 ? (
+                      <div className="mt-0.5 line-clamp-1 text-[8px] text-warm-500">
+                        {b.vibeTags.slice(0, 2).join(' · ')}
+                      </div>
+                    ) : null}
                   </div>
                 </button>
               )
