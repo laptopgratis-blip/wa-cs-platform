@@ -14,16 +14,20 @@ interface TierConfig {
   tier: LpTier
   maxLp: number
   maxStorageMB: number
+  // Cap pengunjung LP per bulan. Tier berbayar dinaikkan jauh dari default
+  // FREE (1000) supaya LP yang ramai tidak kena placeholder "tidak tersedia".
+  // POWER praktis unlimited (5jt).
+  maxVisitorMonth: number
   // Threshold token (akumulasi total purchased) untuk naik ke tier ini.
   threshold: number
 }
 
 // Urutan dari kecil ke besar — penting untuk scan saat upgrade.
 const TIERS: TierConfig[] = [
-  { tier: 'FREE', maxLp: 1, maxStorageMB: 5, threshold: 0 },
-  { tier: 'STARTER', maxLp: 3, maxStorageMB: 20, threshold: 10_000 },
-  { tier: 'POPULAR', maxLp: 10, maxStorageMB: 100, threshold: 50_000 },
-  { tier: 'POWER', maxLp: 999, maxStorageMB: 500, threshold: 200_000 },
+  { tier: 'FREE', maxLp: 1, maxStorageMB: 5, maxVisitorMonth: 1_000, threshold: 0 },
+  { tier: 'STARTER', maxLp: 3, maxStorageMB: 20, maxVisitorMonth: 20_000, threshold: 10_000 },
+  { tier: 'POPULAR', maxLp: 10, maxStorageMB: 100, maxVisitorMonth: 100_000, threshold: 50_000 },
+  { tier: 'POWER', maxLp: 999, maxStorageMB: 500, maxVisitorMonth: 5_000_000, threshold: 200_000 },
 ]
 
 const RANK: Record<LpTier, number> = {
@@ -83,6 +87,7 @@ export async function upgradeTierFromPurchase(
       tier: target.tier,
       maxLp: Math.max(current.maxLp, target.maxLp),
       maxStorageMB: Math.max(current.maxStorageMB, target.maxStorageMB),
+      maxVisitorMonth: Math.max(current.maxVisitorMonth, target.maxVisitorMonth),
     },
   })
 }
