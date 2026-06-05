@@ -157,6 +157,10 @@ export function LiveRoomView({
 
   const [clientSessionId, setClientSessionId] = useState<string | null>(null)
   const [identity, setIdentity] = useState<{ name: string; phone: string } | null>(null)
+  // Apakah identity sudah dicek dari localStorage? Sebelum dicek (SSR + frame
+  // pertama client) tampilkan layar hitam, BUKAN gate putih → cegah kedip/blank
+  // saat customer yang sudah join melakukan refresh.
+  const [identityChecked, setIdentityChecked] = useState(false)
   const [lastClickedProductId, setLastClickedProductId] = useState<string | null>(null)
   const [showLeadForm, setShowLeadForm] = useState(false)
   // Bottom-sheet "Belanja" — TikTok-style product drawer dipicu FAB keranjang.
@@ -476,6 +480,7 @@ export function LiveRoomView({
         /* invalid JSON — ignore */
       }
     }
+    setIdentityChecked(true)
   }, [slug])
 
   // Greeting message — tampil sebagai 1st assistant msg.
@@ -891,22 +896,57 @@ export function LiveRoomView({
     const stopPinch = (e: TouchEvent) => {
       if (e.touches.length > 1) e.preventDefault()
     }
+    // Live = full-screen terkunci. Apa pun yang sempat menggeser/men-scroll/
+    // zoom viewport (buka sheet card, keyboard, rubber-band iOS) langsung
+    // dikembalikan ke tampilan penuh & center.
     const recenter = () => {
       const vv = window.visualViewport
-      if (vv && Math.abs(vv.scale - 1) > 0.01) window.scrollTo(0, 0)
+      const zoomed = vv ? Math.abs(vv.scale - 1) > 0.01 : false
+      if (window.scrollX !== 0 || window.scrollY !== 0 || zoomed) {
+        window.scrollTo(0, 0)
+      }
     }
     const gestureEvents = ['gesturestart', 'gesturechange', 'gestureend']
     gestureEvents.forEach((ev) => document.addEventListener(ev, stop))
     document.addEventListener('touchmove', stopPinch, { passive: false })
+    window.addEventListener('scroll', recenter, { passive: true })
     window.visualViewport?.addEventListener('resize', recenter)
     window.visualViewport?.addEventListener('scroll', recenter)
+    // Kunci scroll background (html+body) supaya kontainer fixed tak pernah
+    // ter-geser oleh scroll-behind/rubber-band. Dipulihkan saat unmount.
+    const html = document.documentElement
+    const prev = {
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: document.body.style.overflow,
+      bodyOverscroll: document.body.style.overscrollBehavior,
+    }
+    html.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
     return () => {
       gestureEvents.forEach((ev) => document.removeEventListener(ev, stop))
       document.removeEventListener('touchmove', stopPinch)
+      window.removeEventListener('scroll', recenter)
       window.visualViewport?.removeEventListener('resize', recenter)
       window.visualViewport?.removeEventListener('scroll', recenter)
+      html.style.overflow = prev.htmlOverflow
+      document.body.style.overflow = prev.bodyOverflow
+      document.body.style.overscrollBehavior = prev.bodyOverscroll
     }
   }, [])
+
+  // Sebelum identity dicek (SSR + frame pertama client), tampilkan layar hitam
+  // ber-spinner — BUKAN gate putih / blank. SSR tidak bisa baca localStorage,
+  // jadi tanpa ini customer yang sudah join akan melihat kedip gate/putih saat
+  // refresh. Markup sama di server & client → tidak ada hydration mismatch.
+  if (!identityChecked) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black text-white">
+        <Loader2 className="h-7 w-7 animate-spin text-white/70" />
+        <p className="text-sm text-white/60">Menghubungkan ke live…</p>
+      </div>
+    )
+  }
 
   // Login gate — sebelum identity di-set, tampilkan form nama+WA dulu.
   if (!identity) {
@@ -937,7 +977,7 @@ export function LiveRoomView({
   //   bouncing pulse — di TikTok ini elemen paling standout. Klik → bottom sheet
   //   produk muncul slide-up.
   return (
-    <div className="relative h-[100dvh] w-full select-none touch-manipulation overflow-hidden overscroll-none bg-black text-white">
+    <div className="fixed inset-0 select-none touch-manipulation overflow-hidden overscroll-none bg-black text-white">
       {/* ===== VIDEO STAGE — full bleed, object-contain biar aspek 9:16 dari Kling
            dipertahankan apa adanya. Sisi yang lebar dari viewport diisi gelap. ===== */}
       <div className="absolute inset-0 flex items-center justify-center bg-black">
