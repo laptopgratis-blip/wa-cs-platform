@@ -97,7 +97,7 @@ export function LiveEmbedView(
     gateConfig.mode === 'HYBRID' && gateConfig.triggerOnChat && !gatePassed && !showGateModal
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black">
+    <div className="relative h-screen w-screen touch-manipulation overflow-hidden overscroll-none bg-black">
       <LiveRoomView {...props} />
 
       {/* HYBRID + triggerOnChat: invisible blocker di area chat untuk capture klik */}

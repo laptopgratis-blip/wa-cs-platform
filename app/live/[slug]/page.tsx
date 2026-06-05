@@ -1,11 +1,23 @@
 // /live/[slug] — public live room. No auth. Server fetch room data dulu
 // supaya kalau 404/410 user dapat halaman friendly.
+import type { Viewport } from 'next'
 import { notFound } from 'next/navigation'
 
 import { LiveRoomView } from '@/components/live/LiveRoomView'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+
+// Live = pengalaman full-screen. Kunci skala supaya pinch/double-tap tidak
+// menggeser/membesarkan tampilan di mobile. (Override viewport root layout
+// hanya untuk route ini.)
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+}
 
 // Layout root — di luar (dashboard) supaya tidak ke-wrap sidebar Hulao.
 // Public live room = full-screen experience.

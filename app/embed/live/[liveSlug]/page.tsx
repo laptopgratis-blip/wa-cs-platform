@@ -9,12 +9,23 @@
 // - Wrapped dalam gate flow (REQUIRED/OPTIONAL/HYBRID/OFF)
 // - Layout iframe-friendly (no header/footer/sidebar)
 // - Background transparent supaya menyatu dgn LP host
+import type { Viewport } from 'next'
 import { notFound } from 'next/navigation'
 
 import { LiveEmbedView } from '@/components/live/LiveEmbedView'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+
+// Embed live = full-screen di dalam iframe. Kunci skala agar pinch/double-tap
+// tidak menggeser/membesarkan tampilan di mobile.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+}
 
 interface PageProps {
   params: Promise<{ liveSlug: string }>

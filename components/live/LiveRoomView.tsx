@@ -879,6 +879,35 @@ export function LiveRoomView({
     }
   }
 
+  // Kunci viewport mobile untuk live full-screen: cegah pinch-zoom (2 jari) &
+  // double-tap-zoom supaya tampilan tidak ke-geser/membesar. iOS Safari
+  // MENGABAIKAN <meta user-scalable=no>, jadi pinch wajib dicegah via JS
+  // (gesture* = event non-standar Safari; touchmove >1 jari = guard Android).
+  // Kalau viewport sempat ter-zoom/geser, paksa balik ke tampilan penuh/center.
+  // Listener dilepas saat unmount → halaman lain (dashboard) tetap bisa zoom
+  // normal untuk aksesibilitas.
+  useEffect(() => {
+    const stop = (e: Event) => e.preventDefault()
+    const stopPinch = (e: TouchEvent) => {
+      if (e.touches.length > 1) e.preventDefault()
+    }
+    const recenter = () => {
+      const vv = window.visualViewport
+      if (vv && Math.abs(vv.scale - 1) > 0.01) window.scrollTo(0, 0)
+    }
+    const gestureEvents = ['gesturestart', 'gesturechange', 'gestureend']
+    gestureEvents.forEach((ev) => document.addEventListener(ev, stop))
+    document.addEventListener('touchmove', stopPinch, { passive: false })
+    window.visualViewport?.addEventListener('resize', recenter)
+    window.visualViewport?.addEventListener('scroll', recenter)
+    return () => {
+      gestureEvents.forEach((ev) => document.removeEventListener(ev, stop))
+      document.removeEventListener('touchmove', stopPinch)
+      window.visualViewport?.removeEventListener('resize', recenter)
+      window.visualViewport?.removeEventListener('scroll', recenter)
+    }
+  }, [])
+
   // Login gate — sebelum identity di-set, tampilkan form nama+WA dulu.
   if (!identity) {
     return (
@@ -908,7 +937,7 @@ export function LiveRoomView({
   //   bouncing pulse — di TikTok ini elemen paling standout. Klik → bottom sheet
   //   produk muncul slide-up.
   return (
-    <div className="relative h-[100dvh] w-full overflow-hidden bg-black text-white">
+    <div className="relative h-[100dvh] w-full select-none touch-manipulation overflow-hidden overscroll-none bg-black text-white">
       {/* ===== VIDEO STAGE — full bleed, object-contain biar aspek 9:16 dari Kling
            dipertahankan apa adanya. Sisi yang lebar dari viewport diisi gelap. ===== */}
       <div className="absolute inset-0 flex items-center justify-center bg-black">
