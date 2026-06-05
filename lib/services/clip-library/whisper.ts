@@ -10,10 +10,15 @@
 // formats langsung (mp4, mov, mpeg) — internal extract audio. Cuma kalau file
 // terlalu besar (>25MB), perlu split. Untuk klip <30dtk, biasanya <5MB OK.
 
+import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
 import { getLiveApiKey } from '@/lib/services/live/provider-keys'
-import { chargeUsage } from '@/lib/services/usage-charge'
+import {
+  deductTokenAtomic,
+  logGeneration,
+} from '@/lib/services/ai-generation-log'
+import { computeMediaCharge } from '@/lib/services/media-charge'
 
 interface WhisperResult {
   text: string
@@ -81,15 +86,27 @@ export async function transcribeAudio(
   const durationSec =
     json.duration ?? Math.max(1, fileBuffer.length / 16_000) // ~16kB/sec MP3 estimate fallback
 
+  // Pattern standar Hulao: computeMediaCharge → deductTokenAtomic → logGeneration.
+  // Caller wajib pass userId untuk audit; kalau gak pass, skip (legacy compat).
   if (options.userId) {
-    await chargeUsage({
-      userId: options.userId,
+    const charge = await computeMediaCharge({
       featureKey: 'WHISPER_TRANSCRIBE_OPENAI',
       units: Math.ceil(durationSec),
-      reference: `whisper_${options.subjectId ?? Date.now()}`,
+    })
+    const ded = await deductTokenAtomic({
+      userId: options.userId,
+      tokensCharged: charge.tokensCharged,
       description: `Whisper transcribe ${Math.ceil(durationSec)}dtk`,
+      reference: `whisper:${options.subjectId ?? randomUUID()}`,
+    })
+    await logGeneration({
+      featureKey: 'WHISPER_TRANSCRIBE_OPENAI',
+      userId: options.userId,
       subjectType: options.subjectType ?? 'WHISPER',
       subjectId: options.subjectId,
+      charge,
+      status: ded.ok ? 'OK' : 'INSUFFICIENT_BALANCE',
+      errorMessage: ded.ok ? undefined : 'Saldo kurang setelah Whisper call',
     })
   }
 

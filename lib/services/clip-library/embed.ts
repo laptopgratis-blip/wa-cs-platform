@@ -5,10 +5,15 @@
 //   Cosine similarity dihitung in-memory dengan numpy-like loop.
 //   Untuk scale 1000+ clips per host, migrasi ke pgvector di Sprint 5 polish.
 
+import { randomUUID } from 'node:crypto'
 import { Buffer } from 'node:buffer'
 
 import { getLiveApiKey } from '@/lib/services/live/provider-keys'
-import { chargeUsage } from '@/lib/services/usage-charge'
+import {
+  deductTokenAtomic,
+  logGeneration,
+} from '@/lib/services/ai-generation-log'
+import { computeMediaCharge } from '@/lib/services/media-charge'
 
 const EMBED_URL = 'https://api.openai.com/v1/embeddings'
 export const EMBED_MODEL = 'text-embedding-3-small'
@@ -55,17 +60,28 @@ export async function embedText(
   }
 
   // Charge dari real usage.total_tokens (OpenAI return). Fallback estimasi ke
-  // chars/4 (~OpenAI tokenizer ratio).
+  // chars/4 (~OpenAI tokenizer ratio). Pattern standar Hulao:
+  // computeMediaCharge → deductTokenAtomic → logGeneration.
   if (options.userId) {
     const tokens = json.usage?.total_tokens ?? Math.ceil(trimmed.length / 4)
-    await chargeUsage({
-      userId: options.userId,
+    const charge = await computeMediaCharge({
       featureKey: 'KLIP_LIVE_EMBED',
       units: tokens,
-      reference: `embed_${options.subjectId ?? Date.now()}`,
+    })
+    const ded = await deductTokenAtomic({
+      userId: options.userId,
+      tokensCharged: charge.tokensCharged,
       description: `Embedding ${tokens} tok`,
+      reference: `embed:${options.subjectId ?? randomUUID()}`,
+    })
+    await logGeneration({
+      featureKey: 'KLIP_LIVE_EMBED',
+      userId: options.userId,
       subjectType: options.subjectType ?? 'EMBED',
       subjectId: options.subjectId,
+      charge,
+      status: ded.ok ? 'OK' : 'INSUFFICIENT_BALANCE',
+      errorMessage: ded.ok ? undefined : 'Saldo kurang setelah embed call',
     })
   }
 

@@ -3,10 +3,16 @@
 //
 // Pattern di-copy dari siska-ai/routes/tts.js (proven di event live).
 // Format output: MP3 64 kbps mono — cukup untuk live shopping mobile.
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+
+import {
+  deductTokenAtomic,
+  logGeneration,
+} from '@/lib/services/ai-generation-log'
+import { computeMediaCharge } from '@/lib/services/media-charge'
 
 import { getLiveApiKey } from './provider-keys'
 
@@ -148,9 +154,6 @@ export async function generateLiveTts(input: TtsInput): Promise<TtsResult> {
     return { url, cached: true }
   }
 
-  // Import dinamis biar gak circular dep + cuma load saat MISS.
-  const { chargeUsage } = await import('@/lib/services/usage-charge')
-
   const apiKey = await getLiveApiKey('OPENAI')
   const res = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
@@ -178,15 +181,26 @@ export async function generateLiveTts(input: TtsInput): Promise<TtsResult> {
   await writeFile(abs, buf)
 
   // Charge per character text input. Cache miss = call asli ke OpenAI.
+  // Pattern standar Hulao: computeMediaCharge → deductTokenAtomic → logGeneration.
   if (input.userId) {
-    await chargeUsage({
-      userId: input.userId,
+    const charge = await computeMediaCharge({
       featureKey: 'LIVE_TTS_OPENAI',
       units: text.length,
-      reference: `tts_${input.subjectId ?? hash.slice(0, 12)}`,
+    })
+    const ded = await deductTokenAtomic({
+      userId: input.userId,
+      tokensCharged: charge.tokensCharged,
       description: `TTS realtime ${text.length} char`,
+      reference: `tts:${input.subjectId ?? randomUUID()}`,
+    })
+    await logGeneration({
+      featureKey: 'LIVE_TTS_OPENAI',
+      userId: input.userId,
       subjectType: input.subjectType ?? 'LIVE_TTS',
       subjectId: input.subjectId,
+      charge,
+      status: ded.ok ? 'OK' : 'INSUFFICIENT_BALANCE',
+      errorMessage: ded.ok ? undefined : 'Saldo kurang setelah TTS call',
     })
   }
 
