@@ -115,12 +115,27 @@ export default async function PublicLivePage({
       price: true,
       imageUrl: true,
       images: true,
+      stock: true,
+      weightGrams: true,
       flashSalePrice: true,
       flashSaleStartAt: true,
       flashSaleEndAt: true,
       flashSaleQuota: true,
       flashSaleSold: true,
       flashSaleActive: true,
+      variants: {
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          price: true,
+          weightGrams: true,
+          stock: true,
+          imageUrl: true,
+        },
+      },
     },
   })
   const order = new Map(room.productIds.map((id, i) => [id, i]))
@@ -171,12 +186,18 @@ export default async function PublicLivePage({
           startOk &&
           endOk &&
           quotaOk
+        const gallery =
+          p.images.length > 0 ? p.images : p.imageUrl ? [p.imageUrl] : []
         return {
           id: p.id,
           name: p.name,
           description: p.description,
           price: p.price,
-          imageUrl: p.imageUrl ?? p.images[0] ?? null,
+          imageUrl: gallery[0] ?? null,
+          images: gallery,
+          stock: p.stock,
+          weightGrams: p.weightGrams,
+          variants: p.variants,
           flashSalePrice: flashOn ? p.flashSalePrice : null,
           flashSaleEndAt: flashOn ? p.flashSaleEndAt?.toISOString() ?? null : null,
           flashSaleQuota: flashOn ? p.flashSaleQuota : null,
