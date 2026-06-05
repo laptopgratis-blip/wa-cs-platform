@@ -26,6 +26,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { BaselineComposer } from './BaselineComposer'
 import { BulkGenerateModal } from './BulkGenerateModal'
 
 import { Badge } from '@/components/ui/badge'
@@ -118,19 +119,8 @@ export function ClipLibraryBoard({
   const [category, setCategory] = useState<string>('GREETING')
   // Baseline grid — load list dengan video preview (klingVideoId untuk lipsync, videoUrl untuk preview)
   const [baselines, setBaselines] = useState<Array<{ klingVideoId: string; name: string; videoUrl: string; durationSec: number; isPrimary: boolean; sceneId: string }> | null>(null)
-  // Variant catalog (preview before generate) — load lazy saat empty baseline
-  const [variantCatalog, setVariantCatalog] = useState<Array<{
-    key: 'A' | 'B' | 'C'
-    name: string
-    category: string
-    description: string
-    motionScript: string
-    alreadyExists: boolean
-    durationSec: number
-    estimatedCostUsd: number
-  }> | null>(null)
-  const [selectedVariants, setSelectedVariants] = useState<Array<'A' | 'B' | 'C'>>(['A', 'B', 'C'])
-  const [generatingBaselines, setGeneratingBaselines] = useState(false)
+  // Toggle panel "Tambah baseline" di board utama (collapsible).
+  const [showAddBaseline, setShowAddBaseline] = useState(false)
   // IDLE motion picker — load 30 presets
   const [idleMotions, setIdleMotions] = useState<Array<{ id: string; label: string; category: string; emoji: string; durationSec: number }> | null>(null)
   const [selectedIdleMotion, setSelectedIdleMotion] = useState<string>('')
@@ -219,46 +209,16 @@ export function ClipLibraryBoard({
     const j = (await res.json()) as { success: boolean; data?: { motions: typeof idleMotions } }
     if (j.success && j.data?.motions) setIdleMotions(j.data.motions)
   }, [])
-  const fetchVariantCatalog = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/baselines/variants`)
-    const j = (await res.json()) as { success: boolean; data?: { variants: typeof variantCatalog } }
-    if (j.success && j.data?.variants) {
-      setVariantCatalog(j.data.variants)
-      // Default ke varian yg BELUM exist
-      const notYet = j.data.variants.filter((v) => !v.alreadyExists).map((v) => v.key)
-      if (notYet.length > 0) setSelectedVariants(notYet)
-    }
-  }, [hostId])
-  const handleGenerateBaselines = useCallback(async () => {
-    if (selectedVariants.length === 0) {
-      toast.error('Pilih minimal 1 varian')
-      return
-    }
-    const cost = selectedVariants.length * 1.5
-    if (!confirm(`Generate ${selectedVariants.length} baseline (~$${cost.toFixed(2)} = ~Rp ${(cost * 17000).toLocaleString('id-ID')})? Tunggu ~3 menit per varian.`)) {
-      return
-    }
-    setGeneratingBaselines(true)
-    try {
-      const res = await fetch(`/api/host-templates/${hostId}/baselines/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variantKeys: selectedVariants }),
-      })
-      const j = (await res.json()) as { success: boolean; data?: { submitted: number; message: string }; error?: string }
-      if (!j.success) throw new Error(j.error ?? 'Generate gagal')
-      toast.success(j.data?.message ?? `${j.data?.submitted ?? 0} baseline submitted`)
-      // Re-fetch setelah delay supaya scene baru muncul (status: DRAFT → READY)
-      setTimeout(() => {
-        void fetchBaselines()
-        void fetchVariantCatalog()
-      }, 2000)
-    } catch (e) {
-      toast.error((e as Error).message)
-    } finally {
-      setGeneratingBaselines(false)
-    }
-  }, [hostId, selectedVariants, fetchBaselines, fetchVariantCatalog])
+  // Re-fetch baseline list + prep status setelah composer submit. Delay supaya
+  // scene baru (DRAFT) sempat muncul; prep-status polling lanjut update READY.
+  const refreshBaselines = useCallback(() => {
+    setShowAddBaseline(false)
+    void fetchPrepStatus()
+    setTimeout(() => {
+      void fetchBaselines()
+      void fetchPrepStatus()
+    }, 2000)
+  }, [fetchBaselines, fetchPrepStatus])
 
   useEffect(() => {
     void fetchVoices()
@@ -267,8 +227,7 @@ export function ClipLibraryBoard({
     void fetchPrepStatus()
     void fetchBaselines()
     void fetchIdleMotions()
-    void fetchVariantCatalog()
-  }, [fetchVoices, fetchClips, fetchAnalytics, fetchPrepStatus, fetchBaselines, fetchIdleMotions, fetchVariantCatalog])
+  }, [fetchVoices, fetchClips, fetchAnalytics, fetchPrepStatus, fetchBaselines, fetchIdleMotions])
 
   // Auto-poll prep-status tiap 6dtk kalau belum ready (vision atau baseline video)
   useEffect(() => {
@@ -459,12 +418,13 @@ export function ClipLibraryBoard({
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="text-sm font-semibold">
-              ⏳ Menyiapkan host untuk Klip Live…
+              ⏳ Setup host untuk Klip Live
             </div>
             <p className="text-xs text-muted-foreground">
-              Setelah image ready, sistem auto-jalankan vision analyzer + generate
-              baseline silent loop video (sumber lipsync untuk semua klip nanti).
-              Tunggu sampai keduanya ready (~1-2 menit).
+              <strong>Vision analyzer</strong> jalan otomatis setelah image ready.
+              <strong> Baseline video</strong> kamu generate manual di bawah — review
+              & edit dulu prompt gerakannya, baru submit. Baseline = video diam
+              sumber lipsync untuk semua klip.
             </p>
             <div className="space-y-2">
               <div className="flex items-center gap-2 rounded-lg bg-warm-50 p-2.5">
@@ -509,6 +469,28 @@ export function ClipLibraryBoard({
                 </div>
               </div>
             </div>
+
+            {/* Baseline composer — REACHABLE di gate (sebelumnya buntu: panel
+                blok render tapi tombol generate ada di balik blok). */}
+            {baselineStatus === 'RUNNING' ? (
+              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-amber-500" />
+                <div className="text-xs text-amber-900">
+                  Baseline sedang diproses di Kling (~2-3 menit). Halaman auto-refresh
+                  tiap 6dtk — begitu jadi, kamu langsung bisa bikin klip.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-orange-200 bg-orange-50/40 p-3">
+                <div className="mb-2 text-xs font-semibold text-orange-900">
+                  {baselineStatus === 'FAILED'
+                    ? '⚠️ Baseline gagal — edit prompt & generate ulang:'
+                    : '🎬 Generate baseline pertama:'}
+                </div>
+                <BaselineComposer hostId={hostId} onGenerated={refreshBaselines} />
+              </div>
+            )}
+
             <div className="text-[10px] text-muted-foreground">
               💡 Auto-refresh tiap 6dtk. Status update otomatis di halaman ini.
             </div>
@@ -638,88 +620,11 @@ export function ClipLibraryBoard({
             {baselines === null ? (
               <div className="mt-1 text-xs text-warm-500">Loading…</div>
             ) : baselines.length === 0 ? (
-              <div className="mt-1 space-y-2 rounded-md border border-amber-200 bg-amber-50/50 p-3">
+              <div className="mt-1 space-y-2 rounded-md border border-amber-200 bg-amber-50/40 p-3">
                 <div className="text-xs font-semibold text-amber-900">
-                  ⚠️ Belum ada baseline — preview 3 varian motion di bawah, pilih yang mau, konfirm baru generate.
+                  ⚠️ Belum ada baseline siap. Review & edit prompt gerakan di bawah, lalu generate.
                 </div>
-                {variantCatalog === null ? (
-                  <div className="text-[10px] text-warm-500">Loading varian…</div>
-                ) : (
-                  <>
-                    <div className="grid gap-2 md:grid-cols-3">
-                      {variantCatalog.map((v) => {
-                        const checked = selectedVariants.includes(v.key)
-                        return (
-                          <label
-                            key={v.key}
-                            className={`group cursor-pointer rounded-md border-2 bg-white p-2 transition ${
-                              checked ? 'border-orange-500 shadow-sm' : 'border-warm-200 hover:border-warm-300'
-                            } ${v.alreadyExists ? 'opacity-50' : ''}`}
-                          >
-                            <div className="flex items-start gap-1.5">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={v.alreadyExists}
-                                onChange={() => {
-                                  if (v.alreadyExists) return
-                                  setSelectedVariants((prev) =>
-                                    prev.includes(v.key) ? prev.filter((k) => k !== v.key) : [...prev, v.key],
-                                  )
-                                }}
-                                className="mt-0.5 h-3.5 w-3.5 accent-orange-500"
-                              />
-                              <div className="flex-1">
-                                <div className="text-[11px] font-bold">{v.name}</div>
-                                <div className="text-[9px] text-warm-600">{v.description}</div>
-                                {v.alreadyExists ? (
-                                  <span className="mt-0.5 inline-block rounded bg-emerald-100 px-1 py-px text-[8px] text-emerald-700">
-                                    ✓ udah ada
-                                  </span>
-                                ) : (
-                                  <span className="mt-0.5 inline-block text-[9px] text-warm-500">
-                                    ~${v.estimatedCostUsd.toFixed(2)} · {v.durationSec}s
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <details className="mt-1.5 border-t border-warm-100 pt-1">
-                              <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-wide text-warm-500 hover:text-warm-700">
-                                Lihat motion script
-                              </summary>
-                              <pre className="mt-1 max-h-32 overflow-auto rounded bg-warm-50 p-1.5 text-[8px] leading-tight text-warm-700 whitespace-pre-wrap">
-                                {v.motionScript}
-                              </pre>
-                            </details>
-                          </label>
-                        )
-                      })}
-                    </div>
-                    <div className="flex items-center justify-between gap-2 border-t border-amber-200 pt-2">
-                      <div className="text-[10px] text-warm-600">
-                        Pilih: <strong>{selectedVariants.length}</strong> varian · est. cost{' '}
-                        <strong>${(selectedVariants.length * 1.5).toFixed(2)}</strong> (~Rp{' '}
-                        {(selectedVariants.length * 1.5 * 17000).toLocaleString('id-ID')})
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={handleGenerateBaselines}
-                        disabled={generatingBaselines || selectedVariants.length === 0}
-                        className="bg-orange-600 hover:bg-orange-700"
-                      >
-                        {generatingBaselines ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Submitting…
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="mr-1 h-3 w-3" /> Generate {selectedVariants.length} baseline
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <BaselineComposer hostId={hostId} onGenerated={refreshBaselines} />
               </div>
             ) : (
               <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
@@ -764,54 +669,41 @@ export function ClipLibraryBoard({
             <p className="mt-1 text-[10px] text-warm-500">
               💡 Klip lipsync inherit gerakan dari baseline ini. Pilih variant yang cocok sama kategori klip.
             </p>
-            {baselines && baselines.length > 0 && variantCatalog && variantCatalog.some((v) => !v.alreadyExists) ? (
-              <details className="mt-2 rounded border border-warm-200 bg-warm-50 px-2 py-1.5">
-                <summary className="cursor-pointer text-[10px] font-semibold text-warm-700 hover:text-orange-700">
-                  + Tambah varian motion lain ({variantCatalog.filter((v) => !v.alreadyExists).length} belum dibuat)
-                </summary>
-                <div className="mt-2 space-y-2">
-                  {variantCatalog
-                    .filter((v) => !v.alreadyExists)
-                    .map((v) => {
-                      const checked = selectedVariants.includes(v.key)
-                      return (
-                        <label key={v.key} className="flex items-start gap-1.5 rounded bg-white p-1.5">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => {
-                              setSelectedVariants((prev) =>
-                                prev.includes(v.key) ? prev.filter((k) => k !== v.key) : [...prev, v.key],
-                              )
-                            }}
-                            className="mt-0.5 h-3.5 w-3.5 accent-orange-500"
-                          />
-                          <div className="flex-1">
-                            <div className="text-[11px] font-bold">{v.name}</div>
-                            <div className="text-[9px] text-warm-600">{v.description}</div>
-                          </div>
-                        </label>
-                      )
-                    })}
+            {/* Tambah baseline kapan pun, berapa pun — composer editable. */}
+            {baselines && baselines.length > 0 ? (
+              <div className="mt-2">
+                {showAddBaseline ? (
+                  <div className="rounded-lg border border-warm-200 bg-warm-50/60 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-[11px] font-semibold text-warm-700">
+                        Tambah baseline baru
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAddBaseline(false)}
+                        className="h-6 px-2 text-[10px] text-warm-500"
+                      >
+                        Tutup
+                      </Button>
+                    </div>
+                    <BaselineComposer
+                      hostId={hostId}
+                      onGenerated={refreshBaselines}
+                      defaultSeed={false}
+                    />
+                  </div>
+                ) : (
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={handleGenerateBaselines}
-                    disabled={generatingBaselines || selectedVariants.length === 0}
-                    className="w-full bg-orange-600 hover:bg-orange-700"
+                    onClick={() => setShowAddBaseline(true)}
+                    className="border-warm-300 text-warm-700 hover:border-orange-300 hover:bg-orange-50"
                   >
-                    {generatingBaselines ? (
-                      <>
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Submitting…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-1 h-3 w-3" /> Generate ({selectedVariants.length}) · ~$
-                        {(selectedVariants.length * 1.5).toFixed(2)}
-                      </>
-                    )}
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Tambah baseline
                   </Button>
-                </div>
-              </details>
+                )}
+              </div>
             ) : null}
           </div>
           {category === 'IDLE' ? (
