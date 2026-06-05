@@ -21,6 +21,13 @@ const BOT_VIEWER_NAMES = [
 const REAL_USER_PAUSE_MS = 60_000 // jangan ganggu kalau real user lagi nanya
 const CLIENT_SESSION_PREFIX = 'bot-cron-' // virtual client session per room
 
+// GUARDRAIL anti-bleed (2026-06-05). Tiap pesan bot memicu AI reply + TTS
+// OpenAI. Tanpa cap, room yang lupa dimatikan bisa bocor berjam-jam (incident
+// 09:33–15:05 = ~3500 pesan, ~$8). Kalau bot sudah kirim >= cap ini dalam 24
+// jam, room auto-disable botEnabled. Self-heal: owner tinggal nyalakan lagi
+// kalau memang mau lanjut demo.
+const DAILY_BOT_CAP = 300
+
 interface BotRunResult {
   checked: number
   triggered: number
@@ -51,10 +58,33 @@ export async function runLiveBotTick(options: { baseUrl: string } = { baseUrl: '
       continue
     }
 
+    const sessionIds = await getRoomSessionIds(room.id)
+
+    // GUARDRAIL: auto-off kalau bot sudah kirim >= DAILY_BOT_CAP pesan / 24 jam.
+    // Cegah bleed OpenAI berjam-jam dari room yang lupa dimatikan.
+    const botMsgCount24h = await prisma.liveEvent.count({
+      where: {
+        liveSessionId: { in: sessionIds },
+        type: 'USER_MESSAGE',
+        payload: { path: ['isBot'], equals: true },
+        createdAt: { gte: new Date(now - 24 * 60 * 60 * 1000) },
+      },
+    })
+    if (botMsgCount24h >= DAILY_BOT_CAP) {
+      await prisma.liveRoom
+        .update({ where: { id: room.id }, data: { botEnabled: false } })
+        .catch(() => {})
+      console.warn(
+        `[bot-runner] room ${room.slug}: ${botMsgCount24h} pesan bot/24j ≥ cap ${DAILY_BOT_CAP} → auto-disable botEnabled (anti-bleed OpenAI)`,
+      )
+      result.skipped += 1
+      continue
+    }
+
     // Cek last activity di room — bot DAN real user
     const lastEvents = await prisma.liveEvent.findMany({
       where: {
-        liveSessionId: { in: await getRoomSessionIds(room.id) },
+        liveSessionId: { in: sessionIds },
         type: { in: ['USER_MESSAGE', 'AI_MESSAGE'] },
       },
       orderBy: { createdAt: 'desc' },
