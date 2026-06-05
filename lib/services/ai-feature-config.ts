@@ -103,6 +103,32 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
     description:
       'Auto-balas chat customer di WhatsApp via AI. Charge proporsional input+output token real per balasan (bukan flat per-message).',
   },
+  // CS Live AI — orchestrator prompt host (Claude Haiku) + analitik live.
+  HOST_PROMPT_ORCHESTRATE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'HOST_PROMPT_ORCHESTRATE',
+    displayName: 'CS Live AI — Host Prompt Orchestrator',
+    description:
+      'Claude bantu susun prompt host optimal untuk pipeline Gemini Nano Banana 2 → Kling.',
+  },
+  LIVE_OBJECTION_ANALYZE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'LIVE_OBJECTION_ANALYZE',
+    displayName: 'CS Live AI — Objection Analyzer',
+    description:
+      'Analisa objection customer dari transkrip live room (dipanggil cron live-objection-extract).',
+  },
+  // Owner trigger jarang — pakai Sonnet untuk kualitas usulan.
+  LIVE_OPTIMIZE_PROPOSE: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'LIVE_OPTIMIZE_PROPOSE',
+    displayName: 'CS Live AI — Optimization Proposer',
+    modelName: 'claude-sonnet-4-6',
+    inputPricePer1M: 3.0,
+    outputPricePer1M: 15.0,
+    description:
+      'Usulan perbaikan systemPrompt/greeting live room (Sonnet, owner trigger).',
+  },
   // CS Live AI host generation — Gemini Nano Banana 2 per image.
   // inputPricePer1M = USD per 1 image × 1_000_000 (Nano Banana 2 ≈ $0.045).
   HOST_IMAGE_GEMINI_NANO: {

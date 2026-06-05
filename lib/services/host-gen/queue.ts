@@ -151,6 +151,7 @@ export async function generateBaselineVideos(input: {
 
   const wanted = input.variantKeys ?? ['A', 'B', 'C']
   const sceneIds: string[] = []
+  let lastError: Error | null = null
 
   for (let i = 0; i < BASELINE_VARIANTS.length; i++) {
     const variant = BASELINE_VARIANTS[i]!
@@ -174,7 +175,6 @@ export async function generateBaselineVideos(input: {
         },
         select: { id: true },
       })
-      sceneIds.push(baselineScene.id)
       await enqueueVideoJob({
         userId: input.userId,
         hostTemplateId: input.hostTemplateId,
@@ -185,11 +185,20 @@ export async function generateBaselineVideos(input: {
         publicBaseUrl: publicBase,
         klingMode: 'pro',
       })
+      // Hitung submitted HANYA kalau Kling job benar-benar ter-enqueue.
+      sceneIds.push(baselineScene.id)
       console.log(`[generateBaselineVideos] ${variant.name} submitted`)
     } catch (e) {
-      console.warn(`[generateBaselineVideos] ${variant.name} gagal:`, (e as Error).message)
+      lastError = e as Error
+      console.error(
+        `[generateBaselineVideos] ${variant.name} gagal:`,
+        lastError.message,
+      )
     }
   }
+  // Kalau SEMUA varian gagal submit, lempar errornya supaya UI tampil error
+  // jelas — bukan spinner abadi menunggu baseline yang tak pernah ter-submit.
+  if (sceneIds.length === 0 && lastError) throw lastError
   return { submitted: sceneIds.length, sceneIds }
 }
 

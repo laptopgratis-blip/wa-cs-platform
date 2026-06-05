@@ -14,7 +14,9 @@ let botTimer: ReturnType<typeof setInterval> | null = null
 
 export function startDevCronRunner(): void {
   if (timer) return
-  if (process.env.NODE_ENV === 'production') return
+  // Catatan: dulu di-skip saat production (pakai cron eksternal). Sekarang VPS
+  // single-instance jalankan in-process di prod juga supaya Kling poll/baseline
+  // finalize otomatis tanpa cron-job.org.
 
   const intervalMs = 60_000
   const objIntervalMs = 5 * 60_000 // objection analyzer lebih jarang (mahal)

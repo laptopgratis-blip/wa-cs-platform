@@ -3,9 +3,10 @@
 // dev-cron untuk Kling polling).
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
-  // Hanya start di proses utama Node.js (skip edge runtime).
-  if (process.env.NODE_ENV !== 'production') {
-    const mod = await import('@/lib/dev-cron-runner')
-    mod.startDevCronRunner()
-  }
+  // Single-instance VPS: jalankan cron in-process di PROD juga (Kling poll,
+  // objection-analyze, live-bot). Tanpa ini, video Kling/baseline yang
+  // ke-submit tak pernah finalize di prod → spinner abadi. Cron eksternal
+  // (cron-job.org) jadi tidak wajib.
+  const mod = await import('@/lib/dev-cron-runner')
+  mod.startDevCronRunner()
 }

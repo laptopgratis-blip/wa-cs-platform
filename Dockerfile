@@ -73,7 +73,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 # Sediakan folder uploads (akan di-mount sebagai volume oleh docker compose).
+# Termasuk folder CS Live AI (host-images/videos/refs, clips, presets, live-tts)
+# supaya writable oleh user `nextjs` — kalau tidak, generate image/video EACCES.
 RUN mkdir -p /app/public/uploads/proofs /app/public/uploads/lp-images \
+      /app/public/uploads/host-images /app/public/uploads/host-videos \
+      /app/public/uploads/host-refs /app/public/uploads/clips \
+      /app/public/uploads/clips-audio /app/public/uploads/presets \
+      /app/public/uploads/live-tts \
  && chown -R nextjs:nodejs /app/public/uploads
 
 USER nextjs
