@@ -10,8 +10,21 @@
 //
 // Audio queue: TTS hasil per kalimat di-play berurutan. Saat playing, video
 // tetap loop (no lip-sync per kata — di handphone aman, di mobile UX live shop).
-import { CheckCircle2, HelpCircle, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
+import { CheckCircle2, Eye, Flame, HelpCircle, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+
+import { FlashSaleCountdown } from './FlashSaleCountdown'
+import { ProductDetailSheet } from './ProductDetailSheet'
+
+interface ProductVariant {
+  id: string
+  name: string
+  sku: string | null
+  price: number
+  weightGrams: number
+  stock: number | null
+  imageUrl: string | null
+}
 
 interface Product {
   id: string
@@ -19,12 +32,27 @@ interface Product {
   description: string | null
   price: number
   imageUrl: string | null
+  images: string[]
+  stock: number | null
+  weightGrams: number
+  variants: ProductVariant[]
   // Flash sale — diisi server-side kalau produk lagi aktif promo & dalam window.
   // Kalau null/undefined → tidak ada flash sale, tampil harga normal.
   flashSalePrice?: number | null
   flashSaleEndAt?: string | null // ISO string
   flashSaleQuota?: number | null
   flashSaleSold?: number | null
+}
+
+interface SocialStats {
+  viewersOpen: number
+  soldThisRoom: number
+  soldToday: number
+  recentBuyer: {
+    name: string
+    productInterest: string | null
+    agoSec: number
+  } | null
 }
 
 interface Scene {
@@ -133,6 +161,18 @@ export function LiveRoomView({
   const [showLeadForm, setShowLeadForm] = useState(false)
   // Bottom-sheet "Belanja" — TikTok-style product drawer dipicu FAB keranjang.
   const [showProducts, setShowProducts] = useState(false)
+  // Detail sheet 1 produk — pattern TikTok: klik kartu featured atau row di
+  // bottom sheet → detail dulu (gallery + variant + social proof), baru beli.
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  // Live social proof — di-poll tiap 7dtk dari /api/live/[slug]/social-stats.
+  const [socialStats, setSocialStats] = useState<SocialStats | null>(null)
+  // Recent buyer toast — pop sekali per pembeli (key=name+ago) supaya tidak
+  // dobel toast utk lead yang sama.
+  const [shownBuyerKeys, setShownBuyerKeys] = useState<Set<string>>(new Set())
+  const [activeBuyerToast, setActiveBuyerToast] = useState<{
+    name: string
+    productInterest: string | null
+  } | null>(null)
   const [leadStatus, setLeadStatus] = useState<
     'idle' | 'submitting' | 'HANDOFF_SENT' | 'HANDOFF_FAILED' | 'error'
   >('idle')
@@ -730,6 +770,53 @@ export function LiveRoomView({
     }
   }, [botConfig, sending, dispatchChat])
 
+  // Poll social-stats tiap 7dtk untuk featured card + detail sheet.
+  // Pop recent buyer toast kalau ada lead CLOSED_WON < 60dtk yang belum dishow.
+  useEffect(() => {
+    let cancelled = false
+    async function poll() {
+      try {
+        const res = await fetch(
+          `/api/live/${encodeURIComponent(slug)}/social-stats`,
+          { cache: 'no-store' },
+        )
+        const json = (await res.json()) as { success: boolean; data?: SocialStats }
+        if (cancelled || !json.success || !json.data) return
+        setSocialStats(json.data)
+        const rb = json.data.recentBuyer
+        if (rb && rb.agoSec <= 30) {
+          // Key dedupe: nama + bucket 10dtk (toleransi clock drift sedikit).
+          const bucket = Math.floor(rb.agoSec / 10)
+          const key = `${rb.name}|${rb.productInterest ?? ''}|${bucket}`
+          if (!shownBuyerKeys.has(key)) {
+            setShownBuyerKeys((prev) => {
+              const next = new Set(prev)
+              next.add(key)
+              // Cap set size — prevent unbounded growth.
+              if (next.size > 50) {
+                const first = next.values().next().value
+                if (first) next.delete(first)
+              }
+              return next
+            })
+            setActiveBuyerToast({ name: rb.name, productInterest: rb.productInterest })
+            setTimeout(() => {
+              if (!cancelled) setActiveBuyerToast(null)
+            }, 6000)
+          }
+        }
+      } catch {
+        // ignore network blip — re-poll cycle berikutnya
+      }
+    }
+    void poll()
+    const t = setInterval(poll, 7000)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+    }
+  }, [slug, shownBuyerKeys])
+
   function trackProductClick(productId: string) {
     if (clientSessionId) {
       void fetch(`/api/live/${encodeURIComponent(slug)}/event`, {
@@ -1007,8 +1094,13 @@ export function LiveRoomView({
         {products.length > 0 ? (
           <FeaturedProductCard
             products={products}
+            onOpenDetail={(p) => {
+              trackProductClick(p.id)
+              setDetailProduct(p)
+            }}
             onOpenAll={() => setShowProducts(true)}
             productCount={products.length}
+            socialStats={socialStats}
           />
         ) : null}
 
@@ -1089,9 +1181,60 @@ export function LiveRoomView({
             onProductAsk(p)
             setShowProducts(false)
           }}
+          onSelectProduct={(p) => {
+            trackProductClick(p.id)
+            setDetailProduct(p)
+            setShowProducts(false)
+          }}
           onTrackClick={trackProductClick}
           orderHref={productOrderHref}
         />
+      ) : null}
+
+      {/* ===== PRODUCT DETAIL SHEET — TikTok/Shopee product detail ===== */}
+      {detailProduct ? (
+        <ProductDetailSheet
+          product={detailProduct}
+          socialStats={socialStats}
+          hostName={hostName}
+          totalProducts={products.length}
+          hasOrderForm={Boolean(orderFormSlug)}
+          onClose={() => setDetailProduct(null)}
+          onAsk={(p) => {
+            onProductAsk(p)
+            setDetailProduct(null)
+          }}
+          onBuy={(p, vId) => {
+            trackProductClick(p.id)
+            const href = productOrderHref(p)
+            if (href) {
+              const url = vId ? `${href}&variant=${encodeURIComponent(vId)}` : href
+              window.open(url, '_blank', 'noopener,noreferrer')
+            }
+            setDetailProduct(null)
+          }}
+          onSeeAll={() => {
+            setDetailProduct(null)
+            setShowProducts(true)
+          }}
+        />
+      ) : null}
+
+      {/* ===== RECENT BUYER TOAST — pop kanan-atas 6dtk saat ada lead closed_won baru ===== */}
+      {activeBuyerToast ? (
+        <div
+          className="pointer-events-none fixed left-1/2 top-4 z-50 -translate-x-1/2 motion-safe:animate-in motion-safe:slide-in-from-top motion-safe:duration-300"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 rounded-full bg-emerald-600/95 px-3.5 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm">
+            <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>
+              <strong>{activeBuyerToast.name}</strong> baru beli
+              {activeBuyerToast.productInterest ? ` ${activeBuyerToast.productInterest}` : ''}!
+            </span>
+          </div>
+        </div>
       ) : null}
 
       {/* ===== LEAD FORM MODAL ===== */}
@@ -1275,11 +1418,15 @@ function RecentPurchasePopup({
 function FeaturedProductCard({
   products,
   onOpenAll,
+  onOpenDetail,
   productCount,
+  socialStats,
 }: {
   products: Product[]
   onOpenAll: () => void
+  onOpenDetail: (p: Product) => void
   productCount: number
+  socialStats: SocialStats | null
 }) {
   const [idx, setIdx] = useState(0)
   const [fading, setFading] = useState(false)
@@ -1309,12 +1456,18 @@ function FeaturedProductCard({
       )
     : 0
 
+  const socialLine =
+    socialStats && (socialStats.viewersOpen > 0 || socialStats.soldToday > 0)
+      ? socialStats
+      : null
+
   return (
+   <div className="flex w-[200px] flex-col items-end gap-1.5">
     <button
       type="button"
-      onClick={onOpenAll}
-      aria-label={`Buka belanja — ${productCount} produk. Sekarang: ${current.name}`}
-      className="group relative flex w-[200px] items-center gap-2 overflow-hidden rounded-2xl bg-white/95 p-1.5 text-left shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-white/40 backdrop-blur-md transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
+      onClick={() => onOpenDetail(current)}
+      aria-label={`Lihat detail ${current.name}`}
+      className="group relative flex w-full items-center gap-2 overflow-hidden rounded-2xl bg-white/95 p-1.5 text-left shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-white/40 backdrop-blur-md transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
     >
       {/* Halo pulse di belakang — standout effect TikTok shop */}
       <span
@@ -1391,49 +1544,45 @@ function FeaturedProductCard({
         )}
         {flashOn && current.flashSaleEndAt ? (
           <FlashSaleCountdown endAt={current.flashSaleEndAt} />
+        ) : socialLine ? (
+          <div className="flex items-center gap-1.5 text-[9px] font-semibold leading-none text-warm-600">
+            {socialLine.viewersOpen > 0 ? (
+              <span className="inline-flex items-center gap-0.5">
+                <Eye className="h-2.5 w-2.5 text-orange-500" aria-hidden="true" />
+                {socialLine.viewersOpen} nonton
+              </span>
+            ) : null}
+            {socialLine.soldToday > 0 ? (
+              <span className="inline-flex items-center gap-0.5">
+                <Flame className="h-2.5 w-2.5 text-red-500" aria-hidden="true" />
+                {socialLine.soldToday} sold
+              </span>
+            ) : null}
+          </div>
         ) : (
           <div className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-500">
             <ShoppingCart className="h-2.5 w-2.5" aria-hidden="true" />
-            Belanja semua →
+            Lihat detail →
           </div>
         )}
       </div>
     </button>
+    {productCount > 1 ? (
+      <button
+        type="button"
+        onClick={onOpenAll}
+        aria-label={`Lihat semua ${productCount} produk`}
+        className="rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+      >
+        Semua produk ({productCount}) →
+      </button>
+    ) : null}
+   </div>
   )
 }
 
 // Countdown mm:ss kalau >0, hh:mm:ss kalau >1 jam, "Berakhir" kalau habis.
 // Update tiap 1dtk.
-function FlashSaleCountdown({ endAt }: { endAt: string }) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [])
-  const ms = new Date(endAt).getTime() - now
-  if (ms <= 0) {
-    return (
-      <div className="text-[9px] font-semibold uppercase tracking-wider text-warm-400">
-        Berakhir
-      </div>
-    )
-  }
-  const totalSec = Math.floor(ms / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  const display = h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`
-  return (
-    <div className="flex items-center gap-1 text-[9px] font-bold tabular-nums leading-none text-red-600">
-      <span className="rounded-sm bg-red-600 px-1 py-px text-white">
-        {display}
-      </span>
-      <span className="uppercase tracking-wider">tersisa</span>
-    </div>
-  )
-}
-
 // Product bottom-sheet — TikTok Shop drawer. Slide-up dari bawah, backdrop
 // semi-gelap, daftar produk vertikal scroll. Klik produk = order link buka
 // tab baru; tombol "Tanya host" = inject ke chat input + tutup sheet.
@@ -1441,12 +1590,14 @@ function ProductBottomSheet({
   products,
   onClose,
   onAsk,
+  onSelectProduct,
   onTrackClick,
   orderHref,
 }: {
   products: Product[]
   onClose: () => void
   onAsk: (p: Product) => void
+  onSelectProduct: (p: Product) => void
   onTrackClick: (id: string) => void
   orderHref: (p: Product) => string | null
 }) {
@@ -1496,7 +1647,8 @@ function ProductBottomSheet({
               <div
                 key={p.id}
                 role="listitem"
-                className={`mb-2 flex gap-3 rounded-2xl border bg-white p-2.5 shadow-sm transition motion-reduce:transition-none ${
+                onClick={() => onSelectProduct(p)}
+                className={`mb-2 flex cursor-pointer gap-3 rounded-2xl border bg-white p-2.5 shadow-sm transition motion-reduce:transition-none ${
                   flashOn
                     ? 'border-red-300 ring-1 ring-red-200/60 shadow-[0_4px_16px_rgba(239,68,68,0.18)]'
                     : 'border-warm-200 hover:border-orange-300'
@@ -1557,7 +1709,10 @@ function ProductBottomSheet({
                     <div className="flex flex-shrink-0 gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onAsk(p)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onAsk(p)
+                        }}
                         aria-label={`Tanya host tentang ${p.name}`}
                         className="flex h-9 w-9 items-center justify-center rounded-full border border-warm-200 text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
                       >
@@ -1568,7 +1723,10 @@ function ProductBottomSheet({
                           href={href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={() => onTrackClick(p.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onTrackClick(p.id)
+                          }}
                           aria-label={`Order ${p.name}`}
                           className={`flex h-9 items-center gap-1 rounded-full px-4 text-xs font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
                             flashOn
