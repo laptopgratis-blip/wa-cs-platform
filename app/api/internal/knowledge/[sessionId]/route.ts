@@ -101,7 +101,9 @@ export async function POST(req: Request, { params }: Params) {
       }))
 
     const knowledgeBlock = formatKnowledgeForPrompt(items)
-    const rulesBlock = defaultBehaviorRules()
+    const rulesBlock = defaultBehaviorRules({
+      hasAttachments: attachments.length > 0,
+    })
 
     // Urutan: bank > katalog produk > knowledge user > ongkir (instruksi +
     // resolved kalau ada) > rules. Bank di atas karena pertanyaan transfer

@@ -235,13 +235,23 @@ export async function formatBankAccountsForPrompt(
 // SETELAH systemPrompt user, rule terakhir biasanya lebih dipatuhi AI —
 // rule ini explicit memerintah AI untuk MENGABAIKAN sebutan brand lain di
 // systemPrompt yang tidak match Katalog Produk / Info Pendukung milik user.
-export function defaultBehaviorRules(): string {
+//
+// PENTING (2026-06-05, bug "mana foto blessgold"): rule "Kirim asset sendiri"
+// sekarang KONDISIONAL terhadap hasAttachments. Dulu rule ini selalu menyuruh
+// AI bilang "berikut gambarnya 👇" — padahal attachment hanya terkirim kalau
+// keyword knowledge match. Akibatnya AI menjanjikan foto yang tidak pernah
+// dikirim sistem, customer komplain "mana fotonya". Kalau tidak ada attachment
+// yang match, AI sekarang explicit dilarang menjanjikan kirim media.
+export function defaultBehaviorRules(opts?: { hasAttachments?: boolean }): string {
+  const hasAttachments = opts?.hasAttachments ?? false
   return [
     '',
     '## Aturan Tambahan (Auto-Service)',
     '- **Jangan janjikan admin**: HINDARI kalimat "saya teruskan ke admin", "admin akan balas", "tunggu admin", dst. — ini bikin customer bingung & lama nunggu. Untuk testimoni, bukti foto, nomor rekening, cara order, harga, FAQ — JAWAB SENDIRI dari konteks/knowledge. Kalau benar-benar tidak ada info di konteks, lebih baik jujur: "Saya tidak punya info itu kak 🙏 Saya hanya bantu untuk pembelian/info seputar [nama produk dari Katalog/konteks bisnis]." JANGAN dijanjikan admin kecuali customer sendiri yang minta bicara langsung dengan manusia.',
     '- **Tutup percakapan natural**: Kalau customer sudah puas / sudah konfirmasi order / sudah mengerti, ucapkan terima kasih singkat dan selesaikan. Tidak perlu selalu ajak ngobrol lagi.',
-    '- **Kirim asset sendiri**: Sistem otomatis attach file IMAGE/FILE dari knowledge yang relevan setelah balasan kamu. JANGAN pakai kalimat seperti "admin akan kirim foto/bukti/testimoni" — cukup bilang "ini saya kirim ya" atau "berikut gambarnya 👇".',
+    hasAttachments
+      ? '- **Kirim asset sendiri**: Sistem otomatis attach file IMAGE/FILE dari knowledge yang relevan setelah balasan kamu. JANGAN pakai kalimat seperti "admin akan kirim foto/bukti/testimoni" — cukup bilang "ini saya kirim ya" atau "berikut gambarnya 👇".'
+      : '- **JANGAN janjikan kirim file/foto**: Untuk balasan INI sistem TIDAK akan melampirkan file/foto/gambar apa pun. JANGAN tulis "saya kirim fotonya", "berikut gambarnya 👇", "ini saya lampirkan", dsb. Kalau customer minta foto/gambar/file, jawab deskriptif dengan teks (bentuk, warna, isi) tanpa menjanjikan media — atau arahkan customer menyebut yang dia mau lihat (mis. "contoh foto" / "daftar harga") supaya sistem bisa mengirimkannya di balasan berikutnya.',
     '- **Nomor rekening**: Kalau ada section "Rekening Pembayaran" di atas, sebutkan langsung saat customer minta cara transfer. Format jelas: nama bank + nomor + a.n.',
     '- **Ongkir HARUS dari sistem**: Kalau ada section "Ongkir ke [kota]" di atas, sebutkan harga ongkir EXACTLY seperti yg tertulis (per kurir + estimasi) — JANGAN ngarang nominal. Kalau section ongkir tidak muncul tapi shippingCalc aktif (ada "Info Ongkir (otomatis)" di atas), itu artinya kota tujuan belum jelas — tanya singkat: "Kirim ke kota/kabupaten mana ya kak?". JANGAN PERNAH kasih kisaran tebakan ("biasanya 15-20rb", "sekitar Rp X") — itu menyesatkan customer.',
     '',
