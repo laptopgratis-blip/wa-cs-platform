@@ -8,12 +8,23 @@
 import { Buffer } from 'node:buffer'
 
 import { getLiveApiKey } from '@/lib/services/live/provider-keys'
+import { chargeUsage } from '@/lib/services/usage-charge'
 
 const EMBED_URL = 'https://api.openai.com/v1/embeddings'
 export const EMBED_MODEL = 'text-embedding-3-small'
 export const EMBED_DIM = 1536
 
-export async function embedText(text: string): Promise<number[]> {
+export interface EmbedOptions {
+  // Charge ke userId — kalau gak pass, skip charge (legacy).
+  userId?: string
+  subjectType?: string
+  subjectId?: string
+}
+
+export async function embedText(
+  text: string,
+  options: EmbedOptions = {},
+): Promise<number[]> {
   const apiKey = await getLiveApiKey('OPENAI')
   const trimmed = text.trim()
   if (!trimmed) throw new Error('Embed text kosong')
@@ -36,11 +47,28 @@ export async function embedText(text: string): Promise<number[]> {
   }
   const json = (await res.json()) as {
     data?: Array<{ embedding?: number[] }>
+    usage?: { total_tokens?: number }
   }
   const vec = json.data?.[0]?.embedding
   if (!vec || vec.length !== EMBED_DIM) {
     throw new Error(`Embed return invalid (len=${vec?.length})`)
   }
+
+  // Charge dari real usage.total_tokens (OpenAI return). Fallback estimasi ke
+  // chars/4 (~OpenAI tokenizer ratio).
+  if (options.userId) {
+    const tokens = json.usage?.total_tokens ?? Math.ceil(trimmed.length / 4)
+    await chargeUsage({
+      userId: options.userId,
+      featureKey: 'KLIP_LIVE_EMBED',
+      units: tokens,
+      reference: `embed_${options.subjectId ?? Date.now()}`,
+      description: `Embedding ${tokens} tok`,
+      subjectType: options.subjectType ?? 'EMBED',
+      subjectId: options.subjectId,
+    })
+  }
+
   return vec
 }
 

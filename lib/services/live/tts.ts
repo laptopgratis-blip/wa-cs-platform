@@ -65,6 +65,11 @@ export interface TtsInput {
   // Slider-derived knobs (di-compose ke instructions kalau `instructions` kosong).
   pitchOffset?: number // -1.0..1.0 (lower / higher pitch)
   expressiveness?: number // 0..1 (flat / very expressive)
+  // Charge ke userId (room owner). Cache HIT tidak charge. Required untuk
+  // audit — kalau gak provide, skip charge (legacy/admin debug).
+  userId?: string
+  subjectType?: string
+  subjectId?: string
 }
 
 // Compose natural-language instructions dari slider knobs. Dipakai kalau
@@ -137,10 +142,14 @@ export async function generateLiveTts(input: TtsInput): Promise<TtsResult> {
   const abs = path.join(process.cwd(), TTS_DIR_REL, filename)
   const url = `${TTS_URL_PREFIX}/${filename}`
 
-  // Cache hit — file sudah ada di disk.
+  // Cache hit — file sudah ada di disk. TIDAK charge ulang (provider cost
+  // sudah dibayar dulu, sekarang gratis re-use).
   if (existsSync(abs)) {
     return { url, cached: true }
   }
+
+  // Import dinamis biar gak circular dep + cuma load saat MISS.
+  const { chargeUsage } = await import('@/lib/services/usage-charge')
 
   const apiKey = await getLiveApiKey('OPENAI')
   const res = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -168,6 +177,19 @@ export async function generateLiveTts(input: TtsInput): Promise<TtsResult> {
   await mkdir(path.dirname(abs), { recursive: true })
   await writeFile(abs, buf)
 
+  // Charge per character text input. Cache miss = call asli ke OpenAI.
+  if (input.userId) {
+    await chargeUsage({
+      userId: input.userId,
+      featureKey: 'LIVE_TTS_OPENAI',
+      units: text.length,
+      reference: `tts_${input.subjectId ?? hash.slice(0, 12)}`,
+      description: `TTS realtime ${text.length} char`,
+      subjectType: input.subjectType ?? 'LIVE_TTS',
+      subjectId: input.subjectId,
+    })
+  }
+
   return { url, cached: false }
 }
 
@@ -180,6 +202,10 @@ export async function generateLiveTtsBatch(input: {
   instructions?: string
   pitchOffset?: number
   expressiveness?: number
+  // Charge ke room owner. Per-kalimat charge per char (sequential, anti-race).
+  userId?: string
+  subjectType?: string
+  subjectId?: string
 }): Promise<TtsResult[]> {
   return Promise.all(
     input.sentences.map((text) =>
@@ -191,6 +217,9 @@ export async function generateLiveTtsBatch(input: {
         instructions: input.instructions,
         pitchOffset: input.pitchOffset,
         expressiveness: input.expressiveness,
+        userId: input.userId,
+        subjectType: input.subjectType,
+        subjectId: input.subjectId,
       }),
     ),
   )

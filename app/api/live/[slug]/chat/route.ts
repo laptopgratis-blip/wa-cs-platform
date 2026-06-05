@@ -191,6 +191,8 @@ export async function POST(
       hostTemplateId: room.hostTemplate.id,
       question: message,
       liveSessionId: session.id,
+      // M5: charge embed cost ke room owner per customer query.
+      ownerUserId: room.userId,
     })
     if (matched) {
       await logLiveEvent({
@@ -300,6 +302,12 @@ export async function POST(
       speed: room.ttsSpeed,
       pitchOffset: room.ttsPitchOffset,
       expressiveness: room.ttsExpressiveness,
+      // M5 2026-06-05: charge ke room owner per char (anti-cost-leak).
+      // Cache hit gak charge ulang. Insufficient balance → catch dan
+      // graceful degrade ke text-only di bawah.
+      userId: room.userId,
+      subjectType: 'LIVE_TTS',
+      subjectId: session.id,
     })
     sentences = reply.sentences.map((text, i) => ({
       text,

@@ -210,6 +210,38 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
     description:
       'OpenAI embedding per klip transcript untuk cosine match saat live. Negligible cost.',
   },
+  // ─── OpenAI cost sink (2026-06-05) — sebelumnya tidak ter-track sama sekali.
+  // Per analisis billing: TTS realtime di host TTS_GENERATIVE = ~$8/hari ke Arli
+  // tapi user gratis. Sekarang charge per character text input.
+  LIVE_TTS_OPENAI: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'LIVE_TTS_OPENAI',
+    displayName: 'Live Shopping — OpenAI TTS realtime',
+    modelName: 'gpt-4o-mini-tts',
+    // gpt-4o-mini-tts: $0.60/1M input char + $12/1M output audio token.
+    // Charge per input char dengan rate effective $12/1M (include compute + audio out).
+    inputPricePer1M: 12,
+    outputPricePer1M: 0,
+    floorTokens: 5,
+    unitType: 'TOKEN' as const,
+    unitLabel: 'character',
+    description:
+      'OpenAI TTS realtime untuk host mode TTS_GENERATIVE. Per character text. Cache hit tidak charge ulang.',
+  },
+  WHISPER_TRANSCRIBE_OPENAI: {
+    ...COMMON_DEFAULTS,
+    featureKey: 'WHISPER_TRANSCRIBE_OPENAI',
+    displayName: 'Klip Live — Whisper transcribe upload',
+    modelName: 'whisper-1',
+    // whisper-1: $0.006/menit = $0.0001/detik = $100/1M detik
+    inputPricePer1M: 100,
+    outputPricePer1M: 0,
+    floorTokens: 20,
+    unitType: 'TOKEN' as const,
+    unitLabel: 'second',
+    description:
+      'OpenAI Whisper transcribe audio upload klip (admin clip lib). Per audio second hasil transcript.',
+  },
 }
 
 export async function getAiFeatureConfig(

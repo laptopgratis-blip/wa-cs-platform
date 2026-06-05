@@ -37,6 +37,9 @@ export interface MatchClipInput {
   liveSessionId?: string | null
   // Threshold default — kalau top score di bawah ini, masuk fallback path.
   confidenceThreshold?: number
+  // M5 (2026-06-05): Charge embed cost ke room owner. Required untuk audit/deduct.
+  // Kalau gak provide, embed call gak charge (legacy compat).
+  ownerUserId?: string
 }
 
 // Threshold 0.4 sebelumnya terlalu strict — Indonesian short phrases ("berapa
@@ -201,7 +204,11 @@ export async function matchClip(input: MatchClipInput): Promise<ClipMatch | null
   // degradation, gak return null).
   let queryVec: number[] | null = null
   try {
-    queryVec = await embedText(question)
+    queryVec = await embedText(question, {
+      userId: input.ownerUserId,
+      subjectType: 'LIVE_MATCH',
+      subjectId: input.liveSessionId ?? undefined,
+    })
   } catch (e) {
     console.warn('[matchClip] embed gagal, fallback evergreen/idle:', (e as Error).message)
   }

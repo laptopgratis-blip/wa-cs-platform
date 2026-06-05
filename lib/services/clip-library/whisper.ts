@@ -13,10 +13,12 @@
 import { Buffer } from 'node:buffer'
 
 import { getLiveApiKey } from '@/lib/services/live/provider-keys'
+import { chargeUsage } from '@/lib/services/usage-charge'
 
 interface WhisperResult {
   text: string
   language?: string
+  durationSec?: number
 }
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024 // OpenAI limit
@@ -25,7 +27,14 @@ const WHISPER_URL = 'https://api.openai.com/v1/audio/transcriptions'
 export async function transcribeAudio(
   fileBuffer: Buffer,
   filename: string,
-  options: { language?: string } = {},
+  options: {
+    language?: string
+    // Charge ke userId — REQUIRED untuk audit. Kalau gak provide, throw.
+    userId?: string
+    // Subject untuk audit log (e.g., 'CLIP', '<clipId>').
+    subjectType?: string
+    subjectId?: string
+  } = {},
 ): Promise<WhisperResult> {
   if (fileBuffer.length > MAX_FILE_BYTES) {
     throw new Error(
@@ -65,8 +74,28 @@ export async function transcribeAudio(
   if (!json.text) {
     throw new Error('Whisper return tanpa text')
   }
+
+  // Charge cost berdasarkan durasi audio aktual (Whisper kasih duration).
+  // Kalau caller gak pass userId, skip charge (legacy / admin debug only).
+  // Defensive: kalau gak ada duration di response, estimasi dari ukuran file.
+  const durationSec =
+    json.duration ?? Math.max(1, fileBuffer.length / 16_000) // ~16kB/sec MP3 estimate fallback
+
+  if (options.userId) {
+    await chargeUsage({
+      userId: options.userId,
+      featureKey: 'WHISPER_TRANSCRIBE_OPENAI',
+      units: Math.ceil(durationSec),
+      reference: `whisper_${options.subjectId ?? Date.now()}`,
+      description: `Whisper transcribe ${Math.ceil(durationSec)}dtk`,
+      subjectType: options.subjectType ?? 'WHISPER',
+      subjectId: options.subjectId,
+    })
+  }
+
   return {
     text: json.text.trim(),
     language: json.language,
+    durationSec,
   }
 }

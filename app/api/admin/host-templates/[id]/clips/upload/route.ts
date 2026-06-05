@@ -75,11 +75,16 @@ export async function POST(
   await writeFile(path.join(CLIPS_DIR, filename), buf)
   const videoUrl = `/uploads/clips/${filename}`
 
-  // Whisper transcribe
+  // Whisper transcribe — charge host owner per audio second.
   let transcript: string
   let language: string | undefined
   try {
-    const wr = await transcribeAudio(buf, filename, { language: 'id' })
+    const wr = await transcribeAudio(buf, filename, {
+      language: 'id',
+      userId: host.userId,
+      subjectType: 'CLIP_UPLOAD',
+      subjectId: hostTemplateId,
+    })
     transcript = wr.text
     language = wr.language
   } catch (e) {
@@ -99,10 +104,15 @@ export async function POST(
   // Override kalau admin set category eksplisit di form
   const finalCategory = categoryOverride || suggested.category
 
-  // Embed transcript (best-effort — kalau gagal, clip tetap READY tanpa embed)
+  // Embed transcript (best-effort — kalau gagal, clip tetap READY tanpa embed).
+  // Charge host owner.
   let embedding: number[] | null = null
   try {
-    embedding = await embedText(transcript)
+    embedding = await embedText(transcript, {
+      userId: host.userId,
+      subjectType: 'CLIP_UPLOAD',
+      subjectId: hostTemplateId,
+    })
   } catch (e) {
     console.warn('[clip-upload] embed gagal (lanjut tanpa embed):', (e as Error).message)
   }
