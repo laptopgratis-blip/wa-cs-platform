@@ -269,7 +269,7 @@ const SELL_LP: ChecklistDefinition = {
       actionLabel: 'Buka Follow-Up',
       inlineTask: 'followup_on',
       instructions: [
-        'Klik tombol di bawah → 7 template default ter-seed otomatis (reminder bayar, konfirmasi paid, info pengiriman, dll).',
+        'Klik tombol di bawah → paket template default ter-seed otomatis (reminder bayar, konfirmasi paid, info pengiriman, nurture lead Live, testimoni, dll).',
         'Boleh edit kata-kata template nanti dari halaman Follow-Up.',
       ],
     },

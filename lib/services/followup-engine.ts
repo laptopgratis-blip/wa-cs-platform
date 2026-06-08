@@ -10,7 +10,14 @@
 import { prisma } from '@/lib/prisma'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 
-import { resolveTemplateVariables } from './followup-variables'
+import {
+  ensureLeadNurtureTemplates,
+  ensureReviewTemplates,
+} from './followup-defaults'
+import {
+  resolveLeadTemplateVariables,
+  resolveTemplateVariables,
+} from './followup-variables'
 
 export type FollowupEvent =
   | 'ORDER_CREATED'
@@ -34,7 +41,7 @@ function mapEventToTriggers(event: FollowupEvent): string[] {
     case 'SHIPPED':
       return ['SHIPPED', 'DAYS_AFTER_SHIPPED']
     case 'COMPLETED':
-      return ['COMPLETED']
+      return ['COMPLETED', 'DAYS_AFTER_DELIVERED']
     case 'CANCELLED':
       return ['CANCELLED']
     default:
@@ -55,6 +62,12 @@ export async function generateQueueForOrder(
   const access = await checkOrderSystemAccess(order.userId)
   if (!access.hasAccess) {
     return { generated: 0, reason: 'Plan gating: not POWER' }
+  }
+
+  // Saat order diterima, pastikan template testimoni (DAYS_AFTER_DELIVERED)
+  // ada untuk user lama (idempotent) supaya panen testimoni jalan otomatis.
+  if (event === 'COMPLETED') {
+    await ensureReviewTemplates(order.userId)
   }
 
   const waSession = await prisma.whatsappSession.findFirst({
@@ -156,6 +169,105 @@ export async function generateQueueForOrder(
         resolvedMessage,
         customerPhone: order.customerPhone,
         triggerEvent: event,
+      },
+    })
+    generated++
+  }
+
+  return { generated }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Nurture lead Live "belum order" — generate FollowUpQueue dari LiveLead.
+// Dipanggil best-effort saat lead capture (app/api/live/[slug]/lead +
+// embed-gate). Trigger DAYS_AFTER_LIVE_LEAD; cron followup-send otomatis SKIP
+// item lead begitu customer sudah bikin UserOrder (lihat cron).
+// ─────────────────────────────────────────────────────────────────────────
+export async function generateQueueForLead(
+  liveLeadId: string,
+): Promise<{ generated: number; reason?: string }> {
+  const lead = await prisma.liveLead.findUnique({
+    where: { id: liveLeadId },
+    include: {
+      user: { select: { id: true, name: true } },
+      liveRoom: { select: { slug: true, orderFormSlug: true } },
+    },
+  })
+  if (!lead) return { generated: 0, reason: 'Lead not found' }
+
+  const access = await checkOrderSystemAccess(lead.userId)
+  if (!access.hasAccess) return { generated: 0, reason: 'Plan gating: not POWER' }
+
+  // Opt-in: hanya jalan kalau user sudah pakai follow-up (punya minimal 1
+  // template). Tidak auto-mengaktifkan untuk user yang belum enable.
+  const templateCount = await prisma.followUpTemplate.count({
+    where: { userId: lead.userId },
+  })
+  if (templateCount === 0) return { generated: 0, reason: 'Follow-up not enabled' }
+
+  // Top-up template lead nurture untuk user lama (idempotent).
+  await ensureLeadNurtureTemplates(lead.userId)
+
+  const waSession = await prisma.whatsappSession.findFirst({
+    where: { userId: lead.userId, status: 'CONNECTED' },
+    select: { id: true },
+  })
+  if (!waSession) return { generated: 0, reason: 'No active WA session' }
+
+  // Simpan customerPhone tanpa '+' supaya konsisten dgn UserOrder & WA send.
+  const phone = lead.customerPhone.replace(/^\+/, '')
+
+  const blacklisted = await prisma.followUpBlacklist.findUnique({
+    where: { userId_customerPhone: { userId: lead.userId, customerPhone: phone } },
+  })
+  if (blacklisted) return { generated: 0, reason: 'Customer in blacklist' }
+
+  const templates = await prisma.followUpTemplate.findMany({
+    where: {
+      userId: lead.userId,
+      isActive: true,
+      trigger: 'DAYS_AFTER_LIVE_LEAD',
+    },
+  })
+  const matched = templates.filter(
+    (t) => t.delayDays >= 0 && t.delayDays <= MAX_DELAY_DAYS,
+  )
+  if (matched.length === 0) return { generated: 0 }
+
+  const orderLink = lead.liveRoom.orderFormSlug
+    ? `https://hulao.id/order/${encodeURIComponent(lead.liveRoom.orderFormSlug)}`
+    : `https://hulao.id/live/${encodeURIComponent(lead.liveRoom.slug)}`
+
+  let generated = 0
+  for (const template of matched) {
+    const existing = await prisma.followUpQueue.findFirst({
+      where: {
+        liveLeadId,
+        templateId: template.id,
+        status: { not: 'CANCELLED' },
+      },
+    })
+    if (existing) continue
+
+    const scheduledAt = new Date()
+    scheduledAt.setDate(scheduledAt.getDate() + template.delayDays)
+
+    const resolvedMessage = resolveLeadTemplateVariables(template.message, {
+      customerName: lead.customerName,
+      productInterest: lead.productInterest,
+      storeName: lead.user.name,
+      orderLink,
+    })
+
+    await prisma.followUpQueue.create({
+      data: {
+        userId: lead.userId,
+        liveLeadId,
+        templateId: template.id,
+        scheduledAt,
+        resolvedMessage,
+        customerPhone: phone,
+        triggerEvent: 'DAYS_AFTER_LIVE_LEAD',
       },
     })
     generated++

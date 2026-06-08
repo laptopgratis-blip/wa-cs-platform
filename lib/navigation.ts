@@ -36,6 +36,7 @@ import {
   ShoppingCart,
   Sliders,
   Sparkles,
+  Star,
   TrendingUp,
   Users,
   Video,
@@ -107,6 +108,9 @@ export const USER_NAV_GROUPS: NavGroup[] = [
         href: '/pesanan/templates',
         icon: FileText,
       },
+      // Testimoni (Fase 3, 2026-06-08) — panen via link follow-up setelah
+      // order diterima.
+      { label: 'Testimoni', href: '/pesanan/testimoni', icon: Star },
       // Page /bank-accounts berisi rekening transfer + shipping profile —
       // label "Pengaturan" lebih representatif. Route tetap supaya tidak
       // breaking existing bookmark.

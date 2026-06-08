@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 
 import { LiveRoomView } from '@/components/live/LiveRoomView'
 import { prisma } from '@/lib/prisma'
+import { resolveLiveOrderFormSlug } from '@/lib/services/live/order-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,12 +33,14 @@ export default async function PublicLivePage({
     where: { slug },
     select: {
       id: true,
+      userId: true,
       name: true,
       description: true,
       greeting: true,
       ttsVoice: true,
       isActive: true,
       productIds: true,
+      featuredProductId: true,
       botEnabled: true,
       botIntervalMinSec: true,
       botIntervalMaxSec: true,
@@ -153,6 +156,14 @@ export default async function PublicLivePage({
   const order = new Map(room.productIds.map((id, i) => [id, i]))
   products.sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999))
 
+  // Tombol "Order" selalu ke form — fallback ke form default owner kalau room
+  // belum set orderFormSlug.
+  const effectiveOrderFormSlug = await resolveLiveOrderFormSlug({
+    explicitSlug: room.orderFormSlug ?? null,
+    userId: room.userId,
+    productIds: room.productIds,
+  })
+
   return (
     <LiveRoomView
       slug={slug}
@@ -173,7 +184,7 @@ export default async function PublicLivePage({
         intervalMaxSec: room.botIntervalMaxSec,
         prompts: room.botPrompts,
       }}
-      orderFormSlug={room.orderFormSlug ?? null}
+      orderFormSlug={effectiveOrderFormSlug}
       ttsPauseMs={room.ttsPauseMs}
       scenes={room.hostTemplate.scenes.map((s) => ({
         id: s.id,
@@ -216,6 +227,7 @@ export default async function PublicLivePage({
           flashSaleSold: flashOn ? p.flashSaleSold : null,
         }
       })}
+      featuredProductId={room.featuredProductId ?? null}
     />
   )
 }

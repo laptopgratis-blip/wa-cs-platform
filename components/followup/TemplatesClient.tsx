@@ -44,6 +44,11 @@ const TRIGGERS = [
   { value: 'DAYS_AFTER_ORDER', label: 'N Hari Setelah Order' },
   { value: 'DAYS_AFTER_PAID', label: 'N Hari Setelah Pembayaran' },
   { value: 'DAYS_AFTER_SHIPPED', label: 'N Hari Setelah Dikirim' },
+  { value: 'DAYS_AFTER_DELIVERED', label: 'N Hari Setelah Diterima (testimoni)' },
+  {
+    value: 'DAYS_AFTER_LIVE_LEAD',
+    label: 'N Hari Setelah Lead Live (belum order)',
+  },
 ] as const
 
 const PAYMENT_STATUSES = ['PENDING', 'WAITING_CONFIRMATION', 'PAID', 'CANCELLED']
@@ -68,6 +73,12 @@ const VARIABLES = [
   '{resi}',
   '{nama_toko}',
   '{invoice_url}',
+  // Khusus trigger DAYS_AFTER_LIVE_LEAD (lead Live belum order):
+  '{produk_minat}',
+  '{link_order}',
+  // Link 1-klik testimoni & konfirmasi diterima:
+  '{link_review}',
+  '{link_terima}',
 ]
 
 // Dummy values untuk preview di modal — sinkron dengan
@@ -85,6 +96,10 @@ const DUMMY_PREVIEW: Record<string, string> = {
   '{resi}': '0987654321',
   '{nama_toko}': 'Toko Test',
   '{invoice_url}': 'https://hulao.id/invoice/INV-TEST-001',
+  '{produk_minat}': 'Cleanoz 1 Box',
+  '{link_order}': 'https://hulao.id/order/toko-test',
+  '{link_review}': 'https://hulao.id/review/ord_test?t=…',
+  '{link_terima}': 'https://hulao.id/diterima/ord_test?t=…',
 }
 
 function previewMessage(template: string): string {

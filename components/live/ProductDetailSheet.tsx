@@ -5,7 +5,7 @@
 // Inside: gallery swipe, deskripsi, variants chip, stok/flash quota indicator,
 // social proof bar (viewers + sold), sticky bottom CTA Tanya host + Beli.
 
-import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Flame, HelpCircle, ShoppingBag, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Flame, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { FlashSaleCountdown } from './FlashSaleCountdown'
@@ -47,11 +47,8 @@ const LOW_STOCK_THRESHOLD = 20
 export function ProductDetailSheet({
   product,
   socialStats,
-  hostName,
   totalProducts,
-  hasOrderForm,
   onClose,
-  onAsk,
   onBuy,
   onSeeAll,
 }: {
@@ -59,9 +56,7 @@ export function ProductDetailSheet({
   socialStats: SocialStats | null
   hostName: string
   totalProducts: number
-  hasOrderForm: boolean
   onClose: () => void
-  onAsk: (product: ProductFull, variantId: string | null) => void
   onBuy: (product: ProductFull, variantId: string | null) => void
   onSeeAll: () => void
 }) {
@@ -361,40 +356,20 @@ export function ProductDetailSheet({
         >
           <button
             type="button"
-            onClick={() => onAsk(product, variantId)}
-            aria-label={`Tanya ${hostName} tentang ${product.name}`}
-            className="flex h-12 flex-col items-center justify-center gap-0.5 rounded-2xl border border-warm-300 px-3 text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+            onClick={() => onBuy(product, variantId)}
+            disabled={outOfStock}
+            aria-label={`Order ${product.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}`}
+            className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-bold text-white shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+              outOfStock
+                ? 'cursor-not-allowed bg-warm-300'
+                : flashOn
+                  ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
+                  : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 focus-visible:ring-orange-400'
+            }`}
           >
-            <HelpCircle className="h-4 w-4" aria-hidden="true" />
-            <span className="text-[10px] font-semibold">Tanya {hostName}</span>
+            <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+            {outOfStock ? 'Stok habis' : 'Order sekarang'}
           </button>
-          {hasOrderForm ? (
-            <button
-              type="button"
-              onClick={() => onBuy(product, variantId)}
-              disabled={outOfStock}
-              aria-label={`Beli ${product.name}${selectedVariant ? ` (${selectedVariant.name})` : ''}`}
-              className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl text-sm font-bold text-white shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-                outOfStock
-                  ? 'cursor-not-allowed bg-warm-300'
-                  : flashOn
-                    ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
-                    : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 focus-visible:ring-orange-400'
-              }`}
-            >
-              <ShoppingBag className="h-4 w-4" aria-hidden="true" />
-              {outOfStock ? 'Stok habis' : 'Beli sekarang'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onAsk(product, variantId)}
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-sm font-bold text-white shadow-lg transition hover:from-orange-600 hover:to-orange-700"
-            >
-              <HelpCircle className="h-4 w-4" aria-hidden="true" />
-              Tanya host buat order
-            </button>
-          )}
         </div>
       </div>
     </div>

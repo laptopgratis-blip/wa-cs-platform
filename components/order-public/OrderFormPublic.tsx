@@ -332,6 +332,36 @@ export function OrderFormPublic({
       .catch(() => {})
   }, [form.slug])
 
+  // Preselect produk + prefill nama/HP dari query (?product=&variant=&name=&phone=).
+  // Dipakai saat form dibuka dari modal "Order langsung" di Live — produk sudah
+  // masuk keranjang (qty 1) & identitas terisi, jadi audience tinggal checkout.
+  const prefilledRef = useRef(false)
+  useEffect(() => {
+    if (prefilledRef.current) return
+    if (products.length === 0) return
+    prefilledRef.current = true
+    const nameQ = searchParams?.get('name')
+    const phoneQ = searchParams?.get('phone')
+    if (nameQ) setCustomerName((v) => v || nameQ)
+    if (phoneQ) setCustomerPhone((v) => v || phoneQ)
+    const productQ = searchParams?.get('product')
+    if (productQ) {
+      const p = products.find((x) => x.id === productQ)
+      if (p) {
+        const hasVariants = (p.variants?.length ?? 0) > 0
+        const variantQ = searchParams?.get('variant')
+        const key = hasVariants
+          ? lineKey(
+              p.id,
+              (p.variants!.find((x) => x.id === variantQ) ?? p.variants![0]).id,
+            )
+          : p.id
+        setQty((q) => (q[key] ? q : { ...q, [key]: 1 }))
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products])
+
   // Fire ViewContent sekali saat produk siap. PageView auto-fire dari
   // PixelLoader. ViewContent butuh detail produk → tunggu produk loaded.
   const viewContentFired = useRef(false)

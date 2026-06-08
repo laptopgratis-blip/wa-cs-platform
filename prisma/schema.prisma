@@ -84,6 +84,7 @@ model User {
   followUpTemplates            FollowUpTemplate[]
   followUpQueueItems           FollowUpQueue[]
   followUpBlacklist            FollowUpBlacklist[]
+  orderReviews                 OrderReview[]
   // LMS — Phase 1 (2026-05-09). Course = creator-owned, multi-tenant per user.
   courses                      Course[]
   // LMS — Phase 3 (2026-05-09). Plan upgrade LMS via token.
@@ -1656,6 +1657,7 @@ model UserOrder {
   orderSession   OrderSession?   @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
   pixelEventLogs PixelEventLog[]
   followUpQueue  FollowUpQueue[]
+  review         OrderReview?
   // LMS Phase 1 — kalau item ada productId.courseId, hook on-PAID upsert
   // Enrollment dgn orderId=this.id supaya admin bisa trace order → akses.
   enrollments    Enrollment[]
@@ -2279,6 +2281,8 @@ model FollowUpTemplate {
   // Trigger event:
   //   ORDER_CREATED, PAYMENT_PAID, SHIPPED, COMPLETED, CANCELLED
   //   DAYS_AFTER_ORDER, DAYS_AFTER_PAID, DAYS_AFTER_SHIPPED
+  //   DAYS_AFTER_LIVE_LEAD — nurture lead Live yang BELUM order (otomatis
+  //   berhenti begitu customer bikin UserOrder). Lihat generateQueueForLead.
   trigger       String
   paymentMethod String? // null = both, COD, TRANSFER
 
@@ -2308,10 +2312,14 @@ model FollowUpTemplate {
 }
 
 model FollowUpQueue {
-  id         String           @id @default(cuid())
-  userId     String
-  orderId    String
-  order      UserOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  // Salah satu dari orderId / liveLeadId terisi. orderId untuk follow-up
+  // berbasis order (existing). liveLeadId untuk nurture lead Live "belum order".
+  orderId    String?
+  order      UserOrder? @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  liveLeadId String?
+  liveLead   LiveLead?  @relation(fields: [liveLeadId], references: [id], onDelete: Cascade)
   templateId String
   template   FollowUpTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -2333,13 +2341,15 @@ model FollowUpQueue {
 
   @@index([scheduledAt, status])
   @@index([orderId, status])
+  @@index([liveLeadId, status])
   @@index([userId, status])
 }
 
 model FollowUpLog {
   id         String  @id @default(cuid())
   userId     String
-  orderId    String
+  orderId    String? // null untuk log nurture lead Live (pakai liveLeadId)
+  liveLeadId String?
   templateId String?
   queueId    String?
 
@@ -2354,6 +2364,38 @@ model FollowUpLog {
 
   @@index([orderId, sentAt(sort: Desc)])
   @@index([userId, sentAt(sort: Desc)])
+}
+
+// Testimoni / review order (Fase 3, 2026-06-08, POWER only)
+// Diisi customer via link form 1-klik ({link_review}) yang dikirim follow-up
+// setelah order diterima ("sudah dicoba? kasih testimoni"). orderId unique =
+// 1 review per order (upsert kalau customer submit ulang). approved=false →
+// owner kurasi dulu sebelum dipakai sebagai social proof.
+model OrderReview {
+  id      String    @id @default(cuid())
+  userId  String // owner — denormalisasi untuk listing & gating cepat
+  orderId String    @unique
+  order   UserOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  customerName  String
+  customerPhone String
+  productName   String? // snapshot produk utama saat review
+
+  rating       Int // 1-5 bintang
+  reviewText   String?  @db.Text
+  photoUrls    String[] @default([])
+  triedProduct Boolean  @default(true) // jawaban "sudah dicoba?"
+
+  approved Boolean @default(false) // kurasi owner sebelum jadi social proof
+  source   String  @default("REVIEW_LINK") // REVIEW_LINK, MANUAL
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, approved])
 }
 
 model FollowUpBlacklist {
@@ -3084,7 +3126,11 @@ model HostTemplate {
   promptImage    String             @db.Text // prompt ke Gemini
   promptVideo    String             @db.Text // prompt gerakan ke Kling (TTS mode), default motion (Klip Live mode)
   refImageUrls   String[]           @default([]) // referensi produk (sampai 14, dipakai Gemini)
-  sourceImageUrl String? // hasil Gemini, path lokal
+  sourceImageUrl String? // hasil Gemini, path lokal — POINTER AKTIF yg dipakai semua pipeline video
+  // Galeri kandidat gambar host (history + upload eksternal). sourceImageUrl tetap
+  // source-of-truth; ini cuma kumpulan kandidat yg bisa di-"Pakai ini".
+  // Bentuk: [{ id, url, source: 'GENERATED'|'UPLOADED', label?, withProduct?, createdAt }]
+  imageVariants  Json               @default("[]")
   videoLoopUrl   String? // hasil Kling sudah di-download, path lokal (TTS mode)
   videoSeconds   Int? // durasi video final (5 / 10)
   status         HostTemplateStatus @default(DRAFT)
@@ -3365,8 +3411,11 @@ model LiveRoom {
   name           String
   description    String?  @db.Text
   hostTemplateId String
-  // Array productId — order menentukan urutan tampil di sidebar.
+  // Array productId — order menentukan urutan tampil di rail/katalog.
   productIds     String[] @default([])
+  // Produk "unggulan" yang di-pin jadi kartu sorotan (FeaturedProductCard).
+  // null = fallback ke productIds[0]. Harus salah satu dari productIds.
+  featuredProductId String?
   // System prompt persona host untuk Claude. Default di-generate dari
   // host.name + product context, admin/user boleh override.
   systemPrompt   String   @db.Text
@@ -3533,9 +3582,10 @@ model LiveLead {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  liveRoom    LiveRoom    @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
-  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  liveRoom      LiveRoom        @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
+  liveSession   LiveSession     @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  followUpQueue FollowUpQueue[]
 
   @@index([userId, createdAt])
   @@index([liveRoomId, createdAt])

@@ -66,6 +66,7 @@ export async function POST(_req: Request, { params }: Params) {
         data: {
           userId: session.user.id,
           orderId: item.orderId,
+          liveLeadId: item.liveLeadId,
           templateId: item.templateId,
           queueId: item.id,
           customerPhone: item.customerPhone,
@@ -86,6 +87,7 @@ export async function POST(_req: Request, { params }: Params) {
       data: {
         userId: session.user.id,
         orderId: item.orderId,
+        liveLeadId: item.liveLeadId,
         templateId: item.templateId,
         queueId: item.id,
         customerPhone: item.customerPhone,

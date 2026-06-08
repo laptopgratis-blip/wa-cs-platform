@@ -10,11 +10,10 @@
 //
 // Audio queue: TTS hasil per kalimat di-play berurutan. Saat playing, video
 // tetap loop (no lip-sync per kata — di handphone aman, di mobile UX live shop).
-import { CheckCircle2, Eye, Flame, HelpCircle, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
+import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { FlashSaleCountdown } from './FlashSaleCountdown'
-import { ProductDetailSheet } from './ProductDetailSheet'
 
 interface ProductVariant {
   id: string
@@ -117,6 +116,44 @@ function pickRandomViewerName(): string {
   return BOT_VIEWER_NAMES[Math.floor(Math.random() * BOT_VIEWER_NAMES.length)]
 }
 
+// WAV pendek 100% sunyi — dipakai untuk "unlock" autoplay audio di dalam gesture
+// user (klik "Masuk Live"). Diputar sekali (tak terdengar) supaya browser ngasih
+// izin autoplay ke element audio; setelah itu suara host bisa bunyi otomatis
+// tanpa minta klik "dengar suara" lagi.
+const SILENT_AUDIO_DATA_URI =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA='
+
+// Singleton element <audio> untuk TTS host — di-share lintas komponen
+// (LiveRoomView & gate embed) supaya "prime" dari gesture mana pun nge-unlock
+// element yang SAMA yang nanti dipakai memutar suara host. Lazy-create supaya
+// `new Audio()` tidak jalan saat SSR (window undefined).
+let sharedTtsAudio: HTMLAudioElement | null = null
+function getSharedTtsAudio(): HTMLAudioElement | null {
+  if (typeof window === 'undefined') return null
+  if (!sharedTtsAudio) {
+    sharedTtsAudio = new Audio()
+    sharedTtsAudio.preload = 'auto'
+  }
+  return sharedTtsAudio
+}
+
+// Prime audio host — WAJIB dipanggil dari dalam user gesture (klik tombol
+// join / gate embed). Putar silent unmuted 1x supaya browser kasih izin
+// playback bersuara nanti, jadi suara host langsung bunyi saat auto-sapa
+// "halo" tanpa perlu tombol "dengar suara host".
+export function primeLiveAudio(): void {
+  try {
+    const a = getSharedTtsAudio()
+    if (!a) return
+    a.muted = false
+    a.src = SILENT_AUDIO_DATA_URI
+    const p = a.play()
+    if (p && typeof p.catch === 'function') p.catch(() => {})
+  } catch {
+    /* ignore — kalau gagal, fallback tombol unlock tetap ada */
+  }
+}
+
 export function LiveRoomView({
   slug,
   name,
@@ -131,6 +168,7 @@ export function LiveRoomView({
   botConfig,
   orderFormSlug,
   ttsPauseMs = 150,
+  featuredProductId = null,
 }: {
   slug: string
   name: string
@@ -148,6 +186,9 @@ export function LiveRoomView({
   botConfig?: BotConfig
   orderFormSlug?: string | null
   ttsPauseMs?: number
+  // Produk unggulan yang di-pin jadi kartu sorotan. null = kartu auto-cycle
+  // (perilaku lama, backward compatible untuk room tanpa featured).
+  featuredProductId?: string | null
 }) {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -162,12 +203,11 @@ export function LiveRoomView({
   // saat customer yang sudah join melakukan refresh.
   const [identityChecked, setIdentityChecked] = useState(false)
   const [lastClickedProductId, setLastClickedProductId] = useState<string | null>(null)
-  const [showLeadForm, setShowLeadForm] = useState(false)
   // Bottom-sheet "Belanja" — TikTok-style product drawer dipicu FAB keranjang.
   const [showProducts, setShowProducts] = useState(false)
-  // Detail sheet 1 produk — pattern TikTok: klik kartu featured atau row di
-  // bottom sheet → detail dulu (gallery + variant + social proof), baru beli.
-  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  // Modal "Order langsung" — iframe ke form order (/order/[slug]) dengan produk
+  // ter-preselect + identitas prefill. Audience order tanpa keluar dari live.
+  const [orderModalUrl, setOrderModalUrl] = useState<string | null>(null)
   // Live social proof — di-poll tiap 7dtk dari /api/live/[slug]/social-stats.
   const [socialStats, setSocialStats] = useState<SocialStats | null>(null)
   // Recent buyer toast — pop sekali per pembeli (key=name+ago) supaya tidak
@@ -210,6 +250,9 @@ export function LiveRoomView({
   }, [idleClips, idleClipUrl])
   const audioQueueRef = useRef<string[]>([])
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  // Element <audio> TTS = singleton modul (lihat getSharedTtsAudio). Di-"prime"
+  // saat user klik join/gate (gesture), reuse element sama untuk semua kalimat
+  // → suara host langsung bunyi tanpa tombol unlock.
   const greetingShownRef = useRef(false)
   // Poll feed dari semua user di room (shared chat). Track timestamp last
   // event yg sudah diterima supaya gak duplicate.
@@ -521,23 +564,27 @@ export function LiveRoomView({
       setLiveState((prev) => (prev === 'talking' ? 'idle' : prev))
       return
     }
-    const audio = new Audio(next)
+    // Pakai ulang element yang sudah di-prime di gesture join → autoplay lancar.
+    const audio = getSharedTtsAudio()
+    if (!audio) return
     audio.muted = muted
-    audio.preload = 'auto'
+    audio.src = next
     currentAudioRef.current = audio
     setTalking(true)
     setLiveState('talking')
-    audio.addEventListener('ended', () => {
+    // Property-assign (bukan addEventListener) supaya handler lama ke-replace,
+    // tidak menumpuk tiap kalimat di element yang sama.
+    audio.onended = () => {
       if (ttsPauseMs > 0) {
         setTimeout(() => playNextAudio(), ttsPauseMs)
       } else {
         playNextAudio()
       }
-    })
-    audio.addEventListener('error', (e) => {
+    }
+    audio.onerror = (e) => {
       console.warn('[live-audio] play error', next, e)
       playNextAudio()
-    })
+    }
     audio.play().catch((err) => {
       // Browser autoplay policy: butuh user gesture. Bukan diam-diam skip —
       // simpan queue + tampilkan prompt "Klik untuk suara", lalu user 1x klik
@@ -732,6 +779,27 @@ export function LiveRoomView({
     await dispatchChat({ text: msg, isBot: false })
   }, [input, sending, dispatchChat])
 
+  // Auto-sapa: begitu audience masuk (identity + session siap), kirim komen
+  // "halo" sekali supaya host LANGSUNG bicara — sebelumnya host diam sampai ada
+  // komen pertama. Guard ref = sekali per mount.
+  // dispatchChat dipegang via ref supaya effect TIDAK re-run saat messages
+  // berubah (kalau ikut deps, cleanup-nya bisa keburu cancel timeout "halo").
+  const autoGreetedRef = useRef(false)
+  const dispatchChatRef = useRef(dispatchChat)
+  useEffect(() => {
+    dispatchChatRef.current = dispatchChat
+  }, [dispatchChat])
+  useEffect(() => {
+    if (autoGreetedRef.current) return
+    if (!identity || !clientSessionId) return
+    autoGreetedRef.current = true
+    // Delay kecil supaya greeting scene + audio unlock sempat siap dulu.
+    const t = setTimeout(() => {
+      void dispatchChatRef.current({ text: 'halo', isBot: false })
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [identity, clientSessionId])
+
   // Bot timer — pick random prompt tiap interval. Pause kalau:
   //   - bot disabled
   //   - prompts empty
@@ -837,15 +905,19 @@ export function LiveRoomView({
     setLastClickedProductId(productId)
   }
 
-  function productOrderHref(p: Product): string | null {
-    if (!orderFormSlug) return null
-    return `/order/${encodeURIComponent(orderFormSlug)}?product=${encodeURIComponent(p.id)}`
-  }
-
-  function onProductAsk(p: Product) {
-    // "Tanya" button — selalu isi chat input, gak buka form.
+  // Buka form order LANGSUNG (modal iframe) — produk ter-preselect + nama/HP
+  // prefill dari identitas. orderFormSlug selalu terisi (di-resolve server-side
+  // ke form default owner), jadi tombol Order SELALU ke form, bukan chat host.
+  function openOrderForm(p: Product, variantId?: string | null) {
     trackProductClick(p.id)
-    setInput(`Saya tertarik ${p.name}. Bisa ceritain lebih detail?`)
+    if (!orderFormSlug) return
+    const params = new URLSearchParams({ product: p.id, embed: '1' })
+    if (variantId) params.set('variant', variantId)
+    if (identity?.name) params.set('name', identity.name)
+    if (identity?.phone) params.set('phone', identity.phone)
+    setOrderModalUrl(
+      `/order/${encodeURIComponent(orderFormSlug)}?${params.toString()}`,
+    )
   }
 
   // Show "Order via WA" trigger setelah ≥3 user message ATAU minimal 1 product click.
@@ -956,6 +1028,9 @@ export function LiveRoomView({
         hostName={hostName}
         roomName={name}
         onJoin={(joinData) => {
+          // Unlock audio DI DALAM gesture klik "Masuk Live" supaya suara host
+          // langsung bunyi saat auto-sapa "halo" — tanpa tombol "dengar suara".
+          primeLiveAudio()
           localStorage.setItem(
             `live:identity:${slug}`,
             JSON.stringify(joinData),
@@ -1158,15 +1233,17 @@ export function LiveRoomView({
         hostName={hostName}
       />
 
-      {/* ===== RIGHT ACTION STACK — Featured product card cycling + Order CTA ===== */}
+      {/* ===== RIGHT ACTION STACK — SATU kartu produk (TikTok-style) + Order CTA.
+           Kartu menampilkan produk unggulan; tap = buka keranjang (semua produk). ===== */}
       <div className="absolute right-3 bottom-24 z-30 flex flex-col items-end gap-2.5">
         {products.length > 0 ? (
           <FeaturedProductCard
             products={products}
-            onOpenDetail={(p) => {
-              trackProductClick(p.id)
-              setDetailProduct(p)
-            }}
+            featuredProduct={
+              (featuredProductId
+                ? products.find((p) => p.id === featuredProductId)
+                : null) ?? products[0] ?? null
+            }
             onOpenAll={() => setShowProducts(true)}
             productCount={products.length}
             socialStats={socialStats}
@@ -1191,16 +1268,31 @@ export function LiveRoomView({
           ) : (
             <button
               type="button"
-              onClick={() => setShowLeadForm(true)}
-              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.55)] ring-1 ring-white/20 transition active:scale-95 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none"
+              // Satu-tap: pakai nama+HP yang sudah diisi di JoinGate — tidak perlu
+              // form ulang. identity dijamin ada di titik ini (sudah lewat gate).
+              onClick={() => {
+                if (identity) {
+                  void submitLead({ name: identity.name, phone: identity.phone })
+                }
+              }}
+              disabled={leadStatus === 'submitting'}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.55)] ring-1 ring-white/20 transition active:scale-95 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-70 motion-reduce:transition-none"
             >
-              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Order WA
+              {leadStatus === 'submitting' ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Mengirim…
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Order WA
+                </>
+              )}
             </button>
           )
         ) : null}
       </div>
 
-      {/* ===== BOTTOM COMPOSER — tipis transparant, TikTok style ===== */}
+      {/* ===== BOTTOM COMPOSER — tipis transparan, TikTok style ===== */}
       <div className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
         <form
           onSubmit={(e) => {
@@ -1246,46 +1338,18 @@ export function LiveRoomView({
         <ProductBottomSheet
           products={products}
           onClose={() => setShowProducts(false)}
-          onAsk={(p) => {
-            onProductAsk(p)
+          onOrder={(p) => {
+            openOrderForm(p)
             setShowProducts(false)
           }}
-          onSelectProduct={(p) => {
-            trackProductClick(p.id)
-            setDetailProduct(p)
-            setShowProducts(false)
-          }}
-          onTrackClick={trackProductClick}
-          orderHref={productOrderHref}
         />
       ) : null}
 
-      {/* ===== PRODUCT DETAIL SHEET — TikTok/Shopee product detail ===== */}
-      {detailProduct ? (
-        <ProductDetailSheet
-          product={detailProduct}
-          socialStats={socialStats}
-          hostName={hostName}
-          totalProducts={products.length}
-          hasOrderForm={Boolean(orderFormSlug)}
-          onClose={() => setDetailProduct(null)}
-          onAsk={(p) => {
-            onProductAsk(p)
-            setDetailProduct(null)
-          }}
-          onBuy={(p, vId) => {
-            trackProductClick(p.id)
-            const href = productOrderHref(p)
-            if (href) {
-              const url = vId ? `${href}&variant=${encodeURIComponent(vId)}` : href
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
-            setDetailProduct(null)
-          }}
-          onSeeAll={() => {
-            setDetailProduct(null)
-            setShowProducts(true)
-          }}
+      {/* ===== ORDER FORM MODAL — iframe form order, langsung bisa checkout ===== */}
+      {orderModalUrl ? (
+        <OrderFormModal
+          url={orderModalUrl}
+          onClose={() => setOrderModalUrl(null)}
         />
       ) : null}
 
@@ -1304,18 +1368,6 @@ export function LiveRoomView({
             </span>
           </div>
         </div>
-      ) : null}
-
-      {/* ===== LEAD FORM MODAL ===== */}
-      {showLeadForm ? (
-        <LeadFormModal
-          submitting={leadStatus === 'submitting'}
-          onClose={() => setShowLeadForm(false)}
-          onSubmit={async (input) => {
-            await submitLead(input)
-            setShowLeadForm(false)
-          }}
-        />
       ) : null}
 
     </div>
@@ -1486,34 +1538,21 @@ function RecentPurchasePopup({
 // standout via shadow glow + ribbon flash sale animate-pulse.
 function FeaturedProductCard({
   products,
+  featuredProduct = null,
   onOpenAll,
-  onOpenDetail,
   productCount,
   socialStats,
 }: {
   products: Product[]
+  // Produk unggulan yang ditampilkan di kartu (di-pin admin, fallback produk
+  // pertama). Kartu STATIS — tap = buka keranjang (semua produk).
+  featuredProduct?: Product | null
   onOpenAll: () => void
-  onOpenDetail: (p: Product) => void
   productCount: number
   socialStats: SocialStats | null
 }) {
-  const [idx, setIdx] = useState(0)
-  const [fading, setFading] = useState(false)
-
-  // Auto-cycle tiap 5dtk. Skip kalau cuma 1 produk.
-  useEffect(() => {
-    if (products.length <= 1) return
-    const t = setInterval(() => {
-      setFading(true)
-      setTimeout(() => {
-        setIdx((i) => (i + 1) % products.length)
-        setFading(false)
-      }, 220)
-    }, 5000)
-    return () => clearInterval(t)
-  }, [products.length])
-
-  const current = products[idx]
+  const fading = false
+  const current = featuredProduct ?? products[0]
   if (!current) return null
 
   const flashOn =
@@ -1534,10 +1573,19 @@ function FeaturedProductCard({
    <div className="flex w-[200px] flex-col items-end gap-1.5">
     <button
       type="button"
-      onClick={() => onOpenDetail(current)}
-      aria-label={`Lihat detail ${current.name}`}
+      onClick={onOpenAll}
+      aria-label={`Belanja — lihat ${productCount} produk`}
       className="group relative flex w-full items-center gap-2 overflow-hidden rounded-2xl bg-white/95 p-1.5 text-left shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-white/40 backdrop-blur-md transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
     >
+      {/* Badge keranjang — sinyal "ada N produk, ketuk untuk lihat semua" */}
+      {productCount > 1 ? (
+        <span
+          className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow"
+          aria-hidden="true"
+        >
+          <ShoppingCart className="h-2.5 w-2.5" /> {productCount}
+        </span>
+      ) : null}
       {/* Halo pulse di belakang — standout effect TikTok shop */}
       <span
         aria-hidden="true"
@@ -1591,7 +1639,7 @@ function FeaturedProductCard({
             </span>
           )}
           <span className="text-[9px] font-medium uppercase tracking-wide text-warm-500">
-            {idx + 1}/{productCount}
+            ★ Unggulan
           </span>
         </div>
         <div className="line-clamp-1 text-[11px] font-semibold leading-tight text-foreground">
@@ -1631,21 +1679,11 @@ function FeaturedProductCard({
         ) : (
           <div className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-500">
             <ShoppingCart className="h-2.5 w-2.5" aria-hidden="true" />
-            Lihat detail →
+            {productCount > 1 ? `${productCount} produk · Ketuk` : 'Ketuk untuk order'}
           </div>
         )}
       </div>
     </button>
-    {productCount > 1 ? (
-      <button
-        type="button"
-        onClick={onOpenAll}
-        aria-label={`Lihat semua ${productCount} produk`}
-        className="rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
-      >
-        Semua produk ({productCount}) →
-      </button>
-    ) : null}
    </div>
   )
 }
@@ -1653,22 +1691,16 @@ function FeaturedProductCard({
 // Countdown mm:ss kalau >0, hh:mm:ss kalau >1 jam, "Berakhir" kalau habis.
 // Update tiap 1dtk.
 // Product bottom-sheet — TikTok Shop drawer. Slide-up dari bawah, backdrop
-// semi-gelap, daftar produk vertikal scroll. Klik produk = order link buka
-// tab baru; tombol "Tanya host" = inject ke chat input + tutup sheet.
+// semi-gelap, daftar produk vertikal scroll. Klik baris ATAU tombol "Order" =
+// buka form order LANGSUNG (modal iframe, produk preselect).
 function ProductBottomSheet({
   products,
   onClose,
-  onAsk,
-  onSelectProduct,
-  onTrackClick,
-  orderHref,
+  onOrder,
 }: {
   products: Product[]
   onClose: () => void
-  onAsk: (p: Product) => void
-  onSelectProduct: (p: Product) => void
-  onTrackClick: (id: string) => void
-  orderHref: (p: Product) => string | null
+  onOrder: (p: Product) => void
 }) {
   return (
     <div
@@ -1691,7 +1723,7 @@ function ProductBottomSheet({
         <div className="flex items-center justify-between px-4 pb-3 pt-2">
           <h2 id="product-sheet-title" className="flex items-center gap-2 text-base font-semibold">
             <ShoppingCart className="h-4 w-4 text-orange-500" aria-hidden="true" />
-            Belanja ({products.length})
+Keranjang Belanja ({products.length})
           </h2>
           <button
             type="button"
@@ -1704,7 +1736,6 @@ function ProductBottomSheet({
         </div>
         <div className="overflow-y-auto px-3 pb-[max(env(safe-area-inset-bottom),1rem)]" role="list" aria-label="Daftar produk">
           {products.map((p) => {
-            const href = orderHref(p)
             const flashOn =
               p.flashSalePrice != null && p.flashSalePrice < p.price
             const discount = flashOn
@@ -1716,7 +1747,7 @@ function ProductBottomSheet({
               <div
                 key={p.id}
                 role="listitem"
-                onClick={() => onSelectProduct(p)}
+                onClick={() => onOrder(p)}
                 className={`mb-2 flex cursor-pointer gap-3 rounded-2xl border bg-white p-2.5 shadow-sm transition motion-reduce:transition-none ${
                   flashOn
                     ? 'border-red-300 ring-1 ring-red-200/60 shadow-[0_4px_16px_rgba(239,68,68,0.18)]'
@@ -1780,32 +1811,17 @@ function ProductBottomSheet({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          onAsk(p)
+                          onOrder(p)
                         }}
-                        aria-label={`Tanya host tentang ${p.name}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-warm-200 text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
+                        aria-label={`Order ${p.name}`}
+                        className={`flex h-9 items-center gap-1 rounded-full px-4 text-xs font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
+                          flashOn
+                            ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
+                            : 'bg-orange-500 hover:bg-orange-600 focus-visible:ring-orange-400'
+                        }`}
                       >
-                        <HelpCircle className="h-4 w-4" aria-hidden="true" />
+                        <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" /> Order
                       </button>
-                      {href ? (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onTrackClick(p.id)
-                          }}
-                          aria-label={`Order ${p.name}`}
-                          className={`flex h-9 items-center gap-1 rounded-full px-4 text-xs font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
-                            flashOn
-                              ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
-                              : 'bg-orange-500 hover:bg-orange-600 focus-visible:ring-orange-400'
-                          }`}
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" /> Order
-                        </a>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1818,96 +1834,51 @@ function ProductBottomSheet({
   )
 }
 
-function LeadFormModal({
-  submitting,
+// Modal form order — iframe ke /order/[slug] (produk preselect + identitas
+// prefill via query). Audience checkout langsung tanpa keluar dari live.
+function OrderFormModal({
+  url,
   onClose,
-  onSubmit,
 }: {
-  submitting: boolean
+  url: string
   onClose: () => void
-  onSubmit: (input: { name: string; phone: string }) => Promise<void>
 }) {
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (name.trim().length < 2 || phone.trim().length < 8) return
-    await onSubmit({ name: name.trim(), phone: phone.trim() })
-  }
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="lead-form-title"
+      aria-label="Form order"
     >
-      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-5 text-white shadow-2xl">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="lead-form-title" className="text-base font-semibold">
-              Tinggalkan nomor WA
-            </h2>
-            <p className="mt-1 text-sm text-zinc-400">
-              Tim CS akan lanjut chat di WhatsApp untuk bantu pesan.
-            </p>
+      <button
+        type="button"
+        aria-label="Tutup form order"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
+      />
+      <div
+        className="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl motion-safe:animate-in motion-safe:slide-in-from-bottom motion-safe:duration-300"
+        style={{ height: '92dvh' }}
+      >
+        <div className="flex items-center justify-between border-b border-warm-200 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-warm-800">
+            <ShoppingCart className="h-4 w-4 text-orange-500" aria-hidden="true" />
+            Form Order
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Tutup form"
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
+            aria-label="Tutup"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-warm-700 transition hover:bg-warm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label htmlFor="lead-name" className="text-sm text-zinc-300">Nama</label>
-            <input
-              id="lead-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nama lengkap"
-              autoComplete="name"
-              className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-base placeholder-zinc-500 transition focus:border-orange-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40 motion-reduce:transition-none"
-              maxLength={80}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="lead-phone" className="text-sm text-zinc-300">Nomor WhatsApp</label>
-            <input
-              id="lead-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="08123456789"
-              className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-base placeholder-zinc-500 transition focus:border-orange-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40 motion-reduce:transition-none"
-              maxLength={20}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={submitting || name.trim().length < 2 || phone.trim().length < 8}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:bg-zinc-700 motion-reduce:transition-none"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Mengirim…
-              </>
-            ) : (
-              <>
-                <MessageSquare className="h-4 w-4" aria-hidden="true" /> Kirim &amp; Lanjut di WhatsApp
-              </>
-            )}
-          </button>
-        </form>
+        <iframe
+          src={url}
+          title="Form Order"
+          className="h-full w-full flex-1 border-0"
+        />
       </div>
     </div>
   )

@@ -19,6 +19,7 @@ const createSchema = z.object({
   description: z.string().trim().max(500).optional(),
   hostTemplateId: z.string().trim().min(1),
   productIds: z.array(z.string()).max(40).default([]),
+  featuredProductId: z.string().trim().nullable().optional(),
   systemPrompt: z.string().trim().min(20).max(4000),
   greeting: z.string().trim().max(500).optional(),
   ttsVoice: z.string().trim().max(40).default('alloy'),
@@ -92,6 +93,12 @@ export async function POST(req: Request) {
     }
   }
 
+  // featuredProductId (kalau ada) harus termasuk productIds room.
+  const featuredProductId =
+    data.featuredProductId && data.productIds.includes(data.featuredProductId)
+      ? data.featuredProductId
+      : null
+
   const created = await prisma.liveRoom.create({
     data: {
       userId: session.user.id,
@@ -100,6 +107,7 @@ export async function POST(req: Request) {
       description: data.description ?? null,
       hostTemplateId: data.hostTemplateId,
       productIds: data.productIds,
+      featuredProductId,
       systemPrompt: data.systemPrompt,
       greeting: data.greeting ?? null,
       ttsVoice: data.ttsVoice,

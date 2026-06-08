@@ -13,7 +13,7 @@
 // clientSessionId ke sessionStorage agar LiveRoomView pakai ID yang sama.
 import { useEffect, useRef, useState } from 'react'
 
-import { LiveRoomView } from './LiveRoomView'
+import { LiveRoomView, primeLiveAudio } from './LiveRoomView'
 
 type GateMode = 'REQUIRED' | 'OPTIONAL' | 'HYBRID' | 'OFF'
 type GateField = 'name' | 'phone' | 'email' | 'city' | 'productInterest'
@@ -171,6 +171,10 @@ function GateModal({ name, fields, mode, slug, lpId, clientSessionId, onPass, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Unlock audio host DI DALAM gesture submit (sebelum await fetch) supaya
+    // suara host langsung bunyi tanpa tombol "dengar suara". Element TTS = shared
+    // singleton, jadi prime di sini nge-unlock element yang dipakai LiveRoomView.
+    primeLiveAudio()
     setError(null)
     if (!clientSessionId) {
       setError('Session belum siap, tunggu sebentar.')

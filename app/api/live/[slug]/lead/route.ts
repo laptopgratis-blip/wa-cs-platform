@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { jsonError, jsonOk } from '@/lib/api'
 import { normalizePhone } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
+import { generateQueueForLead } from '@/lib/services/followup-engine'
 import { buildTranscript, logLiveEvent } from '@/lib/services/live/tangkap'
 import { waService } from '@/lib/wa-service'
 
@@ -127,6 +128,14 @@ export async function POST(
     type: 'LEAD_CAPTURE',
     payload: { name: data.name, phone: normalized, productId: data.productId ?? null },
   })
+
+  // Nurture "belum order" — jadwalkan follow-up WA H+1 & H+3 (best-effort,
+  // tidak boleh menggagalkan lead capture). Auto-berhenti kalau customer order.
+  try {
+    await generateQueueForLead(lead.id)
+  } catch (err) {
+    console.error('[live-lead] generateQueueForLead failed', err)
+  }
 
   // ── Handoff WA (best-effort) ────────────────────────────────────────
   // Cari WA session CONNECTED milik owner. Kalau gak ada, skip — owner
