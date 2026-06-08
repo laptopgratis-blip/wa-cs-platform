@@ -14,7 +14,6 @@ import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, Shoppin
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { FlashSaleCountdown } from './FlashSaleCountdown'
-import { ProductDetailSheet } from './ProductDetailSheet'
 
 interface ProductVariant {
   id: string
@@ -165,9 +164,6 @@ export function LiveRoomView({
   const [showLeadForm, setShowLeadForm] = useState(false)
   // Bottom-sheet "Belanja" — TikTok-style product drawer dipicu FAB keranjang.
   const [showProducts, setShowProducts] = useState(false)
-  // Detail sheet 1 produk — pattern TikTok: klik kartu featured atau row di
-  // bottom sheet → detail dulu (gallery + variant + social proof), baru beli.
-  const [detailProduct, setDetailProduct] = useState<Product | null>(null)
   // Modal "Order langsung" — iframe ke form order (/order/[slug]) dengan produk
   // ter-preselect + identitas prefill. Audience order tanpa keluar dari live.
   const [orderModalUrl, setOrderModalUrl] = useState<string | null>(null)
@@ -1191,10 +1187,7 @@ export function LiveRoomView({
         {products.length > 0 ? (
           <FeaturedProductCard
             products={products}
-            onOpenDetail={(p) => {
-              trackProductClick(p.id)
-              setDetailProduct(p)
-            }}
+            onOrder={(p) => openOrderForm(p)}
             onOpenAll={() => setShowProducts(true)}
             productCount={products.length}
             socialStats={socialStats}
@@ -1277,30 +1270,6 @@ export function LiveRoomView({
           onOrder={(p) => {
             openOrderForm(p)
             setShowProducts(false)
-          }}
-          onSelectProduct={(p) => {
-            trackProductClick(p.id)
-            setDetailProduct(p)
-            setShowProducts(false)
-          }}
-        />
-      ) : null}
-
-      {/* ===== PRODUCT DETAIL SHEET — TikTok/Shopee product detail ===== */}
-      {detailProduct ? (
-        <ProductDetailSheet
-          product={detailProduct}
-          socialStats={socialStats}
-          hostName={hostName}
-          totalProducts={products.length}
-          onClose={() => setDetailProduct(null)}
-          onBuy={(p, vId) => {
-            openOrderForm(p, vId)
-            setDetailProduct(null)
-          }}
-          onSeeAll={() => {
-            setDetailProduct(null)
-            setShowProducts(true)
           }}
         />
       ) : null}
@@ -1511,13 +1480,13 @@ function RecentPurchasePopup({
 function FeaturedProductCard({
   products,
   onOpenAll,
-  onOpenDetail,
+  onOrder,
   productCount,
   socialStats,
 }: {
   products: Product[]
   onOpenAll: () => void
-  onOpenDetail: (p: Product) => void
+  onOrder: (p: Product) => void
   productCount: number
   socialStats: SocialStats | null
 }) {
@@ -1558,8 +1527,8 @@ function FeaturedProductCard({
    <div className="flex w-[200px] flex-col items-end gap-1.5">
     <button
       type="button"
-      onClick={() => onOpenDetail(current)}
-      aria-label={`Lihat detail ${current.name}`}
+      onClick={() => onOrder(current)}
+      aria-label={`Order ${current.name}`}
       className="group relative flex w-full items-center gap-2 overflow-hidden rounded-2xl bg-white/95 p-1.5 text-left shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-white/40 backdrop-blur-md transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
     >
       {/* Halo pulse di belakang — standout effect TikTok shop */}
@@ -1655,7 +1624,7 @@ function FeaturedProductCard({
         ) : (
           <div className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-500">
             <ShoppingCart className="h-2.5 w-2.5" aria-hidden="true" />
-            Lihat detail →
+            Order sekarang →
           </div>
         )}
       </div>
@@ -1677,18 +1646,16 @@ function FeaturedProductCard({
 // Countdown mm:ss kalau >0, hh:mm:ss kalau >1 jam, "Berakhir" kalau habis.
 // Update tiap 1dtk.
 // Product bottom-sheet — TikTok Shop drawer. Slide-up dari bawah, backdrop
-// semi-gelap, daftar produk vertikal scroll. Klik baris = buka detail; tombol
-// "Order" = buka form order langsung (modal iframe, produk preselect).
+// semi-gelap, daftar produk vertikal scroll. Klik baris ATAU tombol "Order" =
+// buka form order LANGSUNG (modal iframe, produk preselect).
 function ProductBottomSheet({
   products,
   onClose,
   onOrder,
-  onSelectProduct,
 }: {
   products: Product[]
   onClose: () => void
   onOrder: (p: Product) => void
-  onSelectProduct: (p: Product) => void
 }) {
   return (
     <div
@@ -1735,7 +1702,7 @@ function ProductBottomSheet({
               <div
                 key={p.id}
                 role="listitem"
-                onClick={() => onSelectProduct(p)}
+                onClick={() => onOrder(p)}
                 className={`mb-2 flex cursor-pointer gap-3 rounded-2xl border bg-white p-2.5 shadow-sm transition motion-reduce:transition-none ${
                   flashOn
                     ? 'border-red-300 ring-1 ring-red-200/60 shadow-[0_4px_16px_rgba(239,68,68,0.18)]'
