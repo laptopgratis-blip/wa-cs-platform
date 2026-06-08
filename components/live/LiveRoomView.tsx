@@ -10,7 +10,7 @@
 //
 // Audio queue: TTS hasil per kalimat di-play berurutan. Saat playing, video
 // tetap loop (no lip-sync per kata — di handphone aman, di mobile UX live shop).
-import { CheckCircle2, Eye, Flame, HelpCircle, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
+import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { FlashSaleCountdown } from './FlashSaleCountdown'
@@ -168,6 +168,9 @@ export function LiveRoomView({
   // Detail sheet 1 produk — pattern TikTok: klik kartu featured atau row di
   // bottom sheet → detail dulu (gallery + variant + social proof), baru beli.
   const [detailProduct, setDetailProduct] = useState<Product | null>(null)
+  // Modal "Order langsung" — iframe ke form order (/order/[slug]) dengan produk
+  // ter-preselect + identitas prefill. Audience order tanpa keluar dari live.
+  const [orderModalUrl, setOrderModalUrl] = useState<string | null>(null)
   // Live social proof — di-poll tiap 7dtk dari /api/live/[slug]/social-stats.
   const [socialStats, setSocialStats] = useState<SocialStats | null>(null)
   // Recent buyer toast — pop sekali per pembeli (key=name+ago) supaya tidak
@@ -732,6 +735,27 @@ export function LiveRoomView({
     await dispatchChat({ text: msg, isBot: false })
   }, [input, sending, dispatchChat])
 
+  // Auto-sapa: begitu audience masuk (identity + session siap), kirim komen
+  // "halo" sekali supaya host LANGSUNG bicara — sebelumnya host diam sampai ada
+  // komen pertama. Guard ref = sekali per mount.
+  // dispatchChat dipegang via ref supaya effect TIDAK re-run saat messages
+  // berubah (kalau ikut deps, cleanup-nya bisa keburu cancel timeout "halo").
+  const autoGreetedRef = useRef(false)
+  const dispatchChatRef = useRef(dispatchChat)
+  useEffect(() => {
+    dispatchChatRef.current = dispatchChat
+  }, [dispatchChat])
+  useEffect(() => {
+    if (autoGreetedRef.current) return
+    if (!identity || !clientSessionId) return
+    autoGreetedRef.current = true
+    // Delay kecil supaya greeting scene + audio unlock sempat siap dulu.
+    const t = setTimeout(() => {
+      void dispatchChatRef.current({ text: 'halo', isBot: false })
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [identity, clientSessionId])
+
   // Bot timer — pick random prompt tiap interval. Pause kalau:
   //   - bot disabled
   //   - prompts empty
@@ -837,15 +861,27 @@ export function LiveRoomView({
     setLastClickedProductId(productId)
   }
 
-  function productOrderHref(p: Product): string | null {
-    if (!orderFormSlug) return null
-    return `/order/${encodeURIComponent(orderFormSlug)}?product=${encodeURIComponent(p.id)}`
-  }
-
   function onProductAsk(p: Product) {
     // "Tanya" button — selalu isi chat input, gak buka form.
     trackProductClick(p.id)
     setInput(`Saya tertarik ${p.name}. Bisa ceritain lebih detail?`)
+  }
+
+  // Buka form order LANGSUNG (modal iframe) — produk ter-preselect + nama/HP
+  // prefill dari identitas. Kalau order form belum di-set, fallback ke chat host.
+  function openOrderForm(p: Product, variantId?: string | null) {
+    trackProductClick(p.id)
+    if (!orderFormSlug) {
+      onProductAsk(p)
+      return
+    }
+    const params = new URLSearchParams({ product: p.id, embed: '1' })
+    if (variantId) params.set('variant', variantId)
+    if (identity?.name) params.set('name', identity.name)
+    if (identity?.phone) params.set('phone', identity.phone)
+    setOrderModalUrl(
+      `/order/${encodeURIComponent(orderFormSlug)}?${params.toString()}`,
+    )
   }
 
   // Show "Order via WA" trigger setelah ≥3 user message ATAU minimal 1 product click.
@@ -1246,8 +1282,8 @@ export function LiveRoomView({
         <ProductBottomSheet
           products={products}
           onClose={() => setShowProducts(false)}
-          onAsk={(p) => {
-            onProductAsk(p)
+          onOrder={(p) => {
+            openOrderForm(p)
             setShowProducts(false)
           }}
           onSelectProduct={(p) => {
@@ -1255,8 +1291,6 @@ export function LiveRoomView({
             setDetailProduct(p)
             setShowProducts(false)
           }}
-          onTrackClick={trackProductClick}
-          orderHref={productOrderHref}
         />
       ) : null}
 
@@ -1269,23 +1303,22 @@ export function LiveRoomView({
           totalProducts={products.length}
           hasOrderForm={Boolean(orderFormSlug)}
           onClose={() => setDetailProduct(null)}
-          onAsk={(p) => {
-            onProductAsk(p)
-            setDetailProduct(null)
-          }}
           onBuy={(p, vId) => {
-            trackProductClick(p.id)
-            const href = productOrderHref(p)
-            if (href) {
-              const url = vId ? `${href}&variant=${encodeURIComponent(vId)}` : href
-              window.open(url, '_blank', 'noopener,noreferrer')
-            }
+            openOrderForm(p, vId)
             setDetailProduct(null)
           }}
           onSeeAll={() => {
             setDetailProduct(null)
             setShowProducts(true)
           }}
+        />
+      ) : null}
+
+      {/* ===== ORDER FORM MODAL — iframe form order, langsung bisa checkout ===== */}
+      {orderModalUrl ? (
+        <OrderFormModal
+          url={orderModalUrl}
+          onClose={() => setOrderModalUrl(null)}
         />
       ) : null}
 
@@ -1653,22 +1686,18 @@ function FeaturedProductCard({
 // Countdown mm:ss kalau >0, hh:mm:ss kalau >1 jam, "Berakhir" kalau habis.
 // Update tiap 1dtk.
 // Product bottom-sheet — TikTok Shop drawer. Slide-up dari bawah, backdrop
-// semi-gelap, daftar produk vertikal scroll. Klik produk = order link buka
-// tab baru; tombol "Tanya host" = inject ke chat input + tutup sheet.
+// semi-gelap, daftar produk vertikal scroll. Klik baris = buka detail; tombol
+// "Order" = buka form order langsung (modal iframe, produk preselect).
 function ProductBottomSheet({
   products,
   onClose,
-  onAsk,
+  onOrder,
   onSelectProduct,
-  onTrackClick,
-  orderHref,
 }: {
   products: Product[]
   onClose: () => void
-  onAsk: (p: Product) => void
+  onOrder: (p: Product) => void
   onSelectProduct: (p: Product) => void
-  onTrackClick: (id: string) => void
-  orderHref: (p: Product) => string | null
 }) {
   return (
     <div
@@ -1704,7 +1733,6 @@ function ProductBottomSheet({
         </div>
         <div className="overflow-y-auto px-3 pb-[max(env(safe-area-inset-bottom),1rem)]" role="list" aria-label="Daftar produk">
           {products.map((p) => {
-            const href = orderHref(p)
             const flashOn =
               p.flashSalePrice != null && p.flashSalePrice < p.price
             const discount = flashOn
@@ -1780,32 +1808,17 @@ function ProductBottomSheet({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          onAsk(p)
+                          onOrder(p)
                         }}
-                        aria-label={`Tanya host tentang ${p.name}`}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-warm-200 text-warm-700 transition hover:bg-warm-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
+                        aria-label={`Order ${p.name}`}
+                        className={`flex h-9 items-center gap-1 rounded-full px-4 text-xs font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
+                          flashOn
+                            ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
+                            : 'bg-orange-500 hover:bg-orange-600 focus-visible:ring-orange-400'
+                        }`}
                       >
-                        <HelpCircle className="h-4 w-4" aria-hidden="true" />
+                        <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" /> Order
                       </button>
-                      {href ? (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onTrackClick(p.id)
-                          }}
-                          aria-label={`Order ${p.name}`}
-                          className={`flex h-9 items-center gap-1 rounded-full px-4 text-xs font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 motion-reduce:transition-none ${
-                            flashOn
-                              ? 'bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 focus-visible:ring-red-400'
-                              : 'bg-orange-500 hover:bg-orange-600 focus-visible:ring-orange-400'
-                          }`}
-                        >
-                          <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" /> Order
-                        </a>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1813,6 +1826,56 @@ function ProductBottomSheet({
             )
           })}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Modal form order — iframe ke /order/[slug] (produk preselect + identitas
+// prefill via query). Audience checkout langsung tanpa keluar dari live.
+function OrderFormModal({
+  url,
+  onClose,
+}: {
+  url: string
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Form order"
+    >
+      <button
+        type="button"
+        aria-label="Tutup form order"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200"
+      />
+      <div
+        className="relative z-10 flex w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl motion-safe:animate-in motion-safe:slide-in-from-bottom motion-safe:duration-300"
+        style={{ height: '92dvh' }}
+      >
+        <div className="flex items-center justify-between border-b border-warm-200 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-warm-800">
+            <ShoppingCart className="h-4 w-4 text-orange-500" aria-hidden="true" />
+            Form Order
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-warm-700 transition hover:bg-warm-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
+        <iframe
+          src={url}
+          title="Form Order"
+          className="h-full w-full flex-1 border-0"
+        />
       </div>
     </div>
   )

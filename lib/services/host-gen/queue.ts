@@ -6,7 +6,7 @@
 //
 // Pattern serial dalam 1 user, tapi job lain user paralel — di MVP gak ada
 // concurrency limit. Pas Skala besar tambah lock di GenerationJob.
-import { HostTemplateStatus, GenerationJobStatus } from '@prisma/client'
+import { HostTemplateStatus, GenerationJobStatus, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -23,6 +23,13 @@ import {
   DEFAULT_KLING_MODEL,
 } from './kling'
 import { fileToBase64, generateHostImage } from './gemini-image'
+import {
+  appendImageVariant,
+  newVariantId,
+  parseVariants,
+  removeImageVariant,
+  type HostImageVariant,
+} from './image-variants'
 
 export const HOST_IMAGE_FEATURE_KEY = 'HOST_IMAGE_GEMINI_NANO'
 export const HOST_VIDEO_FEATURE_KEY = 'HOST_VIDEO_KLING_V3'
@@ -353,6 +360,170 @@ export async function enqueueAndRunImageJob(input: {
     })
     throw err
   }
+}
+
+// ── IMAGE VARIANTS (galeri kandidat) ──────────────────────────────────────
+// Generate gambar kandidat TAMBAHAN tanpa menyentuh sourceImageUrl/status.
+// Hasil di-append ke HostTemplate.imageVariants. Owner pilih "Pakai ini" nanti
+// (activateImageVariant) untuk jadikan sourceImageUrl aktif.
+// withProduct=false → ref produk TIDAK dikirim + directive "tangan kosong",
+// supaya bisa generate host bersih lalu composite produk manual di luar.
+const NO_PRODUCT_DIRECTIVE = `
+
+IMPORTANT — NO PRODUCT IN HANDS: The host's hands are completely empty and relaxed. Do NOT place any product, box, bottle, jar, pouch, or item in the host's hands or in the scene. Clean empty hands, natural relaxed posture, nothing held.`
+
+export async function generateImageVariant(input: {
+  userId: string
+  hostTemplateId: string
+  prompt: string
+  referenceImageUrls: string[]
+  withProduct: boolean
+}): Promise<HostImageVariant> {
+  const prompt = input.withProduct
+    ? input.prompt
+    : `${input.prompt}${NO_PRODUCT_DIRECTIVE}`
+  const refs = input.withProduct ? input.referenceImageUrls : []
+
+  const job = await prisma.generationJob.create({
+    data: {
+      userId: input.userId,
+      hostTemplateId: input.hostTemplateId,
+      type: 'HOST_IMAGE',
+      provider: 'GOOGLE',
+      model: 'gemini-3.1-flash-image-preview',
+      inputPayload: {
+        prompt,
+        referenceImageUrls: refs,
+        variant: true,
+        withProduct: input.withProduct,
+      },
+      status: GenerationJobStatus.RUNNING,
+      startedAt: new Date(),
+    },
+  })
+
+  try {
+    const refImages = await Promise.all(refs.map((u) => fileToBase64(u)))
+    const { result, charge } = await executeMediaSync({
+      featureKey: HOST_IMAGE_FEATURE_KEY,
+      userId: input.userId,
+      ctx: {
+        referencePrefix: `host_img_var:${input.hostTemplateId}`,
+        description: `Host image variant — ${input.hostTemplateId}`,
+        subjectType: 'HOST_TEMPLATE',
+        subjectId: input.hostTemplateId,
+        units: 1,
+        mediaCall: () =>
+          generateHostImage({
+            userId: input.userId,
+            prompt,
+            referenceImages: refImages,
+          }),
+      },
+    })
+
+    await prisma.generationJob.update({
+      where: { id: job.id },
+      data: {
+        status: GenerationJobStatus.DONE,
+        outputUrl: result.imagePath,
+        apiCostUsd: charge.apiCostUsd,
+        tokensCharged: charge.tokensCharged,
+        finishedAt: new Date(),
+      },
+    })
+
+    const variant: HostImageVariant = {
+      id: newVariantId(),
+      url: result.imagePath,
+      source: 'GENERATED',
+      withProduct: input.withProduct,
+      label: input.withProduct ? 'Dengan produk' : 'Tanpa produk',
+      createdAt: new Date().toISOString(),
+    }
+    await appendImageVariant(input.hostTemplateId, variant)
+    return variant
+  } catch (err) {
+    await prisma.generationJob.update({
+      where: { id: job.id },
+      data: {
+        status: GenerationJobStatus.FAILED,
+        errorMessage: (err as Error).message.slice(0, 1000),
+        finishedAt: new Date(),
+      },
+    })
+    throw err
+  }
+}
+
+export interface ActivateVariantResult {
+  sourceImageUrl: string
+  staleWarning: string | null
+}
+
+// Set 1 variant jadi gambar aktif (sourceImageUrl). Invalidasi turunan yg
+// di-derive dari gambar lama: vision analysis + approval di-reset; untuk
+// NATIVE_LIBRARY langsung re-analyze (fire-and-forget). staleWarning kasih tahu
+// owner kalau ada baseline/scene lama yg sekarang basi (dari gambar sebelumnya).
+export async function activateImageVariant(
+  hostTemplateId: string,
+  variantId: string,
+): Promise<ActivateVariantResult> {
+  const host = await prisma.hostTemplate.findUnique({
+    where: { id: hostTemplateId },
+    select: { id: true, mode: true, imageVariants: true, videoLoopUrl: true },
+  })
+  if (!host) throw new Error('Host template tidak ditemukan')
+  const variant = parseVariants(host.imageVariants).find((v) => v.id === variantId)
+  if (!variant) throw new Error('Kandidat gambar tidak ditemukan')
+
+  await prisma.hostTemplate.update({
+    where: { id: hostTemplateId },
+    data: {
+      sourceImageUrl: variant.url,
+      status: HostTemplateStatus.IMAGE_READY,
+      errorMessage: null,
+      // Turunan dari gambar lama jadi tidak valid:
+      visionAnalysis: Prisma.DbNull,
+      visionAnalyzedAt: null,
+      imageApprovedAt: null,
+    },
+  })
+
+  if (host.mode === 'NATIVE_LIBRARY') {
+    void autoVisionAnalyzeHost(hostTemplateId).catch((e) => {
+      console.error('[activateImageVariant→autoVision] gagal:', e)
+    })
+  }
+
+  // Deteksi turunan basi.
+  const sceneCount = await prisma.hostScene.count({ where: { hostTemplateId } })
+  const hasBaseline = Boolean(host.videoLoopUrl)
+  let staleWarning: string | null = null
+  if (host.mode === 'NATIVE_LIBRARY' && hasBaseline) {
+    staleWarning =
+      'Baseline & klip lama dibuat dari gambar sebelumnya — generate ulang baseline supaya cocok dengan gambar baru.'
+  } else if (sceneCount > 0) {
+    staleWarning = `${sceneCount} scene lama dibuat dari gambar sebelumnya — generate ulang scene supaya cocok dengan gambar baru.`
+  }
+
+  return { sourceImageUrl: variant.url, staleWarning }
+}
+
+export async function deleteImageVariant(input: {
+  hostTemplateId: string
+  variantId: string
+}): Promise<HostImageVariant[]> {
+  const host = await prisma.hostTemplate.findUnique({
+    where: { id: input.hostTemplateId },
+    select: { sourceImageUrl: true, imageVariants: true },
+  })
+  if (!host) throw new Error('Host template tidak ditemukan')
+  const target = parseVariants(host.imageVariants).find((v) => v.id === input.variantId)
+  if (target && target.url === host.sourceImageUrl) {
+    throw new Error('Tidak bisa hapus kandidat yang sedang aktif. Pilih kandidat lain dulu.')
+  }
+  return removeImageVariant(input.hostTemplateId, input.variantId)
 }
 
 // ── VIDEO (async) ────────────────────────────────────────────────────────

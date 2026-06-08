@@ -27,6 +27,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { HostImageGallery } from './HostImageGallery'
+
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -303,6 +305,17 @@ export function HostSceneBoard({
             </details>
           </CardContent>
         </div>
+      </Card>
+
+      {/* GALERI GAMBAR HOST — generate/upload/pilih kandidat */}
+      <Card>
+        <CardContent className="p-4">
+          <HostImageGallery
+            hostId={host.id}
+            defaultPromptImage={host.promptImage}
+            onActiveChanged={fetchAll}
+          />
+        </CardContent>
       </Card>
 
       {/* SCENES SECTION HEADER */}

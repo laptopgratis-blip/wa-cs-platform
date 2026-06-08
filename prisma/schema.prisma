@@ -3084,7 +3084,11 @@ model HostTemplate {
   promptImage    String             @db.Text // prompt ke Gemini
   promptVideo    String             @db.Text // prompt gerakan ke Kling (TTS mode), default motion (Klip Live mode)
   refImageUrls   String[]           @default([]) // referensi produk (sampai 14, dipakai Gemini)
-  sourceImageUrl String? // hasil Gemini, path lokal
+  sourceImageUrl String? // hasil Gemini, path lokal — POINTER AKTIF yg dipakai semua pipeline video
+  // Galeri kandidat gambar host (history + upload eksternal). sourceImageUrl tetap
+  // source-of-truth; ini cuma kumpulan kandidat yg bisa di-"Pakai ini".
+  // Bentuk: [{ id, url, source: 'GENERATED'|'UPLOADED', label?, withProduct?, createdAt }]
+  imageVariants  Json               @default("[]")
   videoLoopUrl   String? // hasil Kling sudah di-download, path lokal (TTS mode)
   videoSeconds   Int? // durasi video final (5 / 10)
   status         HostTemplateStatus @default(DRAFT)

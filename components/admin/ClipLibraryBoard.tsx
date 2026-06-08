@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 
 import { BaselineComposer } from './BaselineComposer'
 import { BulkGenerateModal } from './BulkGenerateModal'
+import { HostImageGallery } from './HostImageGallery'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -394,13 +395,28 @@ export function ClipLibraryBoard({
       />
     )
   }
-  if (!hasSourceImage) {
+  // Source bisa muncul setelah owner generate/upload + "Pakai ini" di galeri —
+  // pakai prepStatus.sourceImageUrl (live) sbg sumber kebenaran, fallback prop.
+  const effectiveHasSource = hasSourceImage || Boolean(prepStatus?.sourceImageUrl)
+  if (!effectiveHasSource) {
     return (
-      <PrereqWarning
-        title="Belum ada source image"
-        message="Generate image dulu sebelum bisa bikin klip. Klik 'Generate Image' di halaman host detail."
-        backHref={backHref}
-      />
+      <div className="space-y-4">
+        <Link href={backHref} className="text-xs text-muted-foreground hover:underline">
+          ← Kembali
+        </Link>
+        <h1 className="text-xl font-semibold">🎙️ Klip Live — {hostName}</h1>
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <div className="text-sm font-semibold">🖼️ Siapkan gambar host dulu</div>
+            <p className="text-xs text-muted-foreground">
+              Generate gambar host (boleh <strong>tanpa produk</strong>), atau upload
+              gambar hasil edit, lalu klik <strong>Pakai ini</strong>. Setelah itu
+              vision-analyzer & baseline jalan.
+            </p>
+            <HostImageGallery hostId={hostId} onActiveChanged={fetchPrepStatus} />
+          </CardContent>
+        </Card>
+      </div>
     )
   }
   // Pre-req auto-prep: vision + baseline video. Tampil panel progress kalau
@@ -569,6 +585,19 @@ export function ClipLibraryBoard({
           </CardContent>
         </Card>
       ) : null}
+
+      {/* Galeri gambar host — ganti gambar aktif (regen baseline jika perlu) */}
+      <Card>
+        <CardContent className="p-4">
+          <HostImageGallery
+            hostId={hostId}
+            onActiveChanged={() => {
+              void fetchPrepStatus()
+              refreshBaselines()
+            }}
+          />
+        </CardContent>
+      </Card>
 
       {/* Voice picker — card grid, filter Indonesian default, preview + test */}
       <VoicePickerCard
