@@ -861,20 +861,12 @@ export function LiveRoomView({
     setLastClickedProductId(productId)
   }
 
-  function onProductAsk(p: Product) {
-    // "Tanya" button — selalu isi chat input, gak buka form.
-    trackProductClick(p.id)
-    setInput(`Saya tertarik ${p.name}. Bisa ceritain lebih detail?`)
-  }
-
   // Buka form order LANGSUNG (modal iframe) — produk ter-preselect + nama/HP
-  // prefill dari identitas. Kalau order form belum di-set, fallback ke chat host.
+  // prefill dari identitas. orderFormSlug selalu terisi (di-resolve server-side
+  // ke form default owner), jadi tombol Order SELALU ke form, bukan chat host.
   function openOrderForm(p: Product, variantId?: string | null) {
     trackProductClick(p.id)
-    if (!orderFormSlug) {
-      onProductAsk(p)
-      return
-    }
+    if (!orderFormSlug) return
     const params = new URLSearchParams({ product: p.id, embed: '1' })
     if (variantId) params.set('variant', variantId)
     if (identity?.name) params.set('name', identity.name)
@@ -1301,7 +1293,6 @@ export function LiveRoomView({
           socialStats={socialStats}
           hostName={hostName}
           totalProducts={products.length}
-          hasOrderForm={Boolean(orderFormSlug)}
           onClose={() => setDetailProduct(null)}
           onBuy={(p, vId) => {
             openOrderForm(p, vId)

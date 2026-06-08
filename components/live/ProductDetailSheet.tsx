@@ -48,7 +48,6 @@ export function ProductDetailSheet({
   product,
   socialStats,
   totalProducts,
-  hasOrderForm,
   onClose,
   onBuy,
   onSeeAll,
@@ -57,7 +56,6 @@ export function ProductDetailSheet({
   socialStats: SocialStats | null
   hostName: string
   totalProducts: number
-  hasOrderForm: boolean
   onClose: () => void
   onBuy: (product: ProductFull, variantId: string | null) => void
   onSeeAll: () => void
@@ -370,7 +368,7 @@ export function ProductDetailSheet({
             }`}
           >
             <ShoppingBag className="h-4 w-4" aria-hidden="true" />
-            {outOfStock ? 'Stok habis' : hasOrderForm ? 'Order sekarang' : 'Order via host'}
+            {outOfStock ? 'Stok habis' : 'Order sekarang'}
           </button>
         </div>
       </div>
