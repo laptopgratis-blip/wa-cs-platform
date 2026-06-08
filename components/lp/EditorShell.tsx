@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { AiGenerator } from '@/components/lp/AiGenerator'
 import { ColorsPanel } from '@/components/lp/ColorsPanel'
 import { CtaLinkPanel } from '@/components/lp/CtaLinkPanel'
+import { LiveEmbedPanel } from '@/components/lp/LiveEmbedPanel'
 import { EditorTopbar, type SaveStatus, type Viewport } from '@/components/lp/EditorTopbar'
 import { HtmlEditor } from '@/components/lp/HtmlEditor'
 import { ImageManager } from '@/components/lp/ImageManager'
@@ -332,6 +333,11 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
               initialOpen={!hasContent}
             />
             <CtaLinkPanel html={htmlContent} onChange={setHtmlContent} />
+            <LiveEmbedPanel
+              lpId={initial.id}
+              html={htmlContent}
+              onChange={setHtmlContent}
+            />
             <div className="flex min-h-[500px] flex-1 flex-col">
               <VisualEditor
                 htmlContent={htmlContent}

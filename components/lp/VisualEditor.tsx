@@ -237,11 +237,20 @@ function injectedClickScript(): string {
 // Asumsi htmlContent SUDAH ditag (data-lp-edit).
 function wrapForIframe(taggedHtml: string): string {
   const script = `<script>${injectedClickScript()}</script>`
+  // Placeholder visual untuk marker Live Room (editor-only — tidak ikut
+  // tersimpan / tidak muncul di halaman publish). Bikin posisi embed jelas
+  // terlihat di preview supaya user tidak bingung.
+  const livePlaceholderStyle = `<style>
+    [data-hulao-live-embed]{position:relative;min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:16px auto;max-width:420px;border:2px dashed #fb923c;border-radius:18px;background:linear-gradient(135deg,#fff7ed,#ffedd5);color:#9a3412;font:600 14px/1.45 system-ui,-apple-system,sans-serif;text-align:center;padding:24px 20px}
+    [data-hulao-live-embed]::before{content:"📺  LIVE ROOM";letter-spacing:.08em;font-weight:800;font-size:12px;opacity:.85}
+    [data-hulao-live-embed]::after{content:"Tampil di sini saat halaman dipublish";font-weight:500;font-size:13px}
+  </style>`
+  const inject = livePlaceholderStyle + script
   // Kalau ada </body>, sisip sebelum penutup. Kalau tidak, append di akhir.
   if (/<\/body>/i.test(taggedHtml)) {
-    return taggedHtml.replace(/<\/body>/i, `${script}</body>`)
+    return taggedHtml.replace(/<\/body>/i, `${inject}</body>`)
   }
-  return taggedHtml + script
+  return taggedHtml + inject
 }
 
 export function VisualEditor({ htmlContent, viewport, onChange }: Props) {

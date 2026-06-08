@@ -595,6 +595,48 @@ export function replaceAllNonWaAnchorHrefs(
   })
 }
 
+// ─── Live Room embed marker ────────────────────────────────────────────────
+// Widget hulao-live-embed.js (di-inject di /p/[slug]) mencari elemen
+// [data-hulao-live-embed] lalu mengganti isinya dengan iframe room. Kita
+// sisipkan marker tepat SETELAH headline (h1) pertama supaya embed tampil di
+// bawah judul LP. Marker = elemen kosong; isinya diisi widget saat publish.
+const LIVE_EMBED_ATTR = 'data-hulao-live-embed'
+
+export function hasLiveEmbedMarker(html: string): boolean {
+  if (!html) return false
+  if (typeof window === 'undefined') return /data-hulao-live-embed/i.test(html)
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return Boolean(doc.querySelector(`[${LIVE_EMBED_ATTR}]`))
+}
+
+// Sisip marker setelah headline pertama (h1 → fallback h2 → fallback awal body).
+// Idempotent: kalau marker sudah ada, kembalikan html apa adanya.
+export function insertLiveEmbedMarker(html: string): string {
+  if (typeof window === 'undefined') return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  if (doc.querySelector(`[${LIVE_EMBED_ATTR}]`)) return html
+  const marker = doc.createElement('div')
+  marker.setAttribute(LIVE_EMBED_ATTR, '')
+  marker.className = 'hulao-live-embed-slot'
+  const headline =
+    doc.body.querySelector('h1') ?? doc.body.querySelector('h2')
+  if (headline?.parentNode) {
+    headline.parentNode.insertBefore(marker, headline.nextSibling)
+  } else {
+    doc.body.insertBefore(marker, doc.body.firstChild)
+  }
+  return serializeFullDoc(doc, html)
+}
+
+export function removeLiveEmbedMarker(html: string): string {
+  if (typeof window === 'undefined') return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const markers = doc.querySelectorAll(`[${LIVE_EMBED_ATTR}]`)
+  if (markers.length === 0) return html
+  markers.forEach((el) => el.remove())
+  return serializeFullDoc(doc, html)
+}
+
 // Standard pixel events — superset dari yang di-support semua platform.
 // Custom event bisa dimasukkan via input bebas di UI.
 export const PIXEL_EVENT_PRESETS = [
