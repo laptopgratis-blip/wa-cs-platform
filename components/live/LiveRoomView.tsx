@@ -1231,25 +1231,19 @@ export function LiveRoomView({
       <FloatingChatOverlay
         messages={messages}
         hostName={hostName}
-        raised={products.length > 0}
       />
 
-      {/* ===== RIGHT ACTION STACK — Featured (pinned) product card + Order CTA.
-           Diangkat di atas product rail kalau ada produk. ===== */}
-      <div
-        className={`absolute right-3 z-30 flex flex-col items-end gap-2.5 ${
-          products.length > 0 ? 'bottom-[9.5rem]' : 'bottom-24'
-        }`}
-      >
+      {/* ===== RIGHT ACTION STACK — SATU kartu produk (TikTok-style) + Order CTA.
+           Kartu menampilkan produk unggulan; tap = buka keranjang (semua produk). ===== */}
+      <div className="absolute right-3 bottom-24 z-30 flex flex-col items-end gap-2.5">
         {products.length > 0 ? (
           <FeaturedProductCard
             products={products}
             featuredProduct={
-              featuredProductId
-                ? products.find((p) => p.id === featuredProductId) ?? null
-                : null
+              (featuredProductId
+                ? products.find((p) => p.id === featuredProductId)
+                : null) ?? products[0] ?? null
             }
-            onOrder={(p) => openOrderForm(p)}
             onOpenAll={() => setShowProducts(true)}
             productCount={products.length}
             socialStats={socialStats}
@@ -1298,17 +1292,8 @@ export function LiveRoomView({
         ) : null}
       </div>
 
-      {/* ===== BOTTOM DOCK — product rail (banyak produk) + composer ===== */}
-      <div className="absolute inset-x-0 bottom-0 z-30">
-        {products.length > 0 ? (
-          <ProductRail
-            products={products}
-            featuredProductId={featuredProductId}
-            onOrder={(p) => openOrderForm(p)}
-            onOpenAll={() => setShowProducts(true)}
-          />
-        ) : null}
-        <div className="px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
+      {/* ===== BOTTOM COMPOSER — tipis transparan, TikTok style ===== */}
+      <div className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
         <form
           onSubmit={(e) => {
             e.preventDefault()
@@ -1346,7 +1331,6 @@ export function LiveRoomView({
             )}
           </button>
         </form>
-        </div>
       </div>
 
       {/* ===== PRODUCT BOTTOM SHEET — slide-up drawer TikTok shop style ===== */}
@@ -1402,12 +1386,9 @@ export function LiveRoomView({
 function FloatingChatOverlay({
   messages,
   hostName,
-  raised = false,
 }: {
   messages: ChatMsg[]
   hostName: string
-  // Naikkan posisi kalau ada product rail di bawah supaya tidak ketutупan.
-  raised?: boolean
 }) {
   const MAX_VISIBLE = 7
   const visible = messages
@@ -1418,9 +1399,7 @@ function FloatingChatOverlay({
 
   return (
     <div
-      className={`pointer-events-none absolute left-3 right-24 z-20 flex max-h-[38%] flex-col justify-end gap-1 overflow-hidden ${
-        raised ? 'bottom-[9rem]' : 'bottom-16'
-      }`}
+      className="pointer-events-none absolute bottom-16 left-3 right-24 z-20 flex max-h-[42%] flex-col justify-end gap-1 overflow-hidden"
       style={{
         maskImage:
           'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 18%, rgba(0,0,0,1) 38%)',
@@ -1561,37 +1540,19 @@ function FeaturedProductCard({
   products,
   featuredProduct = null,
   onOpenAll,
-  onOrder,
   productCount,
   socialStats,
 }: {
   products: Product[]
-  // Kalau di-set → kartu PIN produk ini (tidak cycle). Kalau null → cycle
-  // semua produk tiap 5dtk (perilaku lama).
+  // Produk unggulan yang ditampilkan di kartu (di-pin admin, fallback produk
+  // pertama). Kartu STATIS — tap = buka keranjang (semua produk).
   featuredProduct?: Product | null
   onOpenAll: () => void
-  onOrder: (p: Product) => void
   productCount: number
   socialStats: SocialStats | null
 }) {
-  const [idx, setIdx] = useState(0)
-  const [fading, setFading] = useState(false)
-  const pinned = Boolean(featuredProduct)
-
-  // Auto-cycle tiap 5dtk — hanya kalau TIDAK ada produk yang di-pin.
-  useEffect(() => {
-    if (pinned || products.length <= 1) return
-    const t = setInterval(() => {
-      setFading(true)
-      setTimeout(() => {
-        setIdx((i) => (i + 1) % products.length)
-        setFading(false)
-      }, 220)
-    }, 5000)
-    return () => clearInterval(t)
-  }, [products.length, pinned])
-
-  const current = featuredProduct ?? products[idx]
+  const fading = false
+  const current = featuredProduct ?? products[0]
   if (!current) return null
 
   const flashOn =
@@ -1612,10 +1573,19 @@ function FeaturedProductCard({
    <div className="flex w-[200px] flex-col items-end gap-1.5">
     <button
       type="button"
-      onClick={() => onOrder(current)}
-      aria-label={`Order ${current.name}`}
+      onClick={onOpenAll}
+      aria-label={`Belanja — lihat ${productCount} produk`}
       className="group relative flex w-full items-center gap-2 overflow-hidden rounded-2xl bg-white/95 p-1.5 text-left shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-white/40 backdrop-blur-md transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
     >
+      {/* Badge keranjang — sinyal "ada N produk, ketuk untuk lihat semua" */}
+      {productCount > 1 ? (
+        <span
+          className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-bold text-white shadow"
+          aria-hidden="true"
+        >
+          <ShoppingCart className="h-2.5 w-2.5" /> {productCount}
+        </span>
+      ) : null}
       {/* Halo pulse di belakang — standout effect TikTok shop */}
       <span
         aria-hidden="true"
@@ -1669,7 +1639,7 @@ function FeaturedProductCard({
             </span>
           )}
           <span className="text-[9px] font-medium uppercase tracking-wide text-warm-500">
-            {pinned ? '★ Unggulan' : `${idx + 1}/${productCount}`}
+            ★ Unggulan
           </span>
         </div>
         <div className="line-clamp-1 text-[11px] font-semibold leading-tight text-foreground">
@@ -1709,126 +1679,12 @@ function FeaturedProductCard({
         ) : (
           <div className="flex items-center gap-0.5 text-[9px] font-semibold uppercase tracking-wider text-orange-500">
             <ShoppingCart className="h-2.5 w-2.5" aria-hidden="true" />
-            Order sekarang →
+            {productCount > 1 ? `${productCount} produk · Ketuk` : 'Ketuk untuk order'}
           </div>
         )}
       </div>
     </button>
-    {productCount > 1 ? (
-      <button
-        type="button"
-        onClick={onOpenAll}
-        aria-label={`Lihat semua ${productCount} produk`}
-        className="rounded-full bg-black/55 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-white backdrop-blur-md transition hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
-      >
-        Semua produk ({productCount}) →
-      </button>
-    ) : null}
    </div>
-  )
-}
-
-// Product rail — strip horizontal SEMUA produk terpilih, scroll-snap, di atas
-// composer. Tujuan: banyak produk "tercantum" sekaligus tanpa menutup wajah
-// host. Kartu = surface putih solid (legible di atas video apa pun). Tap chip →
-// buka form order langsung. Chip terakhir = "Semua (N)" → bottom sheet.
-function ProductRail({
-  products,
-  featuredProductId,
-  onOrder,
-  onOpenAll,
-}: {
-  products: Product[]
-  featuredProductId: string | null
-  onOrder: (p: Product) => void
-  onOpenAll: () => void
-}) {
-  if (products.length === 0) return null
-  return (
-    <div className="px-2 pb-1 pt-1.5">
-      <div
-        role="list"
-        aria-label="Daftar produk live"
-        className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ scrollSnapType: 'x proximity' }}
-      >
-        {products.map((p) => {
-          const flashOn =
-            p.flashSalePrice != null && p.flashSalePrice < p.price
-          const isFeatured = featuredProductId === p.id
-          return (
-            <button
-              key={p.id}
-              type="button"
-              role="listitem"
-              onClick={() => onOrder(p)}
-              aria-label={`Order ${p.name}, Rp ${(flashOn ? (p.flashSalePrice as number) : p.price).toLocaleString('id-ID')}`}
-              className="flex w-[150px] flex-shrink-0 items-center gap-2 rounded-xl bg-white/95 p-1.5 text-left shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/5 backdrop-blur-sm transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
-              style={{ scrollSnapAlign: 'start' }}
-            >
-              <div className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg bg-warm-100">
-                {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={p.imageUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-warm-400" aria-hidden="true">
-                    <ShoppingCart className="h-4 w-4" />
-                  </div>
-                )}
-                {isFeatured ? (
-                  <span
-                    className="absolute left-0 top-0 rounded-br-md bg-amber-400 px-1 py-px text-[8px] font-black leading-none text-white"
-                    aria-label="Produk unggulan"
-                  >
-                    ★
-                  </span>
-                ) : flashOn ? (
-                  <span className="absolute left-0 top-0 rounded-br-md bg-red-600 px-1 py-px text-[8px] font-black uppercase leading-none tracking-wider text-white">
-                    SALE
-                  </span>
-                ) : null}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="line-clamp-1 text-[11px] font-semibold leading-tight text-foreground">
-                  {p.name}
-                </div>
-                {flashOn ? (
-                  <div className="flex items-baseline gap-1 leading-none">
-                    <span className="text-[12px] font-black tabular-nums text-red-600">
-                      Rp {(p.flashSalePrice as number).toLocaleString('id-ID')}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="text-[12px] font-bold tabular-nums leading-none text-orange-600">
-                    Rp {p.price.toLocaleString('id-ID')}
-                  </div>
-                )}
-                <div className="mt-0.5 flex items-center gap-0.5 text-[8px] font-semibold uppercase tracking-wider text-orange-500">
-                  <ShoppingCart className="h-2 w-2" aria-hidden="true" /> Order
-                </div>
-              </div>
-            </button>
-          )
-        })}
-        {/* Chip "Semua (N)" → bottom sheet katalog penuh */}
-        <button
-          type="button"
-          onClick={onOpenAll}
-          aria-label={`Lihat semua ${products.length} produk`}
-          className="flex w-[72px] flex-shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-black/55 px-2 text-white backdrop-blur-md transition active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
-          style={{ scrollSnapAlign: 'start' }}
-        >
-          <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-          <span className="text-[9px] font-semibold leading-tight">
-            Semua ({products.length})
-          </span>
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -1867,7 +1723,7 @@ function ProductBottomSheet({
         <div className="flex items-center justify-between px-4 pb-3 pt-2">
           <h2 id="product-sheet-title" className="flex items-center gap-2 text-base font-semibold">
             <ShoppingCart className="h-4 w-4 text-orange-500" aria-hidden="true" />
-            Belanja ({products.length})
+Keranjang Belanja ({products.length})
           </h2>
           <button
             type="button"
