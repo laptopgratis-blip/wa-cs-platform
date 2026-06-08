@@ -2860,6 +2860,9 @@ model AiGenerationLog {
   // Margin % = (profit / revenue) × 100. Cron pakai untuk MARGIN_LOW alert.
   marginPct       Float
   modelName       String
+  // Penyedia yang KITA bayar (ANTHROPIC|OPENAI|GOOGLE|KLING|FAL|ELEVENLABS|OTHER)
+  // — denormalisasi dari modelName untuk groupBy "spend per provider" cepat.
+  provider        String?
   // Snapshot full config saat call — audit trail kalau pricing berubah.
   pricingSnapshot Json
   // Status: 'OK' | 'FAILED' (AI error tapi belum di-charge) | 'INSUFFICIENT_BALANCE'
@@ -2870,6 +2873,7 @@ model AiGenerationLog {
   @@index([featureKey, createdAt])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([provider, createdAt])
 }
 
 // Idea hasil Idea Generator. User pick & choose dari 15 ide → promote jadi

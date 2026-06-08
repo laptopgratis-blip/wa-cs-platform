@@ -284,6 +284,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   {
     label: 'ANALISIS',
     items: [
+      // Pemantauan biaya AI per provider + log penggunaan per user (2026-06-08).
+      {
+        label: 'Token & Biaya AI',
+        href: '/admin/token-cost',
+        icon: DollarSign,
+        roles: ['ADMIN'],
+      },
       {
         label: 'Profitability',
         href: '/admin/profitability',

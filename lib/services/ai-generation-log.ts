@@ -13,6 +13,7 @@ import {
   type AiFeatureConfigValues,
   getAiFeatureConfig,
 } from './ai-feature-config'
+import { providerFromModel } from './ai-provider'
 
 export interface ComputedCharge {
   inputTokens: number
@@ -145,6 +146,7 @@ export async function logGeneration(input: {
       profitRp: input.charge.profitRp,
       marginPct: input.charge.marginPct,
       modelName: input.charge.modelName,
+      provider: providerFromModel(input.charge.modelName),
       pricingSnapshot: input.charge.pricingSnapshot,
       status: input.status ?? 'OK',
       errorMessage: input.errorMessage ?? null,
