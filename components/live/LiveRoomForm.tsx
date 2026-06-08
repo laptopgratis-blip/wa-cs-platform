@@ -10,6 +10,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+import { ProductPickerManager } from './ProductPickerManager'
+
 interface HostOption {
   id: string
   name: string
@@ -34,6 +36,7 @@ interface RoomData {
   description: string | null
   hostTemplateId: string
   productIds: string[]
+  featuredProductId: string | null
   systemPrompt: string
   greeting: string | null
   ttsVoice: string
@@ -132,6 +135,7 @@ export function LiveRoomForm({
   const [description, setDescription] = useState('')
   const [hostTemplateId, setHostTemplateId] = useState('')
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
+  const [featuredProductId, setFeaturedProductId] = useState<string | null>(null)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [greeting, setGreeting] = useState('')
   const [ttsVoice, setTtsVoice] = useState('alloy')
@@ -192,6 +196,7 @@ export function LiveRoomForm({
     setDescription(r.description ?? '')
     setHostTemplateId(r.hostTemplateId)
     setSelectedProducts(r.productIds)
+    setFeaturedProductId(r.featuredProductId ?? null)
     setSystemPrompt(r.systemPrompt)
     setGreeting(r.greeting ?? '')
     setTtsVoice(r.ttsVoice)
@@ -215,11 +220,6 @@ export function LiveRoomForm({
     if (mode === 'edit' && roomId) void loadRoom(roomId)
   }, [mode, roomId, loadOptions, loadRoom])
 
-  function toggleProduct(id: string) {
-    setSelectedProducts((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }
 
   function pickHost(id: string) {
     setHostTemplateId(id)
@@ -260,6 +260,10 @@ export function LiveRoomForm({
         description: description.trim() || undefined,
         hostTemplateId,
         productIds: selectedProducts,
+        featuredProductId:
+          featuredProductId && selectedProducts.includes(featuredProductId)
+            ? featuredProductId
+            : null,
         systemPrompt: systemPrompt.trim(),
         greeting: greeting.trim() || undefined,
         ttsVoice,
@@ -404,52 +408,17 @@ export function LiveRoomForm({
 
       <Card>
         <CardContent className="space-y-3 p-4">
-          <div className="flex items-center justify-between">
-            <Label>Pilih Produk (yang akan dijual di room)</Label>
-            <span className="text-xs text-muted-foreground">
-              {selectedProducts.length} dipilih
-            </span>
-          </div>
-          {products === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading produk…
-            </div>
-          ) : products.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Belum ada produk. Tambah di /products dulu.
-            </p>
-          ) : (
-            <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
-              {products.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex cursor-pointer items-center gap-2 rounded-md border p-2 hover:bg-warm-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedProducts.includes(p.id)}
-                    onChange={() => toggleProduct(p.id)}
-                    className="h-4 w-4"
-                  />
-                  {p.imageUrl ? (
-                    <img
-                      src={p.imageUrl}
-                      alt={p.name}
-                      className="h-10 w-10 rounded object-cover"
-                    />
-                  ) : (
-                    <div className="h-10 w-10 rounded bg-warm-100" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Rp {p.price.toLocaleString('id-ID')}
-                    </div>
-                  </div>
-                </label>
-              ))}
-            </div>
-          )}
+          <ProductPickerManager
+            products={products}
+            selected={selectedProducts}
+            featuredId={featuredProductId}
+            onChangeSelected={setSelectedProducts}
+            onChangeFeatured={setFeaturedProductId}
+          />
+          <p className="text-xs text-muted-foreground">
+            ⭐ Produk unggulan tampil sebagai kartu sorotan di room. Urutan
+            menentukan tampilan di rail produk &amp; katalog.
+          </p>
         </CardContent>
       </Card>
 

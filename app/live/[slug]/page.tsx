@@ -40,6 +40,7 @@ export default async function PublicLivePage({
       ttsVoice: true,
       isActive: true,
       productIds: true,
+      featuredProductId: true,
       botEnabled: true,
       botIntervalMinSec: true,
       botIntervalMaxSec: true,
@@ -226,6 +227,7 @@ export default async function PublicLivePage({
           flashSaleSold: flashOn ? p.flashSaleSold : null,
         }
       })}
+      featuredProductId={room.featuredProductId ?? null}
     />
   )
 }

@@ -3411,8 +3411,11 @@ model LiveRoom {
   name           String
   description    String?  @db.Text
   hostTemplateId String
-  // Array productId — order menentukan urutan tampil di sidebar.
+  // Array productId — order menentukan urutan tampil di rail/katalog.
   productIds     String[] @default([])
+  // Produk "unggulan" yang di-pin jadi kartu sorotan (FeaturedProductCard).
+  // null = fallback ke productIds[0]. Harus salah satu dari productIds.
+  featuredProductId String?
   // System prompt persona host untuk Claude. Default di-generate dari
   // host.name + product context, admin/user boleh override.
   systemPrompt   String   @db.Text

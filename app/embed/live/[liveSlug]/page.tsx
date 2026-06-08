@@ -71,6 +71,7 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
       ttsVoice: true,
       isActive: true,
       productIds: true,
+      featuredProductId: true,
       botEnabled: true,
       botIntervalMinSec: true,
       botIntervalMaxSec: true,
@@ -178,6 +179,7 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
           flashSaleSold: flashOn ? p.flashSaleSold : null,
         }
       })}
+      featuredProductId={room.featuredProductId ?? null}
       gateConfig={{
         mode: embed.gateMode,
         fields: embed.gateFields as Array<'name' | 'phone' | 'email' | 'city' | 'productInterest'>,

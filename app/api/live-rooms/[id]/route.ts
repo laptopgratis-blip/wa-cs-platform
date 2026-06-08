@@ -10,6 +10,7 @@ const updateSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
   hostTemplateId: z.string().trim().min(1).optional(),
   productIds: z.array(z.string()).max(40).optional(),
+  featuredProductId: z.string().trim().nullable().optional(),
   systemPrompt: z.string().trim().min(20).max(4000).optional(),
   greeting: z.string().trim().max(500).nullable().optional(),
   ttsVoice: z.string().trim().max(40).optional(),
@@ -59,6 +60,7 @@ export async function GET(
       description: true,
       hostTemplateId: true,
       productIds: true,
+      featuredProductId: true,
       systemPrompt: true,
       greeting: true,
       ttsVoice: true,
@@ -98,7 +100,7 @@ export async function PUT(
   const { id } = await params
   const existing = await prisma.liveRoom.findUnique({
     where: { id },
-    select: { userId: true },
+    select: { userId: true, productIds: true },
   })
   if (!existing) return jsonError('Tidak ditemukan', 404)
   if (existing.userId !== session.user.id) return jsonError('Akses ditolak', 403)
@@ -115,6 +117,18 @@ export async function PUT(
     })
     if (validProducts !== data.productIds.length) {
       return jsonError('Sebagian product tidak ditemukan / bukan milik Anda', 400)
+    }
+  }
+
+  // featuredProductId harus termasuk productIds (yang baru kalau ikut di-update,
+  // kalau tidak pakai yang lama). Kalau tidak valid → set null.
+  if (data.featuredProductId !== undefined) {
+    const effectiveIds = data.productIds ?? existing.productIds
+    if (
+      !data.featuredProductId ||
+      !effectiveIds.includes(data.featuredProductId)
+    ) {
+      data.featuredProductId = null
     }
   }
 
