@@ -71,6 +71,14 @@ export async function GET(req: Request) {
             deliveryStatus: true,
           },
         },
+        liveLead: {
+          select: {
+            id: true,
+            customerName: true,
+            customerPhone: true,
+            productInterest: true,
+          },
+        },
       },
     })
 

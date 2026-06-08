@@ -14,6 +14,7 @@ import { z } from 'zod'
 import { jsonError, jsonOk } from '@/lib/api'
 import { normalizePhone } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
+import { generateQueueForLead } from '@/lib/services/followup-engine'
 import { ensureLiveSession, logLiveEvent, makeFingerprint } from '@/lib/services/live/tangkap'
 import { waService } from '@/lib/wa-service'
 
@@ -203,6 +204,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     where: { id: lead.id },
     data: { status: handoffStatus, contactId, handoffError },
   })
+
+  // Nurture "belum order" — jadwalkan follow-up WA H+1 & H+3 (best-effort).
+  try {
+    await generateQueueForLead(lead.id)
+  } catch (err) {
+    console.error('[live-embed-gate] generateQueueForLead failed', err)
+  }
 
   return jsonOk({ leadId: lead.id, status: handoffStatus, sessionId, duplicate: false })
 }

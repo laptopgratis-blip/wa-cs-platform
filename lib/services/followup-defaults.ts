@@ -1,5 +1,6 @@
-// 7 template default yang auto-create saat user enable Follow-Up Order System
-// untuk pertama kali. Semua POWER tier. Dipanggil dari
+// Template default yang auto-create saat user enable Follow-Up Order System
+// untuk pertama kali (DEFAULT_TEMPLATES order + LEAD_NURTURE_TEMPLATES +
+// REVIEW_TEMPLATES). Semua POWER tier. Dipanggil dari
 // POST /api/integrations/followup/enable.
 //
 // Variable available: {nama} {invoice} {total} {produk} {rekening} {wa_admin}
@@ -134,7 +135,10 @@ Kalau sudah sampai, jangan lupa kabari ya 😊`,
 
 Pesanan {invoice} sudah dikirim 3 hari lalu. Apakah barang sudah sampai dengan baik?
 
-Kalau ada kendala atau barang belum sampai, langsung kabari ya. Kami siap bantu.`,
+Kalau SUDAH sampai, klik link ini untuk konfirmasi (1 detik) ya:
+{link_terima}
+
+Kalau belum sampai / ada kendala, langsung balas pesan ini. Kami siap bantu 🙏`,
   },
   {
     name: 'Minta Review - Hari 5',
@@ -146,11 +150,74 @@ Kalau ada kendala atau barang belum sampai, langsung kabari ya. Kami siap bantu.
     order: 7,
     message: `Halo kak {nama}!
 
-Semoga barang dari pesanan {invoice} sudah sampai dan sesuai harapan ya 🙏
+Semoga barang dari pesanan {invoice} sudah sampai dan cocok ya 🙏
 
-Boleh minta tolong kasih review/testimoni singkat? Kalau ada foto pakai produknya bisa banget juga, sangat bantu kami.
+Boleh minta tolong kasih bintang + testimoni singkat? Cukup 1 klik, bisa sekalian upload foto:
+{link_review}
 
-Terima kasih! ✨`,
+Makasih banyak, sangat membantu kami ✨`,
+  },
+]
+
+// Template panen testimoni "setelah diterima" (DAYS_AFTER_DELIVERED). Dipakai
+// kalau order sudah ditandai DELIVERED (manual admin ATAU customer klik
+// {link_terima}). Cadence: H+2 tanya "sudah dicoba?" + minta testimoni 1-klik.
+export const REVIEW_TEMPLATES: DefaultTemplate[] = [
+  {
+    name: 'Testimoni - H+2 Setelah Diterima',
+    trigger: 'DAYS_AFTER_DELIVERED',
+    paymentMethod: null,
+    applyOnPaymentStatus: null,
+    applyOnDeliveryStatus: null,
+    delayDays: 2,
+    order: 8,
+    message: `Halo kak {nama} 🙏
+
+Pesanan {invoice} sudah diterima beberapa hari lalu. Sudah sempat dicoba/dipakai?
+
+Kalau berkenan, bantu kasih bintang + testimoni singkat ya (1 klik, boleh sekalian foto):
+{link_review}
+
+Masukan kakak sangat berarti buat kami 🙏✨`,
+  },
+]
+
+// Template nurture lead Live "belum order" (cadence 2 langkah: H+1 & H+3).
+// trigger DAYS_AFTER_LIVE_LEAD — auto-berhenti begitu customer bikin order
+// (cek di cron followup-send). Variable: {nama} {produk_minat} {nama_toko}
+// {link_order}.
+export const LEAD_NURTURE_TEMPLATES: DefaultTemplate[] = [
+  {
+    name: 'Live H+1 - Belum Order',
+    trigger: 'DAYS_AFTER_LIVE_LEAD',
+    paymentMethod: null,
+    applyOnPaymentStatus: null,
+    applyOnDeliveryStatus: null,
+    delayDays: 1,
+    order: 10,
+    message: `Halo kak {nama} 🙏
+
+Kemarin sempat lihat-lihat {produk_minat} di live {nama_toko} ya. Masih ada yang mau ditanyakan?
+
+Kalau sudah mantap, langsung amankan stoknya di sini ya:
+{link_order}
+
+Balas pesan ini kalau ada yang mau dibantu 😊`,
+  },
+  {
+    name: 'Live H+3 - Belum Order (Last Call)',
+    trigger: 'DAYS_AFTER_LIVE_LEAD',
+    paymentMethod: null,
+    applyOnPaymentStatus: null,
+    applyOnDeliveryStatus: null,
+    delayDays: 3,
+    order: 11,
+    message: `Halo kak {nama}!
+
+Stok {produk_minat} masih ada, tapi cepat habis kalau lagi rame. Biar nggak kehabisan, bisa langsung order di sini:
+{link_order}
+
+Ada kendala soal harga / pengiriman? Cerita aja ke saya, dibantu cari yang pas 🙏`,
   },
 ]
 
@@ -162,7 +229,55 @@ export async function seedDefaultTemplates(userId: string): Promise<number> {
   if (existing > 0) return 0
 
   const result = await prisma.followUpTemplate.createMany({
-    data: DEFAULT_TEMPLATES.map((t) => ({
+    data: [
+      ...DEFAULT_TEMPLATES,
+      ...LEAD_NURTURE_TEMPLATES,
+      ...REVIEW_TEMPLATES,
+    ].map((t) => ({
+      ...t,
+      userId,
+      isDefault: true,
+      isActive: true,
+      scope: 'GLOBAL',
+    })),
+  })
+  return result.count
+}
+
+// Top-up idempotent untuk user yang SUDAH enable follow-up sebelum fitur lead
+// nurture ada. Dipanggil lazy dari generateQueueForLead — hanya menambah
+// template DAYS_AFTER_LIVE_LEAD kalau user belum punya satupun.
+export async function ensureLeadNurtureTemplates(
+  userId: string,
+): Promise<number> {
+  const existing = await prisma.followUpTemplate.count({
+    where: { userId, trigger: 'DAYS_AFTER_LIVE_LEAD' },
+  })
+  if (existing > 0) return 0
+
+  const result = await prisma.followUpTemplate.createMany({
+    data: LEAD_NURTURE_TEMPLATES.map((t) => ({
+      ...t,
+      userId,
+      isDefault: true,
+      isActive: true,
+      scope: 'GLOBAL',
+    })),
+  })
+  return result.count
+}
+
+// Top-up idempotent template testimoni (DAYS_AFTER_DELIVERED) untuk user lama
+// yang sudah enable follow-up sebelum fitur testimoni ada. Dipanggil lazy dari
+// generateQueueForOrder saat event COMPLETED.
+export async function ensureReviewTemplates(userId: string): Promise<number> {
+  const existing = await prisma.followUpTemplate.count({
+    where: { userId, trigger: 'DAYS_AFTER_DELIVERED' },
+  })
+  if (existing > 0) return 0
+
+  const result = await prisma.followUpTemplate.createMany({
+    data: REVIEW_TEMPLATES.map((t) => ({
       ...t,
       userId,
       isDefault: true,

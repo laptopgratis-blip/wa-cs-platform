@@ -116,6 +116,44 @@ function pickRandomViewerName(): string {
   return BOT_VIEWER_NAMES[Math.floor(Math.random() * BOT_VIEWER_NAMES.length)]
 }
 
+// WAV pendek 100% sunyi — dipakai untuk "unlock" autoplay audio di dalam gesture
+// user (klik "Masuk Live"). Diputar sekali (tak terdengar) supaya browser ngasih
+// izin autoplay ke element audio; setelah itu suara host bisa bunyi otomatis
+// tanpa minta klik "dengar suara" lagi.
+const SILENT_AUDIO_DATA_URI =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA='
+
+// Singleton element <audio> untuk TTS host — di-share lintas komponen
+// (LiveRoomView & gate embed) supaya "prime" dari gesture mana pun nge-unlock
+// element yang SAMA yang nanti dipakai memutar suara host. Lazy-create supaya
+// `new Audio()` tidak jalan saat SSR (window undefined).
+let sharedTtsAudio: HTMLAudioElement | null = null
+function getSharedTtsAudio(): HTMLAudioElement | null {
+  if (typeof window === 'undefined') return null
+  if (!sharedTtsAudio) {
+    sharedTtsAudio = new Audio()
+    sharedTtsAudio.preload = 'auto'
+  }
+  return sharedTtsAudio
+}
+
+// Prime audio host — WAJIB dipanggil dari dalam user gesture (klik tombol
+// join / gate embed). Putar silent unmuted 1x supaya browser kasih izin
+// playback bersuara nanti, jadi suara host langsung bunyi saat auto-sapa
+// "halo" tanpa perlu tombol "dengar suara host".
+export function primeLiveAudio(): void {
+  try {
+    const a = getSharedTtsAudio()
+    if (!a) return
+    a.muted = false
+    a.src = SILENT_AUDIO_DATA_URI
+    const p = a.play()
+    if (p && typeof p.catch === 'function') p.catch(() => {})
+  } catch {
+    /* ignore — kalau gagal, fallback tombol unlock tetap ada */
+  }
+}
+
 export function LiveRoomView({
   slug,
   name,
@@ -161,7 +199,6 @@ export function LiveRoomView({
   // saat customer yang sudah join melakukan refresh.
   const [identityChecked, setIdentityChecked] = useState(false)
   const [lastClickedProductId, setLastClickedProductId] = useState<string | null>(null)
-  const [showLeadForm, setShowLeadForm] = useState(false)
   // Bottom-sheet "Belanja" — TikTok-style product drawer dipicu FAB keranjang.
   const [showProducts, setShowProducts] = useState(false)
   // Modal "Order langsung" — iframe ke form order (/order/[slug]) dengan produk
@@ -209,6 +246,9 @@ export function LiveRoomView({
   }, [idleClips, idleClipUrl])
   const audioQueueRef = useRef<string[]>([])
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+  // Element <audio> TTS = singleton modul (lihat getSharedTtsAudio). Di-"prime"
+  // saat user klik join/gate (gesture), reuse element sama untuk semua kalimat
+  // → suara host langsung bunyi tanpa tombol unlock.
   const greetingShownRef = useRef(false)
   // Poll feed dari semua user di room (shared chat). Track timestamp last
   // event yg sudah diterima supaya gak duplicate.
@@ -520,23 +560,27 @@ export function LiveRoomView({
       setLiveState((prev) => (prev === 'talking' ? 'idle' : prev))
       return
     }
-    const audio = new Audio(next)
+    // Pakai ulang element yang sudah di-prime di gesture join → autoplay lancar.
+    const audio = getSharedTtsAudio()
+    if (!audio) return
     audio.muted = muted
-    audio.preload = 'auto'
+    audio.src = next
     currentAudioRef.current = audio
     setTalking(true)
     setLiveState('talking')
-    audio.addEventListener('ended', () => {
+    // Property-assign (bukan addEventListener) supaya handler lama ke-replace,
+    // tidak menumpuk tiap kalimat di element yang sama.
+    audio.onended = () => {
       if (ttsPauseMs > 0) {
         setTimeout(() => playNextAudio(), ttsPauseMs)
       } else {
         playNextAudio()
       }
-    })
-    audio.addEventListener('error', (e) => {
+    }
+    audio.onerror = (e) => {
       console.warn('[live-audio] play error', next, e)
       playNextAudio()
-    })
+    }
     audio.play().catch((err) => {
       // Browser autoplay policy: butuh user gesture. Bukan diam-diam skip —
       // simpan queue + tampilkan prompt "Klik untuk suara", lalu user 1x klik
@@ -980,6 +1024,9 @@ export function LiveRoomView({
         hostName={hostName}
         roomName={name}
         onJoin={(joinData) => {
+          // Unlock audio DI DALAM gesture klik "Masuk Live" supaya suara host
+          // langsung bunyi saat auto-sapa "halo" — tanpa tombol "dengar suara".
+          primeLiveAudio()
           localStorage.setItem(
             `live:identity:${slug}`,
             JSON.stringify(joinData),
@@ -1212,10 +1259,25 @@ export function LiveRoomView({
           ) : (
             <button
               type="button"
-              onClick={() => setShowLeadForm(true)}
-              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.55)] ring-1 ring-white/20 transition active:scale-95 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none"
+              // Satu-tap: pakai nama+HP yang sudah diisi di JoinGate — tidak perlu
+              // form ulang. identity dijamin ada di titik ini (sudah lewat gate).
+              onClick={() => {
+                if (identity) {
+                  void submitLead({ name: identity.name, phone: identity.phone })
+                }
+              }}
+              disabled={leadStatus === 'submitting'}
+              className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.55)] ring-1 ring-white/20 transition active:scale-95 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-70 motion-reduce:transition-none"
             >
-              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Order WA
+              {leadStatus === 'submitting' ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Mengirim…
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" /> Order WA
+                </>
+              )}
             </button>
           )
         ) : null}
@@ -1297,18 +1359,6 @@ export function LiveRoomView({
             </span>
           </div>
         </div>
-      ) : null}
-
-      {/* ===== LEAD FORM MODAL ===== */}
-      {showLeadForm ? (
-        <LeadFormModal
-          submitting={leadStatus === 'submitting'}
-          onClose={() => setShowLeadForm(false)}
-          onSubmit={async (input) => {
-            await submitLead(input)
-            setShowLeadForm(false)
-          }}
-        />
       ) : null}
 
     </div>
@@ -1834,101 +1884,6 @@ function OrderFormModal({
           title="Form Order"
           className="h-full w-full flex-1 border-0"
         />
-      </div>
-    </div>
-  )
-}
-
-function LeadFormModal({
-  submitting,
-  onClose,
-  onSubmit,
-}: {
-  submitting: boolean
-  onClose: () => void
-  onSubmit: (input: { name: string; phone: string }) => Promise<void>
-}) {
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (name.trim().length < 2 || phone.trim().length < 8) return
-    await onSubmit({ name: name.trim(), phone: phone.trim() })
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="lead-form-title"
-    >
-      <div className="w-full max-w-sm rounded-2xl bg-zinc-900 p-5 text-white shadow-2xl">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h2 id="lead-form-title" className="text-base font-semibold">
-              Tinggalkan nomor WA
-            </h2>
-            <p className="mt-1 text-sm text-zinc-400">
-              Tim CS akan lanjut chat di WhatsApp untuk bantu pesan.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Tutup form"
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full text-zinc-300 transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 motion-reduce:transition-none"
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label htmlFor="lead-name" className="text-sm text-zinc-300">Nama</label>
-            <input
-              id="lead-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Nama lengkap"
-              autoComplete="name"
-              className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-base placeholder-zinc-500 transition focus:border-orange-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40 motion-reduce:transition-none"
-              maxLength={80}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor="lead-phone" className="text-sm text-zinc-300">Nomor WhatsApp</label>
-            <input
-              id="lead-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="08123456789"
-              className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2.5 text-base placeholder-zinc-500 transition focus:border-orange-500/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/40 motion-reduce:transition-none"
-              maxLength={20}
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={submitting || name.trim().length < 2 || phone.trim().length < 8}
-            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 disabled:bg-zinc-700 motion-reduce:transition-none"
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Mengirim…
-              </>
-            ) : (
-              <>
-                <MessageSquare className="h-4 w-4" aria-hidden="true" /> Kirim &amp; Lanjut di WhatsApp
-              </>
-            )}
-          </button>
-        </form>
       </div>
     </div>
   )

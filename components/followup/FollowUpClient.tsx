@@ -45,6 +45,8 @@ interface QueueItem {
   customerPhone: string
   resolvedMessage: string
   template: { name: string; trigger: string }
+  // order ATAU liveLead — salah satu terisi. liveLead untuk nurture lead Live
+  // "belum order".
   order: {
     id: string
     invoiceNumber: string | null
@@ -52,7 +54,13 @@ interface QueueItem {
     customerPhone: string
     paymentStatus: string
     deliveryStatus: string
-  }
+  } | null
+  liveLead: {
+    id: string
+    customerName: string
+    customerPhone: string
+    productInterest: string | null
+  } | null
 }
 
 interface LogItem {
@@ -245,7 +253,8 @@ export function FollowUpClient({
               N hari setelah event.
             </p>
             <p className="text-sm text-muted-foreground">
-              7 template default akan dibuat untuk Anda. Bisa di-edit kapan
+              Paket template default akan dibuat untuk Anda (reminder bayar,
+              info kirim, nurture lead Live, testimoni, dll). Bisa di-edit kapan
               saja di /pesanan/templates.
             </p>
             <Button onClick={handleEnable} disabled={enabling}>
@@ -356,7 +365,7 @@ export function FollowUpClient({
           </DialogHeader>
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Untuk: {editing?.order.customerName} ({editing?.customerPhone})
+              Untuk: {editing?.order?.customerName ?? editing?.liveLead?.customerName ?? 'Lead Live'} ({editing?.customerPhone})
             </p>
             <Textarea
               rows={12}
@@ -423,8 +432,10 @@ function QueueList({
                 </div>
                 <p className="text-sm text-muted-foreground">
                   {new Date(item.scheduledAt).toLocaleString('id-ID')} —{' '}
-                  {item.order.customerName} ({item.customerPhone}) ·{' '}
-                  {item.order.invoiceNumber ?? item.order.id.slice(0, 8)}
+                  {item.order?.customerName ?? item.liveLead?.customerName ?? '—'} ({item.customerPhone}) ·{' '}
+                  {item.order
+                    ? (item.order.invoiceNumber ?? item.order.id.slice(0, 8))
+                    : 'Lead Live (belum order)'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">

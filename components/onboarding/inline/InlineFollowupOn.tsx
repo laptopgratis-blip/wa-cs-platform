@@ -78,9 +78,10 @@ export function InlineFollowupOn({
             Aktifkan follow-up otomatis
           </h3>
           <p className="mt-1 text-xs text-warm-600">
-            Klik tombol di bawah untuk aktifkan + buat 7 template default
-            (reminder bayar, konfirmasi paid, info pengiriman, dll). Bisa
-            edit kata-katanya nanti dari halaman Follow-Up.
+            Klik tombol di bawah untuk aktifkan + buat paket template default
+            (reminder bayar, konfirmasi paid, info pengiriman, nurture lead
+            Live, testimoni, dll). Bisa edit kata-katanya nanti dari halaman
+            Follow-Up.
           </p>
         </div>
       </div>

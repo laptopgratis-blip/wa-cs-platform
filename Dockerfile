@@ -79,7 +79,7 @@ RUN mkdir -p /app/public/uploads/proofs /app/public/uploads/lp-images \
       /app/public/uploads/host-images /app/public/uploads/host-videos \
       /app/public/uploads/host-refs /app/public/uploads/clips \
       /app/public/uploads/clips-audio /app/public/uploads/presets \
-      /app/public/uploads/live-tts \
+      /app/public/uploads/live-tts /app/public/uploads/reviews \
  && chown -R nextjs:nodejs /app/public/uploads
 
 USER nextjs

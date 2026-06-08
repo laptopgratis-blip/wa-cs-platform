@@ -52,40 +52,61 @@ async function handle(req: Request) {
 
   for (const item of due) {
     try {
-      // Order CANCELLED → skip (kecuali template-nya emang untuk CANCELLED).
-      if (
-        item.order.paymentStatus === 'CANCELLED' &&
-        item.template.trigger !== 'CANCELLED'
-      ) {
-        await markSkipped(item.id, 'Order cancelled')
-        skipped++
-        continue
+      // ── Item nurture lead Live "belum order" ──────────────────────────
+      // Auto-stop: kalau customer sudah bikin UserOrder, hentikan nurture.
+      if (item.liveLeadId && !item.orderId) {
+        const phoneNoPlus = item.customerPhone.replace(/^\+/, '')
+        const converted = await prisma.userOrder.findFirst({
+          where: {
+            userId: item.userId,
+            customerPhone: { in: [phoneNoPlus, `+${phoneNoPlus}`] },
+          },
+          select: { id: true },
+        })
+        if (converted) {
+          await markSkipped(item.id, 'Customer sudah order — nurture dihentikan')
+          skipped++
+          continue
+        }
       }
 
-      // Re-validate status — mungkin status berubah sejak queue di-create.
-      // Misal template "Reminder Hari 1 - Belum Bayar" applyOnPaymentStatus=
-      // PENDING; kalau saat send sudah PAID, skip.
-      if (
-        item.template.applyOnPaymentStatus &&
-        item.template.applyOnPaymentStatus !== item.order.paymentStatus
-      ) {
-        await markSkipped(
-          item.id,
-          `Payment status berubah jadi ${item.order.paymentStatus}`,
-        )
-        skipped++
-        continue
-      }
-      if (
-        item.template.applyOnDeliveryStatus &&
-        item.template.applyOnDeliveryStatus !== item.order.deliveryStatus
-      ) {
-        await markSkipped(
-          item.id,
-          `Delivery status berubah jadi ${item.order.deliveryStatus}`,
-        )
-        skipped++
-        continue
+      // ── Validasi khusus item berbasis order (di-skip untuk item lead) ──
+      if (item.order) {
+        // Order CANCELLED → skip (kecuali template-nya emang untuk CANCELLED).
+        if (
+          item.order.paymentStatus === 'CANCELLED' &&
+          item.template.trigger !== 'CANCELLED'
+        ) {
+          await markSkipped(item.id, 'Order cancelled')
+          skipped++
+          continue
+        }
+
+        // Re-validate status — mungkin status berubah sejak queue di-create.
+        // Misal template "Reminder Hari 1 - Belum Bayar" applyOnPaymentStatus=
+        // PENDING; kalau saat send sudah PAID, skip.
+        if (
+          item.template.applyOnPaymentStatus &&
+          item.template.applyOnPaymentStatus !== item.order.paymentStatus
+        ) {
+          await markSkipped(
+            item.id,
+            `Payment status berubah jadi ${item.order.paymentStatus}`,
+          )
+          skipped++
+          continue
+        }
+        if (
+          item.template.applyOnDeliveryStatus &&
+          item.template.applyOnDeliveryStatus !== item.order.deliveryStatus
+        ) {
+          await markSkipped(
+            item.id,
+            `Delivery status berubah jadi ${item.order.deliveryStatus}`,
+          )
+          skipped++
+          continue
+        }
       }
 
       // Customer di blacklist (mungkin baru di-block setelah queue dibuat).
@@ -148,6 +169,7 @@ async function handle(req: Request) {
           data: {
             userId: item.userId,
             orderId: item.orderId,
+            liveLeadId: item.liveLeadId,
             templateId: item.templateId,
             queueId: item.id,
             customerPhone: item.customerPhone,
@@ -164,6 +186,7 @@ async function handle(req: Request) {
             data: {
               userId: item.userId,
               orderId: item.orderId,
+              liveLeadId: item.liveLeadId,
               templateId: item.templateId,
               queueId: item.id,
               customerPhone: item.customerPhone,

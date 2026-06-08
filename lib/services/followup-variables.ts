@@ -9,6 +9,8 @@ import type {
   UserShippingProfile,
 } from '@prisma/client'
 
+import { confirmReceivedLink, reviewLink } from '@/lib/review-token'
+
 interface OrderItem {
   productId?: string
   name: string
@@ -83,6 +85,61 @@ export function resolveTemplateVariables(
     : '-'
   resolved = replaceAll(resolved, '{invoice_url}', invoiceUrl)
 
+  // Link testimoni & konfirmasi-diterima 1-klik (token HMAC stateless).
+  resolved = replaceAll(resolved, '{link_review}', reviewLink(order.id))
+  resolved = replaceAll(
+    resolved,
+    '{link_terima}',
+    confirmReceivedLink(order.id),
+  )
+
+  return resolved
+}
+
+// ── Lead Live nurture ("belum order") ───────────────────────────────────────
+// Lead belum punya order, jadi variabel order ({invoice}/{total}/{resi}/…)
+// tidak relevan. Variabel yang didukung: {nama}, {produk_minat}, {nama_toko},
+// {link_order} (link balik ke form order / live room). Variabel order yang
+// kebetulan dipakai di template lead di-fallback ke '-' supaya tidak bocor
+// placeholder mentah.
+export interface LeadResolveContext {
+  customerName: string
+  productInterest: string | null
+  storeName: string | null
+  // Link CTA untuk order — form order kalau ada, kalau tidak link live room.
+  orderLink: string
+}
+
+const LEAD_ORDER_PLACEHOLDERS = [
+  '{invoice}',
+  '{total}',
+  '{produk}',
+  '{rekening}',
+  '{wa_admin}',
+  '{alamat}',
+  '{etd}',
+  '{kurir}',
+  '{resi}',
+  '{invoice_url}',
+]
+
+export function resolveLeadTemplateVariables(
+  template: string,
+  ctx: LeadResolveContext,
+): string {
+  let resolved = template
+  resolved = replaceAll(resolved, '{nama}', ctx.customerName || 'Kak')
+  resolved = replaceAll(
+    resolved,
+    '{produk_minat}',
+    ctx.productInterest || 'produk kami',
+  )
+  resolved = replaceAll(resolved, '{nama_toko}', ctx.storeName || 'Toko Kami')
+  resolved = replaceAll(resolved, '{link_order}', ctx.orderLink || '-')
+  // Fallback placeholder order yang tidak relevan → '-'.
+  for (const ph of LEAD_ORDER_PLACEHOLDERS) {
+    resolved = replaceAll(resolved, ph, '-')
+  }
   return resolved
 }
 
