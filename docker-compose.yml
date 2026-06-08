@@ -64,7 +64,11 @@ services:
       - "traefik.http.routers.hulao.entrypoints=websecure"
       - "traefik.http.routers.hulao.tls=true"
       - "traefik.http.routers.hulao.tls.certresolver=letsencrypt"
-      - "traefik.http.services.hulao.loadbalancer.server.url=http://127.0.0.1:3000"
+      # Docker-provider Traefik: pakai .server.port (bukan .server.url yang
+      # cuma valid di file-provider). Dulu pakai .server.url → router error,
+      # routing jatuh ke file-provider hardcode IP yang basi saat restart
+      # (insiden hulao.id nyasar ke arlikurnia 2026-06-07).
+      - "traefik.http.services.hulao.loadbalancer.server.port=3000"
       # Redirect www → apex (preferensi SEO).
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.regex=^https://www\\.hulao\\.id/(.*)"
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.replacement=https://hulao.id/$$1"
