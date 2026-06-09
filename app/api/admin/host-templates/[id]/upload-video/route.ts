@@ -17,6 +17,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireAdmin } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
 const MAX_BYTES = 50 * 1024 * 1024 // 50MB
 const ALLOWED = ['video/mp4', 'video/quicktime', 'video/webm']
@@ -59,7 +60,15 @@ export async function POST(
   const ownerDir = path.join(HOST_VIDEO_DIR, host.userId)
   await mkdir(ownerDir, { recursive: true })
   const filename = `${randomBytes(8).toString('hex')}.mp4`
-  await writeFile(path.join(ownerDir, filename), buf)
+  const absPath = path.join(ownerDir, filename)
+  await writeFile(absPath, buf)
+  // Kompres ke bitrate web + normalisasi ke H.264/mp4 (admin bisa upload
+  // .mov/.webm berukuran besar). Aman: gagal → file asli tetap dipakai.
+  try {
+    await transcodeVideoToWeb(absPath)
+  } catch {
+    /* jangan gagalkan upload gara-gara transcode */
+  }
   const publicPath = `/uploads/host-videos/${host.userId}/${filename}`
 
   if (target === 'videoLoop') {

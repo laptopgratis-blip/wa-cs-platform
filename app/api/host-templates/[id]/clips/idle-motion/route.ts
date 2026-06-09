@@ -23,6 +23,7 @@ import { z } from 'zod'
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { getIdleMotionById } from '@/lib/services/clip-library/idle-motions'
+import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 import {
   downloadKlingVideo,
   pollKlingStatus,
@@ -141,7 +142,14 @@ export async function POST(
     const finalPath = `/uploads/clips/${clip.id}.mp4`
     const absSource = path.join(process.cwd(), 'public', dl.videoPath.replace(/^\//, ''))
     const buf = await import('node:fs/promises').then((m) => m.readFile(absSource))
-    await writeFile(path.join(clipsDir, `${clip.id}.mp4`), buf)
+    const finalAbs = path.join(clipsDir, `${clip.id}.mp4`)
+    await writeFile(finalAbs, buf)
+    // Kompres ke bitrate web (aman: gagal → file asli tetap dipakai).
+    try {
+      await transcodeVideoToWeb(finalAbs)
+    } catch {
+      /* jangan gagalkan generate gara-gara transcode */
+    }
 
     // Bill cost — sama rate sebagai Kling image2video (KLIP_LIVE_LIPSYNC unit detik)
     try {

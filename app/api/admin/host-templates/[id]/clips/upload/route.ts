@@ -19,6 +19,7 @@ import { prisma } from '@/lib/prisma'
 import { suggestClipMetadata } from '@/lib/services/clip-library/clip-suggester'
 import { EMBED_MODEL, embedText } from '@/lib/services/clip-library/embed'
 import { transcribeAudio } from '@/lib/services/clip-library/whisper'
+import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
 const MAX_BYTES = 50 * 1024 * 1024 // 50MB
 const ALLOWED = ['video/mp4', 'video/quicktime', 'video/webm', 'audio/mpeg', 'audio/wav']
@@ -72,7 +73,17 @@ export async function POST(
   const clipId = randomBytes(12).toString('hex') // tmp untuk filename, lalu pakai DB id
   const fileExt = file.type.includes('audio') ? '.mp3' : '.mp4'
   const filename = `${clipId}${fileExt}`
-  await writeFile(path.join(CLIPS_DIR, filename), buf)
+  const absPath = path.join(CLIPS_DIR, filename)
+  await writeFile(absPath, buf)
+  // Kompres video upload ke bitrate web (skip kalau audio mp3). Aman: gagal →
+  // file asli tetap dipakai.
+  if (fileExt === '.mp4') {
+    try {
+      await transcodeVideoToWeb(absPath)
+    } catch {
+      /* jangan gagalkan upload gara-gara transcode */
+    }
+  }
   const videoUrl = `/uploads/clips/${filename}`
 
   // Whisper transcribe — charge host owner per audio second.
