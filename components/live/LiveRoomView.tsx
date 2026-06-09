@@ -236,6 +236,19 @@ export function LiveRoomView({
 
   const videoARef = useRef<HTMLVideoElement | null>(null)
   const videoBRef = useRef<HTMLVideoElement | null>(null)
+  // Mirror state ke ref supaya callback (onEnded, prewarm) baca nilai terkini
+  // tanpa stale-closure dan tanpa harus re-create handler tiap render.
+  const activeLayerRef = useRef<'A' | 'B'>('A')
+  const activeUrlRef = useRef<string>(videoLoopUrl)
+  const liveStateRef = useRef<LiveState>('idle')
+  // URL idle berikutnya yang sudah di-PRE-WARM ke layer inactive (buffer ahead,
+  // opacity 0). Saat klip aktif habis, onEnded konsumsi ref ini → flip INSTAN
+  // tanpa cold-fetch. Inilah inti fix "patah-patah saat ganti scene".
+  const nextIdleUrlRef = useRef<string | null>(null)
+  // Layer mana yg sedang di-pre-warm (sudah/sedang load tapi BELUM boleh flip).
+  // handleLayerLoaded cek ini: kalau load berasal dari pre-warm → JANGAN flip,
+  // cukup pause di frame 0 (tunggu klip aktif habis). null = tidak ada pre-warm.
+  const prewarmedLayerRef = useRef<'A' | 'B' | null>(null)
   // Track URL terakhir yang di-set ke INACTIVE layer — supaya onLoadedData
   // tidak misfire untuk re-render redundant.
   const pendingUrlRef = useRef<string | null>(null)
@@ -296,6 +309,43 @@ export function LiveRoomView({
     [videoLoopUrl],
   )
 
+  // Sinkron state → ref (dibaca prewarm/onEnded supaya tidak stale).
+  useEffect(() => {
+    activeLayerRef.current = activeLayer
+    activeUrlRef.current = activeUrl
+  }, [activeLayer, activeUrl])
+  useEffect(() => {
+    liveStateRef.current = liveState
+  }, [liveState])
+
+  // PRE-WARM: siapkan klip idle berikutnya ke layer INACTIVE supaya buffer
+  // duluan selagi klip aktif masih main. Dengan begitu pas klip habis, ganti
+  // scene = flip instan (URL sudah loaded), bukan cold-fetch yg bikin freeze.
+  // Hanya jalan saat state idle — biar tidak bentrok dgn reply/talking yg
+  // memang set inactive layer ke clip balasan via switchToUrl.
+  // currentActive/currentUrl di-pass eksplisit karena dipanggil tepat setelah
+  // flip (state belum ter-commit ke ref).
+  const prewarmNextIdle = useCallback(
+    (currentActive: 'A' | 'B', currentUrl: string) => {
+      if (liveStateRef.current !== 'idle') return
+      const next =
+        hostMode === 'NATIVE_LIBRARY'
+          ? getNextIdleUrl()
+          : pickSceneUrl('idle', currentUrl)
+      if (!next || next === currentUrl) return
+      const inactive: 'A' | 'B' = currentActive === 'A' ? 'B' : 'A'
+      // Sudah ke-buffer di layer inactive dgn URL yg sama? jangan re-set.
+      if (nextIdleUrlRef.current === next && prewarmedLayerRef.current === inactive) {
+        return
+      }
+      nextIdleUrlRef.current = next
+      prewarmedLayerRef.current = inactive
+      if (inactive === 'B') setUrlB(next)
+      else setUrlA(next)
+    },
+    [hostMode, getNextIdleUrl, pickSceneUrl],
+  )
+
   // Imperative initial src + autoplay untuk layer A pas mount.
   useEffect(() => {
     const v = videoARef.current
@@ -303,6 +353,9 @@ export function LiveRoomView({
     v.src = urlA
     v.load()
     v.play().catch(() => {})
+    // Pre-warm klip idle berikutnya ke layer B selagi A main → ganti scene
+    // pertama sudah ter-buffer (no freeze).
+    prewarmNextIdle('A', urlA)
     // Only mount-time, urlA selanjutnya ke-handle via setUrlA + onLoadedData B
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -339,6 +392,9 @@ export function LiveRoomView({
   const switchToUrl = useCallback(
     (newUrl: string | null) => {
       if (!newUrl) return
+      // Transisi disengaja → batalkan flag pre-warm yg tertunda. handleLayerLoaded
+      // untuk layer yg di-repurpose (mis. klip balasan) harus boleh flip lagi.
+      prewarmedLayerRef.current = null
       if (newUrl === activeUrl) {
         const v = activeLayer === 'A' ? videoARef.current : videoBRef.current
         if (v) {
@@ -360,13 +416,15 @@ export function LiveRoomView({
         const oldV =
           activeLayer === 'A' ? videoARef.current : videoBRef.current
         setTimeout(() => oldV?.pause(), 250)
+        // Flip ke buffer yg sudah loaded → langsung pre-warm idle berikutnya.
+        prewarmNextIdle(newActive, newUrl)
         return
       }
       pendingUrlRef.current = newUrl
       if (activeLayer === 'A') setUrlB(newUrl)
       else setUrlA(newUrl)
     },
-    [activeLayer, activeUrl, urlA, urlB, playSafe],
+    [activeLayer, activeUrl, urlA, urlB, playSafe, prewarmNextIdle],
   )
 
   // Apply scene change ketika liveState berubah — HANYA untuk TTS_GENERATIVE.
@@ -388,6 +446,20 @@ export function LiveRoomView({
   const handleLayerLoaded = useCallback(
     (which: 'A' | 'B') => {
       if (which === activeLayer) return // active load (initial), ignore
+      // Load ini berasal dari PRE-WARM (buffer ahead) → JANGAN flip sekarang.
+      // Siapkan di frame 0 + pause; onEnded klip aktif nanti yg memicu flip.
+      if (prewarmedLayerRef.current === which) {
+        const pv = which === 'A' ? videoARef.current : videoBRef.current
+        if (pv) {
+          try {
+            pv.currentTime = 0
+          } catch {
+            /* ignore */
+          }
+          pv.pause()
+        }
+        return
+      }
       const v = which === 'A' ? videoARef.current : videoBRef.current
       if (!v) return
       v.currentTime = 0
@@ -395,8 +467,11 @@ export function LiveRoomView({
       setActiveLayer(which)
       const oldVid = which === 'A' ? videoBRef.current : videoARef.current
       setTimeout(() => oldVid?.pause(), 250)
+      // Layer baru sekarang aktif → pre-warm klip idle SESUDAHNYA ke layer lama
+      // (kini inactive) supaya transisi berikutnya juga instan.
+      prewarmNextIdle(which, which === 'A' ? urlA : urlB)
     },
-    [activeLayer, playSafe],
+    [activeLayer, playSafe, prewarmNextIdle, urlA, urlB],
   )
 
   // Swap scene tiap video clip selesai (onEnded handler di bawah). Pool harus
@@ -1068,6 +1143,7 @@ export function LiveRoomView({
           // TTS mode: video selalu silent (audio dari TTS queue separate).
           muted={hostMode === 'NATIVE_LIBRARY' ? (muted || audioBlocked) : true}
           playsInline
+          preload="auto"
           onLoadedData={() => handleLayerLoaded('A')}
           onEnded={() => {
             if (activeLayer !== 'A') return
@@ -1075,7 +1151,10 @@ export function LiveRoomView({
             // Kalau cuma 1 idle clip, getNextIdleUrl return URL yang sama → restart.
             if (hostMode === 'NATIVE_LIBRARY') {
               setLiveState('idle')
-              const nextIdle = getNextIdleUrl()
+              // Konsumsi klip yg SUDAH di-pre-warm ke layer B → flip INSTAN
+              // (no cold-fetch). Fallback getNextIdleUrl kalau belum sempat warm.
+              const nextIdle = nextIdleUrlRef.current ?? getNextIdleUrl()
+              nextIdleUrlRef.current = null
               if (nextIdle && urlA !== nextIdle) {
                 switchToUrl(nextIdle)
               } else {
@@ -1087,7 +1166,9 @@ export function LiveRoomView({
               }
               return
             }
-            const next = pickSceneUrl(liveState, urlA)
+            const buffered = liveState === 'idle' ? nextIdleUrlRef.current : null
+            nextIdleUrlRef.current = null
+            const next = buffered ?? pickSceneUrl(liveState, urlA)
             if (next && next !== urlA) {
               switchToUrl(next)
             } else {
@@ -1109,12 +1190,14 @@ export function LiveRoomView({
             }`}
             muted={hostMode === 'NATIVE_LIBRARY' ? (muted || audioBlocked) : true}
             playsInline
+            preload="auto"
             onLoadedData={() => handleLayerLoaded('B')}
             onEnded={() => {
               if (activeLayer !== 'B') return
               if (hostMode === 'NATIVE_LIBRARY') {
                 setLiveState('idle')
-                const nextIdle = getNextIdleUrl()
+                const nextIdle = nextIdleUrlRef.current ?? getNextIdleUrl()
+                nextIdleUrlRef.current = null
                 if (nextIdle && urlB !== nextIdle) {
                   switchToUrl(nextIdle)
                 } else {
@@ -1126,7 +1209,9 @@ export function LiveRoomView({
                 }
                 return
               }
-              const next = pickSceneUrl(liveState, urlB)
+              const buffered = liveState === 'idle' ? nextIdleUrlRef.current : null
+              nextIdleUrlRef.current = null
+              const next = buffered ?? pickSceneUrl(liveState, urlB)
               if (next && next !== urlB) {
                 switchToUrl(next)
               } else {

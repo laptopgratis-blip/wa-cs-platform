@@ -56,8 +56,10 @@ ENV HOSTNAME=0.0.0.0
 
 # OpenSSL untuk Prisma. Bookworm-slim sudah include libvips runtime via
 # sharp prebuilt — tidak perlu install terpisah.
+# ffmpeg: kompres video host (scene/clip) Kling ke bitrate web saat generate,
+# supaya live room tidak patah-patah di HP (lihat lib/services/media/transcode).
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
-    openssl ca-certificates \
+    openssl ca-certificates ffmpeg \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system --gid 1001 nodejs \
  && useradd --system --uid 1001 --gid nodejs nextjs

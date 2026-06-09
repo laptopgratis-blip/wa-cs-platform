@@ -15,6 +15,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { getHostGenApiKey } from './provider-keys'
+import { transcodeVideoToWeb } from '../media/transcode'
 
 const KLING_HOST = 'https://api.klingai.com'
 
@@ -275,10 +276,20 @@ export async function downloadKlingVideo(input: {
     input.userId,
   )
   await mkdir(dir, { recursive: true })
-  await writeFile(path.join(dir, filename), buf)
+  const absPath = path.join(dir, filename)
+  await writeFile(absPath, buf)
+  // Kompres ke bitrate web (≈5x lebih kecil) supaya live room tidak patah-patah
+  // saat ganti scene di HP. Aman: kalau gagal, file asli tetap dipakai.
+  let bytes = buf.length
+  try {
+    const r = await transcodeVideoToWeb(absPath)
+    if (r.afterBytes) bytes = r.afterBytes
+  } catch {
+    /* jangan gagalkan pipeline gara-gara transcode */
+  }
   return {
     videoPath: `/uploads/host-videos/${input.userId}/${filename}`,
-    bytes: buf.length,
+    bytes,
   }
 }
 

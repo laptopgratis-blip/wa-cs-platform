@@ -30,6 +30,7 @@ import {
   submitKlingLipsync,
 } from '@/lib/services/host-gen/kling'
 import { computeMediaCharge, executeMediaSync } from '@/lib/services/media-charge'
+import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
 import { generateClipAudio, maxSafeCharsForDuration } from './audio-gen'
 import { EMBED_MODEL, embedText } from './embed'
@@ -92,8 +93,18 @@ async function downloadClipMp4(
   const buf = Buffer.from(await res.arrayBuffer())
   await mkdir(CLIPS_DIR, { recursive: true })
   const filename = `${clipId}.mp4`
-  await writeFile(path.join(CLIPS_DIR, filename), buf)
-  return { videoPath: `${CLIPS_URL_PREFIX}/${filename}`, bytes: buf.length }
+  const absPath = path.join(CLIPS_DIR, filename)
+  await writeFile(absPath, buf)
+  // Kompres ke bitrate web (≈5x lebih kecil, audio dipertahankan) supaya live
+  // room mulus saat ganti klip di HP. Aman: gagal → file asli tetap dipakai.
+  let bytes = buf.length
+  try {
+    const r = await transcodeVideoToWeb(absPath)
+    if (r.afterBytes) bytes = r.afterBytes
+  } catch {
+    /* jangan gagalkan pipeline gara-gara transcode */
+  }
+  return { videoPath: `${CLIPS_URL_PREFIX}/${filename}`, bytes }
 }
 
 // Main pipeline. Synchronous flow — caller wait until READY atau FAILED.
