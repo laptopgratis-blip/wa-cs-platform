@@ -113,6 +113,15 @@ interface CourierService {
   etd: string
 }
 
+// Rule zona subsidi ongkir yang match tujuan — dari /api/orders/cost-preview.
+interface ShippingZonePreview {
+  name: string
+  description: string
+  subsidyType: 'FREE' | 'FLAT_AMOUNT' | 'PERCENT'
+  subsidyValue: number
+  minimumOrder: number | null
+}
+
 function computeFlashSale(p: PublicProduct): {
   active: boolean
   price: number
@@ -270,6 +279,9 @@ export function OrderFormPublic({
 
   const [courierOptions, setCourierOptions] = useState<CourierService[]>([])
   const [selectedCourier, setSelectedCourier] = useState<CourierService | null>(
+    null,
+  )
+  const [shippingZone, setShippingZone] = useState<ShippingZonePreview | null>(
     null,
   )
   const [loadingCourier, setLoadingCourier] = useState(false)
@@ -486,16 +498,19 @@ export function OrderFormPublic({
     if (!form.requireShipping) {
       setCourierOptions([])
       setSelectedCourier(null)
+      setShippingZone(null)
       return
     }
     if (paymentMethod !== 'TRANSFER') {
       setCourierOptions([])
       setSelectedCourier(null)
+      setShippingZone(null)
       return
     }
     if (!destination || items.length === 0 || enabledCouriers.length === 0) {
       setCourierOptions([])
       setSelectedCourier(null)
+      setShippingZone(null)
       return
     }
     let cancelled = false
@@ -509,6 +524,8 @@ export function OrderFormPublic({
             slug: form.slug,
             destination: destination.id,
             weight: Math.max(totalWeight, 100),
+            cityName: destination.city_name,
+            provinceName: destination.province_name,
           }),
         })
         const data = await res.json()
@@ -516,10 +533,12 @@ export function OrderFormPublic({
         if (!res.ok || !data.success) {
           toast.error(data.error ?? 'Gagal ambil ongkir')
           setCourierOptions([])
+          setShippingZone(null)
           return
         }
         const services: CourierService[] = data.data.services ?? []
         setCourierOptions(services)
+        setShippingZone((data.data.zone as ShippingZonePreview | null) ?? null)
         // Auto-pick service termurah supaya UX cepet.
         const cheapest = services.slice().sort((a, b) => a.cost - b.cost)[0]
         if (cheapest) setSelectedCourier(cheapest)
@@ -549,7 +568,20 @@ export function OrderFormPublic({
     : paymentMethod === 'COD'
       ? form.shippingFlatCod ?? 0
       : selectedCourier?.cost ?? 0
-  const total = subtotal + shippingCost  // subsidi belum dihitung di client
+  // Subsidi zona ongkir — mirror rumus calculateOrderTotal di server supaya
+  // angka preview = angka final saat submit.
+  const shippingSubsidy =
+    shippingZone &&
+    shippingCost > 0 &&
+    subtotal >= (shippingZone.minimumOrder ?? 0)
+      ? shippingZone.subsidyType === 'FREE'
+        ? shippingCost
+        : shippingZone.subsidyType === 'FLAT_AMOUNT'
+          ? Math.min(shippingZone.subsidyValue, shippingCost)
+          : Math.round((shippingCost * shippingZone.subsidyValue) / 100)
+      : 0
+  const finalShipping = Math.max(0, shippingCost - shippingSubsidy)
+  const total = subtotal + finalShipping
 
   function inc(
     productId: string,
@@ -1139,17 +1171,38 @@ export function OrderFormPublic({
                         : ''}
                   </span>
                   <span>
-                    {shippingCost > 0
-                      ? `Rp ${formatNumber(shippingCost)}`
-                      : '—'}
+                    {shippingSubsidy > 0 ? (
+                      <>
+                        <span className="mr-1.5 text-warm-400 line-through">
+                          Rp {formatNumber(shippingCost)}
+                        </span>
+                        <span className="font-medium text-emerald-700">
+                          {finalShipping > 0
+                            ? `Rp ${formatNumber(finalShipping)}`
+                            : 'GRATIS'}
+                        </span>
+                      </>
+                    ) : shippingCost > 0 ? (
+                      `Rp ${formatNumber(shippingCost)}`
+                    ) : (
+                      '—'
+                    )}
                   </span>
                 </div>
               )}
-              {form.requireShipping && form.showShippingPromo && (
-                <p className="text-xs text-warm-500">
-                  *Subsidi/promo ongkir akan dihitung otomatis saat submit.
-                </p>
+              {shippingSubsidy > 0 && shippingZone && (
+                <div className="flex justify-between text-sm text-emerald-700">
+                  <span>🎉 {shippingZone.description}</span>
+                  <span>-Rp {formatNumber(shippingSubsidy)}</span>
+                </div>
               )}
+              {form.requireShipping &&
+                form.showShippingPromo &&
+                shippingSubsidy === 0 && (
+                  <p className="text-xs text-warm-500">
+                    *Subsidi/promo ongkir akan dihitung otomatis saat submit.
+                  </p>
+                )}
               <div className="my-2 border-t" />
               <div className="flex justify-between text-base font-bold">
                 <span>Total</span>
