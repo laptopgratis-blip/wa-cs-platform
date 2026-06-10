@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Favicon Hulao — bubble chat citrus orange (brand) + lettermark "H".
+       "H" digambar pakai path (bukan <text>) supaya render konsisten di
+       semua browser tanpa tergantung font. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#ea6c0a"/>
+    </linearGradient>
+  </defs>
+  <!-- Bubble: rounded square + ekor kiri-bawah -->
+  <path fill="url(#g)" d="M16 3h32c7.2 0 13 5.8 13 13v24c0 7.2-5.8 13-13 13H26L10 61l3.2-9.4C7.3 49.7 3 44.4 3 38V16C3 8.8 8.8 3 16 3Z"/>
+  <!-- Lettermark H -->
+  <path fill="#fff" d="M20 14h7v12h10V14h7v28h-7V33H27v9h-7V14Z"/>
+</svg>
