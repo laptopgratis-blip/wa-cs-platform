@@ -120,7 +120,7 @@ export async function findMatchingZone(input: MatchZoneInput) {
   return null
 }
 
-function describeZone(z: {
+export function describeZone(z: {
   subsidyType: string
   subsidyValue: number
   minimumOrder: number | null
