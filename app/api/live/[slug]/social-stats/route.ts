@@ -23,12 +23,25 @@ const statsCache = new Map<
   { body: Record<string, unknown> | null; expiresAt: number }
 >()
 
+// Sweep entri kedaluwarsa — Map jangan tumbuh terus per slug unik.
+const SWEEP_INTERVAL_MS = 5 * 60_000
+let lastSweep = 0
+function maybeSweep(): void {
+  const now = Date.now()
+  if (now - lastSweep < SWEEP_INTERVAL_MS) return
+  lastSweep = now
+  for (const [slug, e] of statsCache) {
+    if (e.expiresAt <= now) statsCache.delete(slug)
+  }
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
 
+  maybeSweep()
   const hit = statsCache.get(slug)
   if (hit && hit.expiresAt > Date.now()) {
     if (!hit.body) return jsonError('Room tidak ditemukan', 404)

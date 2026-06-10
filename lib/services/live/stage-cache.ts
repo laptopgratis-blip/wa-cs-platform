@@ -28,11 +28,29 @@ const bySlug = new Map<string, { snap: StageSnapshot | null; expiresAt: number }
 // Index roomId → slug untuk invalidasi (stage.ts hanya tahu roomId).
 const slugByRoomId = new Map<string, string>()
 
+// Sweep entri kedaluwarsa — tanpa ini kedua Map tumbuh terus per slug unik
+// yang pernah diakses. Mapping roomId→slug yang slug-nya sudah tidak punya
+// entri cache ikut dibuang (invalidasi untuk room itu memang jadi no-op).
+const SWEEP_INTERVAL_MS = 5 * 60_000
+let lastSweep = 0
+function maybeSweep(): void {
+  const now = Date.now()
+  if (now - lastSweep < SWEEP_INTERVAL_MS) return
+  lastSweep = now
+  for (const [slug, e] of bySlug) {
+    if (e.expiresAt <= now) bySlug.delete(slug)
+  }
+  for (const [roomId, slug] of slugByRoomId) {
+    if (!bySlug.has(slug)) slugByRoomId.delete(roomId)
+  }
+}
+
 // Return: snapshot kalau hit, null kalau hit negative-cache (room tak ada),
 // undefined kalau miss (caller harus query DB lalu setStageSnapshot).
 export function getStageSnapshot(
   slug: string,
 ): StageSnapshot | null | undefined {
+  maybeSweep()
   const hit = bySlug.get(slug)
   if (!hit) return undefined
   if (hit.expiresAt <= Date.now()) {

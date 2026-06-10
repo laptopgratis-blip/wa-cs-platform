@@ -41,6 +41,19 @@ const WINDOW_CAP = 200
 const bySlug = new Map<string, { snap: FeedSnapshot | null; expiresAt: number }>()
 const inflight = new Map<string, Promise<FeedSnapshot | null>>()
 
+// Sweep entri kedaluwarsa — tanpa ini Map tumbuh terus per slug unik yang
+// pernah diakses (termasuk slug acak dari scanner/attacker).
+const SWEEP_INTERVAL_MS = 5 * 60_000
+let lastSweep = 0
+function maybeSweep(): void {
+  const now = Date.now()
+  if (now - lastSweep < SWEEP_INTERVAL_MS) return
+  lastSweep = now
+  for (const [slug, e] of bySlug) {
+    if (e.expiresAt <= now) bySlug.delete(slug)
+  }
+}
+
 async function queryWindow(slug: string): Promise<FeedSnapshot | null> {
   const room = await prisma.liveRoom.findUnique({
     where: { slug },
@@ -79,6 +92,7 @@ async function queryWindow(slug: string): Promise<FeedSnapshot | null> {
 }
 
 export async function getFeedWindow(slug: string): Promise<FeedSnapshot | null> {
+  maybeSweep()
   const hit = bySlug.get(slug)
   if (hit && hit.expiresAt > Date.now()) return hit.snap
 
