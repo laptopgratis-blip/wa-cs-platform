@@ -4,7 +4,12 @@
 // excludeSession: skip event dari clientSessionId tertentu (biasanya
 // caller's own session — supaya gak duplikat dengan msg lokal).
 import { jsonError, jsonOk } from '@/lib/api'
+import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
+import {
+  checkPollRateLimit,
+  maybeCleanup,
+} from '@/lib/services/live/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +21,18 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
+
+  // Anti-hammering — endpoint publik tanpa auth, tiap request = query DB.
+  // Limit longgar utk CGNAT (lihat rate-limit.ts lapis 4).
+  const rl = checkPollRateLimit(getClientIp(req), slug, 'feed')
+  if (!rl.ok) {
+    return jsonError(
+      `Terlalu sering. Coba lagi dalam ${rl.retryAfterSec ?? 60}dtk.`,
+      429,
+    )
+  }
+  maybeCleanup()
+
   const url = new URL(req.url)
   const sinceParam = url.searchParams.get('since')
   const since = sinceParam ? new Date(Number(sinceParam)) : new Date(Date.now() - DEFAULT_LOOKBACK_MS)

@@ -231,8 +231,12 @@ async function buildPerformance(
   }
 
   // ── TTS_GENERATIVE: Claude reply + TTS per kalimat ──
-  const history = await buildRoomHistory(room.id)
-  const products = await fetchLiveProducts(room.productIds)
+  // History & produk independen — paralel hemat ~0.5dtk per jawaban,
+  // antrian ke-drain lebih cepat saat room ramai.
+  const [history, products] = await Promise.all([
+    buildRoomHistory(room.id),
+    fetchLiveProducts(room.productIds),
+  ])
   const reply = await generateLiveReply({
     ownerUserId: room.userId,
     roomId: room.id,
