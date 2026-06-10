@@ -3458,6 +3458,18 @@ model LiveRoom {
   botPrompts         String[] @default([])
   // Active toggle — kalau false, customer lihat halaman "live sedang offline".
   isActive       Boolean  @default(true)
+  // ── PANGGUNG BERSAMA (shared live stage, 2026-06-10) ──
+  // currentPerformance = jawaban host yang SEDANG tayang untuk SEMUA penonton
+  // (server-authoritative). Bentuk JSON:
+  //   { seq, askerName, questionText, replyText, mode: 'clip'|'tts'|'text',
+  //     clipUrl?, ttsUrls?: string[], startedAt: ms, endsAt: ms }
+  // null = host idle (tidak sedang menjawab). performanceSeq naik tiap jawaban
+  // baru supaya client deteksi perubahan via polling /stage.
+  currentPerformance Json?
+  performanceSeq     Int      @default(0)
+  // Lock waktu: advanceStage skip kalau now < stageLockedUntil (mencegah dua
+  // proses generate barengan saat antrian di-tarik).
+  stageLockedUntil   DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -3466,11 +3478,43 @@ model LiveRoom {
   sessions     LiveSession[]
   leads        LiveLead[]
   proposals    LiveOptimizationProposal[]
+  queueItems   LiveQueueItem[]
   // LP × Live AI Embed (2026-06-04). 1:N — 1 room bisa di-embed di banyak LP.
   lpEmbeds     LpLiveEmbed[]
 
   @@index([userId, createdAt])
   @@index([slug])
+}
+
+// ─────────────────────────────────────────
+// PANGGUNG BERSAMA — ANTRIAN PERTANYAAN (2026-06-10)
+// ─────────────────────────────────────────
+// Semua pertanyaan (customer asli + bot) masuk antrian global per room. Satu
+// "host loop" server (advanceStage) menarik satu per satu, prioritas user asli
+// dulu, lalu set jadi currentPerformance yg ditonton semua device.
+enum LiveQueueStatus {
+  PENDING   // menunggu giliran dijawab
+  ANSWERING // sedang di-generate / tayang
+  DONE      // selesai dijawab
+  DROPPED   // dibuang (antrian penuh / bot diredam)
+}
+
+model LiveQueueItem {
+  id            String          @id @default(cuid())
+  liveRoomId    String
+  // Session penanya (null kalau bot cron). Untuk atribusi & feed.
+  liveSessionId String?
+  askerName     String?
+  isBot         Boolean         @default(false)
+  questionText  String          @db.Text
+  status        LiveQueueStatus @default(PENDING)
+  createdAt     DateTime        @default(now())
+  answeredAt    DateTime?
+
+  liveRoom LiveRoom @relation(fields: [liveRoomId], references: [id], onDelete: Cascade)
+
+  // Index utama: tarik antrian PENDING per room urut waktu.
+  @@index([liveRoomId, status, createdAt])
 }
 
 // ─────────────────────────────────────────

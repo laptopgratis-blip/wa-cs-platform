@@ -79,11 +79,27 @@ interface ChatMsg {
   // Created at — untuk timestamp overlay (relatif waktu).
   createdAt: number
   isBot?: boolean
+  // Pesan host (assistant) di panggung bersama: nama penanya yg sedang dijawab
+  // → render caption "Menjawab Budi:". null/undef = sapaan umum.
+  repliedTo?: string
 }
 
 interface SentenceWithAudio {
   text: string
   audioUrl: string | null
+}
+
+// Performance dari /stage (lihat lib/services/live/stage.ts → Performance).
+interface StagePerformance {
+  seq: number
+  askerName: string | null
+  questionText: string
+  replyText: string
+  mode: 'clip' | 'tts' | 'text'
+  clipUrl?: string | null
+  ttsUrls?: string[]
+  startedAt: number
+  endsAt: number
 }
 
 type LiveState = 'greeting' | 'idle' | 'listening' | 'thinking' | 'talking'
@@ -195,6 +211,14 @@ export function LiveRoomView({
   const [sending, setSending] = useState(false)
   const [muted, setMuted] = useState(false)
   const [talking, setTalking] = useState(false) // audio sedang main
+  // Panggung bersama: nama penanya yang SEDANG dijawab host (untuk banner
+  // "Menjawab Budi"). null = host idle/tidak sedang menjawab.
+  const [nowAnswering, setNowAnswering] = useState<string | null>(null)
+  // Seq terakhir yg sudah diketahui (dari /stage) & yg sudah diputar — cegah
+  // putar ulang performance yang sama.
+  const lastStageSeqRef = useRef(0)
+  const performedSeqRef = useRef(0)
+  const stageEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [clientSessionId, setClientSessionId] = useState<string | null>(null)
   const [identity, setIdentity] = useState<{ name: string; phone: string } | null>(null)
@@ -515,16 +539,17 @@ export function LiveRoomView({
         }
         const newMsgs: ChatMsg[] = []
         for (const ev of events) {
+          // Jawaban host (AI_MESSAGE) datang dari panggung bersama (/stage),
+          // jadi dari feed kita HANYA ambil pertanyaan orang lain & bot supaya
+          // tidak dobel dengan jawaban yang diputar lewat stage.
+          if (ev.type !== 'USER_MESSAGE') continue
           if (seenEventIdsRef.current.has(ev.id)) continue
           seenEventIdsRef.current.add(ev.id)
           newMsgs.push({
             id: `feed-${ev.id}`,
-            role: ev.type === 'USER_MESSAGE' ? 'user' : 'assistant',
+            role: 'user',
             text: ev.text,
-            viewerName:
-              ev.type === 'USER_MESSAGE'
-                ? ev.customerName ?? 'Anonim'
-                : undefined,
+            viewerName: ev.customerName ?? 'Anonim',
             createdAt: ev.createdAt,
             isBot: ev.isBot ?? false,
           })
@@ -708,143 +733,54 @@ export function LiveRoomView({
   const lastRealUserAtRef = useRef<number>(0)
 
   // Core dispatcher — handle both real user + bot input.
+  // PANGGUNG BERSAMA: kirim pertanyaan ke ANTRIAN server — TIDAK menjawab di
+  // device ini. Jawaban host datang lewat /stage (poll) dan diputar sinkron di
+  // semua device. Pertanyaan sendiri ditampilkan optimistis; pertanyaan orang
+  // lain & bot muncul via feed poll.
   const dispatchChat = useCallback(
     async (input: { text: string; isBot?: boolean; viewerName?: string }) => {
       if (!clientSessionId) return
       const msg = input.text.trim()
       if (!msg) return
-      if (input.isBot && sending) return // bot tunggu giliran kalau lagi proses
-      const userMsgId = `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-      const viewer = input.viewerName ?? (input.isBot ? pickRandomViewerName() : undefined)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: userMsgId,
-          role: 'user',
-          text: msg,
-          viewerName: viewer,
-          createdAt: Date.now(),
-          isBot: input.isBot,
-        },
-      ])
-      if (!input.isBot) lastRealUserAtRef.current = Date.now()
+      const viewer =
+        input.viewerName ?? (input.isBot ? pickRandomViewerName() : undefined)
+      if (!input.isBot) {
+        const userMsgId = `u-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: userMsgId,
+            role: 'user',
+            text: msg,
+            viewerName: identity?.name,
+            createdAt: Date.now(),
+          },
+        ])
+        lastRealUserAtRef.current = Date.now()
+      }
       setSending(true)
-      setLiveState('thinking')
       try {
-        // History: prefix nama viewer di setiap msg user supaya Claude tahu
-        // pesan mana dari bot dan mana dari customer asli. Tanpa ini, semua
-        // user-msg terlihat "anonymous" dan Claude ngasih balasan ke nama
-        // customer asli walau yang baru aja nanya bot lain.
-        const history = messages
-          .filter((m) => m.id !== 'greeting')
-          .slice(-12)
-          .map((m) => {
-            if (m.role === 'user') {
-              const name = m.viewerName ?? identity?.name ?? 'anonim'
-              return { role: m.role, content: `(${name}) ${m.text}` }
-            }
-            return { role: m.role, content: m.text }
-          })
-        // Asker = bot viewer name (kalau isBot) ATAU identitas customer asli.
-        // Backend pakai ini sebagai customerName ke Claude.
         const askerName = input.isBot ? viewer : identity?.name
         const askerPhone = input.isBot ? undefined : identity?.phone
-        const res = await fetch(`/api/live/${encodeURIComponent(slug)}/chat`, {
+        await fetch(`/api/live/${encodeURIComponent(slug)}/chat`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             message: msg,
-            history,
             clientSessionId,
             customerName: askerName,
             customerPhone: askerPhone,
             isBot: Boolean(input.isBot),
           }),
         })
-        const json = (await res.json()) as {
-          success: boolean
-          data?:
-            | { mode: 'tts'; reply: string; sentences: SentenceWithAudio[]; tokensCharged: number }
-            | {
-                mode: 'clip'
-                clip: {
-                  id: string
-                  videoUrl: string
-                  audioUrl: string | null
-                  transcript: string
-                  category: string
-                  durationMs: number | null
-                  confidence: number
-                  isFallback: boolean
-                }
-              }
-            | { mode: 'text-only'; reply: string; sentences: SentenceWithAudio[]; tokensCharged: number }
-          error?: string
-        }
-        if (!json.success || !json.data) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `e-${Date.now()}`,
-              role: 'assistant',
-              text: `⚠️ ${json.error ?? 'Gagal balas — coba lagi'}`,
-              createdAt: Date.now(),
-            },
-          ])
-          return
-        }
-
-        // ──────────────────────────────────────────
-        // SPRINT 4: NATIVE_LIBRARY mode response
-        // ──────────────────────────────────────────
-        if (json.data.mode === 'clip') {
-          const clip = json.data.clip
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `a-${Date.now()}`,
-              role: 'assistant',
-              text: clip.transcript,
-              createdAt: Date.now(),
-            },
-          ])
-          // Swap video URL ke matched clip. Audio inline (gak ada audioUrls queue).
-          // Existing switchToUrl reuse — dual buffer A/B handle cross-fade.
-          setLiveState('talking')
-          switchToUrl(clip.videoUrl)
-          return
-        }
-
-        // TTS atau text-only response (existing flow)
-        const reply = json.data.reply ?? ''
-        const sentences = ('sentences' in json.data ? json.data.sentences : []) as SentenceWithAudio[]
-        const audioUrls = sentences
-          .map((s) => s.audioUrl)
-          .filter((u): u is string => Boolean(u))
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `a-${Date.now()}`,
-            role: 'assistant',
-            text: reply,
-            audioUrls,
-            createdAt: Date.now(),
-          },
-        ])
-        if (audioUrls.length > 0) {
-          setLiveState('talking')
-          enqueueAudio(audioUrls)
-        } else {
-          setLiveState('talking')
-          setTimeout(() => {
-            setLiveState((prev) => (prev === 'talking' ? 'idle' : prev))
-          }, 2500)
-        }
+        // Sengaja tidak baca balasan di sini — host menjawab di panggung bersama.
+      } catch {
+        /* network blip — user bisa kirim ulang */
       } finally {
         setSending(false)
       }
     },
-    [sending, slug, messages, enqueueAudio, clientSessionId, switchToUrl],
+    [clientSessionId, slug, identity],
   )
 
   const send = useCallback(async () => {
@@ -853,6 +789,78 @@ export function LiveRoomView({
     setInput('')
     await dispatchChat({ text: msg, isBot: false })
   }, [input, sending, dispatchChat])
+
+  // ── PANGGUNG BERSAMA: poll /stage ~1.5dtk ──
+  // Saat performanceSeq naik → host menjawab pertanyaan baru. SEMUA device
+  // memutar performance yang sama (klip / TTS) + caption "Menjawab X".
+  // (ditaruh setelah enqueueAudio/switchToUrl sudah dideklarasikan.)
+  useEffect(() => {
+    if (!clientSessionId) return
+    let cancelled = false
+    const STAGE_POLL_MS = 1500
+    async function pollStage() {
+      try {
+        const res = await fetch(
+          `/api/live/${encodeURIComponent(slug)}/stage?seq=${lastStageSeqRef.current}`,
+          { cache: 'no-store' },
+        )
+        if (!res.ok) return
+        const json = (await res.json()) as {
+          success: boolean
+          data?: { seq: number; serverNow: number; performance: StagePerformance | null }
+        }
+        if (cancelled || !json.success || !json.data) return
+        lastStageSeqRef.current = json.data.seq
+        const perf = json.data.performance
+        if (!perf || perf.seq <= performedSeqRef.current) return
+        performedSeqRef.current = perf.seq
+
+        // Koreksi selisih jam server↔client supaya endsAt dibanding waktu lokal.
+        const skew = Date.now() - json.data.serverNow
+        const localEndsAt = perf.endsAt + skew
+
+        // Tambahkan jawaban host ke chat dgn atribusi penanya.
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `stage-${perf.seq}`,
+            role: 'assistant',
+            text: perf.replyText,
+            repliedTo: perf.askerName ?? undefined,
+            createdAt: Date.now(),
+          },
+        ])
+
+        // Late-joiner: performance sudah lewat → tampil teks saja, jangan perform.
+        if (localEndsAt <= Date.now()) return
+
+        setNowAnswering(perf.askerName ?? null)
+        setLiveState('talking')
+        if (perf.mode === 'clip' && perf.clipUrl) {
+          switchToUrl(perf.clipUrl)
+        } else if (perf.mode === 'tts' && perf.ttsUrls && perf.ttsUrls.length > 0) {
+          enqueueAudio(perf.ttsUrls)
+        }
+        if (stageEndTimerRef.current) clearTimeout(stageEndTimerRef.current)
+        stageEndTimerRef.current = setTimeout(
+          () => {
+            setNowAnswering(null)
+            setLiveState((prev) => (prev === 'talking' ? 'idle' : prev))
+          },
+          Math.max(500, localEndsAt - Date.now()),
+        )
+      } catch {
+        /* swallow — re-poll */
+      }
+    }
+    void pollStage()
+    const t = setInterval(() => void pollStage(), STAGE_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(t)
+      if (stageEndTimerRef.current) clearTimeout(stageEndTimerRef.current)
+    }
+  }, [clientSessionId, slug, switchToUrl, enqueueAudio])
 
   // Auto-sapa: begitu audience masuk (identity + session siap), kirim komen
   // "halo" sekali supaya host LANGSUNG bicara — sebelumnya host diam sampai ada
@@ -875,48 +883,11 @@ export function LiveRoomView({
     return () => clearTimeout(t)
   }, [identity, clientSessionId])
 
-  // Bot timer — pick random prompt tiap interval. Pause kalau:
-  //   - bot disabled
-  //   - prompts empty
-  //   - lagi sending (tunggu giliran)
-  //   - <60dtk sejak real user message terakhir
-  const botTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    if (!botConfig?.enabled || botConfig.prompts.length === 0) {
-      if (botTimerRef.current) {
-        clearTimeout(botTimerRef.current)
-        botTimerRef.current = null
-      }
-      return
-    }
-    const cfg = botConfig
-    const minMs = Math.max(10, cfg.intervalMinSec) * 1000
-    const maxMs = Math.max(minMs, cfg.intervalMaxSec * 1000)
-    const PAUSE_AFTER_REAL_USER_MS = 60_000
-
-    function scheduleNext() {
-      const ms = minMs + Math.floor(Math.random() * (maxMs - minMs))
-      botTimerRef.current = setTimeout(() => {
-        const sinceReal = Date.now() - lastRealUserAtRef.current
-        const ok = sinceReal > PAUSE_AFTER_REAL_USER_MS
-        if (ok && !sending) {
-          const prompt =
-            cfg.prompts[Math.floor(Math.random() * cfg.prompts.length)]
-          if (prompt) {
-            void dispatchChat({ text: prompt, isBot: true })
-          }
-        }
-        scheduleNext()
-      }, ms)
-    }
-    scheduleNext()
-    return () => {
-      if (botTimerRef.current) {
-        clearTimeout(botTimerRef.current)
-        botTimerRef.current = null
-      }
-    }
-  }, [botConfig, sending, dispatchChat])
+  // CATATAN: bot demo kini DIPUSATKAN di server (cron live-bot → /chat enqueue,
+  // lihat lib/services/live/bot-runner + stage). Loop bot client-side dihapus
+  // supaya di panggung bersama bot tidak dobel (tiap device dulu fire sendiri)
+  // dan tetap jalan walau tidak ada tab terbuka. Prioritas/redam vs user asli
+  // ditangani di Fase 3 (server-side). `botConfig` masih diterima sbg prop.
 
   // Poll social-stats tiap 7dtk untuk featured card + detail sheet.
   // Pop recent buyer toast kalau ada lead CLOSED_WON < 60dtk yang belum dishow.
@@ -1293,6 +1264,17 @@ export function LiveRoomView({
         </button>
       ) : null}
 
+      {/* ===== BANNER "MENJAWAB X" — panggung bersama: siapa yg sedang dijawab ===== */}
+      {nowAnswering ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-16 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-orange-500/90 px-3 py-1 text-[12px] font-semibold text-white shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-300 motion-reduce:animate-none"
+          aria-live="polite"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse motion-reduce:animate-none" aria-hidden="true" />
+          Menjawab {nowAnswering}
+        </div>
+      ) : null}
+
       {/* ===== HOST "MIKIR" INDICATOR — pill kecil di tengah atas saat sending ===== */}
       {sending ? (
         <div
@@ -1478,6 +1460,10 @@ function FloatingChatOverlay({
   const MAX_VISIBLE = 7
   const visible = messages
     .filter((m) => m.id !== 'greeting')
+    // Urut by waktu: pertanyaan (feed) bisa datang di poll berbeda dgn jawaban
+    // (stage) → tanpa sort, jawaban kadang muncul sebelum pertanyaannya.
+    .slice()
+    .sort((a, b) => a.createdAt - b.createdAt)
     .slice(-MAX_VISIBLE)
 
   if (visible.length === 0) return null
@@ -1519,6 +1505,11 @@ function FloatingChatOverlay({
               <span className={`text-[13px] font-semibold ${speakerColor}`}>
                 {speaker}
               </span>
+              {!isUser && m.repliedTo ? (
+                <span className="ml-1 text-[11px] font-medium text-orange-200/85">
+                  → {m.repliedTo}
+                </span>
+              ) : null}
               <span className="ml-1.5 text-[13px] leading-snug text-white/95">
                 {m.text}
               </span>

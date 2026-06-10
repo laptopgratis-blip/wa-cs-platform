@@ -7,10 +7,12 @@
 import { pollAndFinalizePendingVideos } from '@/lib/services/host-gen/queue'
 import { runLiveBotTick } from '@/lib/services/live/bot-runner'
 import { batchAnalyzePendingSessions } from '@/lib/services/live/objection-analyzer'
+import { runStageTick } from '@/lib/services/live/stage'
 
 let timer: ReturnType<typeof setInterval> | null = null
 let objTimer: ReturnType<typeof setInterval> | null = null
 let botTimer: ReturnType<typeof setInterval> | null = null
+let stageTimer: ReturnType<typeof setInterval> | null = null
 
 // Bungkus tick dengan in-flight guard: kalau run sebelumnya belum selesai,
 // skip tick ini supaya task tidak overlap dengan dirinya sendiri (run yang
@@ -108,8 +110,25 @@ export function startDevCronRunner(): void {
     botIntervalMs,
   )
 
+  // Panggung Bersama: drain antrian tiap 2 detik (host loop). advanceStage
+  // no-op kalau room masih menjawab → murah.
+  const stageIntervalMs = 2_000
+  stageTimer = setInterval(() => {
+    runStageTick()
+      .then((r) => {
+        if (r.advanced > 0) {
+          console.log(
+            `[dev-cron] live-stage: checked=${r.checked} advanced=${r.advanced}`,
+          )
+        }
+      })
+      .catch((err) => {
+        console.warn('[dev-cron] live-stage error:', (err as Error).message)
+      })
+  }, stageIntervalMs)
+
   // unref supaya tidak block proses exit di test/dev.
-  ;[timer, objTimer, botTimer].forEach((t) => {
+  ;[timer, objTimer, botTimer, stageTimer].forEach((t) => {
     if (t && typeof (t as unknown as { unref?: () => void }).unref === 'function') {
       ;(t as unknown as { unref: () => void }).unref()
     }
@@ -128,5 +147,9 @@ export function stopDevCronRunner(): void {
   if (botTimer) {
     clearInterval(botTimer)
     botTimer = null
+  }
+  if (stageTimer) {
+    clearInterval(stageTimer)
+    stageTimer = null
   }
 }
