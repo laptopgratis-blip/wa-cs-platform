@@ -105,14 +105,20 @@ export async function formatProductCatalogForPrompt(
     '',
   )
 
+  let hasFlash = false
   for (const p of products) {
     const flash = options.applyFlashSale && isFlashSaleActive(p)
+    if (flash) hasFlash = true
     const effectivePrice =
       flash && p.flashSalePrice != null ? p.flashSalePrice : p.price
     const priceStr = formatRupiah(effectivePrice)
+    // Sertakan batas waktu flash (WIB) supaya AI bisa jawab "promo sampai
+    // kapan?" dengan akurat, bukan ngarang / bilang tidak tahu.
     const flashStr =
       flash && p.flashSalePrice != null
-        ? ` ~~${formatRupiah(p.price)}~~ 🔥 FLASH SALE`
+        ? ` ~~${formatRupiah(p.price)}~~ 🔥 FLASH SALE${
+            p.flashSaleEndAt ? ` s.d. ${formatWib(p.flashSaleEndAt)}` : ''
+          }`
         : ''
     const stockStr = formatStock(p.stock)
     const weightStr = p.weightGrams > 0 ? ` (${p.weightGrams}g)` : ''
@@ -130,11 +136,30 @@ export async function formatProductCatalogForPrompt(
   }
 
   lines.push('')
+  if (hasFlash) {
+    lines.push(
+      '**Flash sale**: untuk produk bertanda 🔥, sebutkan harga promo + harga normal (coret) secara PROAKTIF saat membahas produk itu, dan sebutkan batas waktunya supaya customer tahu promonya terbatas. JANGAN menjanjikan harga flash untuk pembelian di luar periode tersebut.',
+    )
+  }
   lines.push(
     '**Catatan**: kalau customer tanya produk yang tidak ada di daftar di atas, bilang produk itu belum tersedia / sudah habis — JANGAN ngarang harga.',
   )
 
   return lines.join('\n')
+}
+
+// Format waktu dalam zona Asia/Jakarta untuk prompt — server jalan di UTC,
+// customer baca WIB.
+function formatWib(d: Date): string {
+  return (
+    new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d) + ' WIB'
+  )
 }
 
 function formatRupiah(n: number): string {
