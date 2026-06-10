@@ -58,58 +58,73 @@ export async function runLiveBotTick(options: { baseUrl: string } = { baseUrl: '
       continue
     }
 
-    const sessionIds = await getRoomSessionIds(room.id)
+    // Session virtual bot dibuat SEKALI seumur hidup room (clientSessionId
+    // 'bot-cron-<roomId>') — lookup langsung by unique key, TANPA window waktu.
+    // BUG LAMA (fixed 2026-06-10): query session pakai filter startedAt >=
+    // now-1jam, padahal startedAt session bot tidak pernah berubah → 1 jam
+    // setelah dibuat, session bot keluar window → lastBot tidak ketemu → bot
+    // fire TIAP tick & cap 24 jam tidak pernah kena (cost leak Claude+TTS).
+    const botSession = await prisma.liveSession.findUnique({
+      where: { clientSessionId: CLIENT_SESSION_PREFIX + room.id },
+      select: { id: true },
+    })
 
-    // GUARDRAIL: auto-off kalau bot sudah kirim >= DAILY_BOT_CAP pesan / 24 jam.
-    // Cegah bleed OpenAI berjam-jam dari room yang lupa dimatikan.
-    const botMsgCount24h = await prisma.liveEvent.count({
+    if (botSession) {
+      // GUARDRAIL: auto-off kalau bot sudah kirim >= DAILY_BOT_CAP pesan / 24 jam.
+      // Cegah bleed OpenAI berjam-jam dari room yang lupa dimatikan.
+      // Semua USER_MESSAGE di session virtual bot adalah pesan bot (session
+      // ini hanya ditulis bot runner via chat route dengan isBot=true), jadi
+      // tidak perlu filter JSON payload — count langsung pakai index
+      // (liveSessionId, createdAt) yang sudah ada.
+      const botMsgCount24h = await prisma.liveEvent.count({
+        where: {
+          liveSessionId: botSession.id,
+          type: 'USER_MESSAGE',
+          createdAt: { gte: new Date(now - 24 * 60 * 60 * 1000) },
+        },
+      })
+      if (botMsgCount24h >= DAILY_BOT_CAP) {
+        await prisma.liveRoom
+          .update({ where: { id: room.id }, data: { botEnabled: false } })
+          .catch(() => {})
+        console.warn(
+          `[bot-runner] room ${room.slug}: ${botMsgCount24h} pesan bot/24j ≥ cap ${DAILY_BOT_CAP} → auto-disable botEnabled (anti-bleed OpenAI)`,
+        )
+        result.skipped += 1
+        continue
+      }
+    }
+
+    // Pause kalau ada pesan user REAL < 60 detik terakhir — jangan ganggu
+    // interaksi asli. Query by window createdAt (index type+createdAt) lewat
+    // relasi session room, exclude session virtual bot.
+    const recentRealMsg = await prisma.liveEvent.findFirst({
       where: {
-        liveSessionId: { in: sessionIds },
         type: 'USER_MESSAGE',
-        payload: { path: ['isBot'], equals: true },
-        createdAt: { gte: new Date(now - 24 * 60 * 60 * 1000) },
+        createdAt: { gte: new Date(now - REAL_USER_PAUSE_MS) },
+        liveSession: { liveRoomId: room.id },
+        ...(botSession ? { liveSessionId: { not: botSession.id } } : {}),
       },
+      select: { id: true },
     })
-    if (botMsgCount24h >= DAILY_BOT_CAP) {
-      await prisma.liveRoom
-        .update({ where: { id: room.id }, data: { botEnabled: false } })
-        .catch(() => {})
-      console.warn(
-        `[bot-runner] room ${room.slug}: ${botMsgCount24h} pesan bot/24j ≥ cap ${DAILY_BOT_CAP} → auto-disable botEnabled (anti-bleed OpenAI)`,
-      )
+    if (recentRealMsg) {
       result.skipped += 1
       continue
     }
 
-    // Cek last activity di room — bot DAN real user
-    const lastEvents = await prisma.liveEvent.findMany({
-      where: {
-        liveSessionId: { in: sessionIds },
-        type: { in: ['USER_MESSAGE', 'AI_MESSAGE'] },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-      select: { type: true, createdAt: true, payload: true },
-    })
-
-    // Cek user real terakhir
-    const lastReal = lastEvents.find(
-      (e) => e.type === 'USER_MESSAGE' && !(e.payload as { isBot?: boolean } | null)?.isBot,
-    )
-    if (lastReal && now - lastReal.createdAt.getTime() < REAL_USER_PAUSE_MS) {
-      result.skipped += 1
-      continue
-    }
-
-    // Cek bot terakhir — anti-spam respect interval owner
-    const lastBot = lastEvents.find(
-      (e) =>
-        e.type === 'USER_MESSAGE' && (e.payload as { isBot?: boolean } | null)?.isBot === true,
-    )
-    const minIntervalMs = Math.max(10, room.botIntervalMinSec) * 1000
-    if (lastBot && now - lastBot.createdAt.getTime() < minIntervalMs) {
-      result.skipped += 1
-      continue
+    // Cek bot terakhir — anti-spam respect interval owner. Tanpa window
+    // startedAt: ambil USER_MESSAGE terbaru di session virtual bot.
+    if (botSession) {
+      const lastBot = await prisma.liveEvent.findFirst({
+        where: { liveSessionId: botSession.id, type: 'USER_MESSAGE' },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      })
+      const minIntervalMs = Math.max(10, room.botIntervalMinSec) * 1000
+      if (lastBot && now - lastBot.createdAt.getTime() < minIntervalMs) {
+        result.skipped += 1
+        continue
+      }
     }
 
     // Trigger! Random prompt + viewer name
@@ -140,17 +155,4 @@ export async function runLiveBotTick(options: { baseUrl: string } = { baseUrl: '
   }
 
   return result
-}
-
-// Helper: ambil semua sessionId untuk room dalam 1 jam terakhir
-async function getRoomSessionIds(roomId: string): Promise<string[]> {
-  const sessions = await prisma.liveSession.findMany({
-    where: {
-      liveRoomId: roomId,
-      startedAt: { gte: new Date(Date.now() - 60 * 60 * 1000) }, // 1 jam window
-    },
-    select: { id: true },
-    take: 50,
-  })
-  return sessions.map((s) => s.id)
 }

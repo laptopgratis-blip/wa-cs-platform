@@ -12,9 +12,11 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
+import { getClientIp } from '@/lib/client-ip'
 import { normalizePhone } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
+import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
 import { ensureLiveSession, logLiveEvent, makeFingerprint } from '@/lib/services/live/tangkap'
 import { waService } from '@/lib/wa-service'
 
@@ -53,6 +55,20 @@ function buildEmbedHandoffMessage(input: {
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
+
+  // Rate limit ketat (5/menit per IP per slug) — sama kelas dengan
+  // /api/live/[slug]/lead: endpoint publik terima PII + memicu kirim WA.
+  // IP dari elemen terakhir XFF (trusted hop Traefik), anti-spoof.
+  const ip = getClientIp(req)
+  const rl = checkLeadRateLimit(ip, slug)
+  if (!rl.ok) {
+    return jsonError(
+      `Terlalu banyak percobaan. Coba lagi dalam ${rl.retryAfterSec ?? 60}dtk.`,
+      429,
+    )
+  }
+  maybeCleanup()
+
   const parsed = gateSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Body tidak valid', 400)
@@ -80,8 +96,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     return jsonError('Konfigurasi embed tidak valid', 400)
   }
 
-  // Build fingerprint dari IP + UA — analytics dedup.
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  // Build fingerprint dari IP + UA — analytics dedup. IP sudah diresolve di
+  // atas via getClientIp (elemen terakhir XFF, bukan yang bisa dipalsukan).
   const ua = req.headers.get('user-agent')
   const fingerprint = makeFingerprint({ ip, ua })
 

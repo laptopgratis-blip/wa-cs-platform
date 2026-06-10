@@ -11,6 +11,7 @@ import crypto from 'node:crypto'
 
 import { NextResponse } from 'next/server'
 
+import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
 import { parseUa } from '@/lib/ua-parse'
 
@@ -54,15 +55,6 @@ function hashIp(ip: string): string {
   return crypto.createHash('sha256').update(`${ip}|${salt}`).digest('hex')
 }
 
-function clientIpFrom(headers: Headers): string {
-  const fwd = headers.get('x-forwarded-for')
-  if (fwd) {
-    const first = fwd.split(',')[0]?.trim()
-    if (first) return first
-  }
-  return headers.get('x-real-ip') ?? 'unknown'
-}
-
 // Bounce heuristic: visit yg scroll <25% AND time-on-page <10 detik.
 // Kalau salah satu lewat, dianggap engaged (bounced=false).
 function isStillBounced(scrollPct: number | null | undefined, timeSec: number | null | undefined): boolean {
@@ -97,7 +89,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: 'lp not found' }, { status: 404 })
   }
 
-  const ipHash = hashIp(clientIpFrom(req.headers))
+  // IP dari elemen TERAKHIR XFF (hop yang di-append Traefik) — elemen pertama
+  // bisa dipalsukan client untuk bypass rate limit per-ipHash di bawah.
+  const ipHash = hashIp(getClientIp(req))
   const userAgent = req.headers.get('user-agent') ?? ''
   const parsedUa = parseUa(userAgent)
 
@@ -218,7 +212,7 @@ export async function POST(req: Request) {
     let maxScroll = matchedVisit.scrollMaxPct ?? 0
     let maxTime = matchedVisit.timeOnPageSec ?? 0
     let cta = matchedVisit.ctaClicked
-    let utmUpdate: {
+    const utmUpdate: {
       utmSource?: string | null
       utmMedium?: string | null
       utmCampaign?: string | null

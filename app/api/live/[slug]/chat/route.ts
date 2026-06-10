@@ -9,10 +9,15 @@
 import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
+import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
 import { InsufficientBalanceError } from '@/lib/services/ai-generation-log'
 import { generateLiveReply, type ChatTurn, type LiveProduct } from '@/lib/services/live/chat'
-import { checkRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
+import {
+  checkRateLimit,
+  checkRoomRateLimit,
+  maybeCleanup,
+} from '@/lib/services/live/rate-limit'
 import {
   bumpMessageCount,
   ensureLiveSession,
@@ -44,12 +49,6 @@ const chatSchema = z.object({
     .optional(),
 })
 
-function getIp(req: Request): string {
-  const xf = req.headers.get('x-forwarded-for')
-  if (xf) return xf.split(',')[0]?.trim() ?? 'unknown'
-  return req.headers.get('x-real-ip') ?? 'unknown'
-}
-
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ slug: string }> },
@@ -62,12 +61,23 @@ export async function POST(
   const { message, isBot } = parsed.data
   const history: ChatTurn[] = parsed.data.history ?? []
 
-  // Rate limit per IP per slug.
-  const ip = getIp(req)
+  // Rate limit per IP per slug. IP diambil dari elemen TERAKHIR XFF (yang
+  // di-append Traefik) — elemen pertama bisa dipalsukan client.
+  const ip = getClientIp(req)
   const rl = checkRateLimit(ip, slug)
   if (!rl.ok) {
     return jsonError(
       `Terlalu banyak pesan. Coba lagi dalam ${rl.retryAfterSec ?? 60}dtk.`,
+      429,
+    )
+  }
+  // Defense-in-depth: cap global per room, terlepas IP. Limit per-IP saja
+  // tidak cukup kalau penyerang rotasi IP (botnet/proxy) — tiap pesan memicu
+  // Claude + TTS berbayar dari saldo owner.
+  const roomRl = checkRoomRateLimit(slug)
+  if (!roomRl.ok) {
+    return jsonError(
+      `Room lagi ramai banget. Coba lagi dalam ${roomRl.retryAfterSec ?? 60}dtk.`,
       429,
     )
   }

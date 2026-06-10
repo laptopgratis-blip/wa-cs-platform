@@ -48,7 +48,10 @@ services:
       # container di-recreate. Mount langsung ke /app/public/uploads di image.
       - ./public/uploads:/app/public/uploads
     ports:
-      - "3000:3000"
+      # Bind ke loopback host SAJA — publish 0.0.0.0 membuka jalur bypass
+      # Traefik (X-Forwarded-For bebas dipalsukan + /api/internal terjangkau
+      # dari luar kalau firewall bolong). 127.0.0.1 tetap bisa debug dari host.
+      - "127.0.0.1:3000:3000"
     networks:
       - traefik-public
       - internal

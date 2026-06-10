@@ -12,9 +12,11 @@
 import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
+import { getClientIp } from '@/lib/client-ip'
 import { normalizePhone } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
+import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
 import { buildTranscript, logLiveEvent } from '@/lib/services/live/tangkap'
 import { waService } from '@/lib/wa-service'
 
@@ -49,6 +51,19 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
+
+  // Rate limit ketat (5/menit per IP per slug) — endpoint publik yang terima
+  // PII + memicu kirim WA. IP dari elemen terakhir XFF (trusted hop Traefik).
+  const ip = getClientIp(req)
+  const rl = checkLeadRateLimit(ip, slug)
+  if (!rl.ok) {
+    return jsonError(
+      `Terlalu banyak percobaan. Coba lagi dalam ${rl.retryAfterSec ?? 60}dtk.`,
+      429,
+    )
+  }
+  maybeCleanup()
+
   const parsed = leadSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Body tidak valid', 400)
