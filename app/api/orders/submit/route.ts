@@ -5,13 +5,12 @@
 //   3. Hitung total via pricing engine (sumber kebenaran — JANGAN trust client)
 //   4. Generate invoiceNumber + uniqueCode
 //   5. Snapshot bank accounts aktif + zone yg di-apply
-//   6. Save UserOrder + increment OrderForm.submissions + increment flash sale sold
+//   6. Save UserOrder + increment OrderForm.submissions + klaim kuota flash
+//      sale secara atomik (anti-oversell: rollback kalau kuota tidak cukup)
 //
 // Catatan: contactId required di UserOrder (FK), tapi customer publik biasanya
 // bukan contact existing. Strategi: cari/buat Contact otomatis dari nomor HP
 // di scope user-pemilik-form, dengan source PUBLIC_FORM.
-import type { NextResponse } from 'next/server'
-
 import { jsonError, jsonOk } from '@/lib/api'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
@@ -20,6 +19,11 @@ import { calculateOrderTotal } from '@/lib/services/order-pricing'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { submitOrderSchema } from '@/lib/validations/submit-order'
+
+// Error khusus saat klaim kuota flash sale gagal di dalam transaksi.
+// Dilempar supaya transaksi rollback, lalu di-catch route jadi jsonError 400
+// (bukan 500 generik) — pesan aman ditampilkan ke customer.
+class FlashSaleQuotaError extends Error {}
 
 function generateInvoiceNumber(): string {
   const d = new Date()
@@ -253,14 +257,50 @@ export async function POST(req: Request) {
         data: { submissions: { increment: 1 } },
       })
 
-      // Increment flashSaleSold per item kalau aktif (best-effort, tidak fatal).
-      for (const item of pricing.items.filter((i) => i.isFlashSale)) {
-        await tx.product
-          .update({
-            where: { id: item.productId },
+      // Klaim kuota flash sale per item secara ATOMIK di dalam transaksi.
+      // isFlashSaleActive di pricing engine cuma cek sold < quota TANPA lock,
+      // jadi dua order concurrent bisa sama-sama lolos cek harga. updateMany
+      // bersyarat di bawah memastikan increment hanya terjadi kalau sisa kuota
+      // masih cukup — kalau tidak, throw → seluruh transaksi rollback.
+      const flashItems = pricing.items.filter((i) => i.isFlashSale)
+      if (flashItems.length > 0) {
+        const flashProducts = await tx.product.findMany({
+          where: { id: { in: flashItems.map((i) => i.productId) } },
+          select: { id: true, flashSaleQuota: true },
+        })
+        const quotaByProductId = new Map(
+          flashProducts.map((p) => [p.id, p.flashSaleQuota]),
+        )
+        for (const item of flashItems) {
+          if (!quotaByProductId.has(item.productId)) {
+            // Produk dihapus di antara hitung harga dan submit — jangan
+            // diam-diam lanjut dengan harga flash sale.
+            throw new FlashSaleQuotaError(
+              `Produk ${item.name} sudah tidak tersedia. Silakan ulangi order.`,
+            )
+          }
+          const quota = quotaByProductId.get(item.productId) ?? null
+          const claimed = await tx.product.updateMany({
+            where: {
+              id: item.productId,
+              // quota null = flash sale tanpa batas → increment tanpa guard.
+              // quota ada = increment hanya kalau sold + qty <= quota
+              // (ekuivalen: sold <= quota - qty).
+              ...(quota == null
+                ? {}
+                : { flashSaleSold: { lte: quota - item.qty } }),
+            },
             data: { flashSaleSold: { increment: item.qty } },
           })
-          .catch(() => {})
+          if (claimed.count === 0) {
+            // Catatan: jangan janjikan "harga normal" — kalau kuota belum
+            // benar-benar habis (sisa < qty), retry masih dapat harga flash
+            // dan gagal lagi. Saran yang akurat: kurangi jumlah / coba lagi.
+            throw new FlashSaleQuotaError(
+              `Kuota flash sale tidak cukup untuk produk ${item.name}. Kurangi jumlah pesanan atau coba lagi nanti.`,
+            )
+          }
+        }
       }
 
       return order
@@ -291,6 +331,12 @@ export async function POST(req: Request) {
       201,
     )
   } catch (err) {
+    // Kuota flash sale habis / produk hilang saat klaim → bukan error server.
+    // Transaksi sudah rollback, balas 400 dengan pesan yang aman untuk customer.
+    if (err instanceof FlashSaleQuotaError) {
+      console.warn('[POST /api/orders/submit] klaim flash sale gagal:', err.message)
+      return jsonError(err.message, 400)
+    }
     console.error('[POST /api/orders/submit] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)
   }
