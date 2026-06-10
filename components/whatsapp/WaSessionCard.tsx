@@ -38,7 +38,9 @@ import {
 } from '@/components/ui/select'
 import {
   getSocket,
+  subscribeWaSession,
   type StatusEventPayload,
+  type SubscribeErrorPayload,
   type WaStatus,
 } from '@/lib/socket-client'
 import { formatNumber } from '@/lib/format'
@@ -100,7 +102,17 @@ export function WaSessionCard({
 
   useEffect(() => {
     const socket = getSocket()
-    socket.emit('subscribe', session.id)
+    let cancelled = false
+
+    // Subscribe pakai token short-lived dari server — wa-service menolak
+    // join room tanpa token valid (anti QR hijack). isCancelled mencegah
+    // subscribe telat (setelah cleanup unsubscribe) saat komponen unmount.
+    void subscribeWaSession(socket, session.id, {
+      isCancelled: () => cancelled,
+    }).then((result) => {
+      if (cancelled || result.ok) return
+      toast.error(result.error || 'Gagal terhubung ke status realtime')
+    })
 
     function handleStatus(payload: StatusEventPayload) {
       if (payload.sessionId !== session.id) return
@@ -124,14 +136,22 @@ export function WaSessionCard({
       setStatus('DISCONNECTED')
     }
 
+    function handleSubscribeError(payload: SubscribeErrorPayload) {
+      if (payload.sessionId !== session.id) return
+      toast.error(payload.error || 'Gagal subscribe status realtime')
+    }
+
     socket.on('status', handleStatus)
     socket.on('connected', handleConnected)
     socket.on('disconnected', handleDisconnected)
+    socket.on('subscribe-error', handleSubscribeError)
 
     return () => {
+      cancelled = true
       socket.off('status', handleStatus)
       socket.off('connected', handleConnected)
       socket.off('disconnected', handleDisconnected)
+      socket.off('subscribe-error', handleSubscribeError)
       socket.emit('unsubscribe', session.id)
     }
   }, [session.id])

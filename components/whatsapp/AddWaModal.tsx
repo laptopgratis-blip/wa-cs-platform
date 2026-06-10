@@ -21,8 +21,10 @@ import {
 } from '@/components/ui/dialog'
 import {
   getSocket,
+  subscribeWaSession,
   type QrEventPayload,
   type StatusEventPayload,
+  type SubscribeErrorPayload,
   type WaStatus,
 } from '@/lib/socket-client'
 
@@ -93,7 +95,17 @@ export function AddWaModal({
   useEffect(() => {
     if (!open || !sessionId) return
     const socket = getSocket()
-    socket.emit('subscribe', sessionId)
+    let cancelled = false
+
+    // Subscribe pakai token short-lived dari server — wa-service menolak
+    // join room tanpa token valid (anti QR hijack). isCancelled mencegah
+    // subscribe telat (setelah cleanup unsubscribe) saat modal keburu ditutup.
+    void subscribeWaSession(socket, sessionId, {
+      isCancelled: () => cancelled,
+    }).then((result) => {
+      if (cancelled || result.ok) return
+      setError(result.error || 'Gagal terhubung ke status realtime')
+    })
 
     function handleQr(payload: QrEventPayload) {
       if (payload.sessionId !== sessionId) return
@@ -117,14 +129,22 @@ export function AddWaModal({
       })
     }
 
+    function handleSubscribeError(payload: SubscribeErrorPayload) {
+      if (payload.sessionId !== sessionId) return
+      setError(payload.error || 'Gagal subscribe status realtime')
+    }
+
     socket.on('qr', handleQr)
     socket.on('status', handleStatus)
     socket.on('connected', handleConnected)
+    socket.on('subscribe-error', handleSubscribeError)
 
     return () => {
+      cancelled = true
       socket.off('qr', handleQr)
       socket.off('status', handleStatus)
       socket.off('connected', handleConnected)
+      socket.off('subscribe-error', handleSubscribeError)
       socket.emit('unsubscribe', sessionId)
     }
   }, [open, sessionId, onConnected, onOpenChange])

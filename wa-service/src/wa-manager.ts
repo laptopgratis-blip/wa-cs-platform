@@ -12,6 +12,7 @@ import {
   useMultiFileAuthState,
   type WAMessage,
   type WASocket,
+  type WAVersion,
 } from 'baileys'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -20,7 +21,11 @@ import qrcode from 'qrcode'
 import type { Server as IOServer } from 'socket.io'
 
 import { generateReply, type AiUsage } from './ai-handler.js'
-import { internalApi, type InternalSoulConfig } from './internal-api.js'
+import {
+  internalApi,
+  type InternalMessageHistoryItem,
+  type InternalSoulConfig,
+} from './internal-api.js'
 import { resolvePhoneNumber } from './lib/jid-resolver.js'
 import { tokenChecker } from './token-checker.js'
 
@@ -28,10 +33,35 @@ import { tokenChecker } from './token-checker.js'
 // ke GitHub setiap call — bisa 1-5s lat. Cache 1 jam, refresh background.
 // Kalau call pertama belum selesai, semua connect await Promise yang sama.
 const BAILEYS_VERSION_TTL_MS = 60 * 60 * 1000
-let cachedVersion: { value: number[] | undefined; fetchedAt: number } | null = null
-let inflightVersionFetch: Promise<number[] | undefined> | null = null
+let cachedVersion: { value: WAVersion | undefined; fetchedAt: number } | null = null
+let inflightVersionFetch: Promise<WAVersion | undefined> | null = null
 
-async function getBaileysVersionCached(): Promise<number[] | undefined> {
+// ── Konstanta reconnect & antrian pesan ─────────────────────────────────────
+// Backoff eksponensial untuk reconnect non-restartRequired: 1.5s → 3s → 6s →
+// ... cap 60s, max 10 percobaan beruntun. restartRequired (515, normal
+// pasca-pairing) tetap fast-reconnect tanpa dihitung sebagai kegagalan.
+const RECONNECT_BASE_DELAY_MS = 1500
+const RECONNECT_MAX_DELAY_MS = 60_000
+const MAX_RECONNECT_ATTEMPTS = 10
+const FAST_RECONNECT_DELAY_MS = 1500
+
+// Hitung delay reconnect percobaan ke-N (1-based) + jitter ±20% supaya banyak
+// sesi tidak reconnect serempak (thundering herd ke server WA).
+function reconnectDelayMs(attempt: number): number {
+  const exp = Math.min(
+    RECONNECT_MAX_DELAY_MS,
+    RECONNECT_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  )
+  const jitter = exp * 0.2 * (Math.random() * 2 - 1)
+  return Math.max(500, Math.round(exp + jitter))
+}
+
+// Batas putaran drain antrian pesan beruntun per kontak (lihat
+// handleIncomingMessage). Sisa antrian di luar batas tetap tersimpan di CRM —
+// hanya tidak dapat balasan AI tambahan.
+const MAX_DRAIN_ROUNDS = 3
+
+async function getBaileysVersionCached(): Promise<WAVersion | undefined> {
   const now = Date.now()
   if (cachedVersion && now - cachedVersion.fetchedAt < BAILEYS_VERSION_TTL_MS) {
     return cachedVersion.value
@@ -103,6 +133,14 @@ interface SessionEntry {
   // Set kontak yang sedang diproses AI (kunci: phoneNumber). Hindari double-reply
   // kalau customer kirim banyak pesan beruntun.
   inFlight: Set<string>
+  // Antrian pesan customer per kontak (kunci: phoneNumber) yang masuk SAAT
+  // pipeline AI masih jalan. Pesan sudah disimpan ke CRM saat enqueue —
+  // setelah pipeline selesai, antrian di-drain jadi satu putaran AI gabungan
+  // (lihat handleIncomingMessage). Jangan drop pesan beruntun!
+  pendingByContact: Map<string, string[]>
+  // Hitungan percobaan reconnect beruntun — reset saat connection open sukses.
+  // Dipakai untuk exponential backoff + stop setelah MAX_RECONNECT_ATTEMPTS.
+  reconnectAttempts: number
   // ID pesan outgoing yang baru-baru ini kita kirim sendiri (msg.key.id). Dipakai
   // untuk dedup event messages.upsert fromMe — cegah race antara save ke DB di
   // Next.js dan event echo dari Baileys. Entry di-evict setelah 60 detik.
@@ -152,8 +190,25 @@ export class WaManager {
     return this.sessions.get(sessionId)?.socket ?? null
   }
 
+  // Promise connect yang sedang in-flight per sessionId. Anti race
+  // double-socket: dua caller connect() bersamaan (mis. user klik connect +
+  // auto-reconnect) dapat promise yang SAMA — tanpa ini, await di antara guard
+  // idempoten dan sessions.set bisa bikin dua makeWASocket untuk satu sesi.
+  // Pola sama dengan getBaileysVersionCached di atas.
+  private connectPromises = new Map<string, Promise<SessionState>>()
+
   // Mulai (atau lanjutkan) satu sesi. Idempoten — kalau sudah jalan, return state saat ini.
   async connect(sessionId: string): Promise<SessionState> {
+    const inflight = this.connectPromises.get(sessionId)
+    if (inflight) return inflight
+    const promise = this.doConnect(sessionId).finally(() => {
+      this.connectPromises.delete(sessionId)
+    })
+    this.connectPromises.set(sessionId, promise)
+    return promise
+  }
+
+  private async doConnect(sessionId: string): Promise<SessionState> {
     const existing = this.sessions.get(sessionId)
     if (existing && existing.socket) {
       return existing.state
@@ -172,6 +227,8 @@ export class WaManager {
       socket: null,
       intentionallyClosed: false,
       inFlight: new Set<string>(),
+      pendingByContact: new Map<string, string[]>(),
+      reconnectAttempts: 0,
       recentlySentIds: new Set<string>(),
     }
     entry.intentionallyClosed = false
@@ -220,6 +277,9 @@ export class WaManager {
       }
 
       if (connection === 'open') {
+        // Koneksi sukses — reset counter backoff supaya disconnect berikutnya
+        // mulai lagi dari delay terkecil.
+        entry.reconnectAttempts = 0
         const me = sock.user
         const phoneNumber = me?.id ? me.id.split(':')[0]?.split('@')[0] ?? null : null
         this.updateState(entry, {
@@ -266,6 +326,60 @@ export class WaManager {
           return
         }
 
+        // badSession: credentials korup — reconnect dengan creds yang sama
+        // pasti gagal terus. Wipe folder, minta user pair ulang (scan QR baru).
+        // Pola wipe sama dengan kasus loggedOut di atas.
+        if (reasonCode === DisconnectReason.badSession) {
+          this.updateState(entry, {
+            status: 'DISCONNECTED',
+            qr: null,
+            qrDataUrl: null,
+            lastError: 'Sesi rusak (bad session) — perlu scan QR ulang',
+          })
+          this.emit<DisconnectedEvent>('disconnected', {
+            sessionId,
+            reason: 'bad session — perlu scan QR ulang',
+          })
+          await this.wipeFolder(sessionId).catch(() => {})
+          return
+        }
+
+        // connectionReplaced / conflict (440): nomor ini diambil alih koneksi
+        // lain (mis. instance wa-service ganda). Reconnect cuma saling tendang
+        // tanpa henti — stop dengan status ERROR + alasan jelas.
+        if (reasonCode === DisconnectReason.connectionReplaced) {
+          this.updateState(entry, {
+            status: 'ERROR',
+            qr: null,
+            qrDataUrl: null,
+            lastError:
+              'Koneksi digantikan sesi lain (conflict 440) — pastikan tidak ada instance wa-service ganda untuk nomor ini',
+          })
+          return
+        }
+
+        // restartRequired (515): normal pasca-pairing — reconnect cepat tanpa
+        // dihitung sebagai kegagalan. Reason lain: exponential backoff +
+        // jitter, stop setelah MAX_RECONNECT_ATTEMPTS percobaan beruntun.
+        const isRestartRequired = reasonCode === DisconnectReason.restartRequired
+        let delayMs = FAST_RECONNECT_DELAY_MS
+        if (!isRestartRequired) {
+          entry.reconnectAttempts += 1
+          if (entry.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+            this.updateState(entry, {
+              status: 'ERROR',
+              qr: null,
+              qrDataUrl: null,
+              lastError: `Gagal reconnect setelah ${MAX_RECONNECT_ATTEMPTS} percobaan${reasonText ? ` — ${reasonText}` : ''}`,
+            })
+            return
+          }
+          delayMs = reconnectDelayMs(entry.reconnectAttempts)
+          console.warn(
+            `[wa-manager:${sessionId}] reconnect percobaan ke-${entry.reconnectAttempts} dalam ${delayMs}ms (reason: ${reasonCode ?? 'unknown'})`,
+          )
+        }
+
         // Reconnect otomatis untuk error lain (network, server down, dll.).
         this.updateState(entry, {
           status: 'CONNECTING',
@@ -281,7 +395,7 @@ export class WaManager {
               })
             })
           }
-        }, 1500)
+        }, delayMs)
       }
     })
 
@@ -458,10 +572,34 @@ export class WaManager {
     if (remoteJid === 'status@broadcast') return
     if (remoteJid.endsWith('@g.us')) return // skip grup untuk MVP
 
-    const content = extractText(msg)
-    if (!content) return // bukan pesan teks (media/sticker/dll.)
-
     const sessionId = entry.state.sessionId
+    const content = extractText(msg)
+    if (!content) {
+      // Media tanpa caption (gambar/voice note/dokumen/stiker) dari customer:
+      // jangan hilang diam-diam — simpan placeholder ke CRM supaya CS tetap
+      // lihat di inbox. TIDAK memicu pipeline AI (tidak ada teks diproses).
+      const placeholder = extractMediaPlaceholder(msg)
+      if (placeholder && !msg.key.fromMe) {
+        const mediaPhone = await resolvePhoneNumber(entry.socket, remoteJid)
+        await internalApi
+          .saveMessage({
+            sessionId,
+            phoneNumber: mediaPhone,
+            pushName: msg.pushName ?? null,
+            content: placeholder,
+            role: 'USER',
+            withHistory: false,
+          })
+          .catch((err) =>
+            console.error(
+              `[wa-manager:${sessionId}] save placeholder media:`,
+              err,
+            ),
+          )
+      }
+      return
+    }
+
     // Resolve LID → PN. Helper sudah handle cache + fallback ke LID kalau
     // mapping belum ada.
     const phoneNumber = await resolvePhoneNumber(entry.socket, remoteJid)
@@ -513,18 +651,98 @@ export class WaManager {
     // ── Branch !fromMe: pesan dari customer ──
     const inFlightKey = phoneNumber
     if (entry.inFlight.has(inFlightKey)) {
-      // Pesan beruntun dari kontak yang sama — biarkan flow yang sedang
-      // jalan menyimpan history-nya, request berikut akan ambil pas turn-nya.
+      // Pipeline AI kontak ini masih jalan. JANGAN drop pesan: antri konten
+      // untuk putaran drain setelah pipeline selesai, dan tetap simpan ke CRM
+      // sekarang supaya inbox lengkap. Putaran drain TIDAK menyimpan ulang
+      // pesan ini (sudah tersimpan di sini).
+      const queued = entry.pendingByContact.get(inFlightKey) ?? []
+      entry.pendingByContact.set(inFlightKey, [...queued, content])
+      await internalApi
+        .saveMessage({
+          sessionId,
+          phoneNumber,
+          pushName: msg.pushName ?? null,
+          content,
+          role: 'USER',
+          withHistory: false,
+        })
+        .catch((err) =>
+          console.error(`[wa-manager:${sessionId}] save pesan antrian:`, err),
+        )
       return
     }
     entry.inFlight.add(inFlightKey)
 
     try {
+      // Putaran pertama: pesan trigger — pipeline yang simpan ke CRM.
+      let round = await this.runCustomerPipeline(entry, {
+        remoteJid,
+        phoneNumber,
+        pushName: msg.pushName ?? null,
+        content,
+        presetHistory: null,
+      })
+
+      // Drain antrian pesan yang masuk selama pipeline jalan: gabungkan jadi
+      // SATU konteks per putaran (join newline), max MAX_DRAIN_ROUNDS putaran
+      // supaya tidak rekursi/loop tak terbatas. inFlight masih dipegang
+      // selama drain → mutual exclusion terjaga, tidak mungkin double-reply /
+      // double-charge untuk kontak yang sama.
+      let drains = 0
+      while (round.shouldContinue && drains < MAX_DRAIN_ROUNDS) {
+        const pending = entry.pendingByContact.get(inFlightKey)
+        if (!pending || pending.length === 0) break
+        entry.pendingByContact.delete(inFlightKey)
+        drains += 1
+        round = await this.runCustomerPipeline(entry, {
+          remoteJid,
+          phoneNumber,
+          pushName: msg.pushName ?? null,
+          content: pending.join('\n'),
+          presetHistory: round.historyAfter,
+        })
+      }
+    } finally {
+      // Sisa antrian (kalau ada) sudah tersimpan di CRM — buang dari memori
+      // supaya tidak terbawa ke pipeline berikutnya, lalu lepas inFlight.
+      entry.pendingByContact.delete(inFlightKey)
+      entry.inFlight.delete(inFlightKey)
+    }
+  }
+
+  // Satu putaran pipeline balasan untuk pesan customer.
+  // - presetHistory == null → putaran normal: simpan pesan ke CRM
+  //   (withHistory) lalu proses seperti biasa.
+  // - presetHistory != null → putaran drain: pesan SUDAH disimpan saat
+  //   enqueue, JANGAN simpan ulang; pakai history in-memory dari putaran
+  //   sebelumnya sebagai konteks percakapan.
+  // shouldContinue=false artinya putaran drain berikutnya tidak berguna
+  // (CS takeover, STOP, token habis, config belum lengkap, atau error).
+  private async runCustomerPipeline(
+    entry: SessionEntry,
+    args: {
+      remoteJid: string
+      phoneNumber: string
+      pushName: string | null
+      content: string
+      presetHistory: InternalMessageHistoryItem[] | null
+    },
+  ): Promise<{
+    shouldContinue: boolean
+    historyAfter: InternalMessageHistoryItem[]
+  }> {
+    const sessionId = entry.state.sessionId
+    const { remoteJid, phoneNumber, content } = args
+
+    let contactId: string
+    let baseHistory: InternalMessageHistoryItem[]
+
+    if (args.presetHistory === null) {
       // 1. Simpan pesan customer + minta history.
       const saved = await internalApi.saveMessage({
         sessionId,
         phoneNumber,
-        pushName: msg.pushName ?? null,
+        pushName: args.pushName,
         content,
         role: 'USER',
         withHistory: true,
@@ -534,229 +752,266 @@ export class WaManager {
           `[wa-manager:${sessionId}] saveMessage gagal:`,
           saved.error,
         )
-        return
+        return { shouldContinue: false, historyAfter: [] }
       }
 
       // Kalau CS sedang ambil alih kontak ini → simpan saja, jangan AI reply.
-      if (saved.data.contact?.aiPaused) return
-
-      // 1.4 Follow-Up STOP detection: kalau customer balas STOP/BERHENTI/dll,
-      // Next.js akan blacklist customer + cancel pending queue. Return
-      // autoReply opsional yang kita kirim balik via Baileys, lalu STOP semua
-      // proses lain (jangan trigger flow / AI). Best-effort — kalau call
-      // gagal, fallback diam ke flow normal.
-      const stopCheck = await internalApi.checkFollowupStop({
+      if (saved.data.contact?.aiPaused) {
+        return { shouldContinue: false, historyAfter: saved.data.history }
+      }
+      contactId = saved.data.contactId
+      // History dari server sudah termasuk pesan yang barusan disimpan.
+      baseHistory = saved.data.history
+    } else {
+      // 1. (drain) Pesan sudah tersimpan saat enqueue — cukup re-check status
+      // takeover. CS bisa saja ambil alih kontak di tengah putaran sebelumnya.
+      const statusRes = await internalApi.getContactStatus({
         sessionId,
         phoneNumber,
-        content,
       })
-      if (stopCheck.success && stopCheck.data?.isStop) {
-        if (stopCheck.data.autoReply) {
-          try {
-            const sent = await entry.socket?.sendMessage(remoteJid, {
-              text: stopCheck.data.autoReply,
-            })
-            const msgId = sent?.key?.id ?? null
-            if (msgId) this.markSent(entry, msgId)
-            await internalApi
-              .saveMessage({
-                sessionId,
-                phoneNumber,
-                content: stopCheck.data.autoReply,
-                role: 'AI',
-                source: 'AI',
-                externalMsgId: msgId,
-                tokensUsed: 0,
-              })
-              .catch(() => {})
-          } catch (err) {
-            console.error(
-              `[wa-manager:${sessionId}] followup stop autoReply gagal:`,
-              err,
-            )
-          }
-        }
-        return
+      if (!statusRes.success || !statusRes.data) {
+        console.error(
+          `[wa-manager:${sessionId}] getContactStatus (drain) gagal:`,
+          statusRes.error,
+        )
+        return { shouldContinue: false, historyAfter: args.presetHistory }
       }
+      if (statusRes.data.aiPaused) {
+        return { shouldContinue: false, historyAfter: args.presetHistory }
+      }
+      contactId = statusRes.data.contactId
+      // Konteks in-memory putaran sebelumnya + gabungan pesan antrian.
+      baseHistory = [
+        ...args.presetHistory,
+        { role: 'USER', content, createdAt: new Date().toISOString() },
+      ]
+    }
 
-      // 1.5 Sales Flow: kalau ada OrderSession aktif atau pesan ini cocok
-      // trigger keyword, flow engine yang handle (script-based, hemat token).
-      // Kalau gagal → diam-diam fallback ke AI normal.
-      const flow = await internalApi.processFlow({
-        sessionId,
-        contactId: saved.data.contactId,
-        message: content,
-      })
-      if (flow.success && flow.data?.handled && flow.data.reply) {
-        // Kirim balasan flow ke customer.
-        let flowMsgId: string | null = null
+    // History untuk putaran drain berikutnya = konteks sekarang + balasan
+    // yang baru terkirim (immutable — selalu array baru).
+    const withReply = (reply: string): InternalMessageHistoryItem[] => [
+      ...baseHistory,
+      { role: 'AI', content: reply, createdAt: new Date().toISOString() },
+    ]
+
+    // 1.4 Follow-Up STOP detection: kalau customer balas STOP/BERHENTI/dll,
+    // Next.js akan blacklist customer + cancel pending queue. Return
+    // autoReply opsional yang kita kirim balik via Baileys, lalu STOP semua
+    // proses lain (jangan trigger flow / AI). Best-effort — kalau call
+    // gagal, fallback diam ke flow normal.
+    const stopCheck = await internalApi.checkFollowupStop({
+      sessionId,
+      phoneNumber,
+      content,
+    })
+    if (stopCheck.success && stopCheck.data?.isStop) {
+      if (stopCheck.data.autoReply) {
         try {
           const sent = await entry.socket?.sendMessage(remoteJid, {
-            text: flow.data.reply,
+            text: stopCheck.data.autoReply,
           })
-          flowMsgId = sent?.key?.id ?? null
-          if (flowMsgId) this.markSent(entry, flowMsgId)
+          const msgId = sent?.key?.id ?? null
+          if (msgId) this.markSent(entry, msgId)
+          await internalApi
+            .saveMessage({
+              sessionId,
+              phoneNumber,
+              content: stopCheck.data.autoReply,
+              role: 'AI',
+              source: 'AI',
+              externalMsgId: msgId,
+              tokensUsed: 0,
+            })
+            .catch(() => {})
         } catch (err) {
-          console.error(`[wa-manager:${sessionId}] flow sendMessage gagal:`, err)
-        }
-        // Simpan reply ke DB sebagai pesan AI (untuk inbox visibility).
-        await internalApi
-          .saveMessage({
-            sessionId,
-            phoneNumber,
-            content: flow.data.reply,
-            role: 'AI',
-            source: 'AI',
-            externalMsgId: flowMsgId,
-            tokensUsed: 0,
-          })
-          .catch((err) =>
-            console.error(`[wa-manager:${sessionId}] flow save msg:`, err),
-          )
-
-        // Notifikasi admin kalau flow selesai dan setting-nya aktif.
-        if (flow.data.notifyAdmin) {
-          const { phoneNumber: adminPhone, message: adminMsg } =
-            flow.data.notifyAdmin
-          // sendText sudah handle JID + connection check. Best-effort: log
-          // kalau gagal, jangan menahan flow customer-side.
-          this.sendText(sessionId, adminPhone, adminMsg).catch((err) =>
-            console.error(
-              `[wa-manager:${sessionId}] notif admin gagal:`,
-              err,
-            ),
+          console.error(
+            `[wa-manager:${sessionId}] followup stop autoReply gagal:`,
+            err,
           )
         }
-        return
       }
+      // Customer minta STOP — jangan lanjut drain antrian.
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
 
-      // 2. Ambil soul + model. Kalau belum di-set → skip reply.
-      const cfg = await internalApi.getSoul(sessionId)
-      if (!cfg.success || !cfg.data) {
-        console.error(`[wa-manager:${sessionId}] getSoul gagal:`, cfg.error)
-        return
-      }
-      const { soul, model, userId } = cfg.data
-      if (!soul || !model) {
-        // Belum dikonfigurasi user — biarkan, tidak balas.
-        return
-      }
-
-      // 3. Pre-flight balance check — rough estimate dari avgTokensPerMessage.
-      // Charge real dihitung server SETELAH AI sukses berdasarkan response.usage
-      // (skema fair-pricing: proporsional terhadap penggunaan token).
-      const preflightAmount = Math.max(
-        model.costPerMessage,
-        Math.ceil(model.avgTokensPerMessage / 50), // rough floor (1/50 of avg)
-      )
-      const enough = await tokenChecker.hasEnough(userId, preflightAmount)
-      if (!enough) {
-        this.updateState(entry, {
-          status: 'PAUSED',
-          lastError: 'Saldo token habis',
-        })
-        return
-      }
-
-      // 4. Ambil knowledge yang match keyword di pesan customer. Best-effort:
-      // kalau gagal, lanjut tanpa knowledge — jangan menahan reply.
-      const kb = await internalApi.getKnowledge(sessionId, content)
-      const augmentedPrompt =
-        kb.success && kb.data && kb.data.promptBlock
-          ? soul.systemPrompt + kb.data.promptBlock
-          : soul.systemPrompt
-
-      // 5. Generate balasan — provider routing di ai-handler.
-      const ai = await generateReply({
-        systemPrompt: augmentedPrompt,
-        provider: model.provider,
-        modelId: model.modelId,
-        history: saved.data.history,
-        latestUserMessage: content,
-      })
-      if (!ai.ok || !ai.reply) {
-        console.error(`[wa-manager:${sessionId}] AI error:`, ai.error)
-        if (ai.invalidApiKey) {
-          this.updateState(entry, {
-            status: 'PAUSED',
-            lastError: ai.error ?? 'API key invalid',
-          })
-        }
-        return
-      }
-
-      // 5. Charge token proporsional — server hitung tokensCharged dari real
-      // (inputTokens, outputTokens) × harga AiModel × margin CS_REPLY config.
-      // Kalau gagal → pause & jangan kirim balasan.
-      const charge = await tokenChecker.chargeCsReply({
-        userId,
-        sessionId,
-        aiModelId: model.id,
-        inputTokens: ai.usage?.inputTokens ?? 0,
-        outputTokens: ai.usage?.outputTokens ?? 0,
-      })
-      if (!charge.ok) {
-        if (charge.insufficient) {
-          this.updateState(entry, {
-            status: 'PAUSED',
-            lastError: 'Saldo token habis',
-          })
-        }
-        return
-      }
-
-      // 6. Kirim balasan via Baileys.
-      let aiMsgId: string | null = null
+    // 1.5 Sales Flow: kalau ada OrderSession aktif atau pesan ini cocok
+    // trigger keyword, flow engine yang handle (script-based, hemat token).
+    // Kalau gagal → diam-diam fallback ke AI normal.
+    const flow = await internalApi.processFlow({
+      sessionId,
+      contactId,
+      message: content,
+    })
+    if (flow.success && flow.data?.handled && flow.data.reply) {
+      // Kirim balasan flow ke customer.
+      let flowMsgId: string | null = null
       try {
         const sent = await entry.socket?.sendMessage(remoteJid, {
-          text: ai.reply,
+          text: flow.data.reply,
         })
-        aiMsgId = sent?.key?.id ?? null
-        if (aiMsgId) this.markSent(entry, aiMsgId)
+        flowMsgId = sent?.key?.id ?? null
+        if (flowMsgId) this.markSent(entry, flowMsgId)
       } catch (err) {
-        console.error(`[wa-manager:${sessionId}] sendMessage gagal:`, err)
+        console.error(`[wa-manager:${sessionId}] flow sendMessage gagal:`, err)
       }
-
-      // 6b. Kirim attachments dari knowledge IMAGE/FILE — fire-and-forget,
-      // jangan block flow. wa-manager auto-attach supaya AI tidak perlu
-      // request manual ke admin ("admin akan kirim foto/bukti").
-      const attachments = kb.success ? kb.data?.attachments ?? [] : []
-      console.log(
-        `[wa-manager:${sessionId}] reply done · attachments=${attachments.length}`,
-      )
-      if (attachments.length > 0 && entry.socket) {
-        void sendKnowledgeAttachments(
-          entry.socket,
-          remoteJid,
-          attachments,
-          sessionId,
-        )
-      }
-
-      // 7. Simpan balasan AI ke DB (history untuk percakapan berikutnya).
-      const cost = buildCostFields(ai.usage, {
-        tokensCharged: charge.tokensCharged ?? 0,
-        apiCostRp: charge.apiCostRp ?? 0,
-        revenueRp: charge.revenueRp ?? 0,
-        profitRp: charge.profitRp ?? 0,
-      })
+      // Simpan reply ke DB sebagai pesan AI (untuk inbox visibility).
       await internalApi
         .saveMessage({
           sessionId,
           phoneNumber,
-          content: ai.reply,
+          content: flow.data.reply,
           role: 'AI',
           source: 'AI',
-          externalMsgId: aiMsgId,
-          tokensUsed: cost.tokensCharged,
-          ...cost,
+          externalMsgId: flowMsgId,
+          tokensUsed: 0,
         })
         .catch((err) =>
-          console.error(`[wa-manager:${sessionId}] save AI msg:`, err),
+          console.error(`[wa-manager:${sessionId}] flow save msg:`, err),
         )
-    } finally {
-      entry.inFlight.delete(inFlightKey)
+
+      // Notifikasi admin kalau flow selesai dan setting-nya aktif.
+      if (flow.data.notifyAdmin) {
+        const { phoneNumber: adminPhone, message: adminMsg } =
+          flow.data.notifyAdmin
+        // sendText sudah handle JID + connection check. Best-effort: log
+        // kalau gagal, jangan menahan flow customer-side.
+        this.sendText(sessionId, adminPhone, adminMsg).catch((err) =>
+          console.error(
+            `[wa-manager:${sessionId}] notif admin gagal:`,
+            err,
+          ),
+        )
+      }
+      // Flow bisa lanjut multi-step — antrian berikutnya boleh di-drain.
+      return { shouldContinue: true, historyAfter: withReply(flow.data.reply) }
     }
+
+    // 2. Ambil soul + model. Kalau belum di-set → skip reply.
+    const cfg = await internalApi.getSoul(sessionId)
+    if (!cfg.success || !cfg.data) {
+      console.error(`[wa-manager:${sessionId}] getSoul gagal:`, cfg.error)
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
+    const { soul, model, userId } = cfg.data
+    if (!soul || !model) {
+      // Belum dikonfigurasi user — biarkan, tidak balas.
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
+
+    // 3. Pre-flight balance check — rough estimate dari avgTokensPerMessage.
+    // Charge real dihitung server SETELAH AI sukses berdasarkan response.usage
+    // (skema fair-pricing: proporsional terhadap penggunaan token).
+    const preflightAmount = Math.max(
+      model.costPerMessage,
+      Math.ceil(model.avgTokensPerMessage / 50), // rough floor (1/50 of avg)
+    )
+    const enough = await tokenChecker.hasEnough(userId, preflightAmount)
+    if (!enough) {
+      this.updateState(entry, {
+        status: 'PAUSED',
+        lastError: 'Saldo token habis',
+      })
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
+
+    // 4. Ambil knowledge yang match keyword di pesan customer. Best-effort:
+    // kalau gagal, lanjut tanpa knowledge — jangan menahan reply.
+    const kb = await internalApi.getKnowledge(sessionId, content)
+    const augmentedPrompt =
+      kb.success && kb.data && kb.data.promptBlock
+        ? soul.systemPrompt + kb.data.promptBlock
+        : soul.systemPrompt
+
+    // 5. Generate balasan — provider routing di ai-handler.
+    const ai = await generateReply({
+      systemPrompt: augmentedPrompt,
+      provider: model.provider,
+      modelId: model.modelId,
+      history: baseHistory,
+      latestUserMessage: content,
+    })
+    if (!ai.ok || !ai.reply) {
+      console.error(`[wa-manager:${sessionId}] AI error:`, ai.error)
+      if (ai.invalidApiKey) {
+        this.updateState(entry, {
+          status: 'PAUSED',
+          lastError: ai.error ?? 'API key invalid',
+        })
+      }
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
+
+    // 5. Charge token proporsional — server hitung tokensCharged dari real
+    // (inputTokens, outputTokens) × harga AiModel × margin CS_REPLY config.
+    // Kalau gagal → pause & jangan kirim balasan.
+    const charge = await tokenChecker.chargeCsReply({
+      userId,
+      sessionId,
+      aiModelId: model.id,
+      inputTokens: ai.usage?.inputTokens ?? 0,
+      outputTokens: ai.usage?.outputTokens ?? 0,
+    })
+    if (!charge.ok) {
+      if (charge.insufficient) {
+        this.updateState(entry, {
+          status: 'PAUSED',
+          lastError: 'Saldo token habis',
+        })
+      }
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
+
+    // 6. Kirim balasan via Baileys.
+    let aiMsgId: string | null = null
+    try {
+      const sent = await entry.socket?.sendMessage(remoteJid, {
+        text: ai.reply,
+      })
+      aiMsgId = sent?.key?.id ?? null
+      if (aiMsgId) this.markSent(entry, aiMsgId)
+    } catch (err) {
+      console.error(`[wa-manager:${sessionId}] sendMessage gagal:`, err)
+    }
+
+    // 6b. Kirim attachments dari knowledge IMAGE/FILE — fire-and-forget,
+    // jangan block flow. wa-manager auto-attach supaya AI tidak perlu
+    // request manual ke admin ("admin akan kirim foto/bukti").
+    const attachments = kb.success ? kb.data?.attachments ?? [] : []
+    console.log(
+      `[wa-manager:${sessionId}] reply done · attachments=${attachments.length}`,
+    )
+    if (attachments.length > 0 && entry.socket) {
+      void sendKnowledgeAttachments(
+        entry.socket,
+        remoteJid,
+        attachments,
+        sessionId,
+      )
+    }
+
+    // 7. Simpan balasan AI ke DB (history untuk percakapan berikutnya).
+    const cost = buildCostFields(ai.usage, {
+      tokensCharged: charge.tokensCharged ?? 0,
+      apiCostRp: charge.apiCostRp ?? 0,
+      revenueRp: charge.revenueRp ?? 0,
+      profitRp: charge.profitRp ?? 0,
+    })
+    await internalApi
+      .saveMessage({
+        sessionId,
+        phoneNumber,
+        content: ai.reply,
+        role: 'AI',
+        source: 'AI',
+        externalMsgId: aiMsgId,
+        tokensUsed: cost.tokensCharged,
+        ...cost,
+      })
+      .catch((err) =>
+        console.error(`[wa-manager:${sessionId}] save AI msg:`, err),
+      )
+
+    return { shouldContinue: true, historyAfter: withReply(ai.reply) }
   }
 
   // ── DEV/TEST: simulate incoming message tanpa Baileys ────────────────────
@@ -1103,4 +1358,19 @@ function extractText(msg: WAMessage): string | null {
     m.listResponseMessage?.title ||
     null
   )
+}
+
+// Placeholder untuk pesan media TANPA caption (extractText return null) —
+// supaya tetap tercatat di inbox CRM walau tidak ada teks untuk diproses AI.
+// Urutan cek mengikuti varian message Baileys yang dipakai extractText.
+function extractMediaPlaceholder(msg: WAMessage): string | null {
+  const m = msg.message
+  if (!m) return null
+  if (m.imageMessage) return '[Gambar]'
+  if (m.videoMessage) return '[Video]'
+  // ptt (push-to-talk) = voice note; selain itu file audio biasa.
+  if (m.audioMessage) return m.audioMessage.ptt ? '[Voice note]' : '[Audio]'
+  if (m.documentMessage) return '[Dokumen]'
+  if (m.stickerMessage) return '[Stiker]'
+  return null
 }

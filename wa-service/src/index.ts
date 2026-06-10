@@ -5,6 +5,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express, { type NextFunction, type Request, type Response } from 'express'
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,6 +27,17 @@ dotenv.config({ path: path.resolve(__dirname, '../.env'), override: false })
 const PORT = Number(process.env.WA_SERVICE_PORT ?? 3001)
 const SECRET = process.env.WA_SERVICE_SECRET ?? ''
 const SESSIONS_DIR = path.resolve(__dirname, '../sessions')
+
+// Fail-closed di production: tanpa secret, semua endpoint internal terbuka
+// (siapa pun bisa connect/disconnect/broadcast). Lebih baik refuse boot
+// daripada jalan tanpa proteksi. Di dev tetap diizinkan (lihat requireSecret).
+if (process.env.NODE_ENV === 'production' && !SECRET) {
+  console.error(
+    '[wa-service] FATAL: WA_SERVICE_SECRET wajib di-set saat NODE_ENV=production. ' +
+      'Set env tersebut (sama dengan yang dipakai Next.js) lalu restart service.',
+  )
+  process.exit(1)
+}
 // Origins yang boleh konek (Next.js dev + custom). '*' kalau dev.
 const CORS_ORIGIN =
   process.env.WA_SERVICE_CORS_ORIGIN?.split(',').map((s) => s.trim()) ??
@@ -253,26 +265,103 @@ app.post('/sessions/disconnect', requireSecret, async (req, res) => {
 })
 
 // ── Socket.io: client join room sesi spesifik untuk dapat event QR/status ──
+
+// Verifikasi token subscribe yang di-mint Next.js (lib/wa-socket-token.ts).
+// Format: `${sessionId}.${exp}.${hmac}` — exp epoch detik, hmac =
+// HMAC-SHA256(WA_SERVICE_SECRET, `${sessionId}.${exp}`) dalam hex.
+// Tanpa token valid, siapa pun bisa join room dan mencuri QR pairing.
+function verifySocketToken(
+  sessionId: string,
+  token: string,
+): { ok: boolean; error?: string } {
+  const parts = token.split('.')
+  if (parts.length !== 3) {
+    return { ok: false, error: 'format token tidak valid' }
+  }
+  const [tokenSessionId, expStr, signature] = parts as [string, string, string]
+  if (tokenSessionId !== sessionId) {
+    return { ok: false, error: 'token bukan untuk session ini' }
+  }
+  const exp = Number(expStr)
+  if (!Number.isFinite(exp) || exp * 1000 < Date.now()) {
+    return { ok: false, error: 'token kedaluwarsa — minta token baru' }
+  }
+  const expectedHex = createHmac('sha256', SECRET)
+    .update(`${tokenSessionId}.${expStr}`)
+    .digest('hex')
+  const expected = Buffer.from(expectedHex, 'hex')
+  const actual = Buffer.from(signature, 'hex')
+  // timingSafeEqual butuh panjang sama — cek dulu supaya tidak throw.
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+    return { ok: false, error: 'signature token tidak valid' }
+  }
+  return { ok: true }
+}
+
 io.on('connection', (socket) => {
-  socket.on('subscribe', (sessionId: string) => {
-    if (typeof sessionId !== 'string' || !sessionId) return
-    socket.join(`session:${sessionId}`)
-    // Kirim state terkini langsung supaya UI tidak kosong sebelum event
-    // berikut. Termasuk QR kalau sudah ada — race-condition fix: kalau
-    // Baileys keburu generate QR sebelum client subscribe, client tetap
-    // dapat QR sekarang tanpa harus menunggu QR refresh ~20s.
-    const state = manager.get(sessionId)
-    if (state) {
-      socket.emit('status', { sessionId, status: state.status })
-      if (state.qr && state.qrDataUrl) {
-        socket.emit('qr', {
-          sessionId,
-          qr: state.qr,
-          qrDataUrl: state.qrDataUrl,
-        })
+  // Payload baru: { sessionId, token }. Payload lama (string polos) DITOLAK,
+  // kecuali dev tanpa secret (DX lokal — wa-service lokal sering tanpa .env).
+  socket.on(
+    'subscribe',
+    (payload: string | { sessionId?: unknown; token?: unknown }) => {
+      let sessionId = ''
+      let token = ''
+      if (typeof payload === 'string') {
+        sessionId = payload
+      } else if (payload && typeof payload === 'object') {
+        sessionId = typeof payload.sessionId === 'string' ? payload.sessionId : ''
+        token = typeof payload.token === 'string' ? payload.token : ''
       }
-    }
-  })
+      if (!sessionId) return
+
+      const devNoSecret = process.env.NODE_ENV !== 'production' && !SECRET
+      if (devNoSecret) {
+        // Tanpa secret tidak ada yang bisa diverifikasi — izinkan (dev only),
+        // tapi tetap kasih jejak di log.
+        console.warn(
+          `[wa-service] subscribe tanpa verifikasi (dev, SECRET kosong): ${sessionId}`,
+        )
+      } else if (!token) {
+        console.warn(
+          `[wa-service] subscribe tanpa token DITOLAK (session: ${sessionId})`,
+        )
+        socket.emit('subscribe-error', {
+          sessionId,
+          error: 'token wajib untuk subscribe',
+        })
+        return
+      } else {
+        const verified = verifySocketToken(sessionId, token)
+        if (!verified.ok) {
+          console.warn(
+            `[wa-service] subscribe token invalid (session: ${sessionId}): ${verified.error}`,
+          )
+          socket.emit('subscribe-error', {
+            sessionId,
+            error: verified.error ?? 'token tidak valid',
+          })
+          return
+        }
+      }
+
+      socket.join(`session:${sessionId}`)
+      // Kirim state terkini langsung supaya UI tidak kosong sebelum event
+      // berikut. Termasuk QR kalau sudah ada — race-condition fix: kalau
+      // Baileys keburu generate QR sebelum client subscribe, client tetap
+      // dapat QR sekarang tanpa harus menunggu QR refresh ~20s.
+      const state = manager.get(sessionId)
+      if (state) {
+        socket.emit('status', { sessionId, status: state.status })
+        if (state.qr && state.qrDataUrl) {
+          socket.emit('qr', {
+            sessionId,
+            qr: state.qr,
+            qrDataUrl: state.qrDataUrl,
+          })
+        }
+      }
+    },
+  )
   socket.on('unsubscribe', (sessionId: string) => {
     if (typeof sessionId !== 'string' || !sessionId) return
     socket.leave(`session:${sessionId}`)
@@ -300,13 +389,29 @@ httpServer.listen(PORT, () => {
 })
 
 // Graceful shutdown: putus semua socket Baileys supaya credentials ter-flush.
-async function shutdown(signal: string) {
+async function shutdown(signal: string, exitCode = 0) {
   console.log(`[wa-service] menerima ${signal}, shutting down...`)
   for (const state of manager.list()) {
     await manager.disconnect(state.sessionId, false).catch(() => {})
   }
-  httpServer.close(() => process.exit(0))
-  setTimeout(() => process.exit(1), 5000).unref()
+  httpServer.close(() => process.exit(exitCode))
+  // Hard exit kalau close menggantung — selalu non-zero supaya terdeteksi abnormal.
+  setTimeout(() => process.exit(exitCode === 0 ? 1 : exitCode), 5000).unref()
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'))
 process.on('SIGINT', () => shutdown('SIGINT'))
+
+// ── Crash isolation ─────────────────────────────────────────────────────────
+// Satu promise gagal tak tertangani (mis. error Baileys di satu sesi) TIDAK
+// boleh menjatuhkan seluruh service — multi-tenant, sesi lain harus tetap
+// hidup. Log detail supaya tetap kelihatan di monitoring.
+process.on('unhandledRejection', (reason) => {
+  console.error('[wa-service] unhandledRejection (diisolasi, service lanjut):', reason)
+})
+// uncaughtException: state proses tidak bisa dijamin sehat — log, coba
+// graceful shutdown singkat (flush creds), lalu exit(1) supaya docker/
+// supervisor restart proses dengan bersih.
+process.on('uncaughtException', (err) => {
+  console.error('[wa-service] uncaughtException — restart dibutuhkan:', err)
+  shutdown('uncaughtException', 1).catch(() => process.exit(1))
+})
