@@ -491,7 +491,15 @@ export function LiveRoomView({
   // visibility. Cross-fade CSS 200ms bridge sisanya.
   const handleLayerLoaded = useCallback(
     (which: 'A' | 'B') => {
-      if (which === activeLayer) return // active load (initial), ignore
+      if (which === activeLayer) {
+        // Initial load layer AKTIF. Elemen video baru mount SETELAH layar cek
+        // identity / gate (render pertama early-return) → mount effect sudah
+        // lewat dengan ref null dan tidak pernah play. Tanpa ini video diam di
+        // frame hitam sampai switchToUrl pertama (host jawab komen).
+        const v = which === 'A' ? videoARef.current : videoBRef.current
+        if (v && v.paused) playSafe(v)
+        return
+      }
       // Load ini berasal dari PRE-WARM (buffer ahead) → JANGAN flip sekarang.
       // Siapkan di frame 0 + pause; onEnded klip aktif nanti yg memicu flip.
       if (prewarmedLayerRef.current === which) {
