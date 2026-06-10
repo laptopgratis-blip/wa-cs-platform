@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
 import {
+  formatCurrentTimeForPrompt,
   formatProductCatalogForPrompt,
   formatShippingInstructionForPrompt,
   resolveShippingFromMessage,
@@ -105,11 +106,13 @@ export async function POST(req: Request, { params }: Params) {
       hasAttachments: attachments.length > 0,
     })
 
-    // Urutan: bank > katalog produk > knowledge user > ongkir (instruksi +
-    // resolved kalau ada) > rules. Bank di atas karena pertanyaan transfer
-    // sering muncul; produk & ongkir konteks domain spesifik; rules di paling
-    // bawah sebagai guard rail terakhir.
+    // Urutan: waktu sekarang > bank > katalog produk > knowledge user >
+    // ongkir (instruksi + resolved kalau ada) > rules. Waktu paling atas
+    // karena jadi acuan semua batas promo; bank di atas karena pertanyaan
+    // transfer sering muncul; produk & ongkir konteks domain spesifik;
+    // rules di paling bawah sebagai guard rail terakhir.
     const promptBlock = [
+      formatCurrentTimeForPrompt(),
       bankBlock,
       productBlock,
       knowledgeBlock,

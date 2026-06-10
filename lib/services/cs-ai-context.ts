@@ -114,10 +114,15 @@ export async function formatProductCatalogForPrompt(
     const priceStr = formatRupiah(effectivePrice)
     // Sertakan batas waktu flash (WIB) supaya AI bisa jawab "promo sampai
     // kapan?" dengan akurat, bukan ngarang / bilang tidak tahu.
+    // Sisa waktu dihitung server-side supaya AI tidak perlu berhitung
+    // tanggal sendiri (model tidak punya jam internal — pernah salah
+    // menyimpulkan promo berakhir padahal masih berlaku sampai besok).
     const flashStr =
       flash && p.flashSalePrice != null
         ? ` ~~${formatRupiah(p.price)}~~ 🔥 FLASH SALE${
-            p.flashSaleEndAt ? ` s.d. ${formatWib(p.flashSaleEndAt)}` : ''
+            p.flashSaleEndAt
+              ? ` s.d. ${formatWib(p.flashSaleEndAt)} (sisa ${formatRemaining(p.flashSaleEndAt)})`
+              : ''
           }`
         : ''
     const stockStr = formatStock(p.stock)
@@ -138,7 +143,7 @@ export async function formatProductCatalogForPrompt(
   lines.push('')
   if (hasFlash) {
     lines.push(
-      '**Flash sale**: untuk produk bertanda 🔥, sebutkan harga promo + harga normal (coret) secara PROAKTIF saat membahas produk itu, dan sebutkan batas waktunya supaya customer tahu promonya terbatas. JANGAN menjanjikan harga flash untuk pembelian di luar periode tersebut.',
+      '**Flash sale**: untuk produk bertanda 🔥, sebutkan harga promo + harga normal (coret) secara PROAKTIF saat membahas produk itu, dan sebutkan batas waktunya supaya customer tahu promonya terbatas. JANGAN menjanjikan harga flash untuk pembelian di luar periode tersebut. Selama produk masih bertanda 🔥 di daftar ini, promonya MASIH BERLAKU — JANGAN menyimpulkan sendiri bahwa promo sudah berakhir; batas waktu + sisa waktu di atas sudah dihitung sistem dan itu satu-satunya acuan yang benar.',
     )
   }
   lines.push(
@@ -160,6 +165,42 @@ function formatWib(d: Date): string {
       minute: '2-digit',
     }).format(d) + ' WIB'
   )
+}
+
+// Sisa waktu menuju `end` dalam bahasa manusia ("2 hari 3 jam", "5 jam",
+// "40 menit"). Dipakai supaya AI menerima durasi jadi, bukan menghitung
+// selisih tanggal sendiri.
+function formatRemaining(end: Date): string {
+  const ms = end.getTime() - Date.now()
+  if (ms <= 0) return 'beberapa saat'
+  const totalMinutes = Math.floor(ms / 60_000)
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+  if (days > 0) return hours > 0 ? `${days} hari ${hours} jam` : `${days} hari`
+  if (hours > 0) return `${hours} jam`
+  return `${minutes} menit`
+}
+
+// Blok "waktu sekarang" untuk system prompt — AI tidak punya jam internal,
+// jadi tanpa ini dia tidak bisa menilai apakah batas promo sudah lewat
+// (insiden Cleanoz 2026-06-10: AI bilang flash sale habis padahal masih
+// berlaku sampai besok). Dibulatkan ke menit.
+export function formatCurrentTimeForPrompt(): string {
+  const now = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date())
+  return [
+    '',
+    '## Waktu Sekarang',
+    `Sekarang: ${now} WIB. Pakai ini sebagai satu-satunya acuan tanggal & jam — JANGAN berasumsi soal tanggal hari ini dari konteks lain.`,
+  ].join('\n')
 }
 
 function formatRupiah(n: number): string {
