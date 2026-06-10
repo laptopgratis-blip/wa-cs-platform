@@ -2,10 +2,11 @@
 // Dipanggil dari cron eksternal (cron-job.org / Vercel Cron) tiap 1 jam.
 // Cek 3 kondisi dalam 24 jam terakhir, generate Alert sesuai kategori.
 //
-// Auth: header `x-cron-secret` == CRON_SECRET env var.
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { getPricingSettings } from '@/lib/pricing-settings'
 import { prisma } from '@/lib/prisma'
 
@@ -14,19 +15,8 @@ const PROFIT_NEGATIVE_THRESHOLD_RP = -1000
 const MARGIN_LOW_THRESHOLD_PCT = 30
 
 export async function POST(req: Request) {
-  const expected = process.env.CRON_SECRET
-  if (!expected) {
-    return NextResponse.json(
-      { success: false, error: 'CRON_SECRET tidak di-set' },
-      { status: 500 },
-    )
-  }
-  if (req.headers.get('x-cron-secret') !== expected) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
   await getPricingSettings() // warm cache

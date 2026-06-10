@@ -6,6 +6,8 @@
 // (admin-tunable di DB) bukan hardcoded constant.
 import { randomUUID } from 'node:crypto'
 
+import { Prisma } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
 import { getPricingSettings } from '@/lib/pricing-settings'
 
@@ -162,37 +164,85 @@ export async function logGeneration(input: {
 // Untuk hindari race condition (mis. caller pass `Date.now()` ms collision)
 // kita SELALU append randomUUID() ke reference internal. Caller pass prefix
 // yang readable (`kb_suggest`, `content_idea`, etc), helper jamin uniqueness.
+//
+// Mode `idempotent: true` — reference dipakai APA ADANYA (tanpa suffix UUID)
+// sehingga unique constraint mendedup charge yang sama. Dipakai jalur retry-able
+// (mis. settle video Kling di cron poll): kalau reference sudah pernah tercatat
+// (P2002), transaksi rollback dan return { ok: true, alreadyCharged: true } —
+// caller anggap charge sudah terjadi, JANGAN charge/log ulang.
 export async function deductTokenAtomic(input: {
   userId: string
   tokensCharged: number
   description: string
   reference: string
-}): Promise<{ ok: boolean }> {
-  // Always suffix with UUID to make reference globally unique.
-  const uniqueReference = `${input.reference}:${randomUUID()}`
-  return prisma.$transaction(async (tx) => {
-    const result = await tx.tokenBalance.updateMany({
-      where: {
-        userId: input.userId,
-        balance: { gte: input.tokensCharged },
-      },
-      data: {
-        balance: { decrement: input.tokensCharged },
-        totalUsed: { increment: input.tokensCharged },
-      },
+  idempotent?: boolean
+}): Promise<{ ok: boolean; alreadyCharged: boolean }> {
+  // Default: suffix UUID supaya reference globally unique (caller boleh pass
+  // prefix sama berkali-kali). Idempotent: reference deterministik untuk dedup.
+  const uniqueReference = input.idempotent
+    ? input.reference
+    : `${input.reference}:${randomUUID()}`
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const result = await tx.tokenBalance.updateMany({
+        where: {
+          userId: input.userId,
+          balance: { gte: input.tokensCharged },
+        },
+        data: {
+          balance: { decrement: input.tokensCharged },
+          totalUsed: { increment: input.tokensCharged },
+        },
+      })
+      if (result.count === 0) {
+        // Mode idempotent: saldo "tidak cukup" bisa berarti charge SUDAH
+        // terjadi di run sebelumnya (saldo sudah terpotong, lalu turun di
+        // bawah tokensCharged). Cek reference dulu supaya retry tidak salah
+        // lapor INSUFFICIENT_BALANCE padahal sudah pernah di-charge.
+        if (input.idempotent) {
+          const existing = await tx.tokenTransaction.findFirst({
+            where: {
+              userId: input.userId,
+              reference: uniqueReference,
+              type: 'USAGE',
+            },
+            select: { id: true },
+          })
+          if (existing) {
+            console.log(
+              `[deductTokenAtomic] dedup: reference "${uniqueReference}" sudah pernah di-charge — skip`,
+            )
+            return { ok: true, alreadyCharged: true }
+          }
+        }
+        return { ok: false, alreadyCharged: false }
+      }
+      await tx.tokenTransaction.create({
+        data: {
+          userId: input.userId,
+          amount: -input.tokensCharged,
+          type: 'USAGE',
+          description: input.description,
+          reference: uniqueReference,
+        },
+      })
+      return { ok: true, alreadyCharged: false }
     })
-    if (result.count === 0) return { ok: false }
-    await tx.tokenTransaction.create({
-      data: {
-        userId: input.userId,
-        amount: -input.tokensCharged,
-        type: 'USAGE',
-        description: input.description,
-        reference: uniqueReference,
-      },
-    })
-    return { ok: true }
-  })
+  } catch (err) {
+    if (
+      input.idempotent &&
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      // Reference sudah ada → charge sudah pernah tercatat run sebelumnya.
+      // Decrement balance di transaksi ini sudah otomatis ter-rollback.
+      console.log(
+        `[deductTokenAtomic] dedup: reference "${uniqueReference}" sudah pernah di-charge — skip`,
+      )
+      return { ok: true, alreadyCharged: true }
+    }
+    throw err
+  }
 }
 
 // Pre-flight cek apakah user punya saldo cukup. Bukan reservation — race

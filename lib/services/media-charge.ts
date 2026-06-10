@@ -164,35 +164,9 @@ export async function assertVideoBudgetOk(input: {
   return charge
 }
 
-export async function settleVideoCharge(input: {
-  featureKey: string
-  userId: string
-  seconds: number
-  referencePrefix: string
-  description: string
-  subjectType?: string
-  subjectId?: string
-}): Promise<{ ok: boolean; charge: ComputedCharge }> {
-  const charge = await computeMediaCharge({
-    featureKey: input.featureKey,
-    units: input.seconds,
-  })
-  const dedRes = await deductTokenAtomic({
-    userId: input.userId,
-    tokensCharged: charge.tokensCharged,
-    description: input.description,
-    reference: input.referencePrefix,
-  })
-  await logGeneration({
-    featureKey: input.featureKey,
-    userId: input.userId,
-    subjectType: input.subjectType,
-    subjectId: input.subjectId,
-    charge,
-    status: dedRes.ok ? 'OK' : 'INSUFFICIENT_BALANCE',
-    errorMessage: dedRes.ok ? undefined : 'Race: saldo turun saat settle',
-  })
-  return { ok: dedRes.ok, charge }
-}
+// Catatan: settle charge video kini di settleVideoChargeIdempotent
+// (lib/services/host-gen/queue.ts) — reference deterministik per job id
+// supaya poller dobel tidak double-charge. Varian lama (non-idempotent,
+// suffix UUID) sengaja dihapus dari sini agar tidak terpakai lagi.
 
 export { InsufficientBalanceError }

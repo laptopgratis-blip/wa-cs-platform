@@ -8,27 +8,15 @@
 //   https://hulao.id/api/cron/bank-scrape-all?secret=<CRON_SECRET>
 // Frequency: tiap 15 menit.
 //
-// Auth: header `x-cron-secret` atau query `?secret=` == CRON_SECRET.
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { triggerCronRunAll } from '@/lib/services/bank-scraper'
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
-
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const result = await triggerCronRunAll()
   if (!result.ok) {

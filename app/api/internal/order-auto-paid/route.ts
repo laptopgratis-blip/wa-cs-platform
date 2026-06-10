@@ -6,6 +6,8 @@
 // Auth: x-scraper-secret header == SCRAPER_SECRET env.
 // Catatan: scraper sudah update paymentStatus = PAID + autoConfirmedAt sebelum
 // memanggil endpoint ini, jadi di sini tugas downstream saja.
+import { timingSafeEqual } from 'node:crypto'
+
 import { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
@@ -16,23 +18,33 @@ import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 
 const SCRAPER_SECRET = process.env.SCRAPER_SECRET || ''
 
-function authOk(req: Request): boolean {
+// Perbandingan secret timing-safe — hindari timing attack pada string compare.
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
+
+// Fail-closed: SCRAPER_SECRET kosong → 503 (bukan lolos). Return NextResponse
+// error kalau auth gagal, null kalau lolos.
+function requireScraperSecret(req: Request): NextResponse | null {
   if (!SCRAPER_SECRET) {
-    console.warn(
-      '[order-auto-paid] SCRAPER_SECRET kosong — endpoint terbuka tanpa auth!',
+    console.error(
+      '[order-auto-paid] SCRAPER_SECRET belum dikonfigurasi — request ditolak (fail-closed)',
     )
-    return true
+    return jsonError('SCRAPER_SECRET belum dikonfigurasi', 503)
   }
-  return req.headers.get('x-scraper-secret') === SCRAPER_SECRET
+  const got = req.headers.get('x-scraper-secret') ?? ''
+  if (!safeEqual(got, SCRAPER_SECRET)) {
+    return jsonError('unauthorized', 401)
+  }
+  return null
 }
 
 export async function POST(req: Request) {
-  if (!authOk(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireScraperSecret(req)
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => null)
   const orderId = typeof body?.orderId === 'string' ? body.orderId : null

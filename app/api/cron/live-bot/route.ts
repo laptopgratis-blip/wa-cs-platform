@@ -8,25 +8,13 @@
 
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { runLiveBotTick } from '@/lib/services/live/bot-runner'
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  return (
-    url.searchParams.get('secret') === expected ||
-    req.headers.get('x-cron-secret') === expected
-  )
-}
-
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  // Auth terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
   try {
     const baseUrl = new URL(req.url).origin
     const r = await runLiveBotTick({ baseUrl })

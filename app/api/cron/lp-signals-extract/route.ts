@@ -6,27 +6,18 @@
 // Cron job lain tetap jalan (cron-job.org / similar service).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import {
   extractSignalsForLp,
   persistSignals,
 } from '@/lib/services/lp-chat-signals'
 import { prisma } from '@/lib/prisma'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
-
-function authOk(url: URL): boolean {
-  if (!CRON_SECRET) {
-    console.warn('[lp-signals-extract] CRON_SECRET kosong — endpoint terbuka.')
-    return true
-  }
-  return url.searchParams.get('secret') === CRON_SECRET
-}
-
 export async function GET(req: Request) {
-  const url = new URL(req.url)
-  if (!authOk(url)) {
-    return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
-  }
+  // Auth terpusat di lib/cron-auth.ts — fail-closed kalau CRON_SECRET kosong
+  // (dulu fail-open di sini).
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   // Hanya proses LP milik user POWER plan — chat signals fitur eksklusif POWER.

@@ -1,6 +1,6 @@
 // POST /api/cron/cleanup-lp — daily cron untuk cleanup LP-related data.
 //
-// Auth: header `x-cron-secret` harus match `process.env.CRON_SECRET`.
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 // Dipanggil dari cron eksternal (cron-job.org) atau cron host lokal sehari sekali.
 //
 // Yang dibersihkan:
@@ -18,6 +18,7 @@ import path from 'node:path'
 
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { updateStorageUsed } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 
@@ -25,13 +26,8 @@ const VISIT_RETAIN_DAYS = 90
 const ORPHAN_GRACE_DAYS = 7
 
 export async function POST(req: Request) {
-  const secret = req.headers.get('x-cron-secret')
-  if (!secret || secret !== process.env.CRON_SECRET) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const stats = {
     visitsDeleted: 0,

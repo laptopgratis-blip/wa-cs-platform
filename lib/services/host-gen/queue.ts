@@ -1,7 +1,7 @@
 // Orkestrasi GenerationJob lifecycle:
 //   1. enqueueImageJob() — sync Gemini call, deduct token, simpan path
 //   2. enqueueVideoJob() — submit Fal.ai, return request_id; charge baru di
-//      settleVideoCharge saat cron poll selesai
+//      settleVideoChargeIdempotent saat cron poll selesai (dedup by job id)
 //   3. pollAndFinalizePendingVideos() — dipanggil cron tiap menit
 //
 // Pattern serial dalam 1 user, tapi job lain user paralel — di MVP gak ada
@@ -10,9 +10,14 @@ import { HostTemplateStatus, GenerationJobStatus, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 import {
+  deductTokenAtomic,
+  logGeneration,
+  type ComputedCharge,
+} from '@/lib/services/ai-generation-log'
+import {
   assertVideoBudgetOk,
+  computeMediaCharge,
   executeMediaSync,
-  settleVideoCharge,
 } from '@/lib/services/media-charge'
 
 import {
@@ -592,10 +597,56 @@ export async function enqueueVideoJob(input: {
   return { jobId: job.id, requestId: submission.requestId }
 }
 
+// Settle charge video Kling secara IDEMPOTENT — reference deterministik
+// berbasis job id (`host_vid:<jobId>`, TANPA suffix UUID) sehingga unique
+// constraint TokenTransaction(userId, reference, type) mendedup kalau poller
+// jalan dobel (cron eksternal + dev-cron-runner, atau retry setelah crash).
+// alreadyCharged=true → charge sudah tercatat run sebelumnya, skip log
+// AiGenerationLog supaya profitability tidak dobel.
+async function settleVideoChargeIdempotent(input: {
+  userId: string
+  seconds: number
+  reference: string
+  description: string
+  subjectId?: string
+}): Promise<{ ok: boolean; alreadyCharged: boolean; charge: ComputedCharge }> {
+  const charge = await computeMediaCharge({
+    featureKey: HOST_VIDEO_FEATURE_KEY,
+    units: input.seconds,
+  })
+  const dedRes = await deductTokenAtomic({
+    userId: input.userId,
+    tokensCharged: charge.tokensCharged,
+    description: input.description,
+    reference: input.reference,
+    idempotent: true,
+  })
+  if (dedRes.alreadyCharged) {
+    console.log(
+      `[settleVideoCharge] ${input.reference} sudah pernah di-charge — skip log ulang`,
+    )
+    return { ok: true, alreadyCharged: true, charge }
+  }
+  await logGeneration({
+    featureKey: HOST_VIDEO_FEATURE_KEY,
+    userId: input.userId,
+    subjectType: 'HOST_SCENE',
+    subjectId: input.subjectId,
+    charge,
+    status: dedRes.ok ? 'OK' : 'INSUFFICIENT_BALANCE',
+    errorMessage: dedRes.ok ? undefined : 'Race: saldo turun saat settle',
+  })
+  return { ok: dedRes.ok, alreadyCharged: false, charge }
+}
+
 // Dipanggil cron tiap menit. Iterate semua HOST_VIDEO jobs status RUNNING:
 //   - poll status → COMPLETED: download MP4, settle charge, update template
 //   - FAILED: tandai job + template error
 //   - IN_QUEUE / IN_PROGRESS: skip (poll lagi nanti)
+//
+// Race-safe: finalize (DONE/FAILED) pakai claim kondisional updateMany
+// (where status masih RUNNING) — dua poller paralel tidak memproses job
+// yang sama dua kali; charge sendiri dedup via settleVideoChargeIdempotent.
 export async function pollAndFinalizePendingVideos(): Promise<{
   checked: number
   completed: number
@@ -650,20 +701,23 @@ export async function pollAndFinalizePendingVideos(): Promise<{
         videoUrl,
       })
       const seconds = Math.max(1, Math.round(durationSeconds || 0))
-      const settle = await settleVideoCharge({
-        featureKey: HOST_VIDEO_FEATURE_KEY,
+      // Charge idempotent — reference deterministik `host_vid:<jobId>`.
+      // Aman dipanggil dobel: constraint TokenTransaction mendedup.
+      const settle = await settleVideoChargeIdempotent({
         userId: job.userId,
         seconds,
-        referencePrefix: `host_vid:${job.id}`,
+        reference: `host_vid:${job.id}`,
         description: `Host scene video — ${sceneId ?? job.id} (${seconds}s)`,
-        subjectType: 'HOST_SCENE',
         subjectId: sceneId ?? undefined,
       })
       // Sprint 5+: simpan klingVideoId (videos[0].id) di inputPayload — beda
       // dari providerTaskId. Dipakai sebagai sourceVideoId untuk lipsync.
       const existingPayload = (job.inputPayload as Record<string, unknown> | null) ?? {}
-      await prisma.generationJob.update({
-        where: { id: job.id },
+      // Claim kondisional: hanya finalize kalau status MASIH RUNNING. Kalau
+      // count 0 berarti poller lain sudah memproses job ini — skip update
+      // scene/template supaya tidak dobel.
+      const claimed = await prisma.generationJob.updateMany({
+        where: { id: job.id, status: GenerationJobStatus.RUNNING },
         data: {
           status: GenerationJobStatus.DONE,
           outputUrl: dl.videoPath,
@@ -677,6 +731,12 @@ export async function pollAndFinalizePendingVideos(): Promise<{
           },
         },
       })
+      if (claimed.count === 0) {
+        console.log(
+          `[kling-poll] job ${job.id} sudah di-claim poller lain — skip finalize`,
+        )
+        continue
+      }
 
       if (sceneId) {
         await prisma.hostScene.update({
@@ -749,14 +809,23 @@ async function markVideoJobFailed(
   hostSceneId: string | null,
   err: string,
 ): Promise<void> {
-  await prisma.generationJob.update({
-    where: { id: jobId },
+  // Claim kondisional: hanya tandai FAILED kalau status masih RUNNING.
+  // Kalau count 0, job sudah di-finalize poller lain (DONE/FAILED) — jangan
+  // timpa status & jangan dobel update scene/template.
+  const claimed = await prisma.generationJob.updateMany({
+    where: { id: jobId, status: GenerationJobStatus.RUNNING },
     data: {
       status: GenerationJobStatus.FAILED,
       errorMessage: err.slice(0, 1000),
       finishedAt: new Date(),
     },
   })
+  if (claimed.count === 0) {
+    console.log(
+      `[kling-poll] job ${jobId} sudah di-finalize poller lain — skip mark FAILED`,
+    )
+    return
+  }
   if (hostSceneId) {
     await prisma.hostScene.update({
       where: { id: hostSceneId },

@@ -3,20 +3,15 @@
 // Schedule rekomendasi: tiap jam (di prod via cron-job.org).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { batchAnalyzePendingSessions } from '@/lib/services/live/objection-analyzer'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
-
-function authOk(url: URL): boolean {
-  if (!CRON_SECRET) return true
-  return url.searchParams.get('secret') === CRON_SECRET
-}
-
 export async function GET(req: Request) {
+  // Auth terpusat di lib/cron-auth.ts — fail-closed kalau CRON_SECRET kosong
+  // (dulu fail-open di sini).
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
   const url = new URL(req.url)
-  if (!authOk(url)) {
-    return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
-  }
   const limit = Math.min(50, Number(url.searchParams.get('limit') ?? 20))
   const startedAt = Date.now()
   try {

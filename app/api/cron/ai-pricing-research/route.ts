@@ -2,29 +2,16 @@
 // Scheduled trigger (cron-job.org / Vercel Cron) — jalankan research +
 // generate Alert kalau ada perubahan supaya admin tahu di sidebar bell.
 //
-// Auth: header `x-cron-secret` atau query `?secret=...` == CRON_SECRET.
-// (cron-job.org gampang pakai query param.)
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
 import { runResearch } from '@/lib/services/ai-pricing-research'
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
-
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   // Buat log row baru dengan triggeredBy='cron'.
   const log = await prisma.pricingResearchLog.create({

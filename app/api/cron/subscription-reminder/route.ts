@@ -4,6 +4,7 @@
 // skip. Lihat unique index SubscriptionNotification(userId, subscriptionId, type).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
 import {
   createNotification,
@@ -13,12 +14,9 @@ import {
 const REMINDER_DAYS = [7, 3, 1] as const
 
 export async function POST(req: Request) {
-  if (req.headers.get('x-cron-secret') !== process.env.CRON_SECRET) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  // Auth terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const now = new Date()
   const results = { totalSent: 0, byDay: {} as Record<number, number> }

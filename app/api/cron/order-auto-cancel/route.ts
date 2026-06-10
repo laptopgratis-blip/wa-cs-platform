@@ -5,28 +5,15 @@
 //   2. Restore Product.flashSaleSold dari order yang di-cancel
 //   3. Cleanup ShippingCostCache yang sudah expired
 //
-// Auth: header `x-cron-secret` atau query `?secret=` == CRON_SECRET.
-// Pattern sama dengan cron lain (lihat /api/cron/cleanup-lp).
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
-
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)

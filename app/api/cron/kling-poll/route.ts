@@ -9,23 +9,15 @@
 // lib/dev-cron-runner.ts auto-trigger setiap 60dtk).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { pollAndFinalizePendingVideos } from '@/lib/services/host-gen/queue'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
-
-function authOk(url: URL): boolean {
-  if (!CRON_SECRET) {
-    // Sekali warn supaya admin sadar — di dev biasanya kosong, gpp.
-    return true
-  }
-  return url.searchParams.get('secret') === CRON_SECRET
-}
-
 export async function GET(req: Request) {
-  const url = new URL(req.url)
-  if (!authOk(url)) {
-    return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
-  }
+  // Auth terpusat di lib/cron-auth.ts — fail-closed kalau CRON_SECRET kosong
+  // (dulu fail-open di sini). Dev-cron-runner panggil fungsi langsung, jadi
+  // tidak terpengaruh.
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   try {

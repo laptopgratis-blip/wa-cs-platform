@@ -2,25 +2,19 @@
 //
 // Worker untuk Follow-Up Order System — pick FollowUpQueue PENDING yang due
 // (scheduledAt <= now), validate ulang kondisi, kirim ke customer via WA, log.
+// At-most-once: tiap row di-claim atomik (PENDING → SENT) SEBELUM kirim,
+// supaya dua trigger cron yang overlap tidak mengirim WA dobel.
 //
 // Setup eksternal: cron-job.org, hit:
 //   https://hulao.id/api/cron/followup-send?secret=<CRON_SECRET>
 // Frequency: tiap 5 menit. Batch 50 per run untuk avoid spam burst.
 //
-// Auth: header `x-cron-secret` atau query `?secret=` == CRON_SECRET.
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
 import { waService } from '@/lib/wa-service'
-
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
 
 const BATCH_SIZE = 50
 const MAX_SEND_RETRY = 3 // failure transmisi WA
@@ -29,12 +23,8 @@ const RETRY_BACKOFF_MS = 15 * 60 * 1000
 const WA_RECONNECT_BACKOFF_MS = 30 * 60 * 1000
 
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const now = new Date()
 
@@ -151,6 +141,22 @@ async function handle(req: Request) {
         continue
       }
 
+      // Claim atomik SEBELUM kirim (at-most-once): PENDING → SENT hanya kalau
+      // status masih PENDING. Dua trigger cron yang overlap tidak akan
+      // mengirim WA dobel ke customer — yang kalah claim (count 0) skip.
+      // Status enum FollowUpQueue tidak punya state "SENDING", jadi claim
+      // langsung ke SENT; kalau pengiriman ternyata gagal, di bawah
+      // dikembalikan ke PENDING (retry) atau FAILED.
+      const claim = await prisma.followUpQueue.updateMany({
+        where: { id: item.id, status: 'PENDING' },
+        data: { status: 'SENT', sentAt: new Date() },
+      })
+      if (claim.count === 0) {
+        // Sudah di-claim/diproses run lain — jangan kirim dobel.
+        skipped++
+        continue
+      }
+
       // Kirim via WA service.
       const sendResult = await waService
         .sendMessage(session.id, item.customerPhone, item.resolvedMessage)
@@ -161,10 +167,7 @@ async function handle(req: Request) {
         }))
 
       if (sendResult.ok) {
-        await prisma.followUpQueue.update({
-          where: { id: item.id },
-          data: { status: 'SENT', sentAt: new Date() },
-        })
+        // Status & sentAt sudah di-set saat claim di atas.
         await prisma.followUpLog.create({
           data: {
             userId: item.userId,
@@ -198,9 +201,13 @@ async function handle(req: Request) {
           })
           failed++
         } else {
+          // Pengiriman gagal setelah claim → kembalikan ke PENDING dengan
+          // backoff + catatan retry (claim sebelumnya sudah set SENT).
           await prisma.followUpQueue.update({
             where: { id: item.id },
             data: {
+              status: 'PENDING',
+              sentAt: null,
               retryCount: { increment: 1 },
               scheduledAt: new Date(Date.now() + RETRY_BACKOFF_MS),
               failedReason: sendResult.error,
@@ -229,9 +236,11 @@ async function markSkipped(queueId: string, reason: string) {
 }
 
 async function markFailed(queueId: string, reason: string) {
+  // sentAt di-null-kan: row yang sempat di-claim SENT tapi gagal kirim
+  // tidak boleh terlihat seolah sudah terkirim.
   await prisma.followUpQueue.update({
     where: { id: queueId },
-    data: { status: 'FAILED', failedReason: reason },
+    data: { status: 'FAILED', failedReason: reason, sentAt: null },
   })
 }
 

@@ -4,32 +4,19 @@
 // Pakai firePixelEventForOrder yang punya dedup: kalau sebelumnya gagal di
 // Meta tapi sudah berhasil di TikTok, hanya yang gagal yang di-retry.
 //
-// Auth: header `x-cron-secret` atau query `?secret=` == CRON_SECRET.
-// Pattern sama dengan cron lain (lihat /api/cron/order-auto-cancel).
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { firePixelEventForOrder, type PixelEventName } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 
 const MAX_RETRY_PER_RUN = 50  // batasi supaya tidak overload sekali jalan
 const MAX_RETRY_COUNT = 3
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
-
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)

@@ -10,11 +10,11 @@
 // dedup kalau race dengan webhook yang akhirnya nyampai. P2002 di-treat
 // sebagai already-processed (tidak error).
 //
-// Auth: header `x-cron-secret` atau query `?secret=` == CRON_SECRET. Sama
-// dengan cron lain (lihat /api/cron/order-auto-cancel).
+// Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
 import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { upgradeTierFromPurchase } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { getTransactionDetail } from '@/lib/tripay'
@@ -24,15 +24,6 @@ import { getTransactionDetail } from '@/lib/tripay'
 const RECONCILE_WINDOW_MS = 24 * 60 * 60 * 1000
 // Cap supaya satu run cron tidak terlalu lama kalau backlog besar.
 const MAX_PER_RUN = 100
-
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.CRON_SECRET
-  if (!expected) return false
-  const url = new URL(req.url)
-  const queryToken = url.searchParams.get('secret')
-  const headerToken = req.headers.get('x-cron-secret')
-  return queryToken === expected || headerToken === expected
-}
 
 interface ReconcileSummary {
   checked: number
@@ -135,12 +126,8 @@ async function reconcileOne(payment: {
 }
 
 async function handle(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json(
-      { success: false, error: 'unauthorized' },
-      { status: 401 },
-    )
-  }
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   const cutoff = new Date(Date.now() - RECONCILE_WINDOW_MS)

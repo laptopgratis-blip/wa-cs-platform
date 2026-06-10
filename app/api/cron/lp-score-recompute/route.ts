@@ -3,24 +3,15 @@
 // Schedule rekomendasi: 1× sehari, jam 04:00 WIB (sehabis lp-signals-extract).
 import { NextResponse } from 'next/server'
 
+import { requireCronAuth } from '@/lib/cron-auth'
 import { computeLpScore, persistScore } from '@/lib/services/lp-score'
 import { prisma } from '@/lib/prisma'
 
-const CRON_SECRET = process.env.CRON_SECRET ?? ''
-
-function authOk(url: URL): boolean {
-  if (!CRON_SECRET) {
-    console.warn('[lp-score-recompute] CRON_SECRET kosong — endpoint terbuka.')
-    return true
-  }
-  return url.searchParams.get('secret') === CRON_SECRET
-}
-
 export async function GET(req: Request) {
-  const url = new URL(req.url)
-  if (!authOk(url)) {
-    return NextResponse.json({ success: false, error: 'unauthorized' }, { status: 401 })
-  }
+  // Auth terpusat di lib/cron-auth.ts — fail-closed kalau CRON_SECRET kosong
+  // (dulu fail-open di sini).
+  const authErr = requireCronAuth(req)
+  if (authErr) return authErr
 
   const startedAt = Date.now()
   const lps = await prisma.landingPage.findMany({
