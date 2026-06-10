@@ -11,6 +11,21 @@ services:
     image: postgres:17-alpine
     container_name: hulao-postgres
     restart: unless-stopped
+    # Tuning untuk traffic spike — default image (shared_buffers=128MB,
+    # work_mem=4MB) terlalu kecil saat live room ramai. Nilai konservatif
+    # karena host shared dengan banyak container lain (RAM 8GB).
+    # Catatan: perubahan di sini butuh recreate container postgres
+    # (docker compose up -d postgres) → downtime DB beberapa detik.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
     environment:
       POSTGRES_USER: hulao
       POSTGRES_DB: hulao

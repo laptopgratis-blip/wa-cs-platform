@@ -1,7 +1,32 @@
 # Deploy Hulao ke VPS — Checklist
 
 Catatan deploy dari local (push ke GitHub) → pull ke VPS Hostinger.
-Update: 2026-06-02
+Update: 2026-06-10
+
+---
+
+## ⚡ Khusus branch perf/p0-traffic-spike (tuning traffic spike)
+
+Selain langkah deploy biasa, branch ini butuh 2 langkah manual:
+
+1. **`.env.production` di VPS** — naikkan pool Prisma (10 → 30):
+   ```
+   DATABASE_URL="...?connection_limit=30&schema=public"
+   ```
+   Berlaku setelah container nextjs di-recreate. (nextjs 30 + wa-service 30
+   masih jauh di bawah max_connections=100 Postgres.)
+
+2. **Recreate postgres** — tuning `shared_buffers` dkk di docker-compose.yml
+   baru aktif setelah:
+   ```bash
+   docker compose up -d postgres   # downtime DB beberapa detik
+   docker compose up -d --force-recreate nextjs wa-service
+   ```
+   Verifikasi: `docker exec hulao-postgres psql -U hulao -d hulao -c "SHOW shared_buffers;"` → `512MB`.
+
+3. **(Di luar repo) CDN untuk /uploads/** — pasang Cloudflare di depan hulao.id
+   (DNS proxy, cache MP4/gambar). Tanpa ini, video klip tetap diserve langsung
+   dari bandwidth VPS saat ratusan viewer download klip baru serentak.
 
 ---
 

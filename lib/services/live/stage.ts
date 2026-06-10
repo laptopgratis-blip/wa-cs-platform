@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma'
 import { InsufficientBalanceError } from '@/lib/services/ai-generation-log'
 
 import { generateLiveReply, type ChatTurn, type LiveProduct } from './chat'
+import { invalidateStageCache } from './stage-cache'
 import { bumpMessageCount, logLiveEvent } from './tangkap'
 import { generateLiveTtsBatch } from './tts'
 
@@ -95,6 +96,8 @@ export async function enqueueQuestion(input: {
       questionText: input.questionText.slice(0, 500),
     },
   })
+  // pendingCount berubah → poll /stage berikutnya harus baca segar.
+  invalidateStageCache(input.liveRoomId)
   return true
 }
 
@@ -321,6 +324,7 @@ export async function advanceStage(
         where: { id: liveRoomId },
         data: { currentPerformance: Prisma.JsonNull, stageLockedUntil: null },
       })
+      invalidateStageCache(liveRoomId)
       return { advanced: false, reason: 'queue-empty' }
     }
 
@@ -353,6 +357,7 @@ export async function advanceStage(
         where: { id: liveRoomId },
         data: { stageLockedUntil: null },
       })
+      invalidateStageCache(liveRoomId)
       const reason =
         err instanceof InsufficientBalanceError ? 'insufficient-balance' : 'generate-failed'
       return { advanced: false, reason }
@@ -370,6 +375,8 @@ export async function advanceStage(
       where: { id: item.id },
       data: { status: 'DONE', answeredAt: new Date() },
     })
+    // Performance baru tayang → semua device harus lihat di poll berikutnya.
+    invalidateStageCache(liveRoomId)
 
     // Log AI_MESSAGE utk analitik + history room (best-effort).
     if (item.liveSessionId) {
