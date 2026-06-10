@@ -37,8 +37,33 @@ export function LiveEmbedView(
 ) {
   const { gateConfig, lpId, slug, name } = props
   const [gatePassed, setGatePassed] = useState(gateConfig.mode === 'OFF')
+  // Sudah selesai cek localStorage identity? Sebelum dicek, JANGAN tampilkan
+  // gate (cegah kedip form padahal sudah pernah diisi).
+  const [gateChecked, setGateChecked] = useState(gateConfig.mode === 'OFF')
   const [showGateModal, setShowGateModal] = useState(false)
   const sidRef = useRef<string | null>(null)
+
+  // FIX form muncul lagi: kalau penonton SUDAH pernah isi gate (identity
+  // tersimpan di localStorage — dipakai juga oleh LiveRoomView), anggap gate
+  // sudah lewat. Tanpa ini, tiap iframe remount (mis. LP di-scroll keluar-masuk
+  // viewport) state gate reset → form muncul lagi padahal data sudah diisi.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (gateConfig.mode === 'OFF') {
+      setGateChecked(true)
+      return
+    }
+    try {
+      const raw = localStorage.getItem(`live:identity:${slug}`)
+      if (raw) {
+        const p = JSON.parse(raw) as { name?: string }
+        if (p?.name) setGatePassed(true)
+      }
+    } catch {
+      /* localStorage bisa di-block — abaikan */
+    }
+    setGateChecked(true)
+  }, [slug, gateConfig.mode])
 
   // Pre-create clientSessionId di sessionStorage supaya LiveRoomView pakai
   // ID yang sama saat mount. Gate POST butuh sid ini sebelum LiveRoomView jalan.
@@ -54,19 +79,22 @@ export function LiveEmbedView(
     sidRef.current = id
   }, [slug])
 
-  // Trigger initial gate sesuai mode.
+  // Trigger initial gate sesuai mode — TUNGGU pengecekan identity & skip kalau
+  // sudah passed (sudah pernah isi).
   useEffect(() => {
+    if (!gateChecked || gatePassed) return
     if (gateConfig.mode === 'REQUIRED' || gateConfig.mode === 'OPTIONAL') {
       setShowGateModal(true)
     }
-  }, [gateConfig.mode])
+  }, [gateChecked, gatePassed, gateConfig.mode])
 
   // HYBRID timer trigger.
   useEffect(() => {
-    if (gateConfig.mode !== 'HYBRID' || gatePassed || gateConfig.triggerSec <= 0) return
+    if (!gateChecked || gateConfig.mode !== 'HYBRID' || gatePassed || gateConfig.triggerSec <= 0)
+      return
     const t = setTimeout(() => setShowGateModal(true), gateConfig.triggerSec * 1000)
     return () => clearTimeout(t)
-  }, [gateConfig.mode, gateConfig.triggerSec, gatePassed])
+  }, [gateChecked, gateConfig.mode, gateConfig.triggerSec, gatePassed])
 
   const handlePass = (lead: { name: string; phone: string }) => {
     // Simpan identity ke localStorage supaya LiveRoomView pre-fill nama+phone.
@@ -109,9 +137,10 @@ export function LiveEmbedView(
         />
       )}
 
-      {/* REQUIRED: full-screen blocker — di samping modal */}
+      {/* REQUIRED: scrim peek-through — live tetap terlihat (bikin penasaran),
+          tapi gelap di tengah supaya kartu form tetap kebaca. Blur tipis saja. */}
       {gateConfig.mode === 'REQUIRED' && !gatePassed && (
-        <div className="absolute inset-0 z-40 bg-black/70 backdrop-blur-sm" />
+        <div className="absolute inset-0 z-40 bg-gradient-to-b from-black/35 via-black/55 to-black/35 backdrop-blur-[2px]" />
       )}
 
       {/* Gate modal */}
@@ -218,12 +247,18 @@ function GateModal({ name, fields, mode, slug, lpId, clientSessionId, onPass, on
     <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
         <div className="mb-4 text-center">
-          <div className="text-3xl">🎙️</div>
-          <h2 className="mt-2 text-lg font-semibold text-zinc-900">
-            Yuk ngobrol dengan host {name}
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-white motion-safe:animate-pulse"
+              aria-hidden="true"
+            />
+            Sedang Live
+          </span>
+          <h2 className="mt-3 text-lg font-semibold text-zinc-900">
+            Ngobrol langsung dengan host {name}
           </h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Isi data biar host bisa kasih info detail langsung ke WA kamu.
+            Isi data biar host bisa kasih info &amp; promo langsung ke WA kamu.
           </p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-3">

@@ -1243,8 +1243,33 @@ export function LiveRoomView({
                 LIVE
               </span>
             </div>
-            <div className="truncate text-[11px] text-white/75 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
-              {name}
+            <div className="truncate text-[11px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
+              {nowAnswering ? (
+                // Status "menjawab" = SEKUNDER & subtle: nempel di header host,
+                // tidak menutupi CTA audio di tengah-atas.
+                <span className="flex items-center gap-1 text-orange-200">
+                  <span
+                    className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-400 animate-pulse motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">Menjawab {nowAnswering}</span>
+                  {queueCount > 1 ? (
+                    <span className="ml-0.5 flex-shrink-0 rounded-full bg-white/20 px-1 text-[9px] font-medium text-white/90">
+                      +{queueCount - 1}
+                    </span>
+                  ) : null}
+                </span>
+              ) : sending ? (
+                <span className="flex items-center gap-1 text-white/70">
+                  <Loader2
+                    className="h-2.5 w-2.5 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                  {hostName} lagi mikir…
+                </span>
+              ) : (
+                <span className="text-white/75">{name}</span>
+              )}
             </div>
           </div>
         </div>
@@ -1272,35 +1297,15 @@ export function LiveRoomView({
         </button>
       ) : null}
 
-      {/* ===== BANNER "MENJAWAB X" + antrian — panggung bersama ===== */}
-      {nowAnswering ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-16 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-orange-500/90 px-3 py-1 text-[12px] font-semibold text-white shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-300 motion-reduce:animate-none"
-          aria-live="polite"
-        >
-          <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse motion-reduce:animate-none" aria-hidden="true" />
-          Menjawab {nowAnswering}
-          {queueCount > 1 ? (
-            <span className="ml-1 rounded-full bg-white/25 px-1.5 py-px text-[10px] font-semibold">
-              +{queueCount - 1} antre
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-
-      {/* ===== HOST "MIKIR" INDICATOR — pill kecil di tengah atas saat sending ===== */}
-      {sending ? (
-        <div
-          className="absolute inset-x-0 top-20 z-20 flex justify-center"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="rounded-full bg-black/55 px-3 py-1.5 text-xs text-zinc-100 backdrop-blur-md drop-shadow-md">
-            <Loader2 className="mr-1.5 inline h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            {hostName} lagi mikir…
-          </div>
-        </div>
-      ) : null}
+      {/* Status host (menjawab/mikir) kini tampil subtle di header (kiri-atas),
+          supaya CTA audio di tengah-atas tidak tertutup. Lihat header overlay. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {nowAnswering
+          ? `Host sedang menjawab ${nowAnswering}`
+          : sending
+            ? 'Host sedang memproses'
+            : ''}
+      </span>
 
       {/* ===== SOCIAL PROOF — recent purchase popup ===== */}
       {orderFormSlug ? (
