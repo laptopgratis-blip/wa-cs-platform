@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { sanitizeProductFormMap } from '@/lib/services/live/order-form'
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,60}[a-z0-9])?$/
 
@@ -23,6 +24,13 @@ const createSchema = z.object({
   systemPrompt: z.string().trim().min(20).max(4000),
   greeting: z.string().trim().max(500).optional(),
   ttsVoice: z.string().trim().max(40).default('alloy'),
+  // Form checkout default + override per-produk — sebelumnya field ini di-strip
+  // diam-diam oleh schema sehingga pilihan form saat CREATE tidak pernah tersimpan.
+  orderFormSlug: z.string().trim().max(80).nullable().optional(),
+  productFormMap: z
+    .record(z.string(), z.string().trim().min(1).max(80))
+    .nullable()
+    .optional(),
 })
 
 export async function GET() {
@@ -99,6 +107,27 @@ export async function POST(req: Request) {
       ? data.featuredProductId
       : null
 
+  // Form default: harus milik user. Invalid → simpan null (bukan reject).
+  let orderFormSlug: string | null = null
+  if (data.orderFormSlug) {
+    const form = await prisma.orderForm.findUnique({
+      where: { slug: data.orderFormSlug },
+      select: { userId: true, isActive: true },
+    })
+    if (form && form.userId === session.user.id && form.isActive) {
+      orderFormSlug = data.orderFormSlug
+    }
+  }
+
+  // Form per-produk: entri invalid di-drop (validasi sama dengan PUT).
+  const productFormMap = data.productFormMap
+    ? await sanitizeProductFormMap({
+        rawMap: data.productFormMap,
+        userId: session.user.id,
+        productIds: data.productIds,
+      })
+    : null
+
   const created = await prisma.liveRoom.create({
     data: {
       userId: session.user.id,
@@ -111,6 +140,8 @@ export async function POST(req: Request) {
       systemPrompt: data.systemPrompt,
       greeting: data.greeting ?? null,
       ttsVoice: data.ttsVoice,
+      orderFormSlug,
+      ...(productFormMap ? { productFormMap } : {}),
     },
     select: { id: true, slug: true },
   })

@@ -183,6 +183,7 @@ export function LiveRoomView({
   products,
   botConfig,
   orderFormSlug,
+  productFormMap = {},
   ttsPauseMs = 150,
   featuredProductId = null,
 }: {
@@ -201,6 +202,9 @@ export function LiveRoomView({
   products: Product[]
   botConfig?: BotConfig
   orderFormSlug?: string | null
+  // Override form per-produk: { [productId]: formSlug }. Produk yang tidak ada
+  // di map pakai orderFormSlug default. Sudah divalidasi server-side.
+  productFormMap?: Record<string, string>
   ttsPauseMs?: number
   // Produk unggulan yang di-pin jadi kartu sorotan. null = kartu auto-cycle
   // (perilaku lama, backward compatible untuk room tanpa featured).
@@ -960,17 +964,19 @@ export function LiveRoomView({
   }
 
   // Buka form order LANGSUNG (modal iframe) — produk ter-preselect + nama/HP
-  // prefill dari identitas. orderFormSlug selalu terisi (di-resolve server-side
-  // ke form default owner), jadi tombol Order SELALU ke form, bukan chat host.
+  // prefill dari identitas. Form dipilih per-produk: productFormMap[productId]
+  // kalau di-set, fallback ke orderFormSlug default room (di-resolve
+  // server-side ke form default owner), jadi tombol Order SELALU ke form.
   function openOrderForm(p: Product, variantId?: string | null) {
     trackProductClick(p.id)
-    if (!orderFormSlug) return
+    const formSlug = productFormMap[p.id] ?? orderFormSlug
+    if (!formSlug) return
     const params = new URLSearchParams({ product: p.id, embed: '1' })
     if (variantId) params.set('variant', variantId)
     if (identity?.name) params.set('name', identity.name)
     if (identity?.phone) params.set('phone', identity.phone)
     setOrderModalUrl(
-      `/order/${encodeURIComponent(orderFormSlug)}?${params.toString()}`,
+      `/order/${encodeURIComponent(formSlug)}?${params.toString()}`,
     )
   }
 

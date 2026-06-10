@@ -3420,6 +3420,11 @@ model LiveRoom {
   // Produk "unggulan" yang di-pin jadi kartu sorotan (FeaturedProductCard).
   // null = fallback ke productIds[0]. Harus salah satu dari productIds.
   featuredProductId String?
+  // Pemetaan form order PER-PRODUK (2026-06-10). JSON { [productId]: orderFormSlug }.
+  // Klik produk → buka form yang dipetakan; kalau produk tak ada di map → pakai
+  // orderFormSlug default room. null/{} = semua produk pakai form default
+  // (backward compatible). Form yang dipetakan harus memuat produk tsb.
+  productFormMap Json?
   // System prompt persona host untuk Claude. Default di-generate dari
   // host.name + product context, admin/user boleh override.
   systemPrompt   String   @db.Text

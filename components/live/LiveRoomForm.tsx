@@ -1,6 +1,6 @@
 'use client'
 
-import { Loader2, Save } from 'lucide-react'
+import { AlertTriangle, Loader2, Package, Save } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -53,11 +53,19 @@ interface RoomData {
   botIntervalMaxSec: number
   botPrompts: string[]
   orderFormSlug: string | null
+  productFormMap: Record<string, string> | null
 }
 
 interface OrderFormOption {
   slug: string
   name: string
+  // Subset Product.id yang dimuat form. Kosong = form universal (semua produk).
+  productIds: string[]
+}
+
+// Form memuat produk kalau universal (productIds kosong) atau eksplisit.
+function formContainsProduct(form: OrderFormOption, productId: string): boolean {
+  return form.productIds.length === 0 || form.productIds.includes(productId)
 }
 
 // OpenAI gpt-4o-mini-tts voices — sorted female first + label gender hint.
@@ -145,6 +153,9 @@ export function LiveRoomForm({
   const [botIntervalMaxSec, setBotIntervalMaxSec] = useState(45)
   const [botPromptsText, setBotPromptsText] = useState('')
   const [orderFormSlug, setOrderFormSlug] = useState<string>('')
+  // Override form per-produk: { [productId]: formSlug }. Produk yang tidak ada
+  // di map ikut form default (orderFormSlug).
+  const [productFormMap, setProductFormMap] = useState<Record<string, string>>({})
   const [orderForms, setOrderForms] = useState<OrderFormOption[] | null>(null)
   const [ttsInstructions, setTtsInstructions] = useState('')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
@@ -167,7 +178,14 @@ export function LiveRoomForm({
     }
     const formsJson = (await formsRes.json()) as {
       success: boolean
-      data?: { items?: Array<{ slug: string; name: string; isActive: boolean }> }
+      data?: {
+        items?: Array<{
+          slug: string
+          name: string
+          isActive: boolean
+          productIds?: string[]
+        }>
+      }
     }
     if (hostsJson.success && hostsJson.data) setHosts(hostsJson.data)
     if (productsJson.success && productsJson.data?.items) {
@@ -178,7 +196,11 @@ export function LiveRoomForm({
     const forms = formsJson.success && formsJson.data?.items
       ? formsJson.data.items
           .filter((f) => f.isActive)
-          .map((f) => ({ slug: f.slug, name: f.name }))
+          .map((f) => ({
+            slug: f.slug,
+            name: f.name,
+            productIds: f.productIds ?? [],
+          }))
       : []
     setOrderForms(forms)
   }, [])
@@ -206,6 +228,7 @@ export function LiveRoomForm({
     setBotIntervalMaxSec(r.botIntervalMaxSec)
     setBotPromptsText((r.botPrompts ?? []).join('\n'))
     setOrderFormSlug(r.orderFormSlug ?? '')
+    setProductFormMap(r.productFormMap ?? {})
     setTtsInstructions(r.ttsInstructions ?? '')
     setTtsSpeed(r.ttsSpeed ?? 1.0)
     setTtsPitchOffset(r.ttsPitchOffset ?? 0.0)
@@ -273,6 +296,18 @@ export function LiveRoomForm({
         botIntervalMaxSec: maxSec,
         botPrompts: promptsArr,
         orderFormSlug: orderFormSlug || null,
+        // Kirim hanya entri produk yang masih terpilih + form-nya masih ada —
+        // entri basi (produk dilepas / form dihapus) di-drop di sini.
+        productFormMap: (() => {
+          const cleaned: Record<string, string> = {}
+          for (const pid of selectedProducts) {
+            const slug = productFormMap[pid]
+            if (slug && orderForms?.some((f) => f.slug === slug)) {
+              cleaned[pid] = slug
+            }
+          }
+          return Object.keys(cleaned).length > 0 ? cleaned : null
+        })(),
         ttsInstructions: ttsInstructions.trim() || null,
         ttsSpeed,
         ttsPitchOffset,
@@ -694,15 +729,18 @@ export function LiveRoomForm({
       </Card>
 
       <Card>
-        <CardContent className="space-y-3 p-4">
+        <CardContent className="space-y-4 p-4">
           <div>
-            <Label className="text-base">Checkout Form (klik produk → order langsung)</Label>
+            <Label className="text-base">
+              Form Checkout (klik produk → order langsung)
+            </Label>
             <p className="mt-1 text-xs text-muted-foreground">
-              Saat customer klik kartu produk, akan buka form order ini di tab
-              baru. Kalau tidak dipilih, klik produk hanya isi chat input untuk
-              tanya host.
+              Saat customer klik kartu produk di live, form order terbuka
+              langsung dengan produk itu ter-preselect. Atur satu form default
+              untuk semua produk, lalu (opsional) form khusus per produk.
             </p>
           </div>
+
           {orderForms === null ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading form…
@@ -716,18 +754,179 @@ export function LiveRoomForm({
               .
             </p>
           ) : (
-            <select
-              value={orderFormSlug}
-              onChange={(e) => setOrderFormSlug(e.target.value)}
-              className="w-full rounded-md border bg-white px-3 py-2 text-sm"
-            >
-              <option value="">— Tidak ada (chat fill saja) —</option>
-              {orderForms.map((f) => (
-                <option key={f.slug} value={f.slug}>
-                  {f.name} ({f.slug})
-                </option>
-              ))}
-            </select>
+            <>
+              {/* ── FORM DEFAULT ─────────────────────────────────────── */}
+              <div>
+                <Label htmlFor="live-default-form" className="text-sm">
+                  Form default
+                </Label>
+                <select
+                  id="live-default-form"
+                  value={orderFormSlug}
+                  onChange={(e) => setOrderFormSlug(e.target.value)}
+                  className="mt-1 h-11 w-full rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">
+                    — Tidak ada (klik produk hanya isi chat) —
+                  </option>
+                  {orderForms.map((f) => (
+                    <option key={f.slug} value={f.slug}>
+                      {f.name}
+                      {f.productIds.length === 0 ? ' · semua produk' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Dipakai semua produk yang tidak diberi form khusus di bawah.
+                </p>
+                {(() => {
+                  // Produk room yang TIDAK termuat di form default & belum
+                  // di-override → customer bakal lihat form tanpa produknya.
+                  const defaultForm = orderForms.find(
+                    (f) => f.slug === orderFormSlug,
+                  )
+                  if (!defaultForm) return null
+                  const gap = selectedProducts.filter(
+                    (pid) =>
+                      !formContainsProduct(defaultForm, pid) &&
+                      !productFormMap[pid],
+                  )
+                  if (gap.length === 0) return null
+                  const names = gap
+                    .map((pid) => products?.find((p) => p.id === pid)?.name)
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .join(', ')
+                  return (
+                    <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        <strong>{gap.length} produk</strong> room tidak termuat
+                        di form default ({names}
+                        {gap.length > 3 ? ', …' : ''}). Customer yang klik
+                        produk itu akan lihat form tanpa produknya. Beri form
+                        khusus di bawah, atau tambahkan produknya ke form.
+                      </span>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              {/* ── FORM PER PRODUK ──────────────────────────────────── */}
+              {selectedProducts.length === 0 ? (
+                <p className="rounded-md border border-dashed border-warm-200 px-3 py-2.5 text-xs text-muted-foreground">
+                  Pilih produk room dulu (bagian Produk di atas) untuk bisa
+                  mengatur form per produk.
+                </p>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-warm-200">
+                  <div className="flex items-center justify-between gap-2 border-b border-warm-200 bg-warm-50/60 px-3 py-2.5">
+                    <div>
+                      <div className="text-sm font-medium">Form per produk</div>
+                      <div className="text-xs text-muted-foreground">
+                        Opsional — pakai form berbeda untuk produk tertentu.
+                      </div>
+                    </div>
+                    {(() => {
+                      const n = selectedProducts.filter(
+                        (pid) => productFormMap[pid],
+                      ).length
+                      return n > 0 ? (
+                        <span className="shrink-0 rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-medium text-orange-700">
+                          {n} form khusus
+                        </span>
+                      ) : null
+                    })()}
+                  </div>
+                  <div className="divide-y divide-warm-100">
+                    {selectedProducts.map((pid) => {
+                      const product = products?.find((p) => p.id === pid)
+                      const chosen = productFormMap[pid] ?? ''
+                      const chosenForm = orderForms.find(
+                        (f) => f.slug === chosen,
+                      )
+                      const defaultFormName = orderForms.find(
+                        (f) => f.slug === orderFormSlug,
+                      )?.name
+                      const mismatch =
+                        !!chosenForm && !formContainsProduct(chosenForm, pid)
+                      return (
+                        <div key={pid} className="px-3 py-2.5">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                              {product?.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={product.imageUrl}
+                                  alt=""
+                                  className="h-10 w-10 shrink-0 rounded-md border border-warm-200 object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-warm-200 bg-warm-50 text-warm-400">
+                                  <Package className="h-4 w-4" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium">
+                                  {product?.name ?? 'Produk'}
+                                </div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {chosen
+                                    ? `Form khusus: ${chosenForm?.name ?? chosen}`
+                                    : defaultFormName
+                                      ? `Ikuti default — ${defaultFormName}`
+                                      : 'Belum ada form (klik produk isi chat)'}
+                                </div>
+                              </div>
+                            </div>
+                            <select
+                              aria-label={`Form order untuk ${product?.name ?? 'produk'}`}
+                              value={chosen}
+                              onChange={(e) =>
+                                setProductFormMap((prev) => {
+                                  const next = { ...prev }
+                                  if (e.target.value) next[pid] = e.target.value
+                                  else delete next[pid]
+                                  return next
+                                })
+                              }
+                              className={`h-11 w-full rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 sm:w-64 ${
+                                mismatch ? 'border-amber-400' : ''
+                              }`}
+                            >
+                              <option value="">Ikuti default</option>
+                              {orderForms.map((f) => (
+                                <option key={f.slug} value={f.slug}>
+                                  {f.name}
+                                  {!formContainsProduct(f, pid)
+                                    ? ' (tidak memuat produk ini)'
+                                    : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {mismatch && chosenForm ? (
+                            <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>
+                                Form <strong>{chosenForm.name}</strong> tidak
+                                memuat produk ini — pilihan ini akan{' '}
+                                <strong>diabaikan saat disimpan</strong>.
+                                Tambahkan produk ke form itu di{' '}
+                                <a href="/order-forms" className="underline">
+                                  /order-forms
+                                </a>
+                                , atau pilih form lain.
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

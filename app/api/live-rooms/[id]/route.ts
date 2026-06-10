@@ -1,9 +1,11 @@
 // GET/PUT/DELETE /api/live-rooms/[id] — kelola room milik user.
+import { Prisma } from '@prisma/client'
 import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { sanitizeProductFormMap } from '@/lib/services/live/order-form'
 
 const updateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
@@ -37,6 +39,9 @@ const updateSchema = z.object({
   // Slug OrderForm publik untuk "klik produk → order langsung". Empty
   // string atau null = unlink.
   orderFormSlug: z.string().trim().max(80).nullable().optional(),
+  // Pemetaan form per-produk: { [productId]: orderFormSlug }. null/{} = semua
+  // produk pakai form default (orderFormSlug). Divalidasi server-side.
+  productFormMap: z.record(z.string(), z.string().trim().min(1).max(80)).nullable().optional(),
 })
 
 export async function GET(
@@ -77,6 +82,7 @@ export async function GET(
       botIntervalMaxSec: true,
       botPrompts: true,
       orderFormSlug: true,
+      productFormMap: true,
       createdAt: true,
       updatedAt: true,
       hostTemplate: { select: { name: true, videoLoopUrl: true, sourceImageUrl: true } },
@@ -142,6 +148,27 @@ export async function PUT(
     }
   }
 
+  // ── Form per-produk: bersihkan entri invalid (drop, bukan reject) ──
+  // Valid kalau: produk termasuk produk room AND form milik owner & aktif &
+  // memuat produk itu (atau form universal/productIds kosong).
+  const { productFormMap: rawFormMap, ...restData } = data
+  let productFormMapUpdate:
+    | Prisma.InputJsonValue
+    | typeof Prisma.DbNull
+    | undefined = undefined
+  if (rawFormMap !== undefined) {
+    if (rawFormMap === null) {
+      productFormMapUpdate = Prisma.DbNull
+    } else {
+      const cleaned = await sanitizeProductFormMap({
+        rawMap: rawFormMap,
+        userId: session.user.id,
+        productIds: data.productIds ?? existing.productIds,
+      })
+      productFormMapUpdate = cleaned ?? Prisma.DbNull
+    }
+  }
+
   if (data.hostTemplateId) {
     const host = await prisma.hostTemplate.findUnique({
       where: { id: data.hostTemplateId },
@@ -158,7 +185,12 @@ export async function PUT(
 
   const updated = await prisma.liveRoom.update({
     where: { id },
-    data,
+    data: {
+      ...restData,
+      ...(productFormMapUpdate !== undefined
+        ? { productFormMap: productFormMapUpdate }
+        : {}),
+    },
     select: { id: true, slug: true, isActive: true },
   })
   return jsonOk(updated)

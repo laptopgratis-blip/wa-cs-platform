@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation'
 
 import { LiveRoomView } from '@/components/live/LiveRoomView'
 import { prisma } from '@/lib/prisma'
-import { resolveLiveOrderFormSlug } from '@/lib/services/live/order-form'
+import { resolveLiveOrderForms } from '@/lib/services/live/order-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +46,7 @@ export default async function PublicLivePage({
       botIntervalMaxSec: true,
       botPrompts: true,
       orderFormSlug: true,
+      productFormMap: true,
       ttsPauseMs: true,
       hostTemplate: {
         select: {
@@ -156,13 +157,16 @@ export default async function PublicLivePage({
   const order = new Map(room.productIds.map((id, i) => [id, i]))
   products.sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999))
 
-  // Tombol "Order" selalu ke form — fallback ke form default owner kalau room
-  // belum set orderFormSlug.
-  const effectiveOrderFormSlug = await resolveLiveOrderFormSlug({
-    explicitSlug: room.orderFormSlug ?? null,
-    userId: room.userId,
-    productIds: room.productIds,
-  })
+  // Tombol "Order" selalu ke form — default room (fallback form default owner)
+  // + override per-produk dari productFormMap. Map di-re-validasi di sini
+  // (form non-aktif/terhapus → produk itu fallback ke default).
+  const { defaultSlug: effectiveOrderFormSlug, productFormMap } =
+    await resolveLiveOrderForms({
+      explicitSlug: room.orderFormSlug ?? null,
+      rawProductFormMap: room.productFormMap,
+      userId: room.userId,
+      productIds: room.productIds,
+    })
 
   return (
     <LiveRoomView
@@ -185,6 +189,7 @@ export default async function PublicLivePage({
         prompts: room.botPrompts,
       }}
       orderFormSlug={effectiveOrderFormSlug}
+      productFormMap={productFormMap}
       ttsPauseMs={room.ttsPauseMs}
       scenes={room.hostTemplate.scenes.map((s) => ({
         id: s.id,
