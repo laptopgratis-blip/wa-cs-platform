@@ -161,72 +161,80 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     })
     .catch(() => {/* LpEvent log best-effort, jangan blocking */})
 
-  // Handoff WA best-effort — sama pola dgn /api/live/[slug]/lead.
-  let handoffStatus: 'HANDOFF_SENT' | 'HANDOFF_FAILED' = 'HANDOFF_FAILED'
-  let handoffError: string | null = null
-  let contactId: string | null = null
-  try {
-    const session = await prisma.whatsappSession.findFirst({
-      where: { userId: room.userId, status: 'CONNECTED' },
-      select: { id: true, phoneNumber: true },
-    })
-    if (session) {
-      const contact = await prisma.contact.upsert({
-        where: {
-          waSessionId_phoneNumber: { waSessionId: session.id, phoneNumber: normalized },
-        },
-        create: {
-          userId: room.userId,
-          waSessionId: session.id,
-          phoneNumber: normalized,
-          name: data.name,
-          pipelineStage: 'NEW',
-          tags: ['live-embed', `lp:${embed.landingPage.slug}`],
-        },
-        update: {
-          name: data.name,
-          tags: { push: 'live-embed' },
-        },
-        select: { id: true },
+  // Handoff WA + nurture queue = BACKGROUND, JANGAN di-await di request path.
+  // waService.sendMessage bisa lambat (timeout Baileys s.d. 90 dtk) — kalau
+  // di-await, penonton menatap spinner "Mengirim…" selama itu dan gate terasa
+  // macet. Lead sudah tersimpan; sisanya best-effort (server long-running
+  // Docker, bukan serverless — background promise aman).
+  void (async () => {
+    let handoffStatus: 'HANDOFF_SENT' | 'HANDOFF_FAILED' = 'HANDOFF_FAILED'
+    let handoffError: string | null = null
+    let contactId: string | null = null
+    try {
+      const session = await prisma.whatsappSession.findFirst({
+        where: { userId: room.userId, status: 'CONNECTED' },
+        select: { id: true, phoneNumber: true },
       })
-      contactId = contact.id
+      if (session) {
+        const contact = await prisma.contact.upsert({
+          where: {
+            waSessionId_phoneNumber: { waSessionId: session.id, phoneNumber: normalized },
+          },
+          create: {
+            userId: room.userId,
+            waSessionId: session.id,
+            phoneNumber: normalized,
+            name: data.name,
+            pipelineStage: 'NEW',
+            tags: ['live-embed', `lp:${embed.landingPage.slug}`],
+          },
+          update: {
+            name: data.name,
+            tags: { push: 'live-embed' },
+          },
+          select: { id: true },
+        })
+        contactId = contact.id
 
-      const msg = buildEmbedHandoffMessage({
-        customerName: data.name,
-        roomName: room.name,
-        productInterest: data.productInterest ?? null,
-      })
-      await waService.sendMessage(session.id, normalized, msg)
-      handoffStatus = 'HANDOFF_SENT'
+        const msg = buildEmbedHandoffMessage({
+          customerName: data.name,
+          roomName: room.name,
+          productInterest: data.productInterest ?? null,
+        })
+        await waService.sendMessage(session.id, normalized, msg)
+        handoffStatus = 'HANDOFF_SENT'
 
+        await logLiveEvent({
+          liveSessionId: sessionId,
+          type: 'HANDOFF_WA',
+          payload: { phoneNumber: normalized, sessionId: session.id, success: true },
+        })
+      } else {
+        handoffError = 'Owner belum punya WA session CONNECTED'
+      }
+    } catch (err) {
+      handoffError = err instanceof Error ? err.message : String(err)
       await logLiveEvent({
         liveSessionId: sessionId,
         type: 'HANDOFF_WA',
-        payload: { phoneNumber: normalized, sessionId: session.id, success: true },
+        payload: { phoneNumber: normalized, success: false, error: handoffError },
       })
-    } else {
-      handoffError = 'Owner belum punya WA session CONNECTED'
     }
-  } catch (err) {
-    handoffError = err instanceof Error ? err.message : String(err)
-    await logLiveEvent({
-      liveSessionId: sessionId,
-      type: 'HANDOFF_WA',
-      payload: { phoneNumber: normalized, success: false, error: handoffError },
-    })
-  }
 
-  await prisma.liveLead.update({
-    where: { id: lead.id },
-    data: { status: handoffStatus, contactId, handoffError },
+    await prisma.liveLead.update({
+      where: { id: lead.id },
+      data: { status: handoffStatus, contactId, handoffError },
+    })
+
+    // Nurture "belum order" — jadwalkan follow-up WA H+1 & H+3 (best-effort).
+    try {
+      await generateQueueForLead(lead.id)
+    } catch (err) {
+      console.error('[live-embed-gate] generateQueueForLead failed', err)
+    }
+  })().catch((err) => {
+    console.error('[live-embed-gate] background handoff failed', err)
   })
 
-  // Nurture "belum order" — jadwalkan follow-up WA H+1 & H+3 (best-effort).
-  try {
-    await generateQueueForLead(lead.id)
-  } catch (err) {
-    console.error('[live-embed-gate] generateQueueForLead failed', err)
-  }
-
-  return jsonOk({ leadId: lead.id, status: handoffStatus, sessionId, duplicate: false })
+  return jsonOk({ leadId: lead.id, status: 'NEW', sessionId, duplicate: false })
 }

@@ -14,7 +14,7 @@ import { notFound } from 'next/navigation'
 
 import { LiveEmbedView } from '@/components/live/LiveEmbedView'
 import { prisma } from '@/lib/prisma'
-import { resolveLiveOrderFormSlug } from '@/lib/services/live/order-form'
+import { resolveLiveOrderForms } from '@/lib/services/live/order-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -77,6 +77,7 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
       botIntervalMaxSec: true,
       botPrompts: true,
       orderFormSlug: true,
+      productFormMap: true,
       ttsPauseMs: true,
       hostTemplate: {
         select: {
@@ -127,11 +128,13 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
   const order = new Map(room.productIds.map((id, i) => [id, i]))
   products.sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999))
 
-  const effectiveOrderFormSlug = await resolveLiveOrderFormSlug({
-    explicitSlug: room.orderFormSlug ?? null,
-    userId: room.userId,
-    productIds: room.productIds,
-  })
+  const { defaultSlug: effectiveOrderFormSlug, productFormMap } =
+    await resolveLiveOrderForms({
+      explicitSlug: room.orderFormSlug ?? null,
+      rawProductFormMap: room.productFormMap,
+      userId: room.userId,
+      productIds: room.productIds,
+    })
 
   return (
     <LiveEmbedView
@@ -154,6 +157,7 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
         prompts: room.botPrompts,
       }}
       orderFormSlug={effectiveOrderFormSlug}
+      productFormMap={productFormMap}
       ttsPauseMs={room.ttsPauseMs}
       scenes={room.hostTemplate.scenes.map((s) => ({
         id: s.id, name: s.name, category: s.category, videoUrl: s.videoUrl as string, isPrimary: s.isPrimary,

@@ -13,6 +13,8 @@
 // clientSessionId ke sessionStorage agar LiveRoomView pakai ID yang sama.
 import { useEffect, useRef, useState } from 'react'
 
+import { safeLocal, safeSession } from '@/lib/safe-storage'
+
 import { LiveRoomView, primeLiveAudio } from './LiveRoomView'
 
 type GateMode = 'REQUIRED' | 'OPTIONAL' | 'HYBRID' | 'OFF'
@@ -41,6 +43,10 @@ export function LiveEmbedView(
   // gate (cegah kedip form padahal sudah pernah diisi).
   const [gateChecked, setGateChecked] = useState(gateConfig.mode === 'OFF')
   const [showGateModal, setShowGateModal] = useState(false)
+  // Identity hasil GateModal — disuntik ke LiveRoomView via prop. LiveRoomView
+  // baca localStorage cuma saat mount (sebelum gate lolos), jadi tanpa prop ini
+  // penonton diminta isi nama+WA DUA KALI (gate embed lalu JoinGate internal).
+  const [lead, setLead] = useState<{ name: string; phone: string } | null>(null)
   const sidRef = useRef<string | null>(null)
 
   // FIX form muncul lagi: kalau penonton SUDAH pernah isi gate (identity
@@ -54,27 +60,30 @@ export function LiveEmbedView(
       return
     }
     try {
-      const raw = localStorage.getItem(`live:identity:${slug}`)
+      const raw = safeLocal.get(`live:identity:${slug}`)
       if (raw) {
         const p = JSON.parse(raw) as { name?: string }
         if (p?.name) setGatePassed(true)
       }
     } catch {
-      /* localStorage bisa di-block — abaikan */
+      /* JSON invalid — abaikan */
     }
     setGateChecked(true)
   }, [slug, gateConfig.mode])
 
   // Pre-create clientSessionId di sessionStorage supaya LiveRoomView pakai
   // ID yang sama saat mount. Gate POST butuh sid ini sebelum LiveRoomView jalan.
+  // safeSession WAJIB: sessionStorage di iframe third-party bisa diblok dan
+  // akses langsung THROW → sid null selamanya → submit gate mentok
+  // "Session belum siap" terus-terusan.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const key = `live:session:${slug}`
-    let id = sessionStorage.getItem(key)
+    let id = safeSession.get(key)
     if (!id) {
       id = (globalThis.crypto?.randomUUID?.() ??
         `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
-      sessionStorage.setItem(key, id)
+      safeSession.set(key, id)
     }
     sidRef.current = id
   }, [slug])
@@ -96,14 +105,14 @@ export function LiveEmbedView(
     return () => clearTimeout(t)
   }, [gateChecked, gateConfig.mode, gateConfig.triggerSec, gatePassed])
 
-  const handlePass = (lead: { name: string; phone: string }) => {
-    // Simpan identity ke localStorage supaya LiveRoomView pre-fill nama+phone.
-    try {
-      localStorage.setItem(
-        `live:identity:${slug}`,
-        JSON.stringify({ name: lead.name, phone: lead.phone }),
-      )
-    } catch {/* localStorage bisa di-block, gpp */}
+  const handlePass = (data: { name: string; phone: string }) => {
+    // Simpan identity: localStorage (persist) + state lead (disuntik ke
+    // LiveRoomView yang sudah terlanjur mount).
+    safeLocal.set(
+      `live:identity:${slug}`,
+      JSON.stringify({ name: data.name, phone: data.phone }),
+    )
+    setLead(data)
     setGatePassed(true)
     setShowGateModal(false)
     // Tell parent (LP host) — analytics + scroll behavior.
@@ -126,7 +135,9 @@ export function LiveEmbedView(
 
   return (
     <div className="relative h-screen w-screen touch-manipulation overflow-hidden overscroll-none bg-black">
-      <LiveRoomView {...props} />
+      {/* embedGated: matikan JoinGate internal LiveRoomView — gating diurus
+          GateModal di bawah, dan live HARUS terlihat di belakang gate. */}
+      <LiveRoomView {...props} embedGated externalIdentity={lead} />
 
       {/* HYBRID + triggerOnChat: invisible blocker di area chat untuk capture klik */}
       {showChatBlocker && (
@@ -216,10 +227,15 @@ function GateModal({ name, fields, mode, slug, lpId, clientSessionId, onPass, on
       return
     }
     setSubmitting(true)
+    // Timeout 15dtk — apa pun yang terjadi di server/jaringan, spinner
+    // "Mengirim…" TIDAK BOLEH macet selamanya. Timeout → error + bisa retry.
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 15_000)
     try {
       const res = await fetch(`/api/live/${encodeURIComponent(slug)}/embed-gate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: ctrl.signal,
         body: JSON.stringify({
           clientSessionId,
           lpId,
@@ -238,8 +254,16 @@ function GateModal({ name, fields, mode, slug, lpId, clientSessionId, onPass, on
       }
       onPass({ name: form.name ?? '', phone: form.phone ?? '' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error')
+      setError(
+        err instanceof DOMException && err.name === 'AbortError'
+          ? 'Koneksi lambat — coba kirim lagi.'
+          : err instanceof Error
+            ? err.message
+            : 'Network error',
+      )
       setSubmitting(false)
+    } finally {
+      clearTimeout(timer)
     }
   }
 

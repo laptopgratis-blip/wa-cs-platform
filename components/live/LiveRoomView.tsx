@@ -13,6 +13,8 @@
 import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { safeLocal, safeSession } from '@/lib/safe-storage'
+
 import { FlashSaleCountdown } from './FlashSaleCountdown'
 
 interface ProductVariant {
@@ -186,6 +188,8 @@ export function LiveRoomView({
   productFormMap = {},
   ttsPauseMs = 150,
   featuredProductId = null,
+  embedGated = false,
+  externalIdentity = null,
 }: {
   slug: string
   name: string
@@ -209,6 +213,13 @@ export function LiveRoomView({
   // Produk unggulan yang di-pin jadi kartu sorotan. null = kartu auto-cycle
   // (perilaku lama, backward compatible untuk room tanpa featured).
   featuredProductId?: string | null
+  // true = gating diurus wrapper embed (LiveEmbedView GateModal) — JANGAN
+  // render JoinGate internal, biarkan live tampil di belakang gate embed.
+  embedGated?: boolean
+  // Identity hasil GateModal embed. LiveRoomView baca localStorage hanya saat
+  // mount, jadi gate yang lolos SETELAH mount harus disuntik via prop ini —
+  // tanpa ini penonton embed diminta isi nama+WA dua kali (double gate).
+  externalIdentity?: { name: string; phone: string } | null
 }) {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -609,18 +620,21 @@ export function LiveRoomView({
 
   // Generate/restore clientSessionId di sessionStorage (per tab).
   // Identity (name + phone) — disimpan localStorage (persist antar tab close).
+  // WAJIB safeSession/safeLocal: di iframe embed third-party storage bisa
+  // diblok browser dan akses langsung THROW → efek crash → identityChecked
+  // tidak pernah true → layar "Menghubungkan ke live…" muter selamanya.
   useEffect(() => {
     const sidKey = `live:session:${slug}`
-    let id = sessionStorage.getItem(sidKey)
+    let id = safeSession.get(sidKey)
     if (!id) {
       id =
         (globalThis.crypto?.randomUUID?.() ??
           `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
-      sessionStorage.setItem(sidKey, id)
+      safeSession.set(sidKey, id)
     }
     setClientSessionId(id)
     const identKey = `live:identity:${slug}`
-    const raw = localStorage.getItem(identKey)
+    const raw = safeLocal.get(identKey)
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as { name: string; phone: string }
@@ -631,6 +645,13 @@ export function LiveRoomView({
     }
     setIdentityChecked(true)
   }, [slug])
+
+  // Identity dari GateModal embed (lolos SETELAH mount) — suntik ke state.
+  useEffect(() => {
+    if (externalIdentity?.name && externalIdentity.phone) {
+      setIdentity((prev) => prev ?? externalIdentity)
+    }
+  }, [externalIdentity])
 
   // Greeting message — tampil sebagai 1st assistant msg.
   useEffect(() => {
@@ -1081,20 +1102,19 @@ export function LiveRoomView({
   }
 
   // Login gate — sebelum identity di-set, tampilkan form nama+WA dulu.
-  if (!identity) {
+  // Skip kalau embedGated: gating diurus GateModal LiveEmbedView di atas view
+  // ini (live harus tetap render supaya kelihatan di belakang gate embed).
+  if (!identity && !embedGated) {
     return (
       <JoinGate
-        slug={slug}
         hostName={hostName}
         roomName={name}
+        videoUrl={videoLoopUrl}
         onJoin={(joinData) => {
           // Unlock audio DI DALAM gesture klik "Masuk Live" supaya suara host
           // langsung bunyi saat auto-sapa "halo" — tanpa tombol "dengar suara".
           primeLiveAudio()
-          localStorage.setItem(
-            `live:identity:${slug}`,
-            JSON.stringify(joinData),
-          )
+          safeLocal.set(`live:identity:${slug}`, JSON.stringify(joinData))
           setIdentity(joinData)
         }}
       />
@@ -1985,16 +2005,18 @@ function OrderFormModal({
 }
 
 // Login gate — customer harus input nama + nomor WA sebelum masuk.
-// UX: full-screen vertical layout, branded oranye, simple form 2 field.
+// UX: live JALAN di belakang (video idle muted + scrim gradien) supaya
+// penonton langsung lihat ada live; form = bottom sheet maks ~60% tinggi
+// layar, BUKAN layar penuh yang menutup live.
 function JoinGate({
-  slug,
   hostName,
   roomName,
+  videoUrl,
   onJoin,
 }: {
-  slug: string
   hostName: string
   roomName: string
+  videoUrl: string
   onJoin: (data: { name: string; phone: string }) => void
 }) {
   const [name, setName] = useState('')
@@ -2030,25 +2052,42 @@ function JoinGate({
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-orange-50 via-warm-50 to-amber-50 p-6">
-      <div className="w-full max-w-sm rounded-3xl border bg-white p-6 shadow-2xl">
-        <div className="mb-4 flex justify-center">
-          <div
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-orange-500 text-white shadow-lg"
-            aria-hidden="true"
-          >
-            <span className="text-2xl">🎉</span>
-          </div>
-        </div>
-        <h1 className="text-center text-xl font-semibold text-foreground">
-          Selamat datang di Live
+    <div className="relative flex h-dvh w-full flex-col justify-end overflow-hidden bg-black">
+      {/* Live preview di belakang gate — penonton lihat live-nya duluan. */}
+      <video
+        src={videoUrl}
+        className="absolute inset-0 h-full w-full object-cover"
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-hidden="true"
+      />
+      {/* Scrim: atas tipis (live jelas terlihat), bawah pekat (sheet kebaca). */}
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/20 to-black/70"
+        aria-hidden="true"
+      />
+      {/* Badge live di pojok atas. */}
+      <div className="absolute left-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm">
+        <span
+          className="h-1.5 w-1.5 rounded-full bg-white motion-safe:animate-pulse"
+          aria-hidden="true"
+        />
+        Sedang Live
+      </div>
+
+      {/* Bottom sheet form — maks 60% tinggi, live tetap terlihat di atasnya. */}
+      <div className="relative z-10 mx-auto max-h-[60dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-white p-5 pb-6 shadow-2xl sm:mb-6 sm:rounded-3xl">
+        <div
+          className="mx-auto mb-3 h-1 w-10 rounded-full bg-warm-200 sm:hidden"
+          aria-hidden="true"
+        />
+        <h1 className="text-center text-lg font-semibold text-foreground">
+          {roomName}
         </h1>
-        <p className="mt-1 text-center text-sm text-muted-foreground">
-          <strong>{roomName}</strong> bersama {hostName}
-        </p>
-        <p className="mt-3 rounded-md bg-warm-50 px-3 py-2 text-center text-sm text-warm-700">
-          Isi nama &amp; nomor WA dulu supaya host bisa sapa Anda + kalau order
-          gampang follow-up via WhatsApp.
+        <p className="mt-0.5 text-center text-sm text-muted-foreground">
+          bersama {hostName} — isi nama &amp; WA biar host bisa sapa Anda.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
