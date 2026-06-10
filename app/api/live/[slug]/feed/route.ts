@@ -5,7 +5,7 @@
 // caller's own session — supaya gak duplikat dengan msg lokal).
 import { jsonError, jsonOk } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
-import { prisma } from '@/lib/prisma'
+import { getFeedWindow } from '@/lib/services/live/feed-cache'
 import {
   checkPollRateLimit,
   maybeCleanup,
@@ -42,39 +42,22 @@ export async function GET(
     Math.max(1, Number(url.searchParams.get('limit') ?? 30)),
   )
 
-  const room = await prisma.liveRoom.findUnique({
-    where: { slug },
-    select: { id: true, isActive: true },
-  })
-  if (!room) return jsonError('Room tidak ditemukan', 404)
-  if (!room.isActive) return jsonError('Room offline', 410)
+  // Window event di-cache per room (feed-cache.ts) — filter since/
+  // excludeSession/limit dilakukan in-memory supaya DB tidak kena query
+  // per-viewer.
+  const snap = await getFeedWindow(slug)
+  if (!snap) return jsonError('Room tidak ditemukan', 404)
+  if (!snap.isActive) return jsonError('Room offline', 410)
 
-  // Ambil events USER_MESSAGE + AI_MESSAGE dari semua session room.
-  // excludeSession di-filter via JOIN ke LiveSession.clientSessionId.
-  const events = await prisma.liveEvent.findMany({
-    where: {
-      liveSession: {
-        liveRoomId: room.id,
-        ...(excludeSession ? { clientSessionId: { not: excludeSession } } : {}),
-      },
-      type: { in: ['USER_MESSAGE', 'AI_MESSAGE'] },
-      createdAt: { gt: since },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
-    select: {
-      id: true,
-      type: true,
-      payload: true,
-      createdAt: true,
-      liveSession: {
-        select: {
-          clientSessionId: true,
-          customerName: true,
-        },
-      },
-    },
-  })
+  const events: typeof snap.events = []
+  for (const e of snap.events) {
+    if (e.createdAt <= since) continue
+    if (excludeSession && e.liveSession.clientSessionId === excludeSession) {
+      continue
+    }
+    events.push(e)
+    if (events.length >= limit) break
+  }
 
   return jsonOk({
     events: events.map((e) => {

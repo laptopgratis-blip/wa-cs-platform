@@ -566,7 +566,7 @@ export function LiveRoomView({
   // Bot lokal tetap di-handle client-side terpisah.
   useEffect(() => {
     if (!clientSessionId) return
-    const POLL_MS = 2500
+    const POLL_MS = 4000 // feed: window di-cache server 2dtk, poll lebih rapat sia-sia
     let cancelled = false
     async function poll() {
       try {
@@ -865,7 +865,7 @@ export function LiveRoomView({
   useEffect(() => {
     if (!clientSessionId) return
     let cancelled = false
-    const STAGE_POLL_MS = 1500
+    const STAGE_POLL_MS = 2500 // stage: snapshot di-cache + di-invalidate server-side
     async function pollStage() {
       try {
         const res = await fetch(
@@ -1003,7 +1003,7 @@ export function LiveRoomView({
       }
     }
     void poll()
-    const t = setInterval(poll, 7000)
+    const t = setInterval(poll, 12000)
     return () => {
       cancelled = true
       clearInterval(t)

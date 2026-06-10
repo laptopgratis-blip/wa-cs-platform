@@ -18,7 +18,9 @@ export interface StageSnapshot {
   pendingCount: number
 }
 
-const TTL_MS = 1200
+// 2dtk mengikuti interval poll klien 2.5dtk — perubahan panggung tetap
+// instan karena cache di-invalidate saat enqueue/advance.
+const TTL_MS = 2000
 
 // null = cached "room tidak ditemukan" (negative cache — slug acak dari
 // attacker tidak tembus ke DB tiap request).

@@ -13,16 +13,35 @@ import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
+// Cache per-slug — endpoint di-poll tiap penonton dan isinya social proof
+// agregat (toleran staleness beberapa detik). Tanpa cache, tiap poll = 1
+// findUnique + 4 query count paralel; ratusan viewer = ratusan query/detik
+// (kontributor insiden 2026-06-10). Process-local, valid karena 1 instance.
+const STATS_TTL_MS = 5000
+const statsCache = new Map<
+  string,
+  { body: Record<string, unknown> | null; expiresAt: number }
+>()
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
+
+  const hit = statsCache.get(slug)
+  if (hit && hit.expiresAt > Date.now()) {
+    if (!hit.body) return jsonError('Room tidak ditemukan', 404)
+    return jsonOk(hit.body)
+  }
+
   const room = await prisma.liveRoom.findUnique({
     where: { slug },
     select: { id: true, isActive: true },
   })
   if (!room || !room.isActive) {
+    // Negative cache — room mati/slug salah jangan hammer DB.
+    statsCache.set(slug, { body: null, expiresAt: Date.now() + STATS_TTL_MS })
     return jsonError('Room tidak ditemukan', 404)
   }
 
@@ -74,10 +93,12 @@ export async function GET(
       }
     : null
 
-  return jsonOk({
+  const body = {
     viewersOpen,
     soldThisRoom,
     soldToday,
     recentBuyer,
-  })
+  }
+  statsCache.set(slug, { body, expiresAt: Date.now() + STATS_TTL_MS })
+  return jsonOk(body)
 }

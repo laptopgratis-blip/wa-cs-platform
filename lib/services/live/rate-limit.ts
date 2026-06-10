@@ -79,7 +79,7 @@ export function checkPollRateLimit(
 
 // Cleanup expired buckets — dipanggil setiap N msg untuk hindari leak.
 let lastCleanup = Date.now()
-const CLEANUP_INTERVAL_MS = 10 * 60_000
+const CLEANUP_INTERVAL_MS = 2 * 60_000 // trafik live tinggi = banyak bucket IP; bersihkan lebih sering
 export function maybeCleanup(): void {
   const now = Date.now()
   if (now - lastCleanup < CLEANUP_INTERVAL_MS) return

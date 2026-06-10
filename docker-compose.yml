@@ -51,8 +51,8 @@ services:
     container_name: hulao-nextjs
     restart: unless-stopped
     # Batas memori (host shared, swap 4G) — cegah satu service meng-OOM host.
-    mem_limit: 768m
-    memswap_limit: 1280m
+    mem_limit: 1024m
+    memswap_limit: 1536m
     env_file:
       - .env.production
     environment:
