@@ -1042,11 +1042,9 @@ export function LiveRoomView({
     )
   }
 
-  // Show "Order via WA" trigger setelah ≥3 user message ATAU minimal 1 product click.
-  const userMsgCount = messages.filter((m) => m.role === 'user').length
-  const showOrderCta =
-    leadStatus !== 'HANDOFF_SENT' &&
-    (userMsgCount >= 3 || lastClickedProductId !== null)
+  // CTA "Order WA" selalu tampil untuk semua penonton. Setelah handoff sukses
+  // berubah jadi chip konfirmasi "Cek WhatsApp" — jangan disembunyikan, penonton
+  // butuh feedback bahwa ordernya terkirim.
 
   async function submitLead(input: { name: string; phone: string }) {
     if (!clientSessionId) return
@@ -1402,15 +1400,14 @@ export function LiveRoomView({
           />
         ) : null}
 
-        {showOrderCta ? (
-          (leadStatus as string) === 'HANDOFF_SENT' ? (
-            <div
-              className="flex items-center gap-1.5 rounded-full bg-emerald-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
-              role="status"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Cek WhatsApp
-            </div>
-          ) : leadStatus === 'HANDOFF_FAILED' ? (
+        {leadStatus === 'HANDOFF_SENT' ? (
+          <div
+            className="flex items-center gap-1.5 rounded-full bg-emerald-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
+            role="status"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Cek WhatsApp
+          </div>
+        ) : leadStatus === 'HANDOFF_FAILED' ? (
             <div
               className="rounded-full bg-amber-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
               role="status"
@@ -1440,8 +1437,7 @@ export function LiveRoomView({
                 </>
               )}
             </button>
-          )
-        ) : null}
+        )}
       </div>
 
       {/* ===== BOTTOM COMPOSER — tipis transparan, TikTok style ===== */}
