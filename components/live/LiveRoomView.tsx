@@ -388,12 +388,17 @@ export function LiveRoomView({
   )
 
   // Imperative initial src + autoplay untuk layer A pas mount.
+  // WAJIB playSafe, BUKAN play() mentah: penonton yang identity-nya sudah
+  // tersimpan (atau embed sebelum gate diklik) masuk TANPA gesture → browser
+  // tolak autoplay unmuted (NATIVE_LIBRARY, video ber-audio) → video diam di
+  // frame HITAM sampai ada gesture (mis. komen). playSafe fallback: mute
+  // element → play pasti jalan → overlay "Klik untuk dengar suara host".
   useEffect(() => {
     const v = videoARef.current
     if (!v || !urlA) return
     v.src = urlA
     v.load()
-    v.play().catch(() => {})
+    playSafe(v)
     // Pre-warm klip idle berikutnya ke layer B selagi A main → ganti scene
     // pertama sudah ter-buffer (no freeze).
     prewarmNextIdle('A', urlA)
