@@ -22,7 +22,7 @@ export async function GET(
 
   const room = await prisma.liveRoom.findUnique({
     where: { slug },
-    select: { isActive: true, currentPerformance: true, performanceSeq: true },
+    select: { id: true, isActive: true, currentPerformance: true, performanceSeq: true },
   })
   if (!room) return jsonError('Room tidak ditemukan', 404)
   if (!room.isActive) return jsonError('Room offline', 410)
@@ -30,9 +30,16 @@ export async function GET(
   const perf = (room.currentPerformance as Performance | null) ?? null
   const hasNew = perf !== null && perf.seq > sinceSeq
 
+  // Indikator antrian: berapa pertanyaan menunggu/diproses (untuk badge
+  // "N menunggu dijawab" di client).
+  const pendingCount = await prisma.liveQueueItem.count({
+    where: { liveRoomId: room.id, status: { in: ['PENDING', 'ANSWERING'] } },
+  })
+
   return jsonOk({
     seq: room.performanceSeq,
     serverNow: Date.now(),
     performance: hasNew ? perf : null,
+    pendingCount,
   })
 }

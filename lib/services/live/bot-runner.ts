@@ -112,6 +112,30 @@ export async function runLiveBotTick(options: { baseUrl: string } = { baseUrl: '
       continue
     }
 
+    // Fase 3 (panggung bersama): redam bot berdasarkan ANTRIAN.
+    //   (a) Ada pertanyaan REAL menunggu/diproses → utamakan customer asli,
+    //       jangan selipkan bot di depan/belakang mereka.
+    //   (b) Antrian sudah menumpuk (>=3) → jangan tambah bot biar host tidak
+    //       makin telat. (cap keras tetap di enqueueQuestion = 8.)
+    const pendingReal = await prisma.liveQueueItem.count({
+      where: {
+        liveRoomId: room.id,
+        status: { in: ['PENDING', 'ANSWERING'] },
+        isBot: false,
+      },
+    })
+    if (pendingReal > 0) {
+      result.skipped += 1
+      continue
+    }
+    const pendingTotal = await prisma.liveQueueItem.count({
+      where: { liveRoomId: room.id, status: { in: ['PENDING', 'ANSWERING'] } },
+    })
+    if (pendingTotal >= 3) {
+      result.skipped += 1
+      continue
+    }
+
     // Cek bot terakhir — anti-spam respect interval owner. Tanpa window
     // startedAt: ambil USER_MESSAGE terbaru di session virtual bot.
     if (botSession) {

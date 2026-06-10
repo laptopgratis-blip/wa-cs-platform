@@ -214,6 +214,8 @@ export function LiveRoomView({
   // Panggung bersama: nama penanya yang SEDANG dijawab host (untuk banner
   // "Menjawab Budi"). null = host idle/tidak sedang menjawab.
   const [nowAnswering, setNowAnswering] = useState<string | null>(null)
+  // Jumlah pertanyaan di antrian (PENDING+ANSWERING) — untuk badge "N menunggu".
+  const [queueCount, setQueueCount] = useState(0)
   // Seq terakhir yg sudah diketahui (dari /stage) & yg sudah diputar — cegah
   // putar ulang performance yang sama.
   const lastStageSeqRef = useRef(0)
@@ -807,10 +809,16 @@ export function LiveRoomView({
         if (!res.ok) return
         const json = (await res.json()) as {
           success: boolean
-          data?: { seq: number; serverNow: number; performance: StagePerformance | null }
+          data?: {
+            seq: number
+            serverNow: number
+            performance: StagePerformance | null
+            pendingCount?: number
+          }
         }
         if (cancelled || !json.success || !json.data) return
         lastStageSeqRef.current = json.data.seq
+        setQueueCount(json.data.pendingCount ?? 0)
         const perf = json.data.performance
         if (!perf || perf.seq <= performedSeqRef.current) return
         performedSeqRef.current = perf.seq
@@ -1264,7 +1272,7 @@ export function LiveRoomView({
         </button>
       ) : null}
 
-      {/* ===== BANNER "MENJAWAB X" — panggung bersama: siapa yg sedang dijawab ===== */}
+      {/* ===== BANNER "MENJAWAB X" + antrian — panggung bersama ===== */}
       {nowAnswering ? (
         <div
           className="pointer-events-none absolute inset-x-0 top-16 z-20 mx-auto flex w-fit items-center gap-1.5 rounded-full bg-orange-500/90 px-3 py-1 text-[12px] font-semibold text-white shadow-md backdrop-blur-sm animate-in fade-in slide-in-from-top-1 duration-300 motion-reduce:animate-none"
@@ -1272,6 +1280,11 @@ export function LiveRoomView({
         >
           <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse motion-reduce:animate-none" aria-hidden="true" />
           Menjawab {nowAnswering}
+          {queueCount > 1 ? (
+            <span className="ml-1 rounded-full bg-white/25 px-1.5 py-px text-[10px] font-semibold">
+              +{queueCount - 1} antre
+            </span>
+          ) : null}
         </div>
       ) : null}
 
