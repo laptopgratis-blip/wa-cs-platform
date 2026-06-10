@@ -406,6 +406,34 @@ export function LiveRoomView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Retry play di gesture pertama APA PUN (tap di mana saja) — iOS Low Power
+  // Mode & sebagian browser memblokir autoplay BAHKAN yang sudah muted.
+  // Overlay "Klik untuk dengar" tetap ada untuk unmute; listener ini memastikan
+  // VIDEO-nya hidup dari sentuhan apa pun tanpa user harus menebak tombol.
+  // Capture-phase supaya tetap kebagian event walau target stopPropagation.
+  useEffect(() => {
+    const retry = () => {
+      const v =
+        activeLayerRef.current === 'A' ? videoARef.current : videoBRef.current
+      if (!v) return
+      if (!v.paused) {
+        cleanup()
+        return
+      }
+      const p = v.play()
+      if (p && typeof p.then === 'function') {
+        p.then(() => cleanup()).catch(() => {})
+      }
+    }
+    function cleanup() {
+      document.removeEventListener('pointerdown', retry, true)
+      document.removeEventListener('keydown', retry, true)
+    }
+    document.addEventListener('pointerdown', retry, true)
+    document.addEventListener('keydown', retry, true)
+    return cleanup
+  }, [])
+
   // Switch scene ke URL baru. Logic:
   //   1. Same as active URL → restart active (currentTime=0) — pool tunggal.
   //   2. Same as INACTIVE layer URL → buffer sudah loaded, langsung restart
