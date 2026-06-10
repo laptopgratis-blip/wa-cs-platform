@@ -1,5 +1,7 @@
 // GET /api/inbox/[contactId]/messages
 // Ambil history pesan satu kontak (urut kronologis untuk tampilan chat).
+// Default: halaman terbaru. Query param opsional ?cursor=<messageId> untuk
+// load pesan yang lebih lama (pesan sebelum cursor tersebut).
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
@@ -9,7 +11,11 @@ interface Params {
   params: Promise<{ contactId: string }>
 }
 
-export async function GET(_req: Request, { params }: Params) {
+// Jumlah pesan per halaman. Query ambil +1 hanya untuk deteksi hasMore
+// tanpa perlu query count terpisah.
+const MESSAGES_PAGE_SIZE = 200
+
+export async function GET(req: Request, { params }: Params) {
   let session
   try {
     session = await requireSession()
@@ -18,6 +24,8 @@ export async function GET(_req: Request, { params }: Params) {
   }
 
   const { contactId } = await params
+  // Cursor opsional untuk pagination mundur (load pesan lebih lama).
+  const cursor = new URL(req.url).searchParams.get('cursor')?.trim() || null
   try {
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, userId: session.user.id },
@@ -38,10 +46,17 @@ export async function GET(_req: Request, { params }: Params) {
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)
 
     const isAdmin = session.user.role === 'ADMIN'
-    const messages = await prisma.message.findMany({
+    // Ambil terbaru dulu (desc) supaya percakapan >200 pesan tetap menampilkan
+    // pesan terakhir, lalu dibalik ke kronologis sebelum return — kontrak
+    // response (array ascending) tidak berubah. Secondary sort by id supaya
+    // urutan deterministik saat createdAt identik (penting untuk cursor).
+    const page = await prisma.message.findMany({
       where: { contactId },
-      orderBy: { createdAt: 'asc' },
-      take: 200,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: MESSAGES_PAGE_SIZE + 1,
+      // Cursor = id pesan tertua dari halaman sebelumnya; skip 1 supaya
+      // pesan cursor itu sendiri tidak ikut terambil lagi.
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         content: true,
@@ -63,6 +78,14 @@ export async function GET(_req: Request, { params }: Params) {
           : {}),
       },
     })
+
+    // Item ke-(PAGE_SIZE+1) cuma penanda masih ada pesan lebih lama.
+    const hasMore = page.length > MESSAGES_PAGE_SIZE
+    // slice() menghasilkan array baru, jadi reverse() di sini tidak
+    // memutasi hasil query asli.
+    const messages = page.slice(0, MESSAGES_PAGE_SIZE).reverse()
+    // Cursor halaman berikutnya = pesan tertua di halaman ini.
+    const nextCursor = hasMore ? (messages[0]?.id ?? null) : null
 
     return jsonOk({
       contact: {
@@ -89,6 +112,10 @@ export async function GET(_req: Request, { params }: Params) {
             }
           : {}),
       })),
+      // Info pagination — field tambahan, aman karena frontend existing
+      // hanya membaca contact/messages/isAdmin.
+      hasMore,
+      nextCursor,
     })
   } catch (err) {
     console.error('[GET /api/inbox/:id/messages] gagal:', err)
