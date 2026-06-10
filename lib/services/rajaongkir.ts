@@ -5,6 +5,8 @@
 // Endpoint Komerce (per Mei 2026):
 //   GET  /api/v1/destination/domestic-destination?search=&limit=&offset=
 //   POST /api/v1/calculate/domestic-cost (body: form-urlencoded)
+import type { Prisma } from '@prisma/client'
+
 import { prisma } from '@/lib/prisma'
 
 const RAJAONGKIR_BASE = 'https://rajaongkir.komerce.id/api/v1'
@@ -31,6 +33,11 @@ export interface RajaongkirDestination {
   zip_code: string
 }
 
+// TTL cache search destinasi: data wilayah (kecamatan/kelurahan/zip) sangat
+// jarang berubah. Cache DB persisten lintas deploy — Next fetch-cache TIDAK
+// cukup karena hangus tiap build image (incident kuota jebol 2026-06-10).
+const DEST_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 hari
+
 export async function searchDestinations(
   query: string,
   limit = 10,
@@ -39,27 +46,57 @@ export async function searchDestinations(
   const trimmed = query.trim()
   if (trimmed.length < 2) return []
 
+  const cacheKey = `${trimmed.toLowerCase()}:${limit}:${offset}`
+  const cached = await prisma.shippingDestinationCache
+    .findUnique({ where: { query: cacheKey } })
+    .catch(() => null)
+  if (cached && Date.now() - cached.updatedAt.getTime() < DEST_CACHE_TTL_MS) {
+    return cached.payload as unknown as RajaongkirDestination[]
+  }
+
   const url = new URL(`${RAJAONGKIR_BASE}/destination/domestic-destination`)
   url.searchParams.set('search', trimmed)
   url.searchParams.set('limit', String(limit))
   url.searchParams.set('offset', String(offset))
 
-  const res = await fetch(url.toString(), {
-    headers: { key: getApiKey() },
-    // Cache di Next fetch supaya pencarian populer tidak bombard Komerce.
-    next: { revalidate: 60 * 60 * 24 },  // 24 jam
-  })
+  // result null = upstream gagal (kuota habis / network) → fallback cache basi.
+  let result: RajaongkirDestination[] | null = null
+  try {
+    const res = await fetch(url.toString(), { headers: { key: getApiKey() } })
+    if (res.ok) {
+      const json = await res.json()
+      if (json?.meta?.code === 200 && Array.isArray(json.data)) {
+        result = json.data as RajaongkirDestination[]
+      } else {
+        console.error('[rajaongkir] searchDestinations bad payload:', json?.meta)
+      }
+    } else if (res.status === 404) {
+      // Komerce balas 404 untuk query tanpa hasil — bukan error sistem.
+      // Cache hasil kosong juga (negative cache) supaya query sama tidak
+      // membakar kuota berulang.
+      result = []
+    } else {
+      console.error('[rajaongkir] searchDestinations failed:', res.status)
+    }
+  } catch (err) {
+    console.error('[rajaongkir] searchDestinations error:', err)
+  }
 
-  if (!res.ok) {
-    console.error('[rajaongkir] searchDestinations failed:', res.status)
-    return []
+  if (result !== null) {
+    const payload = result as unknown as Prisma.InputJsonValue
+    await prisma.shippingDestinationCache
+      .upsert({
+        where: { query: cacheKey },
+        create: { query: cacheKey, payload },
+        update: { payload },
+      })
+      .catch(() => {})
+    return result
   }
-  const json = await res.json()
-  if (json?.meta?.code !== 200 || !Array.isArray(json.data)) {
-    console.error('[rajaongkir] searchDestinations bad payload:', json?.meta)
-    return []
-  }
-  return json.data as RajaongkirDestination[]
+
+  // Upstream gagal — pakai cache basi (umur berapa pun) daripada kosong.
+  if (cached) return cached.payload as unknown as RajaongkirDestination[]
+  return []
 }
 
 // ─── SHIPPING COST ─────────────────────────────────────────────────────

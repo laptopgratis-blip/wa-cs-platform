@@ -2016,6 +2016,20 @@ model ShippingCostCache {
   @@index([expiresAt])
 }
 
+// Cache hasil SEARCH destinasi Komerce — PERSISTEN lintas deploy. Sebelumnya
+// hanya Next fetch-cache yang hangus tiap build image → kuota 500 hit/hari
+// jebol (incident 2026-06-10: "Daily limit exceeded", form kecamatan kosong).
+// Data wilayah jarang berubah → TTL panjang; saat upstream 429 (kuota habis)
+// cache basi tetap dipakai (stale-while-error).
+// query format: "<search lowercase>:<limit>:<offset>".
+model ShippingDestinationCache {
+  id        String   @id @default(cuid())
+  query     String   @unique
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ─────────────────────────────────────────
 // PIXEL TRACKING (Phase 1, 2026-05-07) — fitur khusus paket POWER:
 // Browser pixel + Server-side CAPI untuk Meta, Google Ads, TikTok.
