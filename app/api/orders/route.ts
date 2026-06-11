@@ -26,6 +26,17 @@ import type { OrderTab } from '@/lib/validations/order'
 // 12 jam = ambang konservatif: customer rata-rata expect respon < 1 hari kerja.
 const URGENT_HOURS = 12
 
+// Batas "hari ini/kemarin" dihitung dalam WIB (UTC+7), BUKAN jam server.
+// Server jalan di UTC — tanpa offset ini "hari ini" baru mulai 07:00 WIB,
+// sehingga penjualan live malam (19:30–07:00 WIB) hilang dari strip revenue.
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+function startOfTodayWib(now: Date = new Date()): Date {
+  const shifted = new Date(now.getTime() + WIB_OFFSET_MS)
+  shifted.setUTCHours(0, 0, 0, 0)
+  return new Date(shifted.getTime() - WIB_OFFSET_MS)
+}
+
 function buildTabFilter(tab: OrderTab): Prisma.UserOrderWhereInput {
   switch (tab) {
     case 'pending':
@@ -105,18 +116,16 @@ function buildSmartFilter(f: SmartFilter): Prisma.UserOrderWhereInput {
         OR: [{ trackingNumber: null }, { trackingNumber: '' }],
       }
     case 'today': {
-      const start = new Date(now)
-      start.setHours(0, 0, 0, 0)
-      return { createdAt: { gte: start } }
+      return { createdAt: { gte: startOfTodayWib(now) } }
     }
     case 'yesterday': {
-      const start = new Date(now)
-      start.setDate(start.getDate() - 1)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(now)
-      end.setDate(end.getDate() - 1)
-      end.setHours(23, 59, 59, 999)
-      return { createdAt: { gte: start, lte: end } }
+      const todayStart = startOfTodayWib(now)
+      return {
+        createdAt: {
+          gte: new Date(todayStart.getTime() - DAY_MS),
+          lt: todayStart,
+        },
+      }
     }
     case 'this_week': {
       const start = new Date(now)
@@ -306,32 +315,55 @@ export async function GET(req: Request) {
         prisma.userOrder.count({
           where: { ...baseWhere, ...buildTabFilter('completed') },
         }),
-        // Stats hari ini — independent dari filter, untuk strip header.
-        // Hitung count + sum totalRp orders yang createdAt >= start of today.
+        // Stats hari ini (hari = WIB) — independent dari filter, untuk strip
+        // header. Empat angka:
+        //   todayCount/todayTotalRp : order masuk hari ini (exclude CANCELLED)
+        //   todayUnpaidRp           : porsi yang BELUM dibayar (COD + transfer
+        //                             PENDING/WAITING) — potensi revenue
+        //   todayPaidRp             : dibayar HARI INI berbasis paidAt — order
+        //                             semalam yang dikonfirmasi pagi tetap masuk
         (async () => {
-          const startOfToday = new Date()
-          startOfToday.setHours(0, 0, 0, 0)
+          const startOfToday = startOfTodayWib()
           const todayWhere: Prisma.UserOrderWhereInput = {
             userId: session.user.id,
             createdAt: { gte: startOfToday },
+            paymentStatus: { not: 'CANCELLED' },
           }
-          const [todayCount, todayAgg, urgentCount] = await Promise.all([
-            prisma.userOrder.count({ where: todayWhere }),
-            prisma.userOrder.aggregate({
-              where: { ...todayWhere, paymentStatus: 'PAID' },
-              _sum: { totalRp: true },
-            }),
-            // Urgent count untuk badge chip — independent dari filter aktif.
-            prisma.userOrder.count({
-              where: {
-                userId: session.user.id,
-                ...buildSmartFilter('urgent'),
-              },
-            }),
-          ])
+          const [todayCount, todayTotalAgg, todayUnpaidAgg, paidAgg, urgentCount] =
+            await Promise.all([
+              prisma.userOrder.count({ where: todayWhere }),
+              prisma.userOrder.aggregate({
+                where: todayWhere,
+                _sum: { totalRp: true },
+              }),
+              prisma.userOrder.aggregate({
+                where: {
+                  ...todayWhere,
+                  paymentStatus: { in: ['PENDING', 'WAITING_CONFIRMATION'] },
+                },
+                _sum: { totalRp: true },
+              }),
+              prisma.userOrder.aggregate({
+                where: {
+                  userId: session.user.id,
+                  paymentStatus: 'PAID',
+                  paidAt: { gte: startOfToday },
+                },
+                _sum: { totalRp: true },
+              }),
+              // Urgent count untuk badge chip — independent dari filter aktif.
+              prisma.userOrder.count({
+                where: {
+                  userId: session.user.id,
+                  ...buildSmartFilter('urgent'),
+                },
+              }),
+            ])
           return {
             todayCount,
-            todayPaidRp: todayAgg._sum.totalRp ?? 0,
+            todayTotalRp: todayTotalAgg._sum.totalRp ?? 0,
+            todayUnpaidRp: todayUnpaidAgg._sum.totalRp ?? 0,
+            todayPaidRp: paidAgg._sum.totalRp ?? 0,
             urgentCount,
           }
         })(),

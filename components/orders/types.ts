@@ -71,6 +71,11 @@ export interface OrdersCounts {
 
 export interface OrdersTotals {
   todayCount: number
+  // Total nilai semua pesanan hari ini (WIB, exclude CANCELLED).
+  todayTotalRp: number
+  // Porsi yang belum dibayar (COD + transfer PENDING/WAITING_CONFIRMATION).
+  todayUnpaidRp: number
+  // Dibayar hari ini berbasis paidAt (order lama yang lunas hari ini ikut).
   todayPaidRp: number
   urgentCount: number
 }

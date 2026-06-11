@@ -50,6 +50,8 @@ const ZERO_COUNTS: OrdersCounts = {
 }
 const ZERO_TOTALS: OrdersTotals = {
   todayCount: 0,
+  todayTotalRp: 0,
+  todayUnpaidRp: 0,
   todayPaidRp: 0,
   urgentCount: 0,
 }
@@ -443,6 +445,8 @@ export function OrdersList() {
 
       <OrdersStatsStrip
         todayCount={totals.todayCount}
+        todayTotalRp={totals.todayTotalRp}
+        todayUnpaidRp={totals.todayUnpaidRp}
         todayPaidRp={totals.todayPaidRp}
         urgentCount={totals.urgentCount}
         onClickUrgent={() => {
