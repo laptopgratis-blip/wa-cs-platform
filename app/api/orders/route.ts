@@ -11,6 +11,8 @@
 //                — preset smart filter (override tab kalau bertentangan)
 //   limit      : max 100, default 50 (compact view fit lebih banyak)
 //   cursor     : id order — ambil item setelah cursor (pagination)
+//   statsRange : today|12h|24h|7d|custom — periode kartu statistik header
+//   statsFrom, statsTo : ISO date — rentang custom untuk statsRange=custom
 //
 // Response: { orders, counts, nextCursor, totals }
 //   counts = per tab (untuk badge angka)
@@ -35,6 +37,52 @@ function startOfTodayWib(now: Date = new Date()): Date {
   const shifted = new Date(now.getTime() + WIB_OFFSET_MS)
   shifted.setUTCHours(0, 0, 0, 0)
   return new Date(shifted.getTime() - WIB_OFFSET_MS)
+}
+
+// Periode strip statistik (kartu di atas /pesanan) — terpisah dari filter
+// list. Preset relatif (12h/24h/7d) supaya sesi live malam yang melewati
+// pergantian hari tetap terlihat utuh; custom = rentang tanggal bebas.
+type StatsRange = 'today' | '12h' | '24h' | '7d' | 'custom'
+function parseStatsRange(v: string | null): StatsRange {
+  switch (v) {
+    case '12h':
+    case '24h':
+    case '7d':
+    case 'custom':
+      return v
+    default:
+      return 'today'
+  }
+}
+function resolveStatsWindow(
+  range: StatsRange,
+  fromIso: string | null,
+  toIso: string | null,
+): { start: Date; end: Date | null } {
+  const now = new Date()
+  switch (range) {
+    case '12h':
+      return { start: new Date(now.getTime() - 12 * 60 * 60 * 1000), end: null }
+    case '24h':
+      return { start: new Date(now.getTime() - DAY_MS), end: null }
+    case '7d':
+      return { start: new Date(now.getTime() - 7 * DAY_MS), end: null }
+    case 'custom': {
+      const from = fromIso ? new Date(fromIso) : null
+      const to = toIso ? new Date(toIso) : null
+      if (from && !Number.isNaN(from.getTime())) {
+        return {
+          start: from,
+          end: to && !Number.isNaN(to.getTime()) ? to : null,
+        }
+      }
+      // Custom tanpa tanggal valid → fallback hari ini.
+      return { start: startOfTodayWib(now), end: null }
+    }
+    case 'today':
+    default:
+      return { start: startOfTodayWib(now), end: null }
+  }
 }
 
 function buildTabFilter(tab: OrderTab): Prisma.UserOrderWhereInput {
@@ -210,6 +258,9 @@ export async function GET(req: Request) {
   const toRaw = url.searchParams.get('to')
   const pmRaw = url.searchParams.get('pm')?.toUpperCase()
   const smart = parseSmart(url.searchParams.get('f'))
+  const statsRange = parseStatsRange(url.searchParams.get('statsRange'))
+  const statsFromRaw = url.searchParams.get('statsFrom')
+  const statsToRaw = url.searchParams.get('statsTo')
   const productIdRaw = url.searchParams.get('productId')?.trim() || null
   const cursor = url.searchParams.get('cursor')
   const limit = Math.min(
@@ -315,18 +366,25 @@ export async function GET(req: Request) {
         prisma.userOrder.count({
           where: { ...baseWhere, ...buildTabFilter('completed') },
         }),
-        // Stats hari ini (hari = WIB) — independent dari filter, untuk strip
-        // header. Empat angka:
-        //   todayCount/todayTotalRp : order masuk hari ini (exclude CANCELLED)
+        // Stats strip header — periode dipilih user (statsRange: hari ini WIB /
+        // 12 jam / 24 jam / 7 hari / custom), independent dari filter list.
+        //   todayCount/todayTotalRp : order masuk dalam periode (excl CANCELLED)
         //   todayUnpaidRp           : porsi yang BELUM dibayar (COD + transfer
         //                             PENDING/WAITING) — potensi revenue
-        //   todayPaidRp             : dibayar HARI INI berbasis paidAt — order
-        //                             semalam yang dikonfirmasi pagi tetap masuk
+        //   todayPaidRp             : dilunasi DALAM periode berbasis paidAt —
+        //                             order lama yang dikonfirmasi ikut masuk
         (async () => {
-          const startOfToday = startOfTodayWib()
+          const { start, end } = resolveStatsWindow(
+            statsRange,
+            statsFromRaw,
+            statsToRaw,
+          )
+          const createdRange: Prisma.DateTimeFilter = end
+            ? { gte: start, lte: end }
+            : { gte: start }
           const todayWhere: Prisma.UserOrderWhereInput = {
             userId: session.user.id,
-            createdAt: { gte: startOfToday },
+            createdAt: createdRange,
             paymentStatus: { not: 'CANCELLED' },
           }
           const [todayCount, todayTotalAgg, todayUnpaidAgg, paidAgg, urgentCount] =
@@ -347,7 +405,7 @@ export async function GET(req: Request) {
                 where: {
                   userId: session.user.id,
                   paymentStatus: 'PAID',
-                  paidAt: { gte: startOfToday },
+                  paidAt: createdRange,
                 },
                 _sum: { totalRp: true },
               }),

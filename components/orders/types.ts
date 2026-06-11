@@ -69,13 +69,16 @@ export interface OrdersCounts {
   completed: number
 }
 
+// Periode kartu statistik header (strip) — terpisah dari filter list.
+export type StatsRange = 'today' | '12h' | '24h' | '7d' | 'custom'
+
 export interface OrdersTotals {
   todayCount: number
-  // Total nilai semua pesanan hari ini (WIB, exclude CANCELLED).
+  // Total nilai semua pesanan dalam periode (exclude CANCELLED).
   todayTotalRp: number
   // Porsi yang belum dibayar (COD + transfer PENDING/WAITING_CONFIRMATION).
   todayUnpaidRp: number
-  // Dibayar hari ini berbasis paidAt (order lama yang lunas hari ini ikut).
+  // Dilunasi dalam periode berbasis paidAt (order lama yang lunas ikut).
   todayPaidRp: number
   urgentCount: number
 }

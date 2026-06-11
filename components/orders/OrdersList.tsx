@@ -31,6 +31,7 @@ import type {
   OrdersTotals,
   QuickAction,
   SmartFilter,
+  StatsRange,
   ViewMode,
 } from './types'
 import { useViewPreference } from './useViewPreference'
@@ -65,6 +66,10 @@ export function OrdersList() {
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'TRANSFER' | null>(
     null,
   )
+  // Periode kartu statistik header — terpisah dari filter list di bawahnya.
+  const [statsRange, setStatsRange] = useState<StatsRange>('today')
+  const [statsFrom, setStatsFrom] = useState('')
+  const [statsTo, setStatsTo] = useState('')
   const [productId, setProductId] = useState<string | null>(null)
   // List produk milik user untuk dropdown filter — load sekali saat mount.
   // Limit 100 sesuai PRODUCT_LIMIT_PER_USER, jadi tidak butuh pagination.
@@ -151,6 +156,15 @@ export function OrdersList() {
     if (productId) p.set('productId', productId)
     if (viewPref.sortColumn) p.set('sort', viewPref.sortColumn)
     if (viewPref.sortDirection) p.set('dir', viewPref.sortDirection)
+    p.set('statsRange', statsRange)
+    if (statsRange === 'custom') {
+      if (statsFrom) p.set('statsFrom', new Date(statsFrom).toISOString())
+      if (statsTo) {
+        const end = new Date(statsTo)
+        end.setHours(23, 59, 59, 999)
+        p.set('statsTo', end.toISOString())
+      }
+    }
     p.set('limit', String(PAGE_LIMIT))
     return p.toString()
   }, [
@@ -161,6 +175,9 @@ export function OrdersList() {
     to,
     paymentMethod,
     productId,
+    statsRange,
+    statsFrom,
+    statsTo,
     viewPref.sortColumn,
     viewPref.sortDirection,
   ])
@@ -449,6 +466,12 @@ export function OrdersList() {
         todayUnpaidRp={totals.todayUnpaidRp}
         todayPaidRp={totals.todayPaidRp}
         urgentCount={totals.urgentCount}
+        range={statsRange}
+        customFrom={statsFrom}
+        customTo={statsTo}
+        onRangeChange={setStatsRange}
+        onCustomFromChange={setStatsFrom}
+        onCustomToChange={setStatsTo}
         onClickUrgent={() => {
           setSmart('urgent')
           setTab('all')
