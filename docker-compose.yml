@@ -91,7 +91,8 @@ services:
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.regex=^https://www\\.hulao\\.id/(.*)"
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.replacement=https://hulao.id/$$1"
       - "traefik.http.middlewares.hulao-www-redirect.redirectregex.permanent=true"
-      - "traefik.http.routers.hulao.middlewares=hulao-www-redirect@docker"
+      - "traefik.http.middlewares.hulao-vary.headers.customResponseHeaders.Vary=Accept-Encoding"
+      - "traefik.http.routers.hulao.middlewares=hulao-www-redirect@docker,hulao-vary@docker"
       # Pakai network traefik-public eksplisit (multi-network safety).
       - "traefik.docker.network=traefik-public"
 
