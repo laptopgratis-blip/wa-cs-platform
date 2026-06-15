@@ -81,7 +81,6 @@ services:
       - "traefik.http.routers.hulao.rule=Host(`hulao.id`) || Host(`www.hulao.id`)"
       - "traefik.http.routers.hulao.entrypoints=websecure"
       - "traefik.http.routers.hulao.tls=true"
-      - "traefik.http.routers.hulao.tls.certresolver=letsencrypt"
       # Docker-provider Traefik: pakai .server.port (bukan .server.url yang
       # cuma valid di file-provider). Dulu pakai .server.url → router error,
       # routing jatuh ke file-provider hardcode IP yang basi saat restart
