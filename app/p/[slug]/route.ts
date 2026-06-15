@@ -33,6 +33,10 @@ function hashIp(ip: string): string {
 // kalau header hilang (mis. test lokal). Throttle berbasis hash, jadi dua IP
 // "unknown" akan di-counted bersama — tidak ideal tapi aman (lebih ketat).
 function clientIpFrom(headers: Headers): string {
+  // Di belakang Cloudflare: CF-Connecting-IP = IP asli pengunjung (di-set CF,
+  // tak bisa dipalsukan selama origin di-firewall ke rentang IP Cloudflare).
+  const cf = headers.get('cf-connecting-ip')
+  if (cf && cf.trim()) return cf.trim()
   const fwd = headers.get('x-forwarded-for')
   if (fwd) {
     const first = fwd.split(',')[0]?.trim()

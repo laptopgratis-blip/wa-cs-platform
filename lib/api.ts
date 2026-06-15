@@ -56,7 +56,7 @@ export function jsonOkCached<T>(
   // browser tetap minta fresh tiap poll, edge yang nyerap beban.
   res.headers.set(
     'Cache-Control',
-    `public, s-maxage=${sMaxage}, stale-while-revalidate=${swr}`,
+    `public, max-age=0, s-maxage=${sMaxage}, stale-while-revalidate=${swr}`,
   )
   return res
 }

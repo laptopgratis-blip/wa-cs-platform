@@ -11,6 +11,13 @@
 // return 'unknown' — lebih aman semua dilempar ke satu bucket ketat
 // daripada percaya header lain yang juga bisa dipalsukan.
 export function getClientIp(req: Request): string {
+  // Di belakang Cloudflare: CF-Connecting-IP = IP asli pengunjung, di-set
+  // (dan ditimpa) oleh Cloudflare sehingga tak bisa dipalsukan SELAMA origin
+  // hanya menerima koneksi dari rentang IP Cloudflare (origin di-firewall ke
+  // CF). Pakai ini dulu; tanpa CF (subdomain non-CF / dev) jatuh ke elemen
+  // TERAKHIR X-Forwarded-For yang di-append Traefik.
+  const cf = req.headers.get('cf-connecting-ip')
+  if (cf && cf.trim().length > 0) return cf.trim()
   const xff = req.headers.get('x-forwarded-for')
   if (!xff) return 'unknown'
   const parts = xff
