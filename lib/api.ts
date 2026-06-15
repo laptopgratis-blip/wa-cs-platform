@@ -56,8 +56,11 @@ export function jsonOkCached<T>(
   // browser tetap minta fresh tiap poll, edge yang nyerap beban.
   res.headers.set(
     'Cache-Control',
-    `public, max-age=0, s-maxage=${sMaxage}, stale-while-revalidate=${swr}`,
+    `public, s-maxage=${sMaxage}, stale-while-revalidate=${swr}`,
   )
+  // Next.js App Router menambah `Vary: rsc, next-router-*`; Cloudflare TIDAK
+  // cache response dgn Vary selain Accept-Encoding. Timpa supaya edge bisa cache.
+  res.headers.set('Vary', 'Accept-Encoding')
   return res
 }
 
