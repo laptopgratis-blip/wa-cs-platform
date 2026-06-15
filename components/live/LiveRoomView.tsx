@@ -570,7 +570,7 @@ export function LiveRoomView({
     let cancelled = false
     async function poll() {
       try {
-        const url = `/api/live/${encodeURIComponent(slug)}/feed?since=${lastFeedAtRef.current}&excludeSession=${encodeURIComponent(clientSessionId!)}&limit=30`
+        const url = `/api/live/${encodeURIComponent(slug)}/feed`
         const res = await fetch(url)
         if (!res.ok) return
         const json = (await res.json()) as {
@@ -601,6 +601,7 @@ export function LiveRoomView({
           // jadi dari feed kita HANYA ambil pertanyaan orang lain & bot supaya
           // tidak dobel dengan jawaban yang diputar lewat stage.
           if (ev.type !== 'USER_MESSAGE') continue
+          if (ev.clientSessionId === clientSessionId) continue // skip pesan sendiri (dulu excludeSession)
           if (seenEventIdsRef.current.has(ev.id)) continue
           seenEventIdsRef.current.add(ev.id)
           newMsgs.push({
@@ -868,10 +869,7 @@ export function LiveRoomView({
     const STAGE_POLL_MS = 2500 // stage: snapshot di-cache + di-invalidate server-side
     async function pollStage() {
       try {
-        const res = await fetch(
-          `/api/live/${encodeURIComponent(slug)}/stage?seq=${lastStageSeqRef.current}`,
-          { cache: 'no-store' },
-        )
+        const res = await fetch(`/api/live/${encodeURIComponent(slug)}/stage`) // cacheable di CDN
         if (!res.ok) return
         const json = (await res.json()) as {
           success: boolean

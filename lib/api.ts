@@ -46,6 +46,21 @@ export function jsonOk<T>(data: T, status = 200) {
   return NextResponse.json({ success: true, data }, { status })
 }
 
+export function jsonOkCached<T>(
+  data: T,
+  opts: { sMaxage: number; swr?: number; status?: number },
+) {
+  const { sMaxage, swr = sMaxage, status = 200 } = opts
+  const res = NextResponse.json({ success: true, data }, { status })
+  // s-maxage -> shared cache (Cloudflare) simpan N detik; tanpa max-age ->
+  // browser tetap minta fresh tiap poll, edge yang nyerap beban.
+  res.headers.set(
+    'Cache-Control',
+    `public, s-maxage=${sMaxage}, stale-while-revalidate=${swr}`,
+  )
+  return res
+}
+
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ success: false, error: message }, { status })
 }

@@ -6,7 +6,7 @@
 // Response: { seq, serverNow, performance | null }
 //   performance = { seq, askerName, questionText, replyText, mode, clipUrl?,
 //                   ttsUrls?, startedAt, endsAt } (lihat lib/services/live/stage)
-import { jsonError, jsonOk } from '@/lib/api'
+import { jsonError, jsonOkCached } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
 import {
@@ -26,8 +26,6 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params
-  const url = new URL(req.url)
-  const sinceSeq = Number(url.searchParams.get('seq') ?? '0') || 0
 
   // Anti-hammering: poll legit ~40/menit per device; limit longgar utk CGNAT
   // (lihat rate-limit.ts lapis 4). Client yang kena 429 cukup lanjut poll
@@ -73,15 +71,16 @@ export async function GET(
   if (!snap) return jsonError('Room tidak ditemukan', 404)
   if (!snap.isActive) return jsonError('Room offline', 410)
 
-  // hasNew & serverNow dihitung per request — seq beda tiap client, dan
-  // serverNow dipakai client untuk koreksi skew jam (harus selalu segar).
-  const perf = snap.performance
-  const hasNew = perf !== null && perf.seq > sinceSeq
-
-  return jsonOk({
-    seq: snap.performanceSeq,
-    serverNow: Date.now(),
-    performance: hasNew ? perf : null,
-    pendingCount: snap.pendingCount,
-  })
+  // CDN-cacheable (s-maxage=1): selalu kirim performance terkini (tanpa
+  // gating `seq`). Klien dedupe via performedSeqRef. serverNow bisa basi
+  // hingga ~1dtk, koreksi skew jam meleset <=1dtk (dapat diterima).
+  return jsonOkCached(
+    {
+      seq: snap.performanceSeq,
+      serverNow: Date.now(),
+      performance: snap.performance,
+      pendingCount: snap.pendingCount,
+    },
+    { sMaxage: 1, swr: 2 },
+  )
 }

@@ -8,7 +8,7 @@
 //   soldToday     = LiveLead status=CLOSED_WON, createdAt > startOfToday WIB
 //   recentBuyer   = LiveLead status=CLOSED_WON terbaru kalau < 60dtk; first name only.
 
-import { jsonError, jsonOk } from '@/lib/api'
+import { jsonError, jsonOkCached } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -45,7 +45,7 @@ export async function GET(
   const hit = statsCache.get(slug)
   if (hit && hit.expiresAt > Date.now()) {
     if (!hit.body) return jsonError('Room tidak ditemukan', 404)
-    return jsonOk(hit.body)
+    return jsonOkCached(hit.body, { sMaxage: 5, swr: 10 })
   }
 
   const room = await prisma.liveRoom.findUnique({
@@ -113,5 +113,5 @@ export async function GET(
     recentBuyer,
   }
   statsCache.set(slug, { body, expiresAt: Date.now() + STATS_TTL_MS })
-  return jsonOk(body)
+  return jsonOkCached(body, { sMaxage: 5, swr: 10 })
 }

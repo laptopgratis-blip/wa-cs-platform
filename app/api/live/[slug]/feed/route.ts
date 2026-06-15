@@ -3,7 +3,7 @@
 // multi-user shared chat). Return events sejak `since` (default 60dtk lalu).
 // excludeSession: skip event dari clientSessionId tertentu (biasanya
 // caller's own session — supaya gak duplikat dengan msg lokal).
-import { jsonError, jsonOk } from '@/lib/api'
+import { jsonError, jsonOkCached } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
 import { getFeedWindow } from '@/lib/services/live/feed-cache'
 import {
@@ -12,9 +12,6 @@ import {
 } from '@/lib/services/live/rate-limit'
 
 export const dynamic = 'force-dynamic'
-
-const MAX_LIMIT = 50
-const DEFAULT_LOOKBACK_MS = 60_000
 
 export async function GET(
   req: Request,
@@ -33,33 +30,15 @@ export async function GET(
   }
   maybeCleanup()
 
-  const url = new URL(req.url)
-  const sinceParam = url.searchParams.get('since')
-  const since = sinceParam ? new Date(Number(sinceParam)) : new Date(Date.now() - DEFAULT_LOOKBACK_MS)
-  const excludeSession = url.searchParams.get('excludeSession')?.trim() || null
-  const limit = Math.min(
-    MAX_LIMIT,
-    Math.max(1, Number(url.searchParams.get('limit') ?? 30)),
-  )
-
-  // Window event di-cache per room (feed-cache.ts) — filter since/
-  // excludeSession/limit dilakukan in-memory supaya DB tidak kena query
-  // per-viewer.
+  // Window event di-cache per room (feed-cache.ts). CDN-cacheable: kirim
+  // seluruh window apa adanya; filter since & pesan-sendiri dilakukan di klien.
   const snap = await getFeedWindow(slug)
   if (!snap) return jsonError('Room tidak ditemukan', 404)
   if (!snap.isActive) return jsonError('Room offline', 410)
 
-  const events: typeof snap.events = []
-  for (const e of snap.events) {
-    if (e.createdAt <= since) continue
-    if (excludeSession && e.liveSession.clientSessionId === excludeSession) {
-      continue
-    }
-    events.push(e)
-    if (events.length >= limit) break
-  }
+  const events = snap.events.slice(-50)
 
-  return jsonOk({
+  return jsonOkCached({
     events: events.map((e) => {
       const payload =
         (e.payload as {
@@ -83,5 +62,5 @@ export async function GET(
       }
     }),
     now: Date.now(),
-  })
+  }, { sMaxage: 2, swr: 4 })
 }
