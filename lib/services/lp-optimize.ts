@@ -307,7 +307,7 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
   }
 
   const userPrompt = buildUserPrompt({ ...input, htmlContent: strippedHtml })
-  const client = getAnthropicClient()
+  const client = await getAnthropicClient()
   const model = await getOptimizeModel()
 
   // Dynamic output budget. AI sering ekspansi HTML 1.2-1.8x (tambah testimoni,

@@ -252,7 +252,7 @@ async function callAi(
   platform: AdsPlatform,
   format: AdsFormat,
 ): Promise<GenerationResult> {
-  const client = getAnthropicClient()
+  const client = await getAnthropicClient()
   const response = (await Promise.race([
     client.messages.create({
       model: 'claude-haiku-4-5',

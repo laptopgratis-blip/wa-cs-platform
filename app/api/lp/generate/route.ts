@@ -201,7 +201,7 @@ export async function POST(req: Request) {
       `Mulai langsung dengan <!DOCTYPE html>. Tanpa penjelasan apapun.`,
     ].join('\n')
 
-    const client = getAnthropicClient()
+    const client = await getAnthropicClient()
 
     let charge
     let html: string

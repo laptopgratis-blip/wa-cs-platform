@@ -366,7 +366,7 @@ async function callAi(
   prompt: string,
   systemPrompt: string,
 ): Promise<MethodCallResult> {
-  const client = getAnthropicClient()
+  const client = await getAnthropicClient()
   try {
     const response = (await Promise.race([
       client.messages.create({

@@ -112,7 +112,7 @@ export async function POST(req: Request) {
         estimateInputTokens: ESTIMATE_INPUT_TOKENS,
         estimateOutputTokens: ESTIMATE_OUTPUT_TOKENS,
         aiCall: async () => {
-          const client = getAnthropicClient()
+          const client = await getAnthropicClient()
           const response = await client.messages.create({
             model: config.modelName,
             max_tokens: 500,

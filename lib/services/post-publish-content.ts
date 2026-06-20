@@ -172,7 +172,7 @@ TUGAS: hasilkan 1 WhatsApp Status (text only) untuk audience seller UMKM Indones
 }
 
 async function callAiForOnePiece(prompt: string): Promise<GenerateOnePieceResult> {
-  const client = getAnthropicClient()
+  const client = await getAnthropicClient()
   const response = (await Promise.race([
     client.messages.create({
       model: DEFAULT_MODEL,
