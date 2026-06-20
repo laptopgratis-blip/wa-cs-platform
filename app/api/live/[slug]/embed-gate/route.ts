@@ -13,7 +13,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, toWaNumber } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
 import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
@@ -79,6 +79,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   if (!normalized) {
     return jsonError('Format nomor WA tidak valid (contoh: 08123456789)', 400)
   }
+  // Bentuk digit-only untuk Contact.phoneNumber — samakan dgn flow AI CS supaya
+  // tidak ke-split di inbox & JID kirim valid (lihat lib/phone#toWaNumber).
+  const waNumber = toWaNumber(normalized) as string
 
   // Validate room + LP-embed match.
   const room = await prisma.liveRoom.findUnique({
@@ -178,12 +181,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       if (session) {
         const contact = await prisma.contact.upsert({
           where: {
-            waSessionId_phoneNumber: { waSessionId: session.id, phoneNumber: normalized },
+            waSessionId_phoneNumber: { waSessionId: session.id, phoneNumber: waNumber },
           },
           create: {
             userId: room.userId,
             waSessionId: session.id,
-            phoneNumber: normalized,
+            phoneNumber: waNumber,
             name: data.name,
             pipelineStage: 'NEW',
             tags: ['live-embed', `lp:${embed.landingPage.slug}`],

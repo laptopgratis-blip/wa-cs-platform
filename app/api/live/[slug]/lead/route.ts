@@ -13,7 +13,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
-import { normalizePhone } from '@/lib/phone'
+import { normalizePhone, toWaNumber } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
 import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
@@ -74,6 +74,8 @@ export async function POST(
   if (!normalized) {
     return jsonError('Format nomor WA tidak valid (contoh: 08123456789)', 400)
   }
+  // Digit-only untuk Contact.phoneNumber (samakan dgn flow AI CS).
+  const waNumber = toWaNumber(normalized) as string
 
   const room = await prisma.liveRoom.findUnique({
     where: { slug },
@@ -182,13 +184,13 @@ export async function POST(
     where: {
       waSessionId_phoneNumber: {
         waSessionId: waSession.id,
-        phoneNumber: normalized,
+        phoneNumber: waNumber,
       },
     },
     create: {
       userId: room.userId,
       waSessionId: waSession.id,
-      phoneNumber: normalized,
+      phoneNumber: waNumber,
       name: data.name,
       tags: ['live-room'],
       pipelineStage: 'PROSPECT',
@@ -212,11 +214,7 @@ export async function POST(
     productInterest: productName,
     transcript,
   })
-  const sendResult = await waService.sendMessage(
-    waSession.id,
-    normalized.replace(/^\+/, ''),
-    waMessage,
-  )
+  const sendResult = await waService.sendMessage(waSession.id, waNumber, waMessage)
 
   if (sendResult.success) {
     await prisma.liveLead.update({

@@ -26,7 +26,7 @@ import {
   type InternalMessageHistoryItem,
   type InternalSoulConfig,
 } from './internal-api.js'
-import { resolvePhoneNumber } from './lib/jid-resolver.js'
+import { phoneToSendJid, resolvePhoneNumber } from './lib/jid-resolver.js'
 import { tokenChecker } from './token-checker.js'
 
 // Cache version Baileys di module-level. fetchLatestBaileysVersion() HTTP
@@ -503,9 +503,14 @@ export class WaManager {
         error: `session belum siap (status: ${entry.state.status})`,
       }
     }
-    const jid = phoneNumber.includes('@')
-      ? phoneNumber
-      : `${phoneNumber}@s.whatsapp.net`
+    // Sanitasi nomor → JID valid. Kontak dari Live/order/LMS bisa tersimpan
+    // ber-`+` (E.164) yang kalau dipakai mentah jadi JID invalid & pesan tak
+    // pernah sampai. Kalau hasilnya null → gagalkan eksplisit, jangan pura-pura
+    // terkirim (caller akan tampilkan FAILED, bukan SENT palsu di inbox).
+    const jid = phoneToSendJid(phoneNumber)
+    if (!jid) {
+      return { ok: false, error: `nomor tujuan tidak valid: "${phoneNumber}"` }
+    }
     try {
       const result = await entry.socket.sendMessage(jid, { text })
       const messageId = result?.key?.id ?? undefined

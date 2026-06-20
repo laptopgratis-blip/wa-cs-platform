@@ -8,6 +8,11 @@ import { prisma } from '@/lib/prisma'
 
 const filterEnum = z.enum(['all', 'ai', 'attention', 'resolved']).default('all')
 
+// Jumlah percakapan per halaman. Inbox bisa punya ratusan/ribuan kontak —
+// jangan kirim semua sekaligus. Sisanya dimuat via ?offset (tombol "Muat
+// lebih banyak" di UI).
+const PAGE_SIZE = 100
+
 export async function GET(req: Request) {
   let session
   try {
@@ -19,6 +24,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const filter = filterEnum.parse(url.searchParams.get('filter') ?? 'all')
   const search = (url.searchParams.get('search') ?? '').trim()
+  const offsetRaw = Number(url.searchParams.get('offset') ?? '0')
+  const offset = Number.isFinite(offsetRaw) && offsetRaw > 0 ? Math.floor(offsetRaw) : 0
 
   // Susun where clause sesuai filter.
   const where: Record<string, unknown> = {
@@ -42,7 +49,9 @@ export async function GET(req: Request) {
     const contacts = await prisma.contact.findMany({
       where: where as never,
       orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
-      take: 100,
+      // Ambil 1 ekstra untuk deteksi apakah masih ada halaman berikutnya.
+      take: PAGE_SIZE + 1,
+      skip: offset,
       select: {
         id: true,
         phoneNumber: true,
@@ -62,7 +71,10 @@ export async function GET(req: Request) {
       },
     })
 
-    const data = contacts.map((c) => ({
+    const hasMore = contacts.length > PAGE_SIZE
+    const pageContacts = hasMore ? contacts.slice(0, PAGE_SIZE) : contacts
+
+    const data = pageContacts.map((c) => ({
       id: c.id,
       phoneNumber: c.phoneNumber,
       name: c.name,
@@ -82,6 +94,16 @@ export async function GET(req: Request) {
           }
         : null,
     }))
+
+    // Halaman lanjutan (offset>0) tidak perlu hitung ulang counter — cukup
+    // kirim konversasi + flag hasMore.
+    if (offset > 0) {
+      return jsonOk({
+        conversations: data,
+        hasMore,
+        nextOffset: offset + PAGE_SIZE,
+      })
+    }
 
     // Counter per filter — supaya UI bisa tampilkan badge tab tanpa fetch ulang.
     const [allCount, aiCount, attentionCount, resolvedCount] = await Promise.all([
@@ -111,6 +133,8 @@ export async function GET(req: Request) {
 
     return jsonOk({
       conversations: data,
+      hasMore,
+      nextOffset: offset + PAGE_SIZE,
       counts: {
         all: allCount,
         ai: aiCount,

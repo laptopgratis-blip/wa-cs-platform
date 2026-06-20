@@ -25,7 +25,9 @@ export default async function InboxPage() {
       prisma.contact.findMany({
         where: { userId, messages: { some: {} } },
         orderBy: [{ lastMessageAt: 'desc' }, { updatedAt: 'desc' }],
-        take: 100,
+        // 1 ekstra untuk deteksi "Muat lebih banyak" (sinkron dengan PAGE_SIZE
+        // di /api/inbox).
+        take: 101,
         select: {
           id: true,
           phoneNumber: true,
@@ -56,7 +58,10 @@ export default async function InboxPage() {
       }),
     ])
 
-  const conversations: InboxConversation[] = contacts.map((c) => ({
+  const initialHasMore = contacts.length > 100
+  const pageContacts = initialHasMore ? contacts.slice(0, 100) : contacts
+
+  const conversations: InboxConversation[] = pageContacts.map((c) => ({
     id: c.id,
     phoneNumber: c.phoneNumber,
     name: c.name,
@@ -84,5 +89,11 @@ export default async function InboxPage() {
     resolved: resolvedCount,
   }
 
-  return <InboxView initialConversations={conversations} initialCounts={counts} />
+  return (
+    <InboxView
+      initialConversations={conversations}
+      initialCounts={counts}
+      initialHasMore={initialHasMore}
+    />
+  )
 }

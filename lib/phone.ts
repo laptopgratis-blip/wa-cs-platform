@@ -22,6 +22,17 @@ export function normalizePhone(input: string | null | undefined): string | null 
   return '+' + digits
 }
 
+// Digit-only untuk dipakai sebagai Contact.phoneNumber + JID WA. Flow AI CS
+// menyimpan nomor digit murni (mis. "628123456789"); supaya kontak dari Live/
+// order/LMS tidak ke-split jadi entri terpisah di inbox DAN tidak menghasilkan
+// JID invalid ("+...@s.whatsapp.net" tidak terkirim), simpan dalam bentuk yang
+// sama. Terima E.164 ber-`+` atau apa pun, buang non-digit.
+export function toWaNumber(input: string | null | undefined): string | null {
+  if (!input) return null
+  const digits = input.replace(/\D/g, '')
+  return digits || null
+}
+
 // Mask email untuk UI feedback: "abcde@gmail.com" → "a***@gmail.com".
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@')

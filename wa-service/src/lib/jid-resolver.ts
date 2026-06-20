@@ -36,6 +36,28 @@ function setCached(key: string, result: string): void {
   cache.set(key, { result, expiresAt: Date.now() + CACHE_TTL_MS })
 }
 
+// Bangun JID tujuan kirim dari nilai `phoneNumber` yang tersimpan di Contact.
+// Penting: nilai tersimpan TIDAK selalu digit murni — kontak dari Live embed /
+// order form / LMS dibuat lewat normalizePhone() yang menghasilkan E.164 ber-`+`
+// (mis. "+628123456789"). Kalau di-pakai apa adanya jadi "+628..@s.whatsapp.net"
+// yang JID-nya INVALID: Baileys tetap "berhasil" (balas key.id) tapi pesan tak
+// pernah sampai ke penerima — persis bug "muncul di inbox tapi tidak terkirim".
+//
+// Aturan:
+//  - Sudah berbentuk JID penuh (ada '@', mis. `<lid>@lid` atau
+//    `<pn>@s.whatsapp.net`) → pakai apa adanya (jangan rusak LID/device part).
+//  - Selain itu → buang semua non-digit lalu tempel `@s.whatsapp.net`.
+//  - Kalau tidak ada digit tersisa → return null (caller WAJIB gagalkan kirim
+//    secara eksplisit, jangan diam-diam "terkirim").
+export function phoneToSendJid(phoneNumber: string): string | null {
+  const raw = (phoneNumber ?? '').trim()
+  if (!raw) return null
+  if (raw.includes('@')) return raw
+  const digits = raw.replace(/\D/g, '')
+  if (!digits) return null
+  return `${digits}@s.whatsapp.net`
+}
+
 // Extract digit-only nomor dari JID seperti `628111@s.whatsapp.net` atau
 // `628111:42@s.whatsapp.net`. Return null kalau bukan format PN.
 function pnFromJid(jid: string): string | null {

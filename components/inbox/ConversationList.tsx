@@ -2,6 +2,7 @@
 
 // Daftar percakapan di kolom kiri inbox. Filter tabs + search + item list.
 import { Bot, CheckCircle2, Hand, Search } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +21,9 @@ interface ConversationListProps {
   search: string
   selectedId: string | null
   isLoading: boolean
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
   onFilterChange: (next: InboxFilter) => void
   onSearchChange: (next: string) => void
   onSelect: (id: string) => void
@@ -39,10 +43,36 @@ export function ConversationList({
   search,
   selectedId,
   isLoading,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
   onFilterChange,
   onSearchChange,
   onSelect,
 }: ConversationListProps) {
+  // Auto-load: begitu sentinel di dasar list mendekati layar, muat halaman
+  // berikutnya tanpa user harus klik "Muat lebih banyak". Ini yang mencegah
+  // persepsi "chat tidak muncul semua" — badge tab tampil total, jadi kalau
+  // list berhenti di 100 user kira sisanya hilang. Tombol manual tetap ada
+  // sebagai fallback (mis. IntersectionObserver tak didukung).
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const root = el.closest('[data-slot="scroll-area-viewport"]')
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !isLoadingMore) {
+          onLoadMore()
+        }
+      },
+      // rootMargin: picu sedikit sebelum benar-benar sampai dasar.
+      { root, rootMargin: '300px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, isLoadingMore, onLoadMore])
+
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-3 border-b p-3">
@@ -72,7 +102,11 @@ export function ConversationList({
         </Tabs>
       </div>
 
-      <ScrollArea className="flex-1">
+      {/* min-h-0 WAJIB: tanpa ini flex item (flex-1) default min-height:auto →
+          Root ikut tinggi konten (ratusan chat), Viewport size-full tak pernah
+          punya tinggi terbatas → tidak ada scroll & item bawah terpotong oleh
+          overflow-hidden. min-h-0 bikin flex-1 menyusut ke ruang tersisa. */}
+      <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="p-4 text-center text-sm text-muted-foreground">Memuat...</div>
         ) : conversations.length === 0 ? (
@@ -124,6 +158,20 @@ export function ConversationList({
                 </button>
               </li>
             ))}
+            {hasMore && (
+              <li>
+                {/* Sentinel untuk auto-load saat scroll mendekati dasar. */}
+                <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="w-full px-3 py-3 text-center text-xs font-medium text-primary hover:bg-muted/50 disabled:opacity-60"
+                >
+                  {isLoadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+                </button>
+              </li>
+            )}
           </ul>
         )}
       </ScrollArea>

@@ -22,9 +22,14 @@ import type {
 interface InboxViewProps {
   initialConversations: InboxConversation[]
   initialCounts: InboxCounts
+  initialHasMore?: boolean
 }
 
-export function InboxView({ initialConversations, initialCounts }: InboxViewProps) {
+export function InboxView({
+  initialConversations,
+  initialCounts,
+  initialHasMore = false,
+}: InboxViewProps) {
   const [conversations, setConversations] = useState(initialConversations)
   const [counts, setCounts] = useState(initialCounts)
   const [filter, setFilter] = useState<InboxFilter>('all')
@@ -33,6 +38,8 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
     initialConversations[0]?.id ?? null,
   )
   const [isLoading, setLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(initialHasMore)
+  const [isLoadingMore, setLoadingMore] = useState(false)
 
   // Debounce search supaya tidak spam API setiap keystroke.
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -54,16 +61,51 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
       const res = await fetch(`/api/inbox?${params}`)
       const json = (await res.json()) as {
         success: boolean
-        data?: { conversations: InboxConversation[]; counts: InboxCounts }
+        data?: {
+          conversations: InboxConversation[]
+          counts: InboxCounts
+          hasMore?: boolean
+        }
       }
       if (json.success && json.data) {
         setConversations(json.data.conversations)
         setCounts(json.data.counts)
+        setHasMore(json.data.hasMore ?? false)
       }
     } finally {
       setLoading(false)
     }
   }, [filter, debouncedSearch])
+
+  // Muat halaman percakapan berikutnya (offset = jumlah yang sudah tampil) lalu
+  // tambahkan ke daftar. Dipakai tombol "Muat lebih banyak".
+  const loadMore = useCallback(async () => {
+    if (isLoadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const params = new URLSearchParams({
+        filter,
+        offset: String(conversations.length),
+      })
+      if (debouncedSearch) params.set('search', debouncedSearch)
+      const res = await fetch(`/api/inbox?${params}`)
+      const json = (await res.json()) as {
+        success: boolean
+        data?: { conversations: InboxConversation[]; hasMore?: boolean }
+      }
+      if (json.success && json.data) {
+        const more = json.data.conversations
+        setConversations((prev) => {
+          // Dedup defensif kalau ada pergeseran urutan antar-fetch.
+          const seen = new Set(prev.map((c) => c.id))
+          return [...prev, ...more.filter((c) => !seen.has(c.id))]
+        })
+        setHasMore(json.data.hasMore ?? false)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [isLoadingMore, hasMore, filter, conversations.length, debouncedSearch])
 
   // Skip first call (data sudah dari server). Trigger saat filter/search ganti.
   const isFirst = useRef(true)
@@ -101,6 +143,9 @@ export function InboxView({ initialConversations, initialCounts }: InboxViewProp
           search={search}
           selectedId={selectedId}
           isLoading={isLoading}
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={loadMore}
           onFilterChange={(f) => {
             setFilter(f)
             setSelectedId(null)
