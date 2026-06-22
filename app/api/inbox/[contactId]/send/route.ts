@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { resolveConnectedSessionId } from '@/lib/wa-session'
 import { waService } from '@/lib/wa-service'
 
 const bodySchema = z.object({
@@ -37,11 +38,27 @@ export async function POST(req: Request, { params }: Params) {
     })
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)
 
+    // Kontak di-pin ke waSessionId saat dibuat; setelah user re-scan/re-pair,
+    // session itu jadi DISCONNECTED dan id-nya berubah. Kirim lewat session
+    // mati = "session belum siap" → balasan gagal senyap padahal chat tampil di
+    // inbox. Resolve ke session yang BENAR-BENAR terhubung (prefer session
+    // kontak kalau masih konek, else session aktif user terbaru).
+    const sendSessionId = await resolveConnectedSessionId(
+      session.user.id,
+      contact.waSessionId,
+    )
+    if (!sendSessionId) {
+      return jsonError(
+        'WhatsApp belum terhubung. Hubungkan dulu di menu WhatsApp sebelum membalas.',
+        409,
+      )
+    }
+
     // 1. Kirim ke wa-service. Response berisi messageId (Baileys key.id) yang
     // kita simpan sebagai externalMsgId — dipakai dedup saat event upsert
     // fromMe untuk pesan yang sama masuk lagi.
     const send = await waService.sendMessage(
-      contact.waSessionId,
+      sendSessionId,
       contact.phoneNumber,
       parsed.data.content,
     )
@@ -49,11 +66,13 @@ export async function POST(req: Request, { params }: Params) {
       return jsonError(send.error || 'Gagal kirim ke WhatsApp', 502)
     }
 
-    // 2. Simpan ke DB sebagai AGENT/WEB_DASHBOARD.
+    // 2. Simpan ke DB sebagai AGENT/WEB_DASHBOARD. waSessionId = session yang
+    // dipakai kirim (yang terhubung), supaya dedup echo fromMe (checkMessageExists
+    // by externalMsgId+sessionId) cocok dan tidak menyimpan pesan ganda.
     const message = await prisma.message.create({
       data: {
         contactId: contact.id,
-        waSessionId: contact.waSessionId,
+        waSessionId: sendSessionId,
         content: parsed.data.content,
         role: 'AGENT',
         status: 'SENT',
