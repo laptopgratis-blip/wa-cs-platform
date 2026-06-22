@@ -3,6 +3,7 @@
 // Panel kanan inbox: header + bubble chat + input box.
 // Komponen mandiri yang fetch sendiri data per contactId; parent cukup pass id.
 import {
+  AlertTriangle,
   ArrowLeft,
   Bot,
   CheckCircle2,
@@ -440,6 +441,11 @@ function Bubble({
           </div>
         )}
         <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        {isOutgoing && message.status === 'FAILED' && (
+          <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-red-600">
+            <AlertTriangle className="size-3" /> Gagal terkirim ke WhatsApp
+          </div>
+        )}
         <p
           className={cn(
             'mt-1 text-right text-[10px]',

@@ -160,6 +160,9 @@ export const internalApi = {
     // ID pesan dari Baileys (msg.key.id) — dipakai untuk dedup saat event
     // messages.upsert masuk untuk pesan yang baru kita kirim sendiri.
     externalMsgId?: string | null
+    // Status pengiriman. Default DB = SENT. Set 'FAILED' untuk balasan AI yang
+    // gagal terkirim ke WA (mis. socket putus) supaya inbox jujur.
+    status?: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'
     // Profitability tracking (di-set untuk pesan AI). Boleh kosong → field
     // di DB null untuk pesan customer / pre-feature.
     apiInputTokens?: number

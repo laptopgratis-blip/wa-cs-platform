@@ -61,6 +61,20 @@ function reconnectDelayMs(attempt: number): number {
 // hanya tidak dapat balasan AI tambahan.
 const MAX_DRAIN_ROUNDS = 3
 
+// Bangun JID tujuan kirim BALASAN ke customer. resolvePhoneNumber sudah
+// mengubah LID (`<id>@lid`, privacy mode WA) → nomor PN; kirim ke
+// `<pn>@s.whatsapp.net` — jalur yang sama dengan sendText/broadcast/followup
+// yang TERBUKTI sampai. Penting: Baileys 7 menerima `sendMessage(<id>@lid)`
+// dan mengembalikan key TANPA error, tapi pesan TIDAK pernah diantar ke nomor
+// asli — ini sumber bug "balasan muncul di inbox web tapi tak sampai ke WA".
+// Untuk customer non-LID, phoneNumber = remoteJid digits → hasil identik
+// (no-op). Fallback ke remoteJid hanya kalau PN tak ter-resolve (LID tanpa
+// mapping — nihil di praktik karena Baileys populate mapping saat decode).
+function buildReplyJid(phoneNumber: string, remoteJid: string): string {
+  if (/^\d+$/.test(phoneNumber)) return `${phoneNumber}@s.whatsapp.net`
+  return remoteJid
+}
+
 async function getBaileysVersionCached(): Promise<WAVersion | undefined> {
   const now = Date.now()
   if (cachedVersion && now - cachedVersion.fetchedAt < BAILEYS_VERSION_TTL_MS) {
@@ -739,6 +753,17 @@ export class WaManager {
     const sessionId = entry.state.sessionId
     const { remoteJid, phoneNumber, content } = args
 
+    // JID tujuan kirim balasan: nomor PN hasil resolve, BUKAN remoteJid mentah
+    // (yang bisa `<id>@lid` dan tidak terkirim di Baileys 7). Lihat buildReplyJid.
+    const sendJid = buildReplyJid(phoneNumber, remoteJid)
+    if (sendJid.endsWith('@lid')) {
+      // PN tak ter-resolve → terpaksa kirim ke @lid (rawan tak terkirim).
+      // Harusnya nihil di praktik; kalau muncul, indikasi mapping LID gagal.
+      console.warn(
+        `[wa-manager:${sessionId}] sendJid masih @lid (${sendJid}) — balasan rawan tidak terkirim`,
+      )
+    }
+
     let contactId: string
     let baseHistory: InternalMessageHistoryItem[]
 
@@ -811,29 +836,34 @@ export class WaManager {
     })
     if (stopCheck.success && stopCheck.data?.isStop) {
       if (stopCheck.data.autoReply) {
+        // Kirim dipisah dari simpan: kalau sendMessage throw, saveMessage TETAP
+        // jalan (status FAILED) supaya ada jejak di inbox CS, bukan hilang total.
+        let msgId: string | null = null
         try {
-          const sent = await entry.socket?.sendMessage(remoteJid, {
+          const sent = await entry.socket?.sendMessage(sendJid, {
             text: stopCheck.data.autoReply,
           })
-          const msgId = sent?.key?.id ?? null
+          msgId = sent?.key?.id ?? null
           if (msgId) this.markSent(entry, msgId)
-          await internalApi
-            .saveMessage({
-              sessionId,
-              phoneNumber,
-              content: stopCheck.data.autoReply,
-              role: 'AI',
-              source: 'AI',
-              externalMsgId: msgId,
-              tokensUsed: 0,
-            })
-            .catch(() => {})
         } catch (err) {
           console.error(
             `[wa-manager:${sessionId}] followup stop autoReply gagal:`,
             err,
           )
         }
+        await internalApi
+          .saveMessage({
+            sessionId,
+            phoneNumber,
+            content: stopCheck.data.autoReply,
+            role: 'AI',
+            source: 'AI',
+            externalMsgId: msgId,
+            tokensUsed: 0,
+            // Tandai FAILED kalau Baileys tidak mengembalikan id (tak terkirim).
+            status: msgId ? 'SENT' : 'FAILED',
+          })
+          .catch(() => {})
       }
       // Customer minta STOP — jangan lanjut drain antrian.
       return { shouldContinue: false, historyAfter: baseHistory }
@@ -851,7 +881,7 @@ export class WaManager {
       // Kirim balasan flow ke customer.
       let flowMsgId: string | null = null
       try {
-        const sent = await entry.socket?.sendMessage(remoteJid, {
+        const sent = await entry.socket?.sendMessage(sendJid, {
           text: flow.data.reply,
         })
         flowMsgId = sent?.key?.id ?? null
@@ -869,6 +899,7 @@ export class WaManager {
           source: 'AI',
           externalMsgId: flowMsgId,
           tokensUsed: 0,
+          status: flowMsgId ? 'SENT' : 'FAILED',
         })
         .catch((err) =>
           console.error(`[wa-manager:${sessionId}] flow save msg:`, err),
@@ -886,6 +917,11 @@ export class WaManager {
             err,
           ),
         )
+      }
+      // Kalau kirim gagal: jangan masukkan balasan ke history (biar AI tidak
+      // mengira sudah menjawab) dan hentikan drain antrian.
+      if (!flowMsgId) {
+        return { shouldContinue: false, historyAfter: baseHistory }
       }
       // Flow bisa lanjut multi-step — antrian berikutnya boleh di-drain.
       return { shouldContinue: true, historyAfter: withReply(flow.data.reply) }
@@ -949,6 +985,10 @@ export class WaManager {
     // 5. Charge token proporsional — server hitung tokensCharged dari real
     // (inputTokens, outputTokens) × harga AiModel × margin CS_REPLY config.
     // Kalau gagal → pause & jangan kirim balasan.
+    // CATATAN: charge terjadi SEBELUM kirim. Kalau kirim gagal (status FAILED),
+    // user tetap ter-charge untuk generasi AI yang sudah jalan (biaya provider
+    // nyata). Setelah fix alamat JID, kegagalan kirim jadi edge case (jaringan
+    // putus) — refund/retry otomatis belum diimplementasi (kandidat follow-up).
     const charge = await tokenChecker.chargeCsReply({
       userId,
       sessionId,
@@ -966,29 +1006,41 @@ export class WaManager {
       return { shouldContinue: false, historyAfter: baseHistory }
     }
 
-    // 6. Kirim balasan via Baileys.
+    // 6. Kirim balasan via Baileys ke JID yang benar (PN, bukan @lid).
     let aiMsgId: string | null = null
-    try {
-      const sent = await entry.socket?.sendMessage(remoteJid, {
-        text: ai.reply,
-      })
-      aiMsgId = sent?.key?.id ?? null
-      if (aiMsgId) this.markSent(entry, aiMsgId)
-    } catch (err) {
-      console.error(`[wa-manager:${sessionId}] sendMessage gagal:`, err)
+    let sendOk = false
+    if (!entry.socket) {
+      console.error(
+        `[wa-manager:${sessionId}] sendMessage batal: socket null (kontak ${sendJid})`,
+      )
+    } else {
+      try {
+        const sent = await entry.socket.sendMessage(sendJid, { text: ai.reply })
+        aiMsgId = sent?.key?.id ?? null
+        sendOk = aiMsgId !== null
+        if (aiMsgId) this.markSent(entry, aiMsgId)
+        console.log(
+          `[wa-manager:${sessionId}] AI reply → ${sendJid} ok=${sendOk} id=${aiMsgId ?? '-'}`,
+        )
+      } catch (err) {
+        console.error(
+          `[wa-manager:${sessionId}] sendMessage gagal → ${sendJid}:`,
+          err,
+        )
+      }
     }
 
-    // 6b. Kirim attachments dari knowledge IMAGE/FILE — fire-and-forget,
-    // jangan block flow. wa-manager auto-attach supaya AI tidak perlu
-    // request manual ke admin ("admin akan kirim foto/bukti").
+    // 6b. Kirim attachments dari knowledge IMAGE/FILE — HANYA kalau balasan
+    // teks benar-benar terkirim (jangan kirim lampiran tanpa konteks). Fire-
+    // and-forget, jangan block flow.
     const attachments = kb.success ? kb.data?.attachments ?? [] : []
     console.log(
-      `[wa-manager:${sessionId}] reply done · attachments=${attachments.length}`,
+      `[wa-manager:${sessionId}] reply done · sendOk=${sendOk} · attachments=${attachments.length}`,
     )
-    if (attachments.length > 0 && entry.socket) {
+    if (sendOk && attachments.length > 0 && entry.socket) {
       void sendKnowledgeAttachments(
         entry.socket,
-        remoteJid,
+        sendJid,
         attachments,
         sessionId,
       )
@@ -1010,12 +1062,20 @@ export class WaManager {
         source: 'AI',
         externalMsgId: aiMsgId,
         tokensUsed: cost.tokensCharged,
+        // Kirim gagal → tandai FAILED supaya CS lihat "gagal terkirim" di inbox
+        // dan bisa balas manual; bukan balasan palsu yang terlihat terkirim.
+        status: sendOk ? 'SENT' : 'FAILED',
         ...cost,
       })
       .catch((err) =>
         console.error(`[wa-manager:${sessionId}] save AI msg:`, err),
       )
 
+    // Kalau kirim gagal: JANGAN masukkan balasan ke history (AI jangan mengira
+    // sudah menjawab — biar pesan berikutnya diproses fresh) & hentikan drain.
+    if (!sendOk) {
+      return { shouldContinue: false, historyAfter: baseHistory }
+    }
     return { shouldContinue: true, historyAfter: withReply(ai.reply) }
   }
 
