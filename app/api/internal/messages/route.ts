@@ -21,6 +21,9 @@ const bodySchema = z.object({
   source: z.enum(['WA_DIRECT', 'WEB_DASHBOARD', 'AI']).optional(),
   // ID pesan dari Baileys (msg.key.id) — untuk dedup outgoing message.
   externalMsgId: z.string().nullish(),
+  // Status pengiriman pesan keluar. Absent → default DB (SENT). 'FAILED' untuk
+  // balasan AI yang gagal terkirim ke WhatsApp.
+  status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']).optional(),
   // Profitability tracking — di-set untuk pesan AI. Optional (legacy /
   // pesan customer biarkan null di DB).
   apiInputTokens: z.number().int().nonnegative().optional(),
@@ -115,14 +118,18 @@ export async function POST(req: Request) {
         profitRp: body.profitRp ?? null,
         source: body.source ?? null,
         externalMsgId: body.externalMsgId ?? null,
+        // Absent → biarkan default schema (SENT).
+        status: body.status ?? undefined,
       },
     })
 
     let history: { role: string; content: string; createdAt: Date }[] = []
     if (body.withHistory) {
       // Ambil 10 pesan terakhir (terbaru dulu), lalu balik ke kronologis untuk AI.
+      // Kecualikan pesan FAILED (balasan yang TIDAK terkirim ke customer) supaya
+      // AI tidak mengira sudah menjawab hal yang sebenarnya tak pernah diterima.
       const recent = await prisma.message.findMany({
-        where: { contactId: contact.id },
+        where: { contactId: contact.id, status: { not: 'FAILED' } },
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: { role: true, content: true, createdAt: true },
