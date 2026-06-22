@@ -61,20 +61,6 @@ function reconnectDelayMs(attempt: number): number {
 // hanya tidak dapat balasan AI tambahan.
 const MAX_DRAIN_ROUNDS = 3
 
-// Bangun JID tujuan kirim BALASAN ke customer. resolvePhoneNumber sudah
-// mengubah LID (`<id>@lid`, privacy mode WA) → nomor PN; kirim ke
-// `<pn>@s.whatsapp.net` — jalur yang sama dengan sendText/broadcast/followup
-// yang TERBUKTI sampai. Penting: Baileys 7 menerima `sendMessage(<id>@lid)`
-// dan mengembalikan key TANPA error, tapi pesan TIDAK pernah diantar ke nomor
-// asli — ini sumber bug "balasan muncul di inbox web tapi tak sampai ke WA".
-// Untuk customer non-LID, phoneNumber = remoteJid digits → hasil identik
-// (no-op). Fallback ke remoteJid hanya kalau PN tak ter-resolve (LID tanpa
-// mapping — nihil di praktik karena Baileys populate mapping saat decode).
-function buildReplyJid(phoneNumber: string, remoteJid: string): string {
-  if (/^\d+$/.test(phoneNumber)) return `${phoneNumber}@s.whatsapp.net`
-  return remoteJid
-}
-
 async function getBaileysVersionCached(): Promise<WAVersion | undefined> {
   const now = Date.now()
   if (cachedVersion && now - cachedVersion.fetchedAt < BAILEYS_VERSION_TTL_MS) {
@@ -753,12 +739,15 @@ export class WaManager {
     const sessionId = entry.state.sessionId
     const { remoteJid, phoneNumber, content } = args
 
-    // JID tujuan kirim balasan: nomor PN hasil resolve, BUKAN remoteJid mentah
-    // (yang bisa `<id>@lid` dan tidak terkirim di Baileys 7). Lihat buildReplyJid.
-    const sendJid = buildReplyJid(phoneNumber, remoteJid)
+    // JID tujuan kirim balasan: nomor PN hasil resolve (`<pn>@s.whatsapp.net`),
+    // BUKAN remoteJid mentah yang bisa `<id>@lid`. Baileys 7 menerima
+    // sendMessage(@lid) dan balik key TANPA error tapi TIDAK mengantar ke nomor
+    // asli — sumber bug "balasan muncul di inbox web tapi tak sampai ke WA".
+    // phoneToSendJid sama dengan jalur sendText/broadcast/followup yang terbukti
+    // sampai. Untuk non-LID hasilnya identik (no-op). Fallback ke remoteJid kalau
+    // PN tak ter-resolve (nihil di praktik; Baileys populate mapping saat decode).
+    const sendJid = phoneToSendJid(phoneNumber) ?? remoteJid
     if (sendJid.endsWith('@lid')) {
-      // PN tak ter-resolve → terpaksa kirim ke @lid (rawan tak terkirim).
-      // Harusnya nihil di praktik; kalau muncul, indikasi mapping LID gagal.
       console.warn(
         `[wa-manager:${sessionId}] sendJid masih @lid (${sendJid}) — balasan rawan tidak terkirim`,
       )
