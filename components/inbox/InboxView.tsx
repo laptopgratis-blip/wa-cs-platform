@@ -9,6 +9,11 @@
 import { Inbox as InboxIcon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import {
+  getSocket,
+  subscribeWaSession,
+  type InboxMessagePayload,
+} from '@/lib/socket-client'
 import { cn } from '@/lib/utils'
 
 import { ChatView } from './ChatView'
@@ -17,18 +22,22 @@ import type {
   InboxConversation,
   InboxCounts,
   InboxFilter,
+  MessageSource,
 } from './types'
 
 interface InboxViewProps {
   initialConversations: InboxConversation[]
   initialCounts: InboxCounts
   initialHasMore?: boolean
+  // Daftar WA session milik user — dipakai untuk subscribe room realtime.
+  sessionIds: string[]
 }
 
 export function InboxView({
   initialConversations,
   initialCounts,
   initialHasMore = false,
+  sessionIds,
 }: InboxViewProps) {
   const [conversations, setConversations] = useState(initialConversations)
   const [counts, setCounts] = useState(initialCounts)
@@ -120,6 +129,87 @@ export function InboxView({
   const refresh = useCallback(() => {
     void fetchList()
   }, [fetchList])
+
+  // Subscribe realtime ke room tiap WA session milik user. Saat ada
+  // 'inbox:message': update preview & reorder conversation yang sudah ada,
+  // atau refetch list kalau kontaknya baru (belum ada di daftar).
+  //
+  // Key dependency pakai join string supaya effect tidak re-run gara-gara
+  // identitas array berubah tiap render.
+  const sessionIdsKey = sessionIds.join(',')
+  // refresh dipakai di handler tapi sengaja tidak masuk deps: kalau ikut,
+  // tiap fetch (yang mengubah fetchList) akan unsubscribe+resubscribe ulang.
+  // Pegang lewat ref biar handler selalu lihat versi terbaru tanpa re-subscribe.
+  const refreshRef = useRef(refresh)
+  useEffect(() => {
+    refreshRef.current = refresh
+  }, [refresh])
+
+  // Cermin conversations terbaru untuk dibaca handler socket secara sinkron
+  // (cek "kontak sudah ada?") tanpa memasukkan conversations ke deps effect
+  // subscribe — kalau masuk deps, tiap update list akan resubscribe room.
+  const conversationsRef = useRef(conversations)
+  useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
+
+  useEffect(() => {
+    if (sessionIds.length === 0) return
+    const socket = getSocket()
+    const allowed = new Set(sessionIds)
+
+    for (const sessionId of sessionIds) {
+      void subscribeWaSession(socket, sessionId)
+    }
+
+    const handler = (payload: InboxMessagePayload) => {
+      if (!allowed.has(payload.sessionId)) return
+      const msg = payload.message
+      // Cek keberadaan kontak dari snapshot terbaru (bukan dari flag yang
+      // di-set di dalam updater — updater bisa jalan async/batched).
+      const exists = conversationsRef.current.some(
+        (c) => c.id === payload.contactId,
+      )
+      if (!exists) {
+        // Kontak baru (mis. chat pertama kali) → refetch supaya muncul tanpa
+        // membentuk InboxConversation parsial yang salah tipe.
+        refreshRef.current()
+        return
+      }
+      setConversations((prev) => {
+        const idx = prev.findIndex((c) => c.id === payload.contactId)
+        if (idx === -1) return prev
+        const current = prev[idx]!
+        // Bentuk objek baru (immutable) dengan preview + timestamp terbaru,
+        // lalu pindahkan ke posisi paling atas.
+        const updated: InboxConversation = {
+          ...current,
+          lastMessageAt: msg.createdAt,
+          lastMessage: {
+            content: msg.content,
+            role: msg.role,
+            source: (msg.source as MessageSource | null) ?? null,
+            createdAt: msg.createdAt,
+          },
+        }
+        const next = [...prev]
+        next.splice(idx, 1)
+        return [updated, ...next]
+      })
+    }
+
+    socket.on('inbox:message', handler)
+    return () => {
+      socket.off('inbox:message', handler)
+      // wa-service 'unsubscribe' menerima sessionId string polos (lihat
+      // wa-service/src/index.ts). InboxView yang memegang room sesi tingkat
+      // daftar, jadi unsubscribe di sini saat unmount halaman inbox.
+      for (const sessionId of sessionIds) {
+        socket.emit('unsubscribe', sessionId)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionIdsKey])
 
   const selected = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,

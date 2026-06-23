@@ -178,6 +178,20 @@ export const internalApi = {
     })
   },
 
+  // Update status pengiriman sebuah pesan berdasarkan externalMsgId (Baileys
+  // msg.key.id). Dipakai saat ack Baileys error (messages.update status ERROR)
+  // supaya inbox jujur menandai pesan FAILED. Server jalankan updateMany —
+  // count 0 wajar kalau pesan belum/ tidak tercatat di DB.
+  markMessageStatus(input: {
+    externalMsgId: string
+    status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'
+  }) {
+    return request<{ updated: number }>('/api/internal/messages/status', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+
   // Cek apakah message dengan externalMsgId tertentu sudah disimpan untuk
   // sessionId ini. Dipakai handleIncomingMessage saat fromMe=true untuk dedup
   // pesan yang sudah di-save lewat /api/inbox/[contactId]/send.

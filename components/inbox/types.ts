@@ -40,6 +40,10 @@ export interface ChatMessage {
   status: MessageStatus
   // Asal pesan untuk role AGENT/AI. Null untuk customer / pesan lama.
   source: MessageSource | null
+  // ID pesan di sisi WhatsApp. Dipakai untuk match update status realtime
+  // (event 'inbox:status' membawa externalMsgId). Opsional: route messages
+  // mungkin belum mengembalikannya — kalau undefined, update status di-skip.
+  externalMsgId?: string | null
   createdAt: string
   // Profitability fields — null untuk pesan customer / pre-feature, dan
   // hanya di-populate kalau session.role === 'ADMIN'.

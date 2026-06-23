@@ -20,7 +20,7 @@ export default async function InboxPage() {
 
   const userId = session.user.id
 
-  const [contacts, allCount, aiCount, attentionCount, resolvedCount] =
+  const [contacts, allCount, aiCount, attentionCount, resolvedCount, sessions] =
     await Promise.all([
       prisma.contact.findMany({
         where: { userId, messages: { some: {} } },
@@ -56,7 +56,15 @@ export default async function InboxPage() {
       prisma.contact.count({
         where: { userId, messages: { some: {} }, isResolved: true },
       }),
+      // Daftar sessionId milik user → dipakai InboxView untuk subscribe room
+      // sesi (event 'inbox:message' & 'inbox:status').
+      prisma.whatsappSession.findMany({
+        where: { userId },
+        select: { id: true },
+      }),
     ])
+
+  const sessionIds: string[] = sessions.map((s) => s.id)
 
   const initialHasMore = contacts.length > 100
   const pageContacts = initialHasMore ? contacts.slice(0, 100) : contacts
@@ -94,6 +102,7 @@ export default async function InboxPage() {
       initialConversations={conversations}
       initialCounts={counts}
       initialHasMore={initialHasMore}
+      sessionIds={sessionIds}
     />
   )
 }

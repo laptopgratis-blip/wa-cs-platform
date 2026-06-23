@@ -40,6 +40,8 @@ export async function GET(req: Request, { params }: Params) {
         aiPaused: true,
         isResolved: true,
         lastMessageAt: true,
+        // FK scalar — ChatView pakai untuk subscribe room sesi (event inbox:*).
+        waSessionId: true,
         waSession: { select: { id: true, displayName: true, status: true } },
       },
     })
@@ -63,6 +65,9 @@ export async function GET(req: Request, { params }: Params) {
         role: true,
         status: true,
         source: true,
+        // ID pesan sisi WhatsApp — ChatView pakai untuk match update status
+        // realtime ('inbox:status' membawa externalMsgId).
+        externalMsgId: true,
         createdAt: true,
         // Field cost di-include hanya untuk admin (data sensitif).
         ...(isAdmin
@@ -99,6 +104,7 @@ export async function GET(req: Request, { params }: Params) {
         role: m.role,
         status: m.status,
         source: m.source,
+        externalMsgId: m.externalMsgId,
         createdAt: m.createdAt.toISOString(),
         ...(isAdmin
           ? {

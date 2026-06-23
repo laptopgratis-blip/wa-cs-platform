@@ -32,6 +32,12 @@ import {
   formatChatDateLabel,
   formatChatTime,
 } from '@/lib/format-time'
+import {
+  getSocket,
+  subscribeWaSession,
+  type InboxMessagePayload,
+  type InboxStatusPayload,
+} from '@/lib/socket-client'
 import { cn } from '@/lib/utils'
 
 import type { ChatContact, ChatMessage } from './types'
@@ -95,6 +101,68 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [messages.length, isLoading])
+
+  // Realtime: subscribe ke room WA session kontak ini, lalu append pesan baru
+  // ('inbox:message') & update status kirim ('inbox:status').
+  const waSessionId = contact?.waSession?.id ?? null
+  useEffect(() => {
+    if (!waSessionId) return
+    const socket = getSocket()
+    let cancelled = false
+    void subscribeWaSession(socket, waSessionId, {
+      isCancelled: () => cancelled,
+    })
+
+    // Append pesan baru milik kontak ini. Dedup by message.id supaya pesan
+    // yang sudah ada (mis. balasan manual yang tadi kita append sendiri) tidak
+    // dobel. Kalau id null (gagal simpan), tetap append tanpa dedup.
+    const onMessage = (payload: InboxMessagePayload) => {
+      if (payload.contactId !== contactId) return
+      const m = payload.message
+      setMessages((prev) => {
+        if (m.id && prev.some((p) => p.id === m.id)) return prev
+        const appended: ChatMessage = {
+          id: m.id ?? `rt-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          content: m.content,
+          role: m.role,
+          status: m.status,
+          source: (m.source as ChatMessage['source']) ?? null,
+          createdAt: m.createdAt,
+        }
+        return [...prev, appended]
+      })
+    }
+
+    // Update status kirim (mis. jadi FAILED) — best-effort: payload pakai
+    // externalMsgId, jadi hanya bisa match kalau ChatMessage punya field itu.
+    // Kalau tidak ada yang cocok, lewati (status awal sudah dibawa onMessage).
+    const onStatus = (payload: InboxStatusPayload) => {
+      if (payload.sessionId !== waSessionId) return
+      setMessages((prev) => {
+        let changed = false
+        const next = prev.map((p) => {
+          if (p.externalMsgId && p.externalMsgId === payload.externalMsgId) {
+            changed = true
+            return { ...p, status: payload.status }
+          }
+          return p
+        })
+        return changed ? next : prev
+      })
+    }
+
+    socket.on('inbox:message', onMessage)
+    socket.on('inbox:status', onStatus)
+    return () => {
+      cancelled = true
+      socket.off('inbox:message', onMessage)
+      socket.off('inbox:status', onStatus)
+      // SENGAJA tidak emit 'unsubscribe': socket singleton dibagi dengan
+      // InboxView yang juga memegang room sesi ini. Kalau ChatView keluar dari
+      // room, InboxView ikut berhenti terima 'inbox:message'. Cukup lepas
+      // listener milik ChatView; room dilepas InboxView saat halaman unmount.
+    }
+  }, [contactId, waSessionId])
 
   // Group pesan by tanggal supaya bisa kasih separator "Hari Ini" / tanggal.
   const grouped = useMemo(() => groupByDate(messages), [messages])

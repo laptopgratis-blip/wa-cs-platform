@@ -87,3 +87,28 @@ export interface SubscribeErrorPayload {
   sessionId: string
   error?: string
 }
+
+// Event 'inbox:message' — pesan baru masuk/keluar pada sebuah session.
+// Dipakai untuk update preview di InboxView & append realtime di ChatView.
+export interface InboxMessagePayload {
+  sessionId: string
+  contactId: string
+  phoneNumber: string
+  name: string | null
+  message: {
+    id: string | null // messageId dari DB (hasil saveMessage), null kalau gagal
+    content: string
+    role: 'USER' | 'AI' | 'AGENT' | 'HUMAN'
+    status: 'SENT' | 'FAILED'
+    source: string | null
+    createdAt: string // ISO string
+  }
+}
+
+// Event 'inbox:status' — update status kirim sebuah pesan (mis. jadi FAILED
+// dari ack error WA), ditarget by externalMsgId.
+export interface InboxStatusPayload {
+  sessionId: string
+  externalMsgId: string
+  status: 'FAILED'
+}

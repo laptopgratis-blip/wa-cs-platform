@@ -9,6 +9,7 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
   makeWASocket,
+  proto,
   useMultiFileAuthState,
   type WAMessage,
   type WASocket,
@@ -134,6 +135,30 @@ import type {
   SessionState,
   StatusEvent,
 } from './types.js'
+
+// Payload event Socket.io untuk inbox realtime (server → client). Didefinisikan
+// di sini (bukan types.ts) supaya kontrak inbox terlokalisir di wa-manager —
+// frontend cocokkan bentuk ini saat listen 'inbox:message' / 'inbox:status'.
+interface InboxMessageEvent {
+  sessionId: string
+  contactId: string
+  phoneNumber: string
+  name: string | null
+  message: {
+    id: string | null // messageId dari DB (hasil saveMessage), null kalau gagal
+    content: string
+    role: 'USER' | 'AI' | 'AGENT' | 'HUMAN'
+    status: 'SENT' | 'FAILED'
+    source: string | null
+    createdAt: string // ISO string
+  }
+}
+
+interface InboxStatusEvent {
+  sessionId: string
+  externalMsgId: string
+  status: 'FAILED'
+}
 
 interface SessionEntry {
   state: SessionState
@@ -270,6 +295,36 @@ export class WaManager {
       for (const msg of event.messages) {
         this.handleIncomingMessage(entry, msg).catch((err) => {
           console.error(`[wa-manager:${sessionId}] handleIncomingMessage:`, err)
+        })
+      }
+    })
+
+    // Ack pengiriman dari WhatsApp. Status ERROR pada pesan outgoing (fromMe)
+    // berarti pesan GAGAL terkirim walau sendMessage tadinya sukses (mis. nomor
+    // diblokir / tidak ada WA). Tandai FAILED di DB + emit 'inbox:status' supaya
+    // inbox web tidak menampilkan SENT palsu. Non-blocking — jangan await di
+    // dalam loop yang mem-block event handler.
+    sock.ev.on('messages.update', (updates) => {
+      for (const update of updates) {
+        if (update.update.status !== proto.WebMessageInfo.Status.ERROR) continue
+        if (!update.key.fromMe) continue
+        const externalMsgId = update.key.id
+        if (!externalMsgId) continue
+        console.warn(
+          `[wa-manager:${sessionId}] ack ERROR → FAILED (id=${externalMsgId})`,
+        )
+        internalApi
+          .markMessageStatus({ externalMsgId, status: 'FAILED' })
+          .catch((err) =>
+            console.error(
+              `[wa-manager:${sessionId}] markMessageStatus FAILED gagal:`,
+              err,
+            ),
+          )
+        this.emit<InboxStatusEvent>('inbox:status', {
+          sessionId,
+          externalMsgId,
+          status: 'FAILED',
         })
       }
     })
@@ -602,7 +657,7 @@ export class WaManager {
       const placeholder = extractMediaPlaceholder(msg)
       if (placeholder && !msg.key.fromMe) {
         const mediaPhone = await resolvePhoneNumber(entry.socket, remoteJid)
-        await internalApi
+        const savedMedia = await internalApi
           .saveMessage({
             sessionId,
             phoneNumber: mediaPhone,
@@ -611,12 +666,25 @@ export class WaManager {
             role: 'USER',
             withHistory: false,
           })
-          .catch((err) =>
+          .catch((err) => {
             console.error(
               `[wa-manager:${sessionId}] save placeholder media:`,
               err,
-            ),
-          )
+            )
+            return null
+          })
+        // Emit hanya kalau save berhasil — supaya inbox tidak dapat pesan hantu.
+        if (savedMedia?.success && savedMedia.data) {
+          this.emitInboxMessage(sessionId, savedMedia.data.contactId, {
+            phoneNumber: mediaPhone,
+            name: msg.pushName ?? null,
+            messageId: savedMedia.data.messageId,
+            content: placeholder,
+            role: 'USER',
+            status: 'SENT',
+            source: null,
+          })
+        }
       }
       return
     }
@@ -652,7 +720,7 @@ export class WaManager {
       if (!statusRes.success || !statusRes.data) return
       if (!statusRes.data.aiPaused) return
 
-      await internalApi
+      const savedDirect = await internalApi
         .saveMessage({
           sessionId,
           phoneNumber,
@@ -663,9 +731,23 @@ export class WaManager {
           externalMsgId,
           withHistory: false,
         })
-        .catch((err) =>
-          console.error(`[wa-manager:${sessionId}] save WA_DIRECT msg:`, err),
-        )
+        .catch((err) => {
+          console.error(`[wa-manager:${sessionId}] save WA_DIRECT msg:`, err)
+          return null
+        })
+      // Balasan CS dari HP — emit ke inbox web supaya CS yang buka dashboard
+      // melihat pesan yang dikirim lewat WA HP secara realtime.
+      if (savedDirect?.success && savedDirect.data) {
+        this.emitInboxMessage(sessionId, savedDirect.data.contactId, {
+          phoneNumber,
+          name: msg.pushName ?? null,
+          messageId: savedDirect.data.messageId,
+          content,
+          role: 'AGENT',
+          status: 'SENT',
+          source: 'WA_DIRECT',
+        })
+      }
       return
     }
 
@@ -678,7 +760,7 @@ export class WaManager {
       // pesan ini (sudah tersimpan di sini).
       const queued = entry.pendingByContact.get(inFlightKey) ?? []
       entry.pendingByContact.set(inFlightKey, [...queued, content])
-      await internalApi
+      const savedQueued = await internalApi
         .saveMessage({
           sessionId,
           phoneNumber,
@@ -687,9 +769,23 @@ export class WaManager {
           role: 'USER',
           withHistory: false,
         })
-        .catch((err) =>
-          console.error(`[wa-manager:${sessionId}] save pesan antrian:`, err),
-        )
+        .catch((err) => {
+          console.error(`[wa-manager:${sessionId}] save pesan antrian:`, err)
+          return null
+        })
+      // Pesan customer beruntun — emit walau pipeline AI masih jalan, supaya
+      // inbox web tetap menampilkan pesan masuk secara realtime.
+      if (savedQueued?.success && savedQueued.data) {
+        this.emitInboxMessage(sessionId, savedQueued.data.contactId, {
+          phoneNumber,
+          name: msg.pushName ?? null,
+          messageId: savedQueued.data.messageId,
+          content,
+          role: 'USER',
+          status: 'SENT',
+          source: null,
+        })
+      }
       return
     }
     entry.inFlight.add(inFlightKey)
@@ -790,6 +886,18 @@ export class WaManager {
         return { shouldContinue: false, historyAfter: [] }
       }
 
+      // Pesan customer tersimpan — emit ke inbox web realtime (sebelum cabang
+      // aiPaused supaya CS yang takeover tetap lihat pesan masuk).
+      this.emitInboxMessage(sessionId, saved.data.contactId, {
+        phoneNumber,
+        name: args.pushName,
+        messageId: saved.data.messageId,
+        content,
+        role: 'USER',
+        status: 'SENT',
+        source: null,
+      })
+
       // Kalau CS sedang ambil alih kontak ini → simpan saja, jangan AI reply.
       if (saved.data.contact?.aiPaused) {
         return { shouldContinue: false, historyAfter: saved.data.history }
@@ -856,7 +964,7 @@ export class WaManager {
             err,
           )
         }
-        await internalApi
+        const savedStop = await internalApi
           .saveMessage({
             sessionId,
             phoneNumber,
@@ -868,7 +976,19 @@ export class WaManager {
             // Tandai FAILED kalau Baileys tidak mengembalikan id (tak terkirim).
             status: msgId ? 'SENT' : 'FAILED',
           })
-          .catch(() => {})
+          .catch(() => null)
+        // Emit balasan STOP otomatis ke inbox web (SENT/FAILED ikut hasil kirim).
+        if (savedStop?.success && savedStop.data) {
+          this.emitInboxMessage(sessionId, savedStop.data.contactId, {
+            phoneNumber,
+            name: args.pushName,
+            messageId: savedStop.data.messageId,
+            content: stopCheck.data.autoReply,
+            role: 'AI',
+            status: msgId ? 'SENT' : 'FAILED',
+            source: 'AI',
+          })
+        }
       }
       // Customer minta STOP — jangan lanjut drain antrian.
       return { shouldContinue: false, historyAfter: baseHistory }
@@ -895,7 +1015,7 @@ export class WaManager {
         console.error(`[wa-manager:${sessionId}] flow sendMessage gagal:`, err)
       }
       // Simpan reply ke DB sebagai pesan AI (untuk inbox visibility).
-      await internalApi
+      const savedFlow = await internalApi
         .saveMessage({
           sessionId,
           phoneNumber,
@@ -906,9 +1026,22 @@ export class WaManager {
           tokensUsed: 0,
           status: flowMsgId ? 'SENT' : 'FAILED',
         })
-        .catch((err) =>
-          console.error(`[wa-manager:${sessionId}] flow save msg:`, err),
-        )
+        .catch((err) => {
+          console.error(`[wa-manager:${sessionId}] flow save msg:`, err)
+          return null
+        })
+      // Emit balasan flow ke inbox web (SENT/FAILED ikut hasil kirim Baileys).
+      if (savedFlow?.success && savedFlow.data) {
+        this.emitInboxMessage(sessionId, savedFlow.data.contactId, {
+          phoneNumber,
+          name: args.pushName,
+          messageId: savedFlow.data.messageId,
+          content: flow.data.reply,
+          role: 'AI',
+          status: flowMsgId ? 'SENT' : 'FAILED',
+          source: 'AI',
+        })
+      }
 
       // Notifikasi admin kalau flow selesai dan setting-nya aktif.
       if (flow.data.notifyAdmin) {
@@ -1058,7 +1191,7 @@ export class WaManager {
       revenueRp: charge.revenueRp ?? 0,
       profitRp: charge.profitRp ?? 0,
     })
-    await internalApi
+    const savedAi = await internalApi
       .saveMessage({
         sessionId,
         phoneNumber,
@@ -1072,9 +1205,22 @@ export class WaManager {
         status: sendOk ? 'SENT' : 'FAILED',
         ...cost,
       })
-      .catch((err) =>
-        console.error(`[wa-manager:${sessionId}] save AI msg:`, err),
-      )
+      .catch((err) => {
+        console.error(`[wa-manager:${sessionId}] save AI msg:`, err)
+        return null
+      })
+    // Emit balasan AI ke inbox web (SENT/FAILED ikut hasil kirim Baileys).
+    if (savedAi?.success && savedAi.data) {
+      this.emitInboxMessage(sessionId, savedAi.data.contactId, {
+        phoneNumber,
+        name: args.pushName,
+        messageId: savedAi.data.messageId,
+        content: ai.reply,
+        role: 'AI',
+        status: sendOk ? 'SENT' : 'FAILED',
+        source: 'AI',
+      })
+    }
 
     // Kalau kirim gagal: JANGAN masukkan balasan ke history (AI jangan mengira
     // sudah menjawab — biar pesan berikutnya diproses fresh) & hentikan drain.
@@ -1303,10 +1449,51 @@ export class WaManager {
     }
   }
 
-  private emit<T>(event: 'qr' | 'status' | 'connected' | 'disconnected', payload: T) {
+  private emit<T>(
+    event:
+      | 'qr'
+      | 'status'
+      | 'connected'
+      | 'disconnected'
+      | 'inbox:message'
+      | 'inbox:status',
+    payload: T,
+  ) {
     // Broadcast ke room sessionId — frontend join room saat membuka modal/halaman.
     const sessionId = (payload as unknown as { sessionId: string }).sessionId
     this.io.to(`session:${sessionId}`).emit(event, payload)
+  }
+
+  // Emit event 'inbox:message' ke room sesi setiap pesan baru tersimpan ke CRM.
+  // Dipanggil SETELAH saveMessage berhasil — supaya inbox web realtime tanpa
+  // polling. messageId boleh null kalau titik save tidak mengembalikannya.
+  private emitInboxMessage(
+    sessionId: string,
+    contactId: string,
+    opts: {
+      phoneNumber: string
+      name: string | null
+      messageId: string | null
+      content: string
+      role: 'USER' | 'AI' | 'AGENT' | 'HUMAN'
+      status: 'SENT' | 'FAILED'
+      source: string | null
+    },
+  ): void {
+    this.emit<InboxMessageEvent>('inbox:message', {
+      sessionId,
+      contactId,
+      phoneNumber: opts.phoneNumber,
+      name: opts.name,
+      message: {
+        id: opts.messageId,
+        content: opts.content,
+        role: opts.role,
+        status: opts.status,
+        source: opts.source,
+        createdAt: new Date().toISOString(),
+      },
+    })
   }
 
   private async wipeFolder(sessionId: string): Promise<void> {
