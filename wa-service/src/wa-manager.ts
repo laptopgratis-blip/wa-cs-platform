@@ -41,19 +41,29 @@ let inflightVersionFetch: Promise<WAVersion | undefined> | null = null
 // ... cap 60s, max 10 percobaan beruntun. restartRequired (515, normal
 // pasca-pairing) tetap fast-reconnect tanpa dihitung sebagai kegagalan.
 const RECONNECT_BASE_DELAY_MS = 1500
-const RECONNECT_MAX_DELAY_MS = 60_000
-const MAX_RECONNECT_ATTEMPTS = 10
+// Cap delay 5 menit (bukan 60 dtk): saat 261 sesi drop serentak (restart /
+// throttle massal WA), reason 408 timeout bertubi. Backoff panjang + cap tinggi
+// bikin sesi BERTAHAN melewati window throttle alih-alih menyerah cepat.
+const RECONNECT_MAX_DELAY_MS = 300_000
+// Cap 30 percobaan (bukan 10): dengan max delay 5 menit, ~30 percobaan =
+// retry hampir 2 jam sebelum ERROR — cukup melewati throttle massal, tapi sesi
+// yang benar-benar mati tetap akhirnya berhenti (tidak hammer selamanya).
+const MAX_RECONNECT_ATTEMPTS = 30
 const FAST_RECONNECT_DELAY_MS = 1500
 
-// Hitung delay reconnect percobaan ke-N (1-based) + jitter ±20% supaya banyak
-// sesi tidak reconnect serempak (thundering herd ke server WA).
+// Hitung delay reconnect percobaan ke-N (1-based). Jitter LEBAR (±50%) + stagger
+// absolut pada gelombang awal supaya banyak sesi yang drop berbarengan TIDAK
+// reconnect serempak (thundering herd → throttle WA → gagal massal). Tanpa ini,
+// restart 261 sesi membuat semua menghantam WA bersamaan dan kena 408.
 function reconnectDelayMs(attempt: number): number {
   const exp = Math.min(
     RECONNECT_MAX_DELAY_MS,
     RECONNECT_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1),
   )
-  const jitter = exp * 0.2 * (Math.random() * 2 - 1)
-  return Math.max(500, Math.round(exp + jitter))
+  const jitter = exp * 0.5 * (Math.random() * 2 - 1)
+  // Percobaan awal (saat herd paling padat) disebar tambahan 0-10 dtk.
+  const stagger = attempt <= 3 ? Math.random() * 10_000 : 0
+  return Math.max(500, Math.round(exp + jitter + stagger))
 }
 
 // Batas putaran drain antrian pesan beruntun per kontak (lihat
@@ -163,11 +173,17 @@ export class WaManager {
     await fs.mkdir(this.sessionsDir, { recursive: true })
     const entries = await fs.readdir(this.sessionsDir, { withFileTypes: true })
     const restored: string[] = []
+    let i = 0
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
       try {
         await this.connect(entry.name)
         restored.push(entry.name)
+        // Stagger antar-restore (~80-200ms): dengan ratusan sesi, connect
+        // back-to-back menghantam WA sekaligus → throttle/408 massal. Sebar
+        // gelombang boot supaya server WA tidak menolak koneksi.
+        i += 1
+        if (i % 5 === 0) await sleep(120 + Math.random() * 120)
       } catch (err) {
         console.error(`[wa-manager] gagal restore ${entry.name}:`, err)
       }
