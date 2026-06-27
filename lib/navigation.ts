@@ -35,6 +35,7 @@ import {
   ShoppingBag,
   ShoppingCart,
   Sliders,
+  Smartphone,
   Sparkles,
   Star,
   TrendingUp,
@@ -184,6 +185,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
     label: 'MANAJEMEN',
     items: [
       { label: 'Users', href: '/admin/users', icon: Users, roles: ['ADMIN'] },
+      {
+        label: 'WhatsApp Sessions',
+        href: '/admin/whatsapp-sessions',
+        icon: Smartphone,
+        roles: ['ADMIN'],
+      },
       {
         label: 'Finance',
         href: '/admin/finance',
