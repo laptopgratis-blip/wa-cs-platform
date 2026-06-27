@@ -12,7 +12,8 @@ if [ ! -f .env.production ]; then
 fi
 
 echo "📥 Pull kode terbaru..."
-git pull origin main
+# Branch produksi = chore/favicon-hulao (bukan main). Override via DEPLOY_BRANCH bila perlu.
+git pull origin "${DEPLOY_BRANCH:-chore/favicon-hulao}"
 
 echo "🔄 Jalankan database migrations (Prisma)..."
 # Migrate via container yang sama biar konsisten dengan environment Docker.
