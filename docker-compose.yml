@@ -96,6 +96,26 @@ services:
       # Pakai network traefik-public eksplisit (multi-network safety).
       - "traefik.docker.network=traefik-public"
 
+  # One-off: `prisma migrate deploy` sebelum deploy. Pakai target `deps` yang
+  # punya node_modules (prisma CLI + engine) + folder prisma/. Image runner
+  # standalone TIDAK punya prisma CLI → `npx prisma` di sana malah coba download
+  # dari registry & gagal (EACCES /home/nextjs, user nextjs tanpa home).
+  # Profile "tools" → tidak ikut `up -d`; jalan via `docker compose run --rm migrate`.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    profiles: ["tools"]
+    env_file:
+      - .env.production
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
   wa-service:
     build:
       context: ./wa-service

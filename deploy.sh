@@ -16,10 +16,11 @@ echo "📥 Pull kode terbaru..."
 git pull origin "${DEPLOY_BRANCH:-chore/favicon-hulao}"
 
 echo "🔄 Jalankan database migrations (Prisma)..."
-# Migrate via container yang sama biar konsisten dengan environment Docker.
+# Migrate via service `migrate` (target deps — punya prisma CLI). Image runner
+# standalone tidak punya prisma CLI, jadi tidak bisa dipakai untuk migrate.
 # `migrate deploy` aman di production: hanya apply migration yang sudah di-commit,
 # tidak pernah generate baru atau prompt interactive.
-docker compose run --rm nextjs npx prisma migrate deploy || {
+docker compose run --rm migrate || {
   echo "⚠️  Migrate gagal — periksa DATABASE_URL atau migration files."
   exit 1
 }
