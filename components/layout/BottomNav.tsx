@@ -36,6 +36,7 @@ export function BottomNav({ onOpenDrawer }: BottomNavProps) {
             <li key={href} className="flex-1">
               <Link
                 href={href}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex h-full min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',
                   active

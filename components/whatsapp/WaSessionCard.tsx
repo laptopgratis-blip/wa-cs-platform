@@ -226,7 +226,7 @@ export function WaSessionCard({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={isBusy}>
+            <Button variant="ghost" size="icon" aria-label="Opsi WhatsApp" disabled={isBusy}>
               {isBusy ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (

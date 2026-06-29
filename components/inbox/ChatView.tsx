@@ -427,6 +427,7 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
         )}
         <div className="flex items-end gap-2">
           <Textarea
+            aria-label="Ketik pesan"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={
@@ -448,6 +449,7 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
             onClick={send}
             disabled={!contact.aiPaused || !draft.trim() || isSending}
             size="icon"
+            aria-label="Kirim pesan"
             className="shrink-0"
           >
             {isSending ? (

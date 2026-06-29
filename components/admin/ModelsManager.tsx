@@ -421,12 +421,13 @@ export function ModelsManager() {
                     <Switch checked={m.isActive} onCheckedChange={() => toggleActive(m)} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(m)}>
+                    <Button variant="ghost" size="icon" aria-label="Edit model" onClick={() => openEdit(m)}>
                       <Pencil className="size-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Hapus model"
                       onClick={() => remove(m)}
                       disabled={isDeleting}
                       className="text-destructive hover:text-destructive"

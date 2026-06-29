@@ -58,7 +58,7 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={refresh} disabled={isPending}>
+          <Button variant="outline" size="icon" aria-label="Segarkan daftar" onClick={refresh} disabled={isPending}>
             <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
           </Button>
           <Button

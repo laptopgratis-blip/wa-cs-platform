@@ -187,7 +187,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
               })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Kepribadian">
               <SelectValue placeholder="Pilih kepribadian" />
             </SelectTrigger>
             <SelectContent>
@@ -221,7 +221,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
               })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Gaya Balas">
               <SelectValue placeholder="Pilih gaya" />
             </SelectTrigger>
             <SelectContent>
@@ -253,7 +253,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
               form.setValue('language', v as Language, { shouldDirty: true })
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Bahasa">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

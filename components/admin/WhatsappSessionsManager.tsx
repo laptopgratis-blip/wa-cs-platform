@@ -148,6 +148,7 @@ export function WhatsappSessionsManager() {
         <div className="relative max-w-sm flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="Cari sesi WhatsApp"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value)
@@ -295,6 +296,7 @@ export function WhatsappSessionsManager() {
           <Button
             size="sm"
             variant="outline"
+            aria-label="Halaman sebelumnya"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1 || isLoading}
           >
@@ -306,6 +308,7 @@ export function WhatsappSessionsManager() {
           <Button
             size="sm"
             variant="outline"
+            aria-label="Halaman berikutnya"
             onClick={() => setPage((p) => p + 1)}
             disabled={page * PAGE_SIZE >= total || isLoading}
           >

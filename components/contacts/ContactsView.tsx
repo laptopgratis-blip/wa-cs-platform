@@ -152,6 +152,7 @@ export function ContactsView({
         <div className="relative min-w-[240px] flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="Cari kontak"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cari nama atau nomor..."
@@ -159,7 +160,7 @@ export function ContactsView({
           />
         </div>
         <Select value={stage} onValueChange={(v) => setStage(v as PipelineStage | typeof ANY)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px]" aria-label="Filter stage">
             <SelectValue placeholder="Semua stage" />
           </SelectTrigger>
           <SelectContent>
@@ -172,7 +173,7 @@ export function ContactsView({
           </SelectContent>
         </Select>
         <Select value={tagFilter} onValueChange={setTagFilter} disabled={tags.length === 0}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[180px]" aria-label="Filter tag">
             <SelectValue placeholder={tags.length === 0 ? 'Belum ada tag' : 'Semua tag'} />
           </SelectTrigger>
           <SelectContent>

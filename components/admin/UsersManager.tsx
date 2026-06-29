@@ -239,6 +239,7 @@ export function UsersManager() {
       <div className="relative max-w-sm">
         <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          aria-label="Cari user"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Cari email atau nama..."
@@ -333,6 +334,7 @@ export function UsersManager() {
                           size="icon"
                           variant="ghost"
                           onClick={() => openEdit(u)}
+                          aria-label="Edit user"
                           title="Edit user"
                         >
                           <Pencil className="size-4" />
@@ -348,6 +350,7 @@ export function UsersManager() {
                             setDeleteTarget(u)
                           }}
                           disabled={isSelf}
+                          aria-label="Hapus user"
                           title={isSelf ? 'Tidak bisa menghapus diri sendiri' : 'Hapus user'}
                           className="text-destructive hover:text-destructive disabled:text-muted-foreground"
                         >

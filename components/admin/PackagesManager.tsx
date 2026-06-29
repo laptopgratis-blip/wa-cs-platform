@@ -220,12 +220,13 @@ export function PackagesManager() {
                     <Switch checked={p.isActive} onCheckedChange={() => toggleActive(p)} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                    <Button variant="ghost" size="icon" aria-label="Edit paket" onClick={() => openEdit(p)}>
                       <Pencil className="size-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Hapus paket"
                       onClick={() => remove(p)}
                       className="text-destructive hover:text-destructive"
                     >

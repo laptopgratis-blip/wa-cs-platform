@@ -184,7 +184,7 @@ export function SoulList({ souls }: SoulListProps) {
                       )}
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(s)}>
+                  <Button variant="ghost" size="icon" aria-label="Edit soul" onClick={() => openEdit(s)}>
                     <Pencil className="size-4" />
                   </Button>
                 </div>
