@@ -72,6 +72,11 @@ function reconnectDelayMs(attempt: number): number {
 // hanya tidak dapat balasan AI tambahan.
 const MAX_DRAIN_ROUNDS = 3
 
+// Watchdog: batas waktu satu pipeline balasan (termasuk drain). Kalau ada await
+// yang hang (mis. internal API tak responsif), lock `inFlight` kontak bisa
+// terkunci permanen → kontak tak pernah dibalas lagi. Saat timeout, lock dilepas.
+const PIPELINE_TIMEOUT_MS = 90_000
+
 async function getBaileysVersionCached(): Promise<WAVersion | undefined> {
   const now = Date.now()
   if (cachedVersion && now - cachedVersion.fetchedAt < BAILEYS_VERSION_TTL_MS) {
@@ -790,36 +795,58 @@ export class WaManager {
     }
     entry.inFlight.add(inFlightKey)
 
+    let watchdog: ReturnType<typeof setTimeout> | undefined
     try {
-      // Putaran pertama: pesan trigger — pipeline yang simpan ke CRM.
-      let round = await this.runCustomerPipeline(entry, {
-        remoteJid,
-        phoneNumber,
-        pushName: msg.pushName ?? null,
-        content,
-        presetHistory: null,
-      })
-
-      // Drain antrian pesan yang masuk selama pipeline jalan: gabungkan jadi
-      // SATU konteks per putaran (join newline), max MAX_DRAIN_ROUNDS putaran
-      // supaya tidak rekursi/loop tak terbatas. inFlight masih dipegang
-      // selama drain → mutual exclusion terjaga, tidak mungkin double-reply /
-      // double-charge untuk kontak yang sama.
-      let drains = 0
-      while (round.shouldContinue && drains < MAX_DRAIN_ROUNDS) {
-        const pending = entry.pendingByContact.get(inFlightKey)
-        if (!pending || pending.length === 0) break
-        entry.pendingByContact.delete(inFlightKey)
-        drains += 1
-        round = await this.runCustomerPipeline(entry, {
+      // Pipeline + drain dibungkus IIFE supaya bisa di-race dengan watchdog
+      // timeout. inFlight tetap dipegang selama drain → mutual exclusion terjaga,
+      // tidak mungkin double-reply / double-charge untuk kontak yang sama.
+      const pipeline = (async () => {
+        // Putaran pertama: pesan trigger — pipeline yang simpan ke CRM.
+        let round = await this.runCustomerPipeline(entry, {
           remoteJid,
           phoneNumber,
           pushName: msg.pushName ?? null,
-          content: pending.join('\n'),
-          presetHistory: round.historyAfter,
+          content,
+          presetHistory: null,
         })
-      }
+
+        // Drain antrian pesan yang masuk selama pipeline jalan: gabungkan jadi
+        // SATU konteks per putaran (join newline), max MAX_DRAIN_ROUNDS putaran
+        // supaya tidak rekursi/loop tak terbatas.
+        let drains = 0
+        while (round.shouldContinue && drains < MAX_DRAIN_ROUNDS) {
+          const pending = entry.pendingByContact.get(inFlightKey)
+          if (!pending || pending.length === 0) break
+          entry.pendingByContact.delete(inFlightKey)
+          drains += 1
+          round = await this.runCustomerPipeline(entry, {
+            remoteJid,
+            phoneNumber,
+            pushName: msg.pushName ?? null,
+            content: pending.join('\n'),
+            presetHistory: round.historyAfter,
+          })
+        }
+      })()
+
+      // Watchdog: kalau pipeline hang > PIPELINE_TIMEOUT_MS, lepaskan lock supaya
+      // kontak tidak terkunci permanen. Promise pipeline yang masih jalan
+      // dibiarkan selesai sendiri (tak bisa di-cancel); reaction race tetap
+      // melekat sehingga rejection telat tidak jadi unhandledRejection.
+      const timeout = new Promise<never>((_, reject) => {
+        watchdog = setTimeout(
+          () => reject(new Error(`pipeline timeout ${PIPELINE_TIMEOUT_MS}ms`)),
+          PIPELINE_TIMEOUT_MS,
+        )
+      })
+      await Promise.race([pipeline, timeout])
+    } catch (err) {
+      console.error(
+        `[wa-manager:${sessionId}] pipeline ${phoneNumber} gagal/timeout:`,
+        err,
+      )
     } finally {
+      if (watchdog) clearTimeout(watchdog)
       // Sisa antrian (kalau ada) sudah tersimpan di CRM — buang dari memori
       // supaya tidak terbawa ke pipeline berikutnya, lalu lepas inFlight.
       entry.pendingByContact.delete(inFlightKey)

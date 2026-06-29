@@ -12,6 +12,10 @@ import { ApiKeyError, getApiKey } from './ai-keys.js'
 import type { InternalMessageHistoryItem } from './internal-api.js'
 
 const MAX_TOKENS = 800
+// GPT-5 family: `max_completion_tokens` dipakai BARENG reasoning token (invisible).
+// 800 cukup untuk balasan pendek, tapi rawan reply kosong saat reasoning makan
+// jatah pada output panjang. Pakai budget lebih besar khusus GPT-5.
+const OPENAI_GPT5_MAX_TOKENS = 2500
 // Default model per provider — dipakai kalau modelId kosong (defensive).
 const DEFAULT_MODEL_BY_PROVIDER: Record<Provider, string> = {
   ANTHROPIC: 'claude-haiku-4-5-20251001',
@@ -184,13 +188,22 @@ async function replyViaOpenai(
     : {}
   const res = await client.chat.completions.create({
     model: modelId,
-    max_completion_tokens: MAX_TOKENS,
+    max_completion_tokens: isGpt5 ? OPENAI_GPT5_MAX_TOKENS : MAX_TOKENS,
     messages,
     ...extraOpts,
   })
 
-  const reply = res.choices[0]?.message?.content?.trim() ?? ''
-  if (!reply) return { ok: false, error: 'AI tidak mengembalikan teks' }
+  const choice = res.choices[0]
+  const reply = choice?.message?.content?.trim() ?? ''
+  if (!reply) {
+    // Diagnostic: kenapa reply kosong (mirror cabang Anthropic). Kasus umum GPT-5:
+    // finish_reason='length' + reasoning_tokens tinggi → budget habis dipakai
+    // reasoning. Log verbose supaya cepat diagnose di prod tanpa restart-debug.
+    console.error(
+      `[ai-handler:openai] empty reply — finish_reason=${choice?.finish_reason}, model=${modelId}, completion_tokens=${res.usage?.completion_tokens}, reasoning_tokens=${res.usage?.completion_tokens_details?.reasoning_tokens}, prompt_tokens=${res.usage?.prompt_tokens}`,
+    )
+    return { ok: false, error: 'AI tidak mengembalikan teks' }
+  }
   return {
     ok: true,
     reply,
@@ -286,7 +299,8 @@ function toAlternatingMessages(
   if (!last || last.role !== 'user') {
     out.push({ role: 'user', content: latestUserMessage })
   } else if (!last.content.endsWith(latestUserMessage)) {
-    last.content = latestUserMessage
+    // Append (bukan replace) supaya konteks pesan user sebelumnya tidak hilang.
+    last.content += `\n\n${latestUserMessage}`
   }
 
   // Beberapa provider (Claude) butuh pesan pertama dari user. Buang prefix
