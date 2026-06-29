@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { ContactDetailSheet } from '@/components/contacts/ContactDetailSheet'
 import { PipelineBadge } from '@/components/contacts/PipelineBadge'
 import type { ContactRow } from '@/components/contacts/types'
+import { Pagination } from '@/components/shared/Pagination'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +59,8 @@ const STAGES: PipelineStage[] = [
 ]
 
 const ANY = '__ANY__'
+// Samakan dgn take awal di contacts/page.tsx (SSR) supaya halaman 1 konsisten.
+const CONTACTS_PAGE_SIZE = 100
 
 export function ContactsView({
   initialContacts,
@@ -67,6 +70,7 @@ export function ContactsView({
   const [contacts, setContacts] = useState(initialContacts)
   const [tags, setTags] = useState(initialTags)
   const [total, setTotal] = useState(initialTotal)
+  const [page, setPage] = useState(1)
   const [stage, setStage] = useState<PipelineStage | typeof ANY>(ANY)
   const [tagFilter, setTagFilter] = useState<string>(ANY)
   const [search, setSearch] = useState('')
@@ -94,6 +98,8 @@ export function ContactsView({
       if (stage !== ANY) params.set('stage', stage)
       if (tagFilter !== ANY) params.set('tag', tagFilter)
       if (debouncedSearch) params.set('search', debouncedSearch)
+      params.set('take', String(CONTACTS_PAGE_SIZE))
+      params.set('skip', String((page - 1) * CONTACTS_PAGE_SIZE))
       const res = await fetch(`/api/contacts?${params}`)
       const json = (await res.json()) as {
         success: boolean
@@ -107,7 +113,7 @@ export function ContactsView({
     } finally {
       setLoading(false)
     }
-  }, [stage, tagFilter, debouncedSearch])
+  }, [stage, tagFilter, debouncedSearch, page])
 
   useEffect(() => {
     if (isFirst.current) {
@@ -154,12 +160,21 @@ export function ContactsView({
           <Input
             aria-label="Cari kontak"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
             placeholder="Cari nama atau nomor..."
             className="pl-8"
           />
         </div>
-        <Select value={stage} onValueChange={(v) => setStage(v as PipelineStage | typeof ANY)}>
+        <Select
+          value={stage}
+          onValueChange={(v) => {
+            setStage(v as PipelineStage | typeof ANY)
+            setPage(1)
+          }}
+        >
           <SelectTrigger className="w-[180px]" aria-label="Filter stage">
             <SelectValue placeholder="Semua stage" />
           </SelectTrigger>
@@ -172,7 +187,14 @@ export function ContactsView({
             ))}
           </SelectContent>
         </Select>
-        <Select value={tagFilter} onValueChange={setTagFilter} disabled={tags.length === 0}>
+        <Select
+          value={tagFilter}
+          onValueChange={(v) => {
+            setTagFilter(v)
+            setPage(1)
+          }}
+          disabled={tags.length === 0}
+        >
           <SelectTrigger className="w-[180px]" aria-label="Filter tag">
             <SelectValue placeholder={tags.length === 0 ? 'Belum ada tag' : 'Semua tag'} />
           </SelectTrigger>
@@ -280,6 +302,17 @@ export function ContactsView({
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {total > CONTACTS_PAGE_SIZE && (
+        <Pagination
+          page={page}
+          pageSize={CONTACTS_PAGE_SIZE}
+          total={total}
+          isLoading={isLoading}
+          onPageChange={setPage}
+          noun="kontak"
+        />
       )}
 
       <ContactDetailSheet

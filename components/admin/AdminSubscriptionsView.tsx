@@ -6,6 +6,7 @@ import { CheckCircle2, ExternalLink, Loader2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Pagination } from '@/components/shared/Pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -53,9 +54,13 @@ function daysRemaining(endDate: string): number {
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)))
 }
 
+const PAGE_SIZE = 50
+
 export function AdminSubscriptionsView() {
   const [tab, setTab] = useState<'active' | 'pending' | 'all'>('active')
   const [subs, setSubs] = useState<Sub[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [proofTarget, setProofTarget] = useState<Sub | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -65,12 +70,17 @@ export function AdminSubscriptionsView() {
     setLoading(true)
     try {
       const status = tab === 'active' ? 'ACTIVE' : tab === 'pending' ? 'PENDING' : 'all'
-      const res = await fetch(`/api/admin/subscriptions?status=${status}&pageSize=100`)
+      const res = await fetch(
+        `/api/admin/subscriptions?status=${status}&page=${page}&pageSize=${PAGE_SIZE}`,
+      )
       const json = (await res.json()) as {
         success: boolean
-        data?: { subscriptions: Sub[] }
+        data?: { subscriptions: Sub[]; total: number }
       }
-      if (json.success && json.data) setSubs(json.data.subscriptions)
+      if (json.success && json.data) {
+        setSubs(json.data.subscriptions)
+        setTotal(json.data.total)
+      }
     } finally {
       setLoading(false)
     }
@@ -78,7 +88,8 @@ export function AdminSubscriptionsView() {
 
   useEffect(() => {
     void load()
-  }, [tab])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, page])
 
   async function approveInvoice(invoiceId: string) {
     setActioning(true)
@@ -131,7 +142,13 @@ export function AdminSubscriptionsView() {
 
   return (
     <>
-      <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v as typeof tab)
+          setPage(1)
+        }}
+      >
         <TabsList>
           <TabsTrigger value="active">Aktif</TabsTrigger>
           <TabsTrigger value="pending">Pending</TabsTrigger>
@@ -144,6 +161,18 @@ export function AdminSubscriptionsView() {
             loading={loading}
             onClickInvoice={() => {}}
           />
+          {!loading && total > PAGE_SIZE && (
+            <div className="mt-4">
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                isLoading={loading}
+                onPageChange={setPage}
+                noun="subscription"
+              />
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="pending" className="mt-4">
@@ -160,6 +189,18 @@ export function AdminSubscriptionsView() {
             loading={loading}
             onClickInvoice={() => {}}
           />
+          {!loading && total > PAGE_SIZE && (
+            <div className="mt-4">
+              <Pagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                isLoading={loading}
+                onPageChange={setPage}
+                noun="subscription"
+              />
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

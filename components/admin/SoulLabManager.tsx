@@ -27,6 +27,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Pagination } from '@/components/shared/Pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -1381,10 +1382,14 @@ function EvalList({
 // History section
 // ─────────────────────────────────────────
 
+const SIM_PAGE_SIZE = 50
+
 function HistorySection({ refreshKey }: { refreshKey?: string }) {
   const [items, setItems] = useState<Simulation[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('ALL')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [detailOpen, setDetailOpen] = useState<Simulation | null>(null)
 
   const load = useCallback(async () => {
@@ -1392,13 +1397,17 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
     try {
       const params = new URLSearchParams()
       if (statusFilter !== 'ALL') params.set('status', statusFilter)
+      params.set('page', String(page))
       const res = await fetch(`/api/admin/soul-lab/simulations?${params.toString()}`)
       const json = await res.json()
-      if (json.success) setItems(json.data.items)
+      if (json.success) {
+        setItems(json.data.items)
+        setTotal(json.data.pagination?.total ?? 0)
+      }
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [statusFilter, page])
 
   useEffect(() => {
     // Microtask supaya setState pertama (di dalam load) tidak dianggap sync
@@ -1411,8 +1420,14 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <CardTitle className="text-base">History Simulasi</CardTitle>
         <div className="flex items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-8 w-36">
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => {
+              setStatusFilter(v)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger className="h-8 w-36" aria-label="Filter status simulasi">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1503,6 +1518,18 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
               ))}
             </TableBody>
           </Table>
+        )}
+        {!loading && total > SIM_PAGE_SIZE && (
+          <div className="px-4 pt-3">
+            <Pagination
+              page={page}
+              pageSize={SIM_PAGE_SIZE}
+              total={total}
+              isLoading={loading}
+              onPageChange={setPage}
+              noun="simulasi"
+            />
+          </div>
         )}
       </CardContent>
 
