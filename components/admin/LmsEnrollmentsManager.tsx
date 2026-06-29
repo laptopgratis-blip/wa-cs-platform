@@ -15,7 +15,7 @@ import {
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { enrollmentMeta, statusMeta } from '@/lib/status'
 
 interface Enrollment {
   id: string
@@ -241,17 +242,10 @@ export function LmsEnrollmentsManager() {
                           · {e.studentName}
                         </span>
                       )}
-                      <Badge
-                        className={
-                          e.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : e.status === 'REVOKED'
-                              ? 'bg-rose-100 text-rose-700'
-                              : 'bg-warm-100 text-warm-700'
-                        }
-                      >
-                        {e.status}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(enrollmentMeta, e.status).tone}
+                        label={statusMeta(enrollmentMeta, e.status).label}
+                      />
                     </div>
                     <div className="text-xs text-warm-600">
                       Course: <strong>{e.course.title}</strong> ·{' '}

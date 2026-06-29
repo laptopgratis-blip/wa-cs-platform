@@ -15,7 +15,7 @@ import Image from 'next/image'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { manualPaymentMeta, statusMeta } from '@/lib/status'
 
 interface ManualPaymentRow {
   id: string
@@ -72,15 +73,6 @@ const STATUS_LABEL: Record<ManualPaymentStatus, string> = {
   PENDING: 'Menunggu',
   CONFIRMED: 'Dikonfirmasi',
   REJECTED: 'Ditolak',
-}
-
-const STATUS_VARIANT: Record<
-  ManualPaymentStatus,
-  'default' | 'secondary' | 'destructive' | 'outline'
-> = {
-  PENDING: 'secondary',
-  CONFIRMED: 'default',
-  REJECTED: 'destructive',
 }
 
 const STATUS_ICON: Record<ManualPaymentStatus, typeof Clock> = {
@@ -264,13 +256,11 @@ export function FinanceManager() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={STATUS_VARIANT[r.status]}
-                        className="flex w-fit items-center gap-1"
-                      >
-                        <StatusIcon className="size-3" />
-                        {STATUS_LABEL[r.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(manualPaymentMeta, r.status).tone}
+                        label={STATUS_LABEL[r.status]}
+                        icon={StatusIcon}
+                      />
                       {r.confirmer && r.status !== 'PENDING' && (
                         <div className="mt-1 text-[10px] text-muted-foreground">
                           oleh {r.confirmer.name ?? r.confirmer.email}

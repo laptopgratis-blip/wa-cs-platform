@@ -20,6 +20,7 @@ import {
 import Link from 'next/link'
 import { useState } from 'react'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -33,6 +34,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatRelativeTime } from '@/lib/format-time'
+import { deliveryStatusMeta, paymentStatusMeta, statusMeta } from '@/lib/status'
 import {
   getColumnByKey,
   resolveVisibleColumns,
@@ -683,50 +685,14 @@ function TrackingCell({
 }
 
 function PaymentBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    PENDING: 'bg-amber-100 text-amber-900',
-    WAITING_CONFIRMATION: 'bg-orange-100 text-orange-900',
-    PAID: 'bg-emerald-100 text-emerald-900',
-    CANCELLED: 'bg-warm-100 text-warm-700',
-  }
-  const label: Record<string, string> = {
-    PENDING: '⏳ Belum bayar',
-    WAITING_CONFIRMATION: '🔍 Cek bukti',
-    PAID: '✓ Lunas',
-    CANCELLED: '✕ Batal',
-  }
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-        map[status] ?? ''
-      }`}
-    >
-      {label[status] ?? status}
-    </span>
-  )
+  const meta = statusMeta(paymentStatusMeta, status)
+  return <StatusBadge tone={meta.tone} label={meta.label} />
 }
 
 function DeliveryBadge({ status }: { status: string }) {
   if (status === 'PENDING' || status === 'CANCELLED') {
     return <DashCell />
   }
-  const map: Record<string, string> = {
-    PROCESSING: 'bg-sky-100 text-sky-900',
-    SHIPPED: 'bg-blue-100 text-blue-900',
-    DELIVERED: 'bg-emerald-100 text-emerald-900',
-  }
-  const label: Record<string, string> = {
-    PROCESSING: '⚙️ Proses',
-    SHIPPED: '🚚 Dikirim',
-    DELIVERED: '✅ Selesai',
-  }
-  return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-        map[status] ?? ''
-      }`}
-    >
-      {label[status] ?? status}
-    </span>
-  )
+  const meta = statusMeta(deliveryStatusMeta, status)
+  return <StatusBadge tone={meta.tone} label={meta.label} />
 }
