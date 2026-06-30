@@ -12,9 +12,10 @@ import {
   XCircle,
 } from 'lucide-react'
 import Image from 'next/image'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Pagination } from '@/components/shared/Pagination'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
@@ -62,6 +63,8 @@ interface ManualPaymentRow {
 
 type FilterValue = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'ALL'
 
+const PAGE_SIZE = 20
+
 const FILTER_TABS: { value: FilterValue; label: string }[] = [
   { value: 'PENDING', label: 'Menunggu Konfirmasi' },
   { value: 'CONFIRMED', label: 'Dikonfirmasi' },
@@ -85,6 +88,8 @@ export function FinanceManager() {
   const [rows, setRows] = useState<ManualPaymentRow[]>([])
   const [filter, setFilter] = useState<FilterValue>('PENDING')
   const [isLoading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
 
   const [proofTarget, setProofTarget] = useState<ManualPaymentRow | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<ManualPaymentRow | null>(null)
@@ -95,12 +100,17 @@ export function FinanceManager() {
   async function load(activeFilter: FilterValue = filter) {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/finance?status=${activeFilter}`)
+      const res = await fetch(
+        `/api/admin/finance?status=${activeFilter}&page=${page}&pageSize=${PAGE_SIZE}`,
+      )
       const json = (await res.json()) as {
         success: boolean
-        data?: ManualPaymentRow[]
+        data?: { rows: ManualPaymentRow[]; total: number }
       }
-      if (json.success && json.data) setRows(json.data)
+      if (json.success && json.data) {
+        setRows(json.data.rows)
+        setTotal(json.data.total)
+      }
     } finally {
       setLoading(false)
     }
@@ -109,15 +119,7 @@ export function FinanceManager() {
   useEffect(() => {
     void load(filter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter])
-
-  const counts = useMemo(() => {
-    const c = { PENDING: 0, CONFIRMED: 0, REJECTED: 0 }
-    rows.forEach((r) => {
-      c[r.status]++
-    })
-    return c
-  }, [rows])
+  }, [filter, page])
 
   async function doConfirm() {
     if (!confirmTarget) return
@@ -178,14 +180,20 @@ export function FinanceManager() {
         </p>
       </div>
 
-      <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterValue)}>
+      <Tabs
+        value={filter}
+        onValueChange={(v) => {
+          setFilter(v as FilterValue)
+          setPage(1)
+        }}
+      >
         <TabsList>
           {FILTER_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
-              {filter === t.value && t.value !== 'ALL' && counts[t.value] > 0 && (
+              {filter === t.value && t.value !== 'ALL' && total > 0 && (
                 <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700">
-                  {counts[t.value]}
+                  {total}
                 </span>
               )}
             </TabsTrigger>
@@ -306,6 +314,17 @@ export function FinanceManager() {
           </TableBody>
         </Table>
       </div>
+
+      {total > PAGE_SIZE && (
+        <Pagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          isLoading={isLoading}
+          onPageChange={setPage}
+          noun="pembayaran"
+        />
+      )}
 
       {/* Modal preview bukti */}
       <Dialog

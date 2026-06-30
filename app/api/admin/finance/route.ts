@@ -19,6 +19,11 @@ export async function GET(req: Request) {
   if (!ALLOWED_STATUS.has(statusFilter)) {
     return jsonError('Status filter tidak valid')
   }
+  const page = Math.max(1, Number(url.searchParams.get('page') ?? '1'))
+  const pageSize = Math.min(
+    50,
+    Math.max(1, Number(url.searchParams.get('pageSize') ?? '20')),
+  )
 
   try {
     // Halaman /admin/finance khusus pembelian token. LP upgrade ada
@@ -33,25 +38,32 @@ export async function GET(req: Request) {
             status: statusFilter as 'PENDING' | 'CONFIRMED' | 'REJECTED',
           }
 
-    const rows = await prisma.manualPayment.findMany({
-      where,
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-      take: 200,
-      include: {
-        user: { select: { id: true, name: true, email: true } },
-        package: { select: { id: true, name: true } },
-        confirmer: { select: { id: true, name: true, email: true } },
-      },
-    })
+    const [rows, total] = await Promise.all([
+      prisma.manualPayment.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          package: { select: { id: true, name: true } },
+          confirmer: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      prisma.manualPayment.count({ where }),
+    ])
 
-    return jsonOk(
-      rows.map((r) => ({
+    return jsonOk({
+      page,
+      pageSize,
+      total,
+      rows: rows.map((r) => ({
         ...r,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
         confirmedAt: r.confirmedAt?.toISOString() ?? null,
       })),
-    )
+    })
   } catch (err) {
     console.error('[GET /api/admin/finance] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)
