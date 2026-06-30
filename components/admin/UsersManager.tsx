@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
+import { Pagination } from '@/components/shared/Pagination'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,11 +64,15 @@ interface UserRow {
 
 type EditableRole = 'USER' | 'ADMIN'
 
+const PAGE_SIZE = 20
+
 export function UsersManager() {
   const { data: session } = useSession()
   const currentUserId = session?.user?.id ?? null
 
   const [users, setUsers] = useState<UserRow[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [isLoading, setLoading] = useState(true)
@@ -96,10 +101,18 @@ export function UsersManager() {
 
   async function refresh() {
     const params = new URLSearchParams()
+    params.set('page', String(page))
+    params.set('pageSize', String(PAGE_SIZE))
     if (debounced) params.set('search', debounced)
     const res = await fetch(`/api/admin/users?${params}`)
-    const json = (await res.json()) as { success: boolean; data?: UserRow[] }
-    if (json.success && json.data) setUsers(json.data)
+    const json = (await res.json()) as {
+      success: boolean
+      data?: { users: UserRow[]; total: number }
+    }
+    if (json.success && json.data) {
+      setUsers(json.data.users)
+      setTotal(json.data.total)
+    }
   }
 
   useEffect(() => {
@@ -107,16 +120,24 @@ export function UsersManager() {
     setLoading(true)
     ;(async () => {
       const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('pageSize', String(PAGE_SIZE))
       if (debounced) params.set('search', debounced)
       const res = await fetch(`/api/admin/users?${params}`)
-      const json = (await res.json()) as { success: boolean; data?: UserRow[] }
-      if (!aborted && json.success && json.data) setUsers(json.data)
+      const json = (await res.json()) as {
+        success: boolean
+        data?: { users: UserRow[]; total: number }
+      }
+      if (!aborted && json.success && json.data) {
+        setUsers(json.data.users)
+        setTotal(json.data.total)
+      }
       if (!aborted) setLoading(false)
     })()
     return () => {
       aborted = true
     }
-  }, [debounced])
+  }, [debounced, page])
 
   async function topup() {
     if (!topupTarget) return
@@ -241,7 +262,10 @@ export function UsersManager() {
         <Input
           aria-label="Cari user"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
           placeholder="Cari email atau nama..."
           className="pl-8"
         />
@@ -365,6 +389,17 @@ export function UsersManager() {
           </TableBody>
         </Table>
       </div>
+
+      {total > PAGE_SIZE && (
+        <Pagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={total}
+          isLoading={isLoading}
+          onPageChange={setPage}
+          noun="user"
+        />
+      )}
 
       {/* Top-up dialog */}
       <Dialog
