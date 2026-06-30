@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -126,6 +127,11 @@ export function OrderFormsClient({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [isDeleting, setDeleting] = useState(false)
 
   function openCreate() {
     setEditingId(null)
@@ -241,10 +247,13 @@ export function OrderFormsClient({
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Hapus form "${name}"?`)) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/order-forms/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/order-forms/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const data = await res.json()
       if (!res.ok || !data.success) {
         toast.error(data.error ?? 'Gagal menghapus')
@@ -252,8 +261,11 @@ export function OrderFormsClient({
       }
       await refreshList()
       toast.success('Form dihapus')
+      setDeleteTarget(null)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -384,7 +396,7 @@ export function OrderFormsClient({
                         size="sm"
                         variant="outline"
                         className="text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDelete(f.id, f.name)}
+                        onClick={() => setDeleteTarget({ id: f.id, name: f.name })}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
@@ -880,6 +892,22 @@ export function OrderFormsClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus form ini?"
+        description={
+          <>
+            Hapus form <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
+            bisa dibatalkan.
+          </>
+        }
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

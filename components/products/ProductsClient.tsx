@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -147,6 +148,11 @@ export function ProductsClient({
   const [unlimitedStock, setUnlimitedStock] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [isDeleting, setDeleting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function openCreate() {
@@ -453,10 +459,13 @@ export function ProductsClient({
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Hapus produk "${name}"?`)) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/products/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const data = await res.json()
       if (!res.ok || !data.success) {
         toast.error(data.error ?? 'Gagal menghapus')
@@ -464,8 +473,11 @@ export function ProductsClient({
       }
       await refreshList()
       toast.success('Produk dihapus')
+      setDeleteTarget(null)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -587,7 +599,7 @@ export function ProductsClient({
                       size="sm"
                       variant="outline"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => handleDelete(p.id, p.name)}
+                      onClick={() => setDeleteTarget({ id: p.id, name: p.name })}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -1160,6 +1172,22 @@ export function ProductsClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus produk ini?"
+        description={
+          <>
+            Hapus produk <strong>{deleteTarget?.name}</strong>? Tindakan ini
+            tidak bisa dibatalkan.
+          </>
+        }
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

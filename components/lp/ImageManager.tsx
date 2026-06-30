@@ -16,6 +16,7 @@ import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 
@@ -47,6 +48,7 @@ export function ImageManager({ lpId }: { lpId: string }) {
   const [isLoading, setLoading] = useState(true)
   const [isUploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LpImageRow | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadAll() {
@@ -114,17 +116,20 @@ export function ImageManager({ lpId }: { lpId: string }) {
     }
   }
 
-  async function handleDelete(img: LpImageRow) {
-    if (!confirm(`Hapus gambar "${img.originalName}"?`)) return
-    setDeletingId(img.id)
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeletingId(deleteTarget.id)
     try {
-      const res = await fetch(`/api/lp/images/${img.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/lp/images/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal menghapus')
         return
       }
       toast.success('Gambar dihapus')
+      setDeleteTarget(null)
       void loadAll()
     } finally {
       setDeletingId(null)
@@ -268,7 +273,7 @@ export function ImageManager({ lpId }: { lpId: string }) {
                       size="sm"
                       variant="ghost"
                       className="h-6 px-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => handleDelete(img)}
+                      onClick={() => setDeleteTarget(img)}
                       disabled={deletingId === img.id}
                       title="Hapus gambar"
                     >
@@ -311,6 +316,22 @@ export function ImageManager({ lpId }: { lpId: string }) {
           </Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus gambar ini?"
+        description={
+          <>
+            Hapus gambar <strong>{deleteTarget?.originalName}</strong>? Tindakan
+            ini tidak bisa dibatalkan.
+          </>
+        }
+        isLoading={deletingId !== null}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }
