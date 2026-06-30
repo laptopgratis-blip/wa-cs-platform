@@ -6,6 +6,7 @@ import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -111,6 +112,7 @@ export function ModelsManager() {
   const [isActive, setIsActive] = useState(true)
   const [isSaving, setSaving] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<AiModelRow | null>(null)
   const [isRecalculating, setRecalculating] = useState(false)
   const [confirmRugi, setConfirmRugi] = useState(false)
 
@@ -325,17 +327,20 @@ export function ModelsManager() {
     }
   }
 
-  async function remove(m: AiModelRow) {
-    if (!confirm(`Hapus model "${m.name}"?`)) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(`/api/admin/models/${m.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/admin/models/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal menghapus')
         return
       }
       toast.success('Model dihapus')
+      setDeleteTarget(null)
       void load()
     } finally {
       setDeleting(false)
@@ -428,7 +433,7 @@ export function ModelsManager() {
                       variant="ghost"
                       size="icon"
                       aria-label="Hapus model"
-                      onClick={() => remove(m)}
+                      onClick={() => setDeleteTarget(m)}
                       disabled={isDeleting}
                       className="text-destructive hover:text-destructive"
                     >
@@ -703,6 +708,22 @@ export function ModelsManager() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus model ini?"
+        description={
+          <>
+            Hapus model <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
+            bisa dibatalkan.
+          </>
+        }
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }
