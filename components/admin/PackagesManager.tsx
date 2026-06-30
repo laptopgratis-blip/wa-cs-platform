@@ -5,6 +5,7 @@ import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -48,6 +49,8 @@ export function PackagesManager() {
   const [isPopular, setIsPopular] = useState(false)
   const [isActive, setIsActive] = useState(true)
   const [isSaving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<PackageRow | null>(null)
+  const [isDeleting, setDeleting] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -127,16 +130,24 @@ export function PackagesManager() {
     void load()
   }
 
-  async function remove(p: PackageRow) {
-    if (!confirm(`Hapus paket "${p.name}"?`)) return
-    const res = await fetch(`/api/admin/packages/${p.id}`, { method: 'DELETE' })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (!res.ok || !json.success) {
-      toast.error(json.error || 'Gagal menghapus')
-      return
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/packages/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      const json = (await res.json()) as { success: boolean; error?: string }
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal menghapus')
+        return
+      }
+      toast.success('Paket dihapus')
+      setDeleteTarget(null)
+      void load()
+    } finally {
+      setDeleting(false)
     }
-    toast.success('Paket dihapus')
-    void load()
   }
 
   return (
@@ -227,7 +238,7 @@ export function PackagesManager() {
                       variant="ghost"
                       size="icon"
                       aria-label="Hapus paket"
-                      onClick={() => remove(p)}
+                      onClick={() => setDeleteTarget(p)}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="size-4" />
@@ -303,6 +314,22 @@ export function PackagesManager() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus paket ini?"
+        description={
+          <>
+            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
+            bisa dibatalkan.
+          </>
+        }
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

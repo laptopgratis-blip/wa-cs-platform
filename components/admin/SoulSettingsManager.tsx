@@ -11,6 +11,7 @@ import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -110,6 +111,7 @@ function SoulOptionTable({
   const [order, setOrder] = useState('0')
   const [isSaving, setSaving] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<SoulOptionRow | null>(null)
 
   async function load() {
     setLoading(true)
@@ -193,17 +195,20 @@ function SoulOptionTable({
     void load()
   }
 
-  async function remove(r: SoulOptionRow) {
-    if (!confirm(`Hapus "${r.name}"? Soul lama yang masih merujuk akan otomatis fallback ke prompt tanpa ${labelSingular.toLowerCase()}.`)) return
+  async function confirmDelete() {
+    if (!deleteTarget) return
     setDeleting(true)
     try {
-      const res = await fetch(`${ENDPOINTS[kind]}/${r.id}`, { method: 'DELETE' })
+      const res = await fetch(`${ENDPOINTS[kind]}/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal menghapus')
         return
       }
       toast.success(`${labelSingular} dihapus`)
+      setDeleteTarget(null)
       void load()
     } finally {
       setDeleting(false)
@@ -276,7 +281,7 @@ function SoulOptionTable({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => remove(r)}
+                      onClick={() => setDeleteTarget(r)}
                       disabled={isDeleting}
                       className="text-destructive hover:text-destructive"
                     >
@@ -383,6 +388,23 @@ function SoulOptionTable({
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus ${labelSingular.toLowerCase()} ini?`}
+        description={
+          <>
+            Hapus <strong>{deleteTarget?.name}</strong>? Soul lama yang masih
+            merujuk akan otomatis fallback ke prompt tanpa{' '}
+            {labelSingular.toLowerCase()}.
+          </>
+        }
+        isLoading={isDeleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }
