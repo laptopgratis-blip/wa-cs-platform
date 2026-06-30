@@ -22,6 +22,7 @@ import { toast } from 'sonner'
 
 import { CreateLpModal } from '@/components/lp/CreateLpModal'
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -84,6 +85,7 @@ export function LpManager() {
   const [isLoading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LpRow | null>(null)
 
   async function load() {
     setLoading(true)
@@ -115,22 +117,18 @@ export function LpManager() {
     })()
   }, [])
 
-  async function handleDelete(lp: LpRow) {
-    if (
-      !confirm(
-        `Hapus LP "${lp.title}"? Semua gambar yang menempel di LP ini juga dihapus.`,
-      )
-    )
-      return
-    setDeletingId(lp.id)
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setDeletingId(deleteTarget.id)
     try {
-      const res = await fetch(`/api/lp/${lp.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/lp/${deleteTarget.id}`, { method: 'DELETE' })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal menghapus')
         return
       }
       toast.success('LP berhasil dihapus')
+      setDeleteTarget(null)
       void load()
     } finally {
       setDeletingId(null)
@@ -511,7 +509,7 @@ export function LpManager() {
                       variant="ghost"
                       size="sm"
                       disabled={deletingId === lp.id}
-                      onClick={() => handleDelete(lp)}
+                      onClick={() => setDeleteTarget(lp)}
                       className="text-destructive hover:text-destructive"
                       title="Hapus LP"
                     >
@@ -536,6 +534,23 @@ export function LpManager() {
           setCreateOpen(false)
           void load()
         }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus Landing Page?"
+        description={
+          <>
+            Yakin mau hapus LP <strong>{deleteTarget?.title}</strong>? Semua
+            gambar yang menempel di LP ini juga ikut dihapus. Tindakan ini tidak
+            bisa dibatalkan.
+          </>
+        }
+        isLoading={Boolean(deleteTarget) && deletingId === deleteTarget?.id}
+        onConfirm={confirmDelete}
       />
     </div>
   )

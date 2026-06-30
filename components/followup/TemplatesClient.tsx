@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -140,6 +141,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
   const [editing, setEditing] = useState<Template | null>(null)
   const [creating, setCreating] = useState(false)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Template | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
 
@@ -200,16 +202,17 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
     }
   }
 
-  async function handleDelete(t: Template) {
-    if (!confirm(`Hapus template "${t.name}"?`)) return
-    setActionId(t.id)
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    setActionId(deleteTarget.id)
     try {
-      const res = await fetch(`/api/followup/templates/${t.id}`, {
+      const res = await fetch(`/api/followup/templates/${deleteTarget.id}`, {
         method: 'DELETE',
       })
       const json = await res.json()
       if (!json.success) alert(json.error)
       else {
+        setDeleteTarget(null)
         setLoading(true)
         reload()
       }
@@ -329,7 +332,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
                               size="sm"
                               variant="outline"
                               disabled={actionId === t.id}
-                              onClick={() => handleDelete(t)}
+                              onClick={() => setDeleteTarget(t)}
                             >
                               <Trash2 className="size-4" />
                             </Button>
@@ -364,6 +367,22 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title="Hapus Template Follow-Up?"
+        description={
+          <>
+            Template <strong>{deleteTarget?.name}</strong> akan dihapus permanen
+            dan tidak bisa dikembalikan.
+          </>
+        }
+        isLoading={actionId === deleteTarget?.id}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

@@ -13,6 +13,7 @@ import {
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +43,7 @@ const statusBadge: Record<
 export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
   const [isStarting, setStarting] = useState(false)
   const [isCancelling, setCancelling] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const total = broadcast.totalTargets
   const done = broadcast.totalSent + broadcast.totalFailed
@@ -72,7 +74,6 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
   }
 
   async function cancel() {
-    if (!confirm('Yakin batalkan broadcast ini?')) return
     setCancelling(true)
     try {
       const res = await fetch(`/api/broadcast/${broadcast.id}`, {
@@ -84,6 +85,7 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
         return
       }
       toast.success('Broadcast dibatalkan')
+      setConfirmOpen(false)
       onChanged()
     } finally {
       setCancelling(false)
@@ -170,7 +172,7 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
             <Button
               size="sm"
               variant="outline"
-              onClick={cancel}
+              onClick={() => setConfirmOpen(true)}
               disabled={isCancelling || isStarting}
               className={canStart ? '' : 'flex-1'}
             >
@@ -184,6 +186,24 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
           )}
         </div>
       </CardContent>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(o) => {
+          if (!o) setConfirmOpen(false)
+        }}
+        title="Batalkan broadcast?"
+        description={
+          <>
+            Yakin ingin membatalkan broadcast{' '}
+            <strong>{broadcast.name}</strong>? Tindakan ini tidak bisa
+            dibatalkan.
+          </>
+        }
+        confirmLabel="Ya, Batalkan"
+        isLoading={isCancelling}
+        onConfirm={cancel}
+      />
     </Card>
   )
 }
