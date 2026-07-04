@@ -45,6 +45,9 @@ interface Props {
   // Konversi IDR → token. Snapshot dari PricingSettings.pricePerToken aktif
   // saat page render. Default 2 (Rp 2/token).
   pricePerToken: number
+  // Cap visitor per bulan per tier, dari lib/lp-quota.ts (sumber enforcement).
+  // Jangan hardcode angka di sini — biar selalu sinkron dgn kuota asli.
+  visitorCap: Record<string, number>
 }
 
 const TIER_ICON: Record<string, typeof Sparkles> = {
@@ -91,6 +94,7 @@ export function PricingView({
   currentTier,
   currentBalance,
   pricePerToken,
+  visitorCap,
 }: Props) {
   const router = useRouter()
   const [duration, setDuration] = useState<number>(1)
@@ -163,10 +167,9 @@ export function PricingView({
           features={{
             'Landing Page': '1',
             Storage: '5 MB',
-            'Visitor / bulan': '1.000',
-            'AI Generate': false,
-            'Custom Domain': false,
-            'Hulao Branding': true,
+            'Visitor / bulan': (visitorCap.FREE ?? 1000).toLocaleString('id-ID'),
+            'AI Generate': true,
+            'Host AI (Live Shopping)': false,
           }}
           priceLabel="Rp 0"
           ctaLabel={
@@ -210,15 +213,14 @@ export function PricingView({
                 'Landing Page':
                   pkg.maxLp >= 999 ? 'Unlimited' : `${pkg.maxLp}`,
                 Storage: `${pkg.maxStorageMB} MB`,
-                'Visitor / bulan':
-                  pkg.tier === 'STARTER'
-                    ? '10.000'
-                    : pkg.tier === 'POPULAR'
-                      ? '50.000'
-                      : '100.000',
+                'Visitor / bulan': (
+                  visitorCap[pkg.tier] ?? 0
+                ).toLocaleString('id-ID'),
                 'AI Generate': true,
-                'Custom Domain': pkg.tier !== 'STARTER',
-                'Hulao Branding': false,
+                // Host AI mulai paket Popular — samakan dgn gate di
+                // lib/host-gen-gate.ts (hostTierAllowed).
+                'Host AI (Live Shopping)':
+                  pkg.tier === 'POPULAR' || pkg.tier === 'POWER',
               }}
               priceLabel={`${calc.priceFinalTokens.toLocaleString('id-ID')} token`}
               priceSubLabel={`≈ ${monthlyTokens.toLocaleString('id-ID')} token/bulan · setara Rp ${calc.priceFinal.toLocaleString('id-ID')} (Rp ${monthly.toLocaleString('id-ID')}/bln)`}

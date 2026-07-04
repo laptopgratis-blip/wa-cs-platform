@@ -11,6 +11,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+import { assertHostGenAccess } from '@/lib/host-gen-gate'
 import { prisma } from '@/lib/prisma'
 import { executeAiWithCharge } from '@/lib/services/ai-generation-log'
 
@@ -353,6 +354,11 @@ function parseOutput(raw: string): ParsedOutput {
 export async function orchestrateHostPrompt(
   input: OrchestrateInput,
 ): Promise<OrchestrateOutput> {
+  // Gate: Host AI mulai paket Popular. Diblok di sini juga (bukan cuma di
+  // generateHostImage) supaya user < Popular gagal lebih awal, sebelum
+  // menghabiskan token Claude untuk prompt.
+  await assertHostGenAccess(input.userId)
+
   // Resolve products → image URLs (max 14 ref images Gemini limit).
   const productNames: string[] = []
   const productImageUrls: string[] = []

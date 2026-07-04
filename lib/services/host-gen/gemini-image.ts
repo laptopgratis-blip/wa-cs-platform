@@ -9,6 +9,8 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { assertHostGenAccess } from '@/lib/host-gen-gate'
+
 import { getHostGenApiKey } from './provider-keys'
 
 const GEMINI_HOST = 'https://generativelanguage.googleapis.com'
@@ -62,6 +64,11 @@ export async function generateHostImage(input: {
   referenceImages?: GeminiImageInput['referenceImages']
   model?: string
 }): Promise<GeminiImageResult> {
+  // Gate: Host AI mulai paket Popular (video Kling butuh image ini → menutup
+  // image = menutup seluruh generate host). ADMIN bypass di helper. Gate di
+  // wrapper ini, bukan di generateGeminiImageBuffer — buffer dipakai juga
+  // untuk thumbnail preset admin (tanpa userId).
+  await assertHostGenAccess(input.userId)
   const raw = await generateGeminiImageBuffer(input)
   const ext = inferExt(raw.mimeType)
   const filename = `${randomBytes(12).toString('hex')}.${ext}`

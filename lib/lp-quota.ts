@@ -30,6 +30,12 @@ const TIERS: TierConfig[] = [
   { tier: 'POWER', maxLp: 999, maxStorageMB: 500, maxVisitorMonth: 5_000_000, threshold: 200_000 },
 ]
 
+// Cap visitor per tier — sumber tunggal untuk UI /pricing supaya angka yang
+// ditampilkan selalu sinkron dengan enforcement (jangan hardcode ulang di UI).
+export const TIER_VISITOR_CAP = Object.fromEntries(
+  TIERS.map((t) => [t.tier, t.maxVisitorMonth]),
+) as Record<LpTier, number>
+
 const RANK: Record<LpTier, number> = {
   FREE: 0,
   STARTER: 1,

@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 
 import { PricingView } from '@/components/subscription/PricingView'
 import { authOptions } from '@/lib/auth'
+import { TIER_VISITOR_CAP } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -60,6 +61,7 @@ export default async function PricingPage() {
       currentTier={currentTier}
       currentBalance={currentBalance}
       pricePerToken={pricePerToken}
+      visitorCap={TIER_VISITOR_CAP}
     />
   )
 }
