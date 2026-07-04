@@ -43,6 +43,15 @@ export interface GeminiImageResult {
   finishReason?: string
 }
 
+// Hasil mentah (buffer) — dipakai caller yang mau atur sendiri penyimpanan
+// (mis. preset-thumbnails yang kompres via sharp sebelum simpan).
+export interface GeminiImageBuffer {
+  buffer: Buffer
+  mimeType: string
+  modelName: string
+  finishReason?: string
+}
+
 const HOST_IMAGES_DIR_REL = path.join('public', 'uploads', 'host-images')
 
 // Generate gambar + langsung simpan ke `public/uploads/host-images/<userId>/<id>.png`.
@@ -53,6 +62,27 @@ export async function generateHostImage(input: {
   referenceImages?: GeminiImageInput['referenceImages']
   model?: string
 }): Promise<GeminiImageResult> {
+  const raw = await generateGeminiImageBuffer(input)
+  const ext = inferExt(raw.mimeType)
+  const filename = `${randomBytes(12).toString('hex')}.${ext}`
+  const dir = path.join(process.cwd(), HOST_IMAGES_DIR_REL, input.userId)
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(dir, filename), raw.buffer)
+
+  return {
+    imagePath: `/uploads/host-images/${input.userId}/${filename}`,
+    imageBytes: raw.buffer.length,
+    modelName: raw.modelName,
+    finishReason: raw.finishReason,
+  }
+}
+
+// Low-level: panggil Gemini image-gen, return buffer tanpa menyimpan file.
+export async function generateGeminiImageBuffer(input: {
+  prompt: string
+  referenceImages?: GeminiImageInput['referenceImages']
+  model?: string
+}): Promise<GeminiImageBuffer> {
   const apiKey = await getHostGenApiKey('GOOGLE')
   const model = input.model ?? DEFAULT_MODEL
   const url = `${GEMINI_HOST}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
@@ -140,17 +170,12 @@ export async function generateHostImage(input: {
   }
 
   const buf = Buffer.from(inline.data, 'base64')
-  const ext = inferExt(
-    ('mimeType' in inline ? inline.mimeType : inline.mime_type) ?? 'image/png',
-  )
-  const filename = `${randomBytes(12).toString('hex')}.${ext}`
-  const dir = path.join(process.cwd(), HOST_IMAGES_DIR_REL, input.userId)
-  await mkdir(dir, { recursive: true })
-  await writeFile(path.join(dir, filename), buf)
+  const mimeType =
+    ('mimeType' in inline ? inline.mimeType : inline.mime_type) ?? 'image/png'
 
   return {
-    imagePath: `/uploads/host-images/${input.userId}/${filename}`,
-    imageBytes: buf.length,
+    buffer: buf,
+    mimeType,
     modelName: model,
     finishReason: candidate?.finishReason,
   }

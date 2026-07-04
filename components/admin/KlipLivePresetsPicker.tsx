@@ -9,11 +9,10 @@
 // Dipakai dari OrchestratedHostWizard step 1 ketika mode=NATIVE_LIBRARY.
 // Owner pilih → preset ID di-pass ke orchestrate API → server inject promptFragment.
 //
-// CATATAN (2026-06-05): preset punya kolom thumbnailUrl tapi file gambarnya
-// belum di-generate (folder /uploads/presets/* tidak ada → 404). Daripada
-// nampilin placeholder ikon yang kelihatan seperti gambar gagal load (bikin
-// owner bingung), kartu render TEXT-ONLY: nama + vibe tag. Kalau nanti thumbnail
-// di-generate, ganti blok teks dgn <img src={thumbnailUrl} onError=fallback>.
+// Thumbnail: file di-generate admin via /admin/host-templates (kartu
+// "Thumbnail Preset Klip Live" → /api/admin/host-presets/generate-thumbnails).
+// Kartu render <img thumbnailUrl> + overlay teks; kalau file belum ada /
+// gagal load (onError) → fallback ke kartu text-only (nama + vibe tag).
 
 import { Check, Sparkles, Image as ImageIcon } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
@@ -74,6 +73,16 @@ export function KlipLivePresetsPicker({
   const [backgrounds, setBackgrounds] = useState<Background[] | null>(null)
   const [hookFilter, setHookFilter] = useState('')
   const [bgFilter, setBgFilter] = useState('')
+  // ID preset yang thumbnail-nya gagal load (404 dll) → fallback text-only.
+  const [broken, setBroken] = useState<Set<string>>(new Set())
+
+  const markBroken = useCallback((id: string) => {
+    setBroken((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     void fetch('/api/host-presets')
@@ -162,6 +171,7 @@ export function KlipLivePresetsPicker({
 
             {filteredHooks.map((h) => {
               const active = selection.visualHookId === h.id
+              const hasImg = Boolean(h.thumbnailUrl) && !broken.has(h.id)
               return (
                 <button
                   key={h.id}
@@ -174,22 +184,43 @@ export function KlipLivePresetsPicker({
                       : 'border-warm-200 bg-white hover:border-orange-300'
                   }`}
                 >
+                  {hasImg ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- uploads di-serve nginx, optimizer off (lihat next.config) */}
+                      <img
+                        src={h.thumbnailUrl}
+                        alt={h.nameId}
+                        loading="lazy"
+                        onError={() => markBroken(h.id)}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/25 to-transparent"
+                      />
+                    </>
+                  ) : null}
                   {active ? (
-                    <Check className="absolute right-1 top-1 h-3 w-3 text-orange-600" />
+                    <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-white/90 p-0.5 text-orange-600" />
                   ) : null}
                   {h.cautionFlags.includes('seasonal-only') ? (
                     <span className="absolute left-1 top-1 rounded bg-amber-500 px-1 py-px text-[8px] font-bold text-white">
                       SEASONAL
                     </span>
                   ) : null}
-                  {/* Text-only — thumbnail preset belum di-generate (lihat catatan
-                      di header file). Tampilkan nama + vibe tag, bukan placeholder
-                      gambar yang menyesatkan. */}
-                  <div className="line-clamp-3 text-[10px] font-semibold leading-tight text-warm-800">
+                  <div
+                    className={`relative line-clamp-3 text-[10px] font-semibold leading-tight ${
+                      hasImg ? 'text-white drop-shadow' : 'text-warm-800'
+                    }`}
+                  >
                     {h.nameId}
                   </div>
                   {h.vibeTags.length > 0 ? (
-                    <div className="line-clamp-1 text-[8px] text-warm-500">
+                    <div
+                      className={`relative line-clamp-1 text-[8px] ${
+                        hasImg ? 'text-white/85' : 'text-warm-500'
+                      }`}
+                    >
                       {h.vibeTags.slice(0, 2).join(' · ')}
                     </div>
                   ) : null}
@@ -245,6 +276,7 @@ export function KlipLivePresetsPicker({
           <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-warm-200 bg-warm-50/50 p-2 sm:grid-cols-3 md:grid-cols-4">
             {filteredBgs.map((b) => {
               const active = selection.backgroundId === b.id
+              const hasImg = Boolean(b.thumbnailUrl) && !broken.has(b.id)
               return (
                 <button
                   key={b.id}
@@ -257,16 +289,39 @@ export function KlipLivePresetsPicker({
                       : 'border-warm-200 bg-white hover:border-sky-300'
                   }`}
                 >
-                  {active ? (
-                    <Check className="absolute right-1 top-1 h-3 w-3 text-sky-600" />
+                  {hasImg ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- uploads di-serve nginx, optimizer off (lihat next.config) */}
+                      <img
+                        src={b.thumbnailUrl}
+                        alt={b.nameId}
+                        loading="lazy"
+                        onError={() => markBroken(b.id)}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <div
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/25 to-transparent"
+                      />
+                    </>
                   ) : null}
-                  {/* Text-only — thumbnail preset belum tersedia. */}
-                  <div className="flex flex-1 flex-col justify-end">
-                    <div className="line-clamp-2 text-[11px] font-semibold leading-tight text-warm-800">
+                  {active ? (
+                    <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-white/90 p-0.5 text-sky-600" />
+                  ) : null}
+                  <div className="relative flex flex-1 flex-col justify-end">
+                    <div
+                      className={`line-clamp-2 text-[11px] font-semibold leading-tight ${
+                        hasImg ? 'text-white drop-shadow' : 'text-warm-800'
+                      }`}
+                    >
                       {b.nameId}
                     </div>
                     {b.vibeTags.length > 0 ? (
-                      <div className="mt-0.5 line-clamp-1 text-[8px] text-warm-500">
+                      <div
+                        className={`mt-0.5 line-clamp-1 text-[8px] ${
+                          hasImg ? 'text-white/85' : 'text-warm-500'
+                        }`}
+                      >
                         {b.vibeTags.slice(0, 2).join(' · ')}
                       </div>
                     ) : null}
