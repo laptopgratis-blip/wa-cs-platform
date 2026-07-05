@@ -105,8 +105,30 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
     idleClips = idleList.map((c) => ({ videoUrl: c.videoUrl, durationMs: c.durationMs }))
     idleClipUrl = idleClips[0]?.videoUrl ?? null
   }
-  if (hostMode === 'TTS_GENERATIVE' && !room.hostTemplate?.videoLoopUrl) notFound()
-  if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl) notFound()
+  // Host baru sering belum bikin klip IDLE (wizard cuma generate baseline).
+  // Fallback ke video baseline primary (videoLoopUrl) supaya live tetap
+  // tayang — jangan 404 di dalam iframe LP.
+  if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl && room.hostTemplate?.videoLoopUrl) {
+    idleClipUrl = room.hostTemplate.videoLoopUrl
+    idleClips = [{ videoUrl: idleClipUrl, durationMs: null }]
+  }
+  if (
+    (hostMode === 'TTS_GENERATIVE' && !room.hostTemplate?.videoLoopUrl) ||
+    (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl)
+  ) {
+    // Pesan ramah (paritas dgn /live) — bukan notFound() yang tampil sebagai
+    // 404 misterius di dalam iframe.
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
+        <div>
+          <div className="text-3xl">⚙️</div>
+          <p className="mt-3 text-sm text-zinc-300">
+            Host live belum siap — video host masih diproses. Coba lagi beberapa menit.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const products = await prisma.product.findMany({
     where: { id: { in: room.productIds }, isActive: true },

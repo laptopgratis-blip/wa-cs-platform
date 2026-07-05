@@ -109,6 +109,12 @@ export default async function PublicLivePage({
       </div>
     )
   }
+  // Fallback: belum ada klip IDLE tapi baseline primary sudah READY →
+  // pakai videoLoopUrl sebagai idle loop supaya live tetap tayang.
+  if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl && room.hostTemplate?.videoLoopUrl) {
+    idleClipUrl = room.hostTemplate.videoLoopUrl
+    idleClips = [{ videoUrl: idleClipUrl, durationMs: null }]
+  }
   if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black p-6 text-center text-white">
