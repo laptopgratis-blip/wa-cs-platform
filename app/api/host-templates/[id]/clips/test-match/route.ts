@@ -124,19 +124,25 @@ export async function POST(
     }
   }
 
-  // Phase 2: cosine
-  let queryVec: number[]
+  // Phase 2: cosine — kalau embed gagal (mis. key OpenAI tidak punya akses
+  // model embedding), JANGAN gagalkan tes: keyword match tetap valid, sama
+  // seperti graceful degradation di matcher runtime (match.ts). Kirim
+  // embedWarning supaya UI jelasin kenapa skor cosine kosong.
+  let queryVec: number[] | null = null
+  let embedWarning: string | null = null
   try {
     queryVec = await embedText(question)
   } catch (e) {
-    return jsonError(`Embedding gagal: ${(e as Error).message}`, 500)
+    embedWarning = `Match cosine (AI semantik) tidak jalan: ${(e as Error).message}`
   }
-  const scored = clips
+  // Const supaya TS tetap narrow non-null di dalam callback map.
+  const qv = queryVec
+  const scored = !qv ? [] : clips
     .filter((c) => c.matchMode !== 'KEYWORD_ONLY')
     .map((c) => {
       const raw = c.embedding
       if (!Array.isArray(raw) || raw.length === 0) return null
-      let sim = cosineSimilarity(queryVec, raw as number[])
+      let sim = cosineSimilarity(qv, raw as number[])
       if (c.matchMode === 'BOOST' && c.triggerKeywords.length > 0) sim += 0.15
       return { clip: c, score: sim }
     })
@@ -178,5 +184,5 @@ export async function POST(
     })),
   ].slice(0, 5) // max 5 entries shown
 
-  return jsonOk({ chosen, top3, threshold: DEFAULT_THRESHOLD })
+  return jsonOk({ chosen, top3, threshold: DEFAULT_THRESHOLD, embedWarning })
 }

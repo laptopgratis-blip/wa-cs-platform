@@ -2002,6 +2002,7 @@ interface TestMatchResult {
     hit?: string
   }>
   threshold: number
+  embedWarning?: string | null
 }
 
 function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
@@ -2058,6 +2059,11 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
       </div>
       {result ? (
         <div className="space-y-2 rounded-md border border-orange-300 bg-white p-3">
+          {result.embedWarning ? (
+            <div className="rounded bg-amber-50 p-2 text-[10px] text-amber-800">
+              ⚠️ {result.embedWarning} — hasil di bawah hanya dari trigger keyword.
+            </div>
+          ) : null}
           {result.chosen ? (
             <div className="flex items-start gap-2">
               <div
