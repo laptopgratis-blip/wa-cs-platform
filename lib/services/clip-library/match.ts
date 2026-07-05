@@ -350,7 +350,7 @@ export async function matchClip(input: MatchClipInput): Promise<ClipMatch | null
 export async function findIdleClips(hostTemplateId: string): Promise<
   Array<{ clipId: string; videoUrl: string; durationMs: number | null }>
 > {
-  const clips = await prisma.liveClip.findMany({
+  let clips = await prisma.liveClip.findMany({
     where: {
       hostTemplateId,
       isActive: true,
@@ -361,6 +361,16 @@ export async function findIdleClips(hostTemplateId: string): Promise<
     orderBy: [{ useCount: 'asc' }, { createdAt: 'desc' }],
     select: { id: true, videoUrl: true, durationMs: true },
   })
+  if (clips.length === 0) {
+    // Belum ada klip IDLE (user baru generate 1-2 klip kategori lain) →
+    // pakai klip READY apa pun sebagai loop sementara, supaya live sudah
+    // bisa tayang & user bisa preview hasilnya sambil nambah klip.
+    clips = await prisma.liveClip.findMany({
+      where: { hostTemplateId, isActive: true, status: 'READY', videoUrl: { not: null } },
+      orderBy: [{ useCount: 'asc' }, { createdAt: 'desc' }],
+      select: { id: true, videoUrl: true, durationMs: true },
+    })
+  }
   return clips
     .filter((c) => c.videoUrl != null)
     .map((c) => ({

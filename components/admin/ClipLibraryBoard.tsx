@@ -1157,7 +1157,7 @@ export function ClipLibraryBoard({
                 ))}
               </div>
               <p className="text-[10px] text-muted-foreground">
-                💡 <strong>Catatan</strong>: minimal 1 klip kategori <code>IDLE</code> atau yang ditandai <em>Default Idle</em> WAJIB sebelum live bisa dibuka — buat loop saat tidak ada interaksi.
+                💡 <strong>Catatan</strong>: live sudah bisa tayang dengan 1 klip apa pun (dipakai sebagai loop sementara). Untuk hasil terbaik, buat minimal 1 klip kategori <code>IDLE</code> atau tandai <em>Default Idle</em> — jadi loop saat tidak ada interaksi.
               </p>
             </div>
           ) : (
