@@ -86,6 +86,32 @@ export async function buildKlingAuthHeader(): Promise<string> {
   return `Bearer ${signKlingJwt(accessKey, secretKey)}`
 }
 
+// Kling resource pack punya batas task paralel (HTTP 429 code 1303
+// "parallel task over resource pack limit"). Transient — task video selesai
+// dalam 1-3 menit — jadi retry dengan jeda naik sampai slot lega.
+// ponytail: total tunggu maks ~2.5 menit; kalau sering mentok, upgrade resource pack.
+const SUBMIT_429_DELAYS_MS = [15_000, 30_000, 45_000, 60_000]
+
+async function fetchKlingSubmitWithRetry(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  let res = await fetch(url, init)
+  for (const delayMs of SUBMIT_429_DELAYS_MS) {
+    if (res.status !== 429) return res
+    const errText = await res.text().catch(() => '')
+    console.warn(
+      `[kling] 429 antrian penuh (${errText.slice(0, 120)}) — retry dalam ${delayMs / 1000}s`,
+    )
+    await new Promise((r) => setTimeout(r, delayMs))
+    res = await fetch(url, init)
+  }
+  return res
+}
+
+const KLING_QUEUE_FULL_MSG =
+  'Antrian video Kling masih penuh setelah ~2,5 menit menunggu (batas task paralel resource pack). Tunggu video yang sedang diproses selesai, lalu coba lagi.'
+
 // Resolve image untuk Kling. Kalau URL absolute http(s) ke public host →
 // send URL langsung. Kalau localhost / private IP / path lokal → baca file
 // + send base64 (tanpa data-URI prefix, sesuai spec Kling).
@@ -129,7 +155,7 @@ export async function submitKlingVideo(
     cfg_scale: 0.5,
   }
 
-  const res = await fetch(`${KLING_HOST}/v1/videos/image2video`, {
+  const res = await fetchKlingSubmitWithRetry(`${KLING_HOST}/v1/videos/image2video`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -139,6 +165,7 @@ export async function submitKlingVideo(
   })
   const text = await res.text()
   if (!res.ok) {
+    if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
     throw new Error(`Kling submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`)
   }
   let json: {
@@ -364,7 +391,7 @@ export async function submitKlingLipsync(
 
   const body = { input: inputPayload }
 
-  const res = await fetch(`${KLING_HOST}/v1/videos/lip-sync`, {
+  const res = await fetchKlingSubmitWithRetry(`${KLING_HOST}/v1/videos/lip-sync`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -374,6 +401,7 @@ export async function submitKlingLipsync(
   })
   const text = await res.text()
   if (!res.ok) {
+    if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
     throw new Error(`Kling lipsync submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`)
   }
   let json: {
