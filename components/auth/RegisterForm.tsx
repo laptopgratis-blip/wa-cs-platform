@@ -1,8 +1,8 @@
 'use client'
 
-// Daftar akun baru via OTP — wajib isi email + nomor WA. OTP dikirim ke
-// kedua channel, user verifikasi salah satu untuk aktivasi akun. Tidak
-// pakai password — user OTP-only.
+// Daftar akun baru via OTP — wajib isi email + nomor WA (data akun).
+// OTP dikirim sesuai setting OTP_CHANNEL_MODE (email/WA/keduanya).
+// Tidak pakai password — user OTP-only.
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
 import Link from 'next/link'
@@ -33,7 +33,11 @@ const signupFormSchema = z.object({
 
 type SignupFormInput = z.input<typeof signupFormSchema>
 
-export function RegisterForm() {
+export function RegisterForm({
+  otpChannelMode,
+}: {
+  otpChannelMode: 'EMAIL' | 'WA' | 'BOTH'
+}) {
   const [submitting, setSubmitting] = useState(false)
   const [otpPayload, setOtpPayload] = useState<OtpRequestPayload | null>(null)
   // Simpan data signup terakhir supaya bisa di-resend tanpa user isi ulang.
@@ -141,7 +145,12 @@ export function RegisterForm() {
           <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p>
         )}
         <p className="text-xs text-warm-500">
-          Kami kirim OTP verifikasi ke email + WhatsApp. Pastikan keduanya aktif.
+          {otpChannelMode === 'BOTH' &&
+            'Kami kirim OTP verifikasi ke email + WhatsApp. Pastikan keduanya aktif.'}
+          {otpChannelMode === 'EMAIL' &&
+            'Kami kirim OTP verifikasi ke email kamu. Pastikan email aktif.'}
+          {otpChannelMode === 'WA' &&
+            'Kami kirim OTP verifikasi ke WhatsApp kamu. Pastikan nomornya aktif.'}
         </p>
       </div>
 

@@ -1,10 +1,11 @@
 'use client'
 
-// Picker untuk pilih WhatsappSession mana yang dipakai kirim OTP auth.
-// Tampil di /admin/settings. List semua session CONNECTED (across users)
-// dengan radio button. Pilih satu → PATCH /api/admin/settings dgn key
-// OTP_WA_SESSION_ID. Pilih "Otomatis" → simpan empty string → fallback
-// ke admin session di runtime.
+// Pengaturan pengiriman OTP auth di /admin/settings:
+// 1. Mode channel (OTP_CHANNEL_MODE): Email saja / WhatsApp saja / keduanya.
+//    "Email saja" menghentikan semua trafik OTP via WA — dipakai kalau
+//    nomor WA kena limit/blokir karena volume OTP.
+// 2. Picker WhatsappSession pengirim (OTP_WA_SESSION_ID). Pilih
+//    "Otomatis" → empty string → fallback admin session di runtime.
 import { Loader2, Plus, RefreshCw, Save, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -27,10 +28,32 @@ interface ConnectedSession {
   user: { email: string; role: string }
 }
 
+type ChannelMode = 'EMAIL' | 'WA' | 'BOTH'
+
+const CHANNEL_OPTIONS: { value: ChannelMode; label: string; desc: string }[] = [
+  {
+    value: 'EMAIL',
+    label: 'Email saja',
+    desc: 'OTP hanya via email. WhatsApp tidak dipakai sama sekali — pilih ini kalau nomor WA sering kena limit/blokir.',
+  },
+  {
+    value: 'WA',
+    label: 'WhatsApp saja',
+    desc: 'OTP hanya via WhatsApp. Kalau WA gagal terkirim, sistem otomatis fallback ke email supaya user tidak terkunci.',
+  },
+  {
+    value: 'BOTH',
+    label: 'Email + WhatsApp',
+    desc: 'OTP dikirim ke kedua channel sekaligus (volume WA paling tinggi).',
+  },
+]
+
 export function OtpWaSenderPicker() {
   const [sessions, setSessions] = useState<ConnectedSession[]>([])
   const [currentValue, setCurrentValue] = useState<string>('') // empty = otomatis
   const [savedValue, setSavedValue] = useState<string>('')
+  const [mode, setMode] = useState<ChannelMode>('BOTH')
+  const [savedMode, setSavedMode] = useState<ChannelMode>('BOTH')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -49,13 +72,17 @@ export function OtpWaSenderPicker() {
       }
       const settingsJson = (await settingsRes.json()) as {
         success: boolean
-        data?: { OTP_WA_SESSION_ID?: string }
+        data?: { OTP_WA_SESSION_ID?: string; OTP_CHANNEL_MODE?: string }
       }
       const list = sessionsJson.success && sessionsJson.data ? sessionsJson.data : []
       setSessions(list)
       const v = settingsJson.data?.OTP_WA_SESSION_ID ?? ''
       setCurrentValue(v)
       setSavedValue(v)
+      const m = settingsJson.data?.OTP_CHANNEL_MODE
+      const parsedMode: ChannelMode = m === 'EMAIL' || m === 'WA' ? m : 'BOTH'
+      setMode(parsedMode)
+      setSavedMode(parsedMode)
       return list
     } finally {
       setLoading(false)
@@ -84,39 +111,49 @@ export function OtpWaSenderPicker() {
     await load()
   }
 
+  async function patchSetting(key: string, value: string): Promise<boolean> {
+    const res = await fetch('/api/admin/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    })
+    const json = (await res.json()) as { success: boolean; error?: string }
+    if (!res.ok || !json.success) {
+      toast.error(json.error || 'Gagal menyimpan')
+      return false
+    }
+    return true
+  }
+
   async function handleSave() {
     setSaving(true)
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'OTP_WA_SESSION_ID', value: currentValue }),
-      })
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal menyimpan')
-        return
+      if (mode !== savedMode) {
+        if (!(await patchSetting('OTP_CHANNEL_MODE', mode))) return
+        setSavedMode(mode)
       }
-      setSavedValue(currentValue)
-      toast.success('Pengirim OTP WhatsApp diperbarui')
+      if (currentValue !== savedValue) {
+        if (!(await patchSetting('OTP_WA_SESSION_ID', currentValue))) return
+        setSavedValue(currentValue)
+      }
+      toast.success('Pengaturan OTP diperbarui')
     } finally {
       setSaving(false)
     }
   }
 
-  const dirty = currentValue !== savedValue
+  const dirty = currentValue !== savedValue || mode !== savedMode
 
   return (
     <Card className="rounded-xl border-warm-200">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold text-warm-900">
-          Pengirim OTP WhatsApp
+          Pengiriman OTP (Login &amp; Signup)
         </CardTitle>
         <CardDescription className="text-xs text-warm-500">
-          Pilih sesi WhatsApp yang dipakai untuk kirim kode OTP login/signup.
-          Disarankan pakai nomor dedicated &quot;Hulao Official&quot; supaya
-          tidak mengganggu sesi CS / sales user. Kalau pilih &quot;Otomatis&quot;,
-          sistem cari sesi CONNECTED milik admin sebagai fallback.
+          Atur channel pengiriman kode OTP dan sesi WhatsApp pengirimnya.
+          Halaman login/register user otomatis menyesuaikan pilihan channel
+          di sini.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -126,6 +163,50 @@ export function OtpWaSenderPicker() {
           </div>
         ) : (
           <>
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-xs font-semibold uppercase tracking-wider text-warm-500">
+                Channel pengiriman
+              </legend>
+              {CHANNEL_OPTIONS.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${
+                    mode === opt.value
+                      ? 'border-primary-500 bg-primary-50/40'
+                      : 'border-warm-200 hover:border-warm-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="otp-channel-mode"
+                    className="mt-1 accent-primary-500"
+                    checked={mode === opt.value}
+                    onChange={() => setMode(opt.value)}
+                  />
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-warm-900">
+                      {opt.label}
+                    </div>
+                    <div className="text-xs text-warm-500">{opt.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </fieldset>
+
+            {/* Picker sender WA — tidak relevan kalau mode Email saja */}
+            <div
+              className={`space-y-3 ${mode === 'EMAIL' ? 'pointer-events-none opacity-40' : ''}`}
+            >
+              <div className="text-xs font-semibold uppercase tracking-wider text-warm-500">
+                Pengirim WhatsApp
+              </div>
+              <p className="text-xs text-warm-500">
+                Pilih sesi WhatsApp yang dipakai kirim OTP. Disarankan nomor
+                dedicated &quot;Hulao Official&quot; (bukan nomor CS/admin
+                aktif) supaya aman dari limit. &quot;Otomatis&quot; = sistem
+                pakai sesi CONNECTED milik admin.
+              </p>
+
             <div className="flex items-center justify-between gap-2">
               <Button
                 size="sm"
@@ -224,6 +305,7 @@ export function OtpWaSenderPicker() {
                 })
               )}
             </fieldset>
+            </div>
 
             <div className="flex items-center justify-end gap-2">
               {dirty && !saving && (

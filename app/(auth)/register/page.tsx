@@ -11,10 +11,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
+import { getOtpChannelMode } from '@/lib/settings'
 
 export default async function RegisterPage() {
   const session = await getServerSession(authOptions)
   if (session) redirect('/dashboard')
+
+  const otpChannelMode = await getOtpChannelMode()
 
   return (
     <Card className="rounded-xl border-warm-200 shadow-lg">
@@ -27,7 +30,7 @@ export default async function RegisterPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <RegisterForm />
+        <RegisterForm otpChannelMode={otpChannelMode} />
       </CardContent>
     </Card>
   )

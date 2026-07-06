@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
+import { getOtpChannelMode } from '@/lib/settings'
 
 export default async function LoginPage() {
   const session = await getServerSession(authOptions)
@@ -19,6 +20,7 @@ export default async function LoginPage() {
   const googleEnabled = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   )
+  const otpChannelMode = await getOtpChannelMode()
 
   return (
     <Card className="rounded-xl border-warm-200 shadow-lg">
@@ -31,7 +33,7 @@ export default async function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <LoginForm googleEnabled={googleEnabled} />
+        <LoginForm googleEnabled={googleEnabled} otpChannelMode={otpChannelMode} />
       </CardContent>
     </Card>
   )

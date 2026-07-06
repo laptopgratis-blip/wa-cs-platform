@@ -10,9 +10,15 @@ export const SETTING_KEYS = {
   // Kosong = fallback ke admin's CONNECTED session. Diset via UI picker
   // di /admin/settings, override env OTP_WA_SESSION_ID.
   OTP_WA_SESSION_ID: 'OTP_WA_SESSION_ID',
+  // Channel pengiriman OTP auth: EMAIL (email saja, WA tidak dipakai),
+  // WA (WhatsApp saja, email fallback darurat kalau WA gagal),
+  // BOTH (dual-send, perilaku lama). Diset via /admin/settings.
+  OTP_CHANNEL_MODE: 'OTP_CHANNEL_MODE',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
+
+export type OtpChannelMode = 'EMAIL' | 'WA' | 'BOTH'
 
 // Default platform name kalau belum di-set di DB.
 const DEFAULTS: Record<SettingKey, string> = {
@@ -20,6 +26,12 @@ const DEFAULTS: Record<SettingKey, string> = {
   PLATFORM_NAME: 'Hulao',
   SUPPORT_EMAIL: '',
   OTP_WA_SESSION_ID: '',
+  OTP_CHANNEL_MODE: 'BOTH',
+}
+
+export async function getOtpChannelMode(): Promise<OtpChannelMode> {
+  const v = (await getSetting('OTP_CHANNEL_MODE')).trim().toUpperCase()
+  return v === 'EMAIL' || v === 'WA' ? v : 'BOTH'
 }
 
 export async function getSetting(key: SettingKey): Promise<string> {

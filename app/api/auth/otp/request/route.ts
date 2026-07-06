@@ -14,6 +14,7 @@ import { createOtp, OtpError, checkRateLimit } from '@/lib/otp/auth-otp'
 import { maskEmail, maskPhone, normalizePhone } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { sendOtpDual } from '@/lib/services/auth-otp-sender'
+import { getOtpChannelMode } from '@/lib/settings'
 import { OTP_COOLDOWN_MS } from '@/lib/otp/auth-otp'
 import { otpRequestSchema } from '@/lib/validations/auth'
 
@@ -36,6 +37,13 @@ export async function POST(req: Request) {
 
   const ip = getIp(req)
   const input = parsed.data
+  const channelMode = await getOtpChannelMode()
+
+  // Mode EMAIL: login via nomor WA dimatikan (tab-nya juga disembunyikan
+  // di UI — ini defense kalau ada yang hit endpoint langsung).
+  if (channelMode === 'EMAIL' && input.mode === 'LOGIN' && input.channel === 'PHONE') {
+    return jsonError('Login via WhatsApp sedang nonaktif. Gunakan email.', 400)
+  }
 
   try {
     if (input.mode === 'SIGNUP') {
@@ -86,9 +94,12 @@ export async function POST(req: Request) {
 
       return jsonOk({
         otpId,
+        channelMode,
         sentTo: {
           email: maskEmail(email),
-          phone: maskPhone(phone),
+          // Mode EMAIL: WA memang tidak dipakai — jangan tampilkan nomor
+          // di OtpForm supaya tidak ada warning "WA tidak terkirim".
+          phone: channelMode === 'EMAIL' ? null : maskPhone(phone),
         },
         emailDelivered: result.emailSent,
         waDelivered: result.waSent,
@@ -152,9 +163,13 @@ export async function POST(req: Request) {
 
     return jsonOk({
       otpId,
+      channelMode,
       sentTo: {
         email: maskEmail(user.email),
-        phone: user.phoneNumber ? maskPhone(user.phoneNumber) : null,
+        phone:
+          channelMode !== 'EMAIL' && user.phoneNumber
+            ? maskPhone(user.phoneNumber)
+            : null,
       },
       emailDelivered: result.emailSent,
       waDelivered: result.waSent,

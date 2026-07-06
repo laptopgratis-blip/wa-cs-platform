@@ -32,6 +32,11 @@ async function validateValue(
   if (key === 'PLATFORM_NAME' && value && value.length < 2) {
     return 'Nama platform minimal 2 karakter'
   }
+  if (key === 'OTP_CHANNEL_MODE' && value) {
+    if (!['EMAIL', 'WA', 'BOTH'].includes(value)) {
+      return 'Mode channel OTP harus EMAIL, WA, atau BOTH'
+    }
+  }
   if (key === 'OTP_WA_SESSION_ID' && value) {
     // Empty string = "tidak dipilih" (fallback admin); valid value = ID
     // session CONNECTED. Kalau bukan keduanya, tolak.

@@ -25,6 +25,10 @@ import { Label } from '@/components/ui/label'
 
 export interface OtpRequestPayload {
   otpId: string
+  // Channel mode aktif di server (setting OTP_CHANNEL_MODE) — dipakai
+  // untuk membedakan "email sengaja tidak dikirim" (mode WA) vs "email
+  // gagal" (mode BOTH).
+  channelMode: 'EMAIL' | 'WA' | 'BOTH'
   sentTo: { email: string; phone: string | null }
   emailDelivered: boolean
   waDelivered: boolean
@@ -154,14 +158,17 @@ export function OtpForm({
               Cek email kamu — kode tetap berlaku.
             </p>
           )}
-        {!payload.emailDelivered && payload.waDelivered && (
-          <p className="mt-2 text-xs text-amber-700">
-            ⚠️ Email gagal terkirim. Cek WhatsApp untuk kode OTP.
-          </p>
-        )}
+        {payload.channelMode === 'BOTH' &&
+          !payload.emailDelivered &&
+          payload.waDelivered && (
+            <p className="mt-2 text-xs text-amber-700">
+              ⚠️ Email gagal terkirim. Cek WhatsApp untuk kode OTP.
+            </p>
+          )}
         <p className="mt-2 text-xs text-warm-500">
-          Tidak masuk dalam 1 menit? Cek folder Spam email, atau klik &quot;Kirim
-          ulang&quot;.
+          {payload.emailDelivered
+            ? 'Tidak masuk dalam 1 menit? Cek folder Spam email, atau klik "Kirim ulang".'
+            : 'Tidak masuk dalam 1 menit? Klik "Kirim ulang".'}
         </p>
       </div>
 

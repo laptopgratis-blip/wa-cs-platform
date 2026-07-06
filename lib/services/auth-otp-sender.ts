@@ -1,4 +1,5 @@
-// Dual-send OTP auth: email (wajib) + WhatsApp (best-effort).
+// Pengirim OTP auth via email dan/atau WhatsApp, sesuai setting
+// OTP_CHANNEL_MODE (lihat sendOtpDual).
 // - WA pakai session di env OTP_WA_SESSION_ID (nomor dedicated). Fallback:
 //   session CONNECTED milik ADMIN (sama pola dgn lib/services/lms/wa-otp-sender.ts).
 // - Email pakai sendAuthOtpEmail di lib/email.ts. Kalau gagal lempar
@@ -7,7 +8,7 @@
 import { sendAuthOtpEmail } from '@/lib/email'
 import type { OtpMode } from '@/lib/otp/auth-otp'
 import { prisma } from '@/lib/prisma'
-import { getSetting } from '@/lib/settings'
+import { getOtpChannelMode, getSetting } from '@/lib/settings'
 import { waService } from '@/lib/wa-service'
 
 const OTP_BRAND = 'Hulao'
@@ -80,17 +81,41 @@ export class OtpDeliveryFailedError extends Error {
   }
 }
 
-// Send OTP ke email + WhatsApp paralel. Email & WA dua-duanya best-effort
-// — kalau salah satu sukses, OTP tetap accessible. Kalau dua-duanya gagal,
-// throw OtpDeliveryFailedError supaya endpoint return 500 (user tahu
-// untuk coba lagi).
+// Send OTP sesuai setting OTP_CHANNEL_MODE (/admin/settings):
+// - EMAIL: email saja, WA tidak disentuh (jaga nomor WA dari limit/blokir).
+// - WA: WhatsApp saja; kalau WA gagal atau user tak punya nomor, email
+//   jadi fallback darurat supaya tidak ada user terkunci.
+// - BOTH: dual-send paralel (perilaku lama), min 1 channel sukses.
+// Kalau tidak ada channel sama sekali yang terkirim, throw
+// OtpDeliveryFailedError supaya endpoint return 500.
 export async function sendOtpDual(input: {
   email: string
   phone: string | null
   code: string
   mode: OtpMode
 }): Promise<DualSendResult> {
-  // Run email + WA paralel. Capture error masing-masing tanpa fail-fast.
+  const channelMode = await getOtpChannelMode()
+
+  if (channelMode === 'EMAIL') {
+    const emailRes = await sendEmail(input.email, input.code, input.mode)
+    if (!emailRes.ok) {
+      throw new OtpDeliveryFailedError(emailRes.error, 'Channel WA nonaktif')
+    }
+    return { emailSent: true, waSent: false }
+  }
+
+  if (channelMode === 'WA') {
+    const waRes = await sendWa(input.phone, input.code, input.mode)
+    if (waRes.ok) return { emailSent: false, waSent: true }
+    // Fallback darurat: WA gagal / nomor tak ada → kirim email.
+    const emailRes = await sendEmail(input.email, input.code, input.mode)
+    if (!emailRes.ok) {
+      throw new OtpDeliveryFailedError(emailRes.error, waRes.error)
+    }
+    return { emailSent: true, waSent: false, waError: waRes.error }
+  }
+
+  // BOTH: run email + WA paralel. Capture error masing-masing tanpa fail-fast.
   const [emailRes, waRes] = await Promise.all([
     sendEmail(input.email, input.code, input.mode),
     sendWa(input.phone, input.code, input.mode),

@@ -1,11 +1,10 @@
 'use client'
 
-// Login form 3 mode:
-// - Tab "Email" → OTP ke email (utama untuk semua user)
-// - Tab "WhatsApp" → OTP ke email + WA (kalau user punya phoneNumber)
-// - Tab "Password" → form lama email+password (untuk user existing)
-// Tujuan: user OTP-only (baru) bisa masuk via Email/WA tab; user lama tetap
-// punya akses pakai password.
+// Login form dengan tab adaptif sesuai setting OTP_CHANNEL_MODE:
+// - BOTH  → tab Email | WhatsApp | Password (perilaku lama)
+// - EMAIL → tab Email | Password (WA disembunyikan, jaga nomor dari blokir)
+// - WA    → tab WhatsApp | Password
+// Tab "Password" selalu ada untuk user existing.
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
 import { signIn } from 'next-auth/react'
@@ -30,6 +29,7 @@ import {
 
 interface LoginFormProps {
   googleEnabled: boolean
+  otpChannelMode: 'EMAIL' | 'WA' | 'BOTH'
 }
 
 const emailIdentifierSchema = z.object({
@@ -43,7 +43,7 @@ const phoneIdentifierSchema = z.object({ identifier: phoneSchema })
 
 type IdentifierInput = { identifier: string }
 
-export function LoginForm({ googleEnabled }: LoginFormProps) {
+export function LoginForm({ googleEnabled, otpChannelMode }: LoginFormProps) {
   const router = useRouter()
   const params = useSearchParams()
   const callbackUrl = params.get('callbackUrl') || '/dashboard'
@@ -84,54 +84,72 @@ export function LoginForm({ googleEnabled }: LoginFormProps) {
     )
   }
 
+  const showEmailTab = otpChannelMode !== 'WA'
+  const showWaTab = otpChannelMode !== 'EMAIL'
+  const tabCount = 1 + (showEmailTab ? 1 : 0) + (showWaTab ? 1 : 0)
+
   return (
-    <Tabs defaultValue="email" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="email">Email</TabsTrigger>
-        <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+    <Tabs defaultValue={showEmailTab ? 'email' : 'whatsapp'} className="w-full">
+      <TabsList
+        className={`grid w-full ${tabCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}
+      >
+        {showEmailTab && <TabsTrigger value="email">Email</TabsTrigger>}
+        {showWaTab && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
         <TabsTrigger value="password">Password</TabsTrigger>
       </TabsList>
 
       {/* TAB EMAIL ─────────────────────────────────────────── */}
-      <TabsContent value="email" className="mt-4">
-        <IdentifierLoginForm
-          schema={emailIdentifierSchema}
-          inputProps={{
-            type: 'email',
-            autoComplete: 'email',
-            placeholder: 'kamu@email.com',
-            label: 'Email',
-          }}
-          hint="Kami kirim kode OTP ke email kamu (juga ke WhatsApp kalau terdaftar)."
-          onSubmit={async ({ identifier }) => {
-            const payload = await requestOtp('EMAIL', identifier)
-            setLastRequest({ channel: 'EMAIL', identifier })
-            setOtpPayload(payload)
-          }}
-        />
-        {googleEnabled && (
-          <GoogleSection callbackUrl={callbackUrl} className="mt-4" />
-        )}
-      </TabsContent>
+      {showEmailTab && (
+        <TabsContent value="email" className="mt-4">
+          <IdentifierLoginForm
+            schema={emailIdentifierSchema}
+            inputProps={{
+              type: 'email',
+              autoComplete: 'email',
+              placeholder: 'kamu@email.com',
+              label: 'Email',
+            }}
+            hint={
+              otpChannelMode === 'BOTH'
+                ? 'Kami kirim kode OTP ke email kamu (juga ke WhatsApp kalau terdaftar).'
+                : 'Kami kirim kode OTP ke email kamu.'
+            }
+            onSubmit={async ({ identifier }) => {
+              const payload = await requestOtp('EMAIL', identifier)
+              setLastRequest({ channel: 'EMAIL', identifier })
+              setOtpPayload(payload)
+            }}
+          />
+          {googleEnabled && (
+            <GoogleSection callbackUrl={callbackUrl} className="mt-4" />
+          )}
+        </TabsContent>
+      )}
 
       {/* TAB WHATSAPP ─────────────────────────────────────── */}
-      <TabsContent value="whatsapp" className="mt-4">
-        <IdentifierLoginForm
-          schema={phoneIdentifierSchema}
-          inputProps={{
-            type: 'tel',
-            autoComplete: 'tel',
-            placeholder: '08123456789',
-            label: 'Nomor WhatsApp',
-          }}
-          hint="OTP dikirim ke WhatsApp + email akun kamu."
-          onSubmit={async ({ identifier }) => {
-            const payload = await requestOtp('PHONE', identifier)
-            setLastRequest({ channel: 'PHONE', identifier })
-            setOtpPayload(payload)
-          }}
-        />
-      </TabsContent>
+      {showWaTab && (
+        <TabsContent value="whatsapp" className="mt-4">
+          <IdentifierLoginForm
+            schema={phoneIdentifierSchema}
+            inputProps={{
+              type: 'tel',
+              autoComplete: 'tel',
+              placeholder: '08123456789',
+              label: 'Nomor WhatsApp',
+            }}
+            hint={
+              otpChannelMode === 'BOTH'
+                ? 'OTP dikirim ke WhatsApp + email akun kamu.'
+                : 'OTP dikirim ke WhatsApp kamu.'
+            }
+            onSubmit={async ({ identifier }) => {
+              const payload = await requestOtp('PHONE', identifier)
+              setLastRequest({ channel: 'PHONE', identifier })
+              setOtpPayload(payload)
+            }}
+          />
+        </TabsContent>
+      )}
 
       {/* TAB PASSWORD ─────────────────────────────────────── */}
       <TabsContent value="password" className="mt-4">
