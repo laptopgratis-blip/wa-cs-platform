@@ -11,6 +11,7 @@ import {
   BarChart3,
   BellRing,
   BookOpen,
+  Bot,
   Box,
   Building2,
   Calculator,
@@ -25,11 +26,14 @@ import {
   Home,
   Inbox,
   Key,
+  LayoutTemplate,
   LineChart,
   MapPin,
   MessageCircle,
   Package,
+  Palette,
   Receipt,
+  Rocket,
   Send,
   Settings,
   ShoppingBag,
@@ -55,12 +59,83 @@ export interface NavItem {
   roles?: Role[]
 }
 
+// Aksen warna per grup — full class literal supaya kebaca Tailwind JIT.
+// Dipakai Sidebar (desktop) + MobileDrawer supaya grup gampang dibedakan
+// secara visual (chunking), bukan satu daftar abu-abu panjang.
+export interface NavAccent {
+  /** Warna teks header grup (uppercase kecil). */
+  header: string
+  /** Warna ikon item non-aktif. */
+  icon: string
+  /** bg + teks item aktif. */
+  active: string
+  /** Warna ikon item aktif. */
+  activeIcon: string
+  /** Warna bar indikator kiri item aktif. */
+  bar: string
+}
+
+export const NAV_ACCENTS: Record<string, NavAccent> = {
+  teal: {
+    header: 'text-teal-600',
+    icon: 'text-teal-600/70',
+    active: 'bg-teal-50 text-teal-700',
+    activeIcon: 'text-teal-600',
+    bar: 'bg-teal-500',
+  },
+  orange: {
+    header: 'text-primary-600',
+    icon: 'text-primary-500/80',
+    active: 'bg-primary-50 text-primary-700',
+    activeIcon: 'text-primary-600',
+    bar: 'bg-primary-500',
+  },
+  violet: {
+    header: 'text-violet-600',
+    icon: 'text-violet-500/80',
+    active: 'bg-violet-50 text-violet-700',
+    activeIcon: 'text-violet-600',
+    bar: 'bg-violet-500',
+  },
+  sky: {
+    header: 'text-sky-600',
+    icon: 'text-sky-600/80',
+    active: 'bg-sky-50 text-sky-700',
+    activeIcon: 'text-sky-600',
+    bar: 'bg-sky-500',
+  },
+  emerald: {
+    header: 'text-emerald-600',
+    icon: 'text-emerald-600/80',
+    active: 'bg-emerald-50 text-emerald-700',
+    activeIcon: 'text-emerald-600',
+    bar: 'bg-emerald-500',
+  },
+  amber: {
+    header: 'text-amber-600',
+    icon: 'text-amber-600/80',
+    active: 'bg-amber-50 text-amber-700',
+    activeIcon: 'text-amber-600',
+    bar: 'bg-amber-500',
+  },
+  // Netral — grup AKUN & fallback grup admin (tanpa accent).
+  neutral: {
+    header: 'text-warm-400',
+    icon: 'text-warm-500',
+    active: 'bg-primary-50 text-primary-700',
+    activeIcon: 'text-primary-600',
+    bar: 'bg-primary-500',
+  },
+}
+
 export interface NavGroup {
   label: string
   items: NavItem[]
   // Group hanya tampil kalau user punya akses Order System (paket POWER).
   // Filter dilakukan di komponen yang konsumsi (Sidebar, MobileDrawer).
   requiresOrderSystem?: boolean
+  // Key ke NAV_ACCENTS — warna pembeda grup. Undefined = neutral.
+  accent?: keyof typeof NAV_ACCENTS
 }
 
 // ─── USER (dashboard) ─────────────────────────────────────────────────
@@ -74,6 +149,7 @@ export interface NavGroup {
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'CHAT & CS',
+    accent: 'teal',
     items: [
       { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
       { label: 'Inbox', href: '/inbox', icon: Inbox },
@@ -87,7 +163,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Live Rooms', href: '/live-rooms', icon: Video },
       // Phase 2 brief — user bikin host AI sendiri (Gemini+Kling). Token
       // dipotong dari saldo user.
-      { label: 'Host AI', href: '/host-templates', icon: Sparkles },
+      { label: 'Host AI', href: '/host-templates', icon: Bot },
     ],
   },
   // Order System — hanya tampil untuk user paket POWER. Filter di komponen
@@ -96,6 +172,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'ORDER SYSTEM',
     requiresOrderSystem: true,
+    accent: 'orange',
     items: [
       { label: 'Pesanan', href: '/pesanan', icon: Package },
       { label: 'Produk', href: '/products', icon: ShoppingCart },
@@ -107,33 +184,32 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       {
         label: 'Template Follow-Up',
         href: '/pesanan/templates',
-        icon: FileText,
+        icon: LayoutTemplate,
       },
       // Testimoni (Fase 3, 2026-06-08) — panen via link follow-up setelah
       // order diterima.
       { label: 'Testimoni', href: '/pesanan/testimoni', icon: Star },
-      // Page /bank-accounts berisi rekening transfer + shipping profile —
-      // label "Pengaturan" lebih representatif. Route tetap supaya tidak
-      // breaking existing bookmark.
-      { label: 'Pengaturan', href: '/bank-accounts', icon: Settings },
+      // Page /bank-accounts berisi rekening transfer + shipping profile.
+      // Label eksplisit supaya tidak bentrok mental dgn "pengaturan akun".
+      // Route tetap supaya tidak breaking existing bookmark.
+      { label: 'Rekening & Ongkir', href: '/bank-accounts', icon: Settings },
     ],
   },
   {
     label: 'LANDING PAGE',
+    accent: 'violet',
     items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
-      { label: 'Content Studio', href: '/content', icon: Sparkles },
-      { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
+      { label: 'Content Studio', href: '/content', icon: Palette },
     ],
   },
   // LMS — Phase 1-3, 2026-05-09. Course saya = builder produk digital + e-course.
-  // Customer beli produk linked → otomatis enroll. Phase 3 plan upgrade LMS
-  // via token (sama pattern dgn Upgrade LP).
+  // Customer beli produk linked → otomatis enroll.
   {
     label: 'LMS',
+    accent: 'sky',
     items: [
       { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
-      { label: 'Upgrade LMS', href: '/pricing-lms', icon: TrendingUp },
     ],
   },
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
@@ -141,6 +217,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'INTEGRASI',
     requiresOrderSystem: true,
+    accent: 'emerald',
     items: [
       { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
       // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
@@ -154,13 +231,19 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'LAPORAN',
+    accent: 'amber',
     items: [{ label: 'Analytics', href: '/analytics', icon: BarChart3 }],
   },
+  // Upgrade LP/LMS dipindah ke sini (2026-07-10) — upsell dipisah dari grup
+  // fitur supaya grup fitur murni navigasi operasional.
   {
     label: 'AKUN',
+    accent: 'neutral',
     items: [
       { label: 'Billing', href: '/billing', icon: CreditCard },
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
+      { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
+      { label: 'Upgrade LMS', href: '/pricing-lms', icon: Rocket },
     ],
   },
 ]

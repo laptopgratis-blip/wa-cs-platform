@@ -27,6 +27,8 @@ import { formatNumber } from '@/lib/format'
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_NAV_HOME,
+  NAV_ACCENTS,
+  type NavAccent,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -266,9 +268,15 @@ function DrawerSection({
   pathnameActive: (href: string) => boolean
   onClickItem: () => void
 }) {
+  const accent = NAV_ACCENTS[group.accent ?? 'neutral']
   return (
     <div className="mb-2">
-      <p className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p
+        className={cn(
+          'px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider',
+          accent.header,
+        )}
+      >
         {group.label}
       </p>
       <nav className="px-3">
@@ -279,6 +287,7 @@ function DrawerSection({
             label={it.label}
             Icon={it.icon}
             active={pathnameActive(it.href)}
+            accent={accent}
             onClick={onClickItem}
           />
         ))}
@@ -292,33 +301,32 @@ function DrawerLink({
   label,
   Icon,
   active,
+  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: NavGroup['items'][number]['icon']
   active: boolean
+  accent?: NavAccent
   onClick: () => void
 }) {
+  const a = accent ?? NAV_ACCENTS.neutral
   return (
     <Link
       href={href}
       onClick={onClick}
+      aria-current={active ? 'page' : undefined}
       className={cn(
         'flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors',
-        active
-          ? 'bg-primary-50 font-semibold text-primary-700'
-          : 'text-warm-700 hover:bg-warm-100',
+        active ? cn('font-semibold', a.active) : 'text-warm-700 hover:bg-warm-100',
       )}
     >
       <Icon
-        className={cn(
-          'size-4 shrink-0',
-          active ? 'text-primary-600' : 'text-warm-500',
-        )}
+        className={cn('size-4 shrink-0', active ? a.activeIcon : a.icon)}
       />
       <span className="flex-1">{label}</span>
-      {active && <ChevronRight className="size-3 text-primary-500" />}
+      {active && <ChevronRight className="size-3 opacity-70" />}
     </Link>
   )
 }

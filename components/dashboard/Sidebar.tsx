@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
 import {
+  NAV_ACCENTS,
+  type NavAccent,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -80,9 +82,11 @@ export function Sidebar({
   const groups = filterGroupsByGoal(orderFiltered, onboardingGoal, showAll)
   const hasHidden = hasHiddenGroupsForGoal(orderFiltered, onboardingGoal)
 
-  // Collapsed state per group label, persist ke localStorage. Default semua
-  // expanded. Group yang punya item active otomatis di-force expand supaya
-  // user tidak bingung kenapa link aktif tidak terlihat.
+  // Collapsed state per group label, persist ke localStorage. First visit
+  // (belum ada state tersimpan): semua grup collapse KECUALI grup pertama
+  // (CHAT & CS) — mengurangi dinding 28 link jadi ~12 item terlihat. Group
+  // yang punya item active otomatis di-force expand supaya user tidak
+  // bingung kenapa link aktif tidak terlihat.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -91,6 +95,8 @@ export function Sidebar({
       if (raw) {
         const arr = JSON.parse(raw)
         if (Array.isArray(arr)) setCollapsed(new Set(arr))
+      } else {
+        setCollapsed(new Set(USER_NAV_GROUPS.slice(1).map((g) => g.label)))
       }
     } catch {
       /* abaikan corrupt state */
@@ -160,12 +166,17 @@ export function Sidebar({
         {groups.map((group) => {
           const hasActive = groupHasActive(group.items)
           const isCollapsed = collapsed.has(group.label) && !hasActive
+          const accent = NAV_ACCENTS[group.accent ?? 'neutral']
           return (
             <div key={group.label} className="mt-4">
               <button
                 type="button"
                 onClick={() => toggleGroup(group.label)}
-                className="group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider text-warm-400 transition-colors hover:text-warm-600"
+                aria-expanded={!isCollapsed}
+                className={cn(
+                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
+                  accent.header,
+                )}
                 title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
               >
                 <span>{group.label}</span>
@@ -184,6 +195,7 @@ export function Sidebar({
                         label={it.label}
                         Icon={it.icon}
                         active={isActive(it.href)}
+                        accent={accent}
                         onClick={onNavigate}
                       />
                     </li>
@@ -295,14 +307,18 @@ function SidebarLink({
   label,
   Icon,
   active,
+  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: (typeof USER_NAV_GROUPS)[number]['items'][number]['icon']
   active: boolean
+  /** Aksen warna grup — undefined (mis. Dashboard) fallback ke neutral. */
+  accent?: NavAccent
   onClick?: () => void
 }) {
+  const a = accent ?? NAV_ACCENTS.neutral
   return (
     <Link
       href={href}
@@ -311,22 +327,23 @@ function SidebarLink({
       className={cn(
         'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150',
         active
-          ? 'bg-primary-50 text-primary-700 font-semibold'
+          ? cn('font-semibold', a.active)
           : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
       )}
     >
       {active && (
         <span
           aria-hidden
-          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary-500"
+          className={cn(
+            'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full',
+            a.bar,
+          )}
         />
       )}
       <Icon
         className={cn(
           'size-4 shrink-0 transition-colors',
-          active
-            ? 'text-primary-600'
-            : 'text-warm-500 group-hover:text-warm-700',
+          active ? a.activeIcon : cn(a.icon, 'group-hover:text-warm-700'),
         )}
       />
       {label}
