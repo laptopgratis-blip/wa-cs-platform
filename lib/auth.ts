@@ -154,7 +154,7 @@ export const authOptions: NextAuthOptions = {
       : []),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       // Saat login pertama: salin id & role ke token. Skip validasi user-exists
       // di bawah karena baru ke-fetch dari authorize().
       if (user) {
@@ -162,6 +162,20 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as { role?: 'USER' | 'ADMIN' | 'FINANCE' }).role ?? 'USER'
         token.userCheckedAt = Date.now()
         return token
+      }
+
+      // Client panggil useSession().update() setelah edit profil — re-fetch
+      // nama/foto dari DB (payload update() client-controlled, jangan dipakai
+      // langsung untuk isi token).
+      if (trigger === 'update' && token.uid) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.uid as string },
+          select: { name: true, image: true },
+        })
+        if (dbUser) {
+          token.name = dbUser.name
+          token.picture = dbUser.image
+        }
       }
       // Refresh role dari DB kalau token sudah ada tapi role belum tersimpan
       // (mis. login pertama via Google → user dibuat oleh adapter).
@@ -186,9 +200,15 @@ export const authOptions: NextAuthOptions = {
         if (Date.now() - lastCheck > 5 * 60 * 1000) {
           const exists = await prisma.user.findUnique({
             where: { id: token.uid as string },
-            select: { id: true },
+            select: { id: true, name: true, image: true, role: true },
           })
           if (!exists) return {} as typeof token
+          // Sekalian refresh nama/foto/role — tab/device lain ikut dapat nama
+          // baru (hasil edit profil) paling lambat 5 menit tanpa re-login,
+          // dan role yang dicabut admin tidak nyangkut 60 hari di JWT.
+          token.name = exists.name
+          token.picture = exists.image
+          token.role = exists.role
           token.userCheckedAt = Date.now()
         }
       }

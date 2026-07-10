@@ -25,6 +25,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/analytics': 'Analytics',
   '/billing': 'Billing',
   '/purchases': 'Riwayat Pembelian',
+  '/profile': 'Profil Saya',
   '/admin/dashboard': 'Admin Dashboard',
   '/admin/models': 'AI Models',
   '/admin/packages': 'Token Packages',

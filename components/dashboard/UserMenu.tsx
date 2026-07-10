@@ -1,8 +1,10 @@
 'use client'
 
-// Avatar + dropdown menu di Topbar. Berisi info user dan tombol Sign Out.
+// Avatar + dropdown menu di Topbar. Berisi info user, link Profil, dan
+// tombol Sign Out.
 import { LogOut, User as UserIcon } from 'lucide-react'
 import { signOut } from 'next-auth/react'
+import Link from 'next/link'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -54,6 +56,13 @@ export function UserMenu({ name, email, image }: UserMenuProps) {
             )}
           </div>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/profile">
+            <UserIcon className="mr-2 size-4" />
+            Profil Saya
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => signOut({ callbackUrl: '/login' })}

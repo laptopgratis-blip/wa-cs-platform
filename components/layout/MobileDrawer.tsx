@@ -9,7 +9,7 @@
 //
 // Dipanggil dari header / bottom nav. State open dikontrol parent supaya
 // trigger di mana saja bisa pakai drawer yang sama.
-import { ChevronRight, Eye, EyeOff, LogOut } from 'lucide-react'
+import { ChevronRight, Eye, EyeOff, LogOut, User as UserIcon } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -241,8 +241,17 @@ export function MobileDrawer({
           </div>
         )}
 
-        {/* Logout */}
+        {/* Profil + Logout */}
         <div className="mt-2 border-t px-3 py-3">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-warm-600 hover:bg-warm-100"
+            asChild
+          >
+            <Link href="/profile" onClick={close}>
+              <UserIcon className="mr-3 size-4" /> Profil Saya
+            </Link>
+          </Button>
           <Button
             variant="ghost"
             className="w-full justify-start text-warm-600 hover:bg-warm-100"
