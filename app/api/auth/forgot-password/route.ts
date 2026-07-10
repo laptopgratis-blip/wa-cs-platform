@@ -25,9 +25,10 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({ where: { email } })
 
-    // Hanya kirim email kalau user ada DAN punya password (bukan akun Google-only).
-    // Tapi response selalu sama supaya tidak bocorkan apakah email terdaftar.
-    if (user?.password) {
+    // Kirim email kalau user terdaftar — termasuk akun OTP/Google tanpa password,
+    // karena reset-password sekaligus jadi cara set password pertama kali.
+    // Response selalu sama supaya tidak bocorkan apakah email terdaftar.
+    if (user) {
       const token = randomBytes(32).toString('hex')
       const expiresAt = new Date(Date.now() + TOKEN_TTL_MINUTES * 60 * 1000)
 
