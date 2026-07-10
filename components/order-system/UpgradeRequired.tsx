@@ -1,4 +1,4 @@
-// Halaman fallback ketika user tanpa paket POWER mengakses route Order System.
+// Halaman fallback ketika user tanpa paket POPULAR/POWER mengakses route Order System.
 // Server component — render-able dari page.tsx yang sudah cek access via gate.
 import { ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
@@ -33,14 +33,14 @@ export function UpgradeRequired({
           Paket kamu saat ini: <span className="font-bold">{currentTier}</span>
         </p>
         <p className="mt-1 text-sm text-amber-800">
-          Fitur {feature} hanya tersedia di paket{' '}
-          <span className="font-bold">POWER</span>.
+          Fitur {feature} tersedia mulai paket{' '}
+          <span className="font-bold">POPULAR</span>.
         </p>
       </div>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
         <Button asChild size="lg">
-          <Link href="/pricing">Lihat Paket POWER</Link>
+          <Link href="/pricing">Lihat Paket Upgrade</Link>
         </Button>
         <Button asChild size="lg" variant="outline">
           <Link href="/dashboard">Kembali ke Dashboard</Link>

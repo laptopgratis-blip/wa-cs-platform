@@ -1,7 +1,7 @@
 // Plan gating untuk Order System (Phase 1, 2026-05-07).
 // Akses fitur (Produk, Form Order, Zona Ongkir, Rekening) hanya untuk user
 // dengan subscription ACTIVE pada LpUpgradePackage yang `canUseOrderSystem`.
-// Saat ini hanya paket POWER yang true.
+// Sejak 2026-07-05: POPULAR dan POWER (flag di DB, bisa diubah admin).
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
@@ -10,7 +10,7 @@ import { requireSession } from '@/lib/api'
 export interface OrderSystemAccess {
   hasAccess: boolean
   currentTier: string  // FREE | STARTER | POPULAR | POWER
-  requiredTier: 'POWER'
+  requiredTier: 'POPULAR'
   packageName?: string
   expiresAt?: Date | null
 }
@@ -37,13 +37,13 @@ export async function checkOrderSystemAccess(
     return {
       hasAccess: true,
       currentTier: 'ADMIN',
-      requiredTier: 'POWER',
+      requiredTier: 'POPULAR',
       packageName: 'Admin Bypass',
     }
   }
 
   if (!user?.currentSubscriptionId) {
-    return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POWER' }
+    return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POPULAR' }
   }
 
   const sub = await prisma.subscription.findUnique({
@@ -62,13 +62,13 @@ export async function checkOrderSystemAccess(
   })
 
   if (!sub || sub.status !== 'ACTIVE') {
-    return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POWER' }
+    return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POPULAR' }
   }
 
   return {
     hasAccess: sub.lpPackage.canUseOrderSystem,
     currentTier: sub.lpPackage.tier,
-    requiredTier: 'POWER',
+    requiredTier: 'POPULAR',
     packageName: sub.lpPackage.name,
     expiresAt: sub.endDate,
   }
@@ -84,7 +84,7 @@ export async function requireOrderSystemAccess() {
     throw NextResponse.json(
       {
         success: false,
-        error: 'forbidden — butuh paket POWER untuk fitur Order System',
+        error: 'forbidden — butuh paket POPULAR ke atas untuk fitur Order System',
         code: 'ORDER_SYSTEM_ACCESS_REQUIRED',
         currentTier: access.currentTier,
         requiredTier: access.requiredTier,
