@@ -27,6 +27,7 @@ import {
   submitKlingVideo,
   DEFAULT_KLING_MODEL,
 } from './kling'
+import { isTransientKlingTaskFailure, MAX_KLING_AUTO_RETRIES } from './kling-retry'
 import { fileToBase64, generateHostImage } from './gemini-image'
 import {
   appendImageVariant,
@@ -584,6 +585,9 @@ export async function enqueueVideoJob(input: {
         prompt: input.promptMotion,
         duration: input.durationSeconds,
         hostSceneId: input.hostSceneId,
+        // Disimpan supaya auto-retry (transient Kling error) bisa resubmit
+        // dengan mode sama — pro vs std beda kualitas & biaya.
+        klingMode: input.klingMode ?? 'std',
       },
       providerTaskId: submission.requestId,
       status: GenerationJobStatus.RUNNING,
@@ -639,9 +643,137 @@ async function settleVideoChargeIdempotent(input: {
   return { ok: dedRes.ok, alreadyCharged: false, charge }
 }
 
+// Auto-retry job Kling yang gagal transient (mis. "generation time out").
+// Claim atomik: null-kan providerTaskId + bump klingRetryCount — dua poller
+// paralel (cron eksternal + dev-cron-runner) tidak bisa dobel-submit karena
+// yang kalah race dapat count 0. Query poll utama filter providerTaskId
+// != null, jadi job mid-retry tidak disentuh tick lain.
+async function retryVideoJobOnce(
+  job: {
+    id: string
+    model: string
+    providerTaskId: string
+    hostTemplateId: string | null
+  },
+  payload: Record<string, unknown>,
+  retryCount: number,
+  rawErr: string,
+): Promise<void> {
+  const claimed = await prisma.generationJob.updateMany({
+    where: {
+      id: job.id,
+      status: GenerationJobStatus.RUNNING,
+      providerTaskId: job.providerTaskId,
+    },
+    data: {
+      providerTaskId: null,
+      inputPayload: {
+        ...payload,
+        klingRetryCount: retryCount + 1,
+        // Dipakai orphan sweep — GenerationJob tidak punya updatedAt.
+        klingRetryAt: new Date().toISOString(),
+        klingLastError: rawErr.slice(0, 300),
+      },
+    },
+  })
+  if (claimed.count === 0) return // kalah race — poller lain yang handle
+
+  try {
+    const submission = await submitKlingVideo({
+      imageUrl: String(payload.imageUrl ?? ''),
+      prompt: String(payload.prompt ?? ''),
+      duration: payload.duration === 10 ? 10 : 5,
+      // model WAJIB eksplisit — jangan biarkan fallback DEFAULT_KLING_MODEL
+      // menukar model job yang dibuat dengan versi lain.
+      model: job.model,
+      mode: payload.klingMode === 'pro' ? 'pro' : 'std',
+    })
+    // Tulis task id baru KONDISIONAL (status masih RUNNING + masih ter-claim
+    // kita). Submit bisa nunggu antrian ~2,5 menit — di jendela itu poller
+    // lain yang pegang task id lama bisa keburu mark FAILED (mis. transport
+    // error). Tanpa guard, kita menimpa row FAILED dan task baru jadi yatim
+    // tanpa ketahuan.
+    const attached = await prisma.generationJob.updateMany({
+      where: {
+        id: job.id,
+        status: GenerationJobStatus.RUNNING,
+        providerTaskId: null,
+      },
+      data: { providerTaskId: submission.requestId, startedAt: new Date() },
+    })
+    if (attached.count === 0) {
+      console.error(
+        `[kling-poll] job ${job.id} keburu di-finalize poller lain saat retry — task Kling baru ${submission.requestId} yatim (tidak akan di-poll)`,
+      )
+      return
+    }
+    console.log(
+      `[kling-poll] job ${job.id} gagal transient ("${rawErr.slice(0, 80)}") — auto-retry ke-${retryCount + 1} (task baru ${submission.requestId})`,
+    )
+  } catch (submitErr) {
+    const submitMsg = (submitErr as Error).message
+    // Kuota retry sudah habis → gagal-cepat sekarang, jangan buang satu
+    // tick lagi. Juga menutup celah ABA: providerTaskId lama tidak pernah
+    // di-restore dengan retryCount maksimal, jadi poller ber-snapshot basi
+    // tidak bisa re-claim & me-reset hitungan retry.
+    if (retryCount + 1 >= MAX_KLING_AUTO_RETRIES) {
+      await markVideoJobFailed(
+        job.id,
+        job.hostTemplateId,
+        typeof payload.hostSceneId === 'string' ? payload.hostSceneId : null,
+        `${rawErr} — resubmit gagal: ${submitMsg} (sudah dicoba ${retryCount + 1}× otomatis)`,
+      )
+      return
+    }
+    // Masih ada jatah retry — kembalikan providerTaskId lama supaya tick
+    // berikutnya re-poll FAILED & coba lagi.
+    await prisma.generationJob.updateMany({
+      where: {
+        id: job.id,
+        status: GenerationJobStatus.RUNNING,
+        providerTaskId: null,
+      },
+      data: { providerTaskId: job.providerTaskId },
+    })
+    console.warn(`[kling-poll] job ${job.id} resubmit retry gagal: ${submitMsg}`)
+  }
+}
+
+// Sapu job yang ter-claim retry (providerTaskId null) tapi resubmit-nya
+// terputus (proses restart/crash sebelum task id baru tertulis). Tanpa ini
+// job jadi yatim: status RUNNING tapi tak pernah di-poll → scene GENERATING
+// abadi. Threshold 15 menit supaya claim yang sedang jalan tidak tersapu.
+const RETRY_ORPHAN_MAX_AGE_MS = 15 * 60 * 1000
+
+async function sweepOrphanedRetryJobs(): Promise<void> {
+  const orphans = await prisma.generationJob.findMany({
+    where: {
+      type: 'HOST_VIDEO',
+      status: GenerationJobStatus.RUNNING,
+      providerTaskId: null,
+    },
+    take: 10,
+    select: { id: true, hostTemplateId: true, inputPayload: true },
+  })
+  for (const o of orphans) {
+    const p =
+      (o.inputPayload as { klingRetryAt?: string; hostSceneId?: string } | null) ?? {}
+    const retryAt = p.klingRetryAt ? Date.parse(p.klingRetryAt) : NaN
+    const ageMs = Number.isNaN(retryAt) ? Infinity : Date.now() - retryAt
+    if (ageMs < RETRY_ORPHAN_MAX_AGE_MS) continue
+    await markVideoJobFailed(
+      o.id,
+      o.hostTemplateId,
+      p.hostSceneId ?? null,
+      'Retry otomatis terputus (proses restart) — silakan generate ulang',
+    )
+  }
+}
+
 // Dipanggil cron tiap menit. Iterate semua HOST_VIDEO jobs status RUNNING:
 //   - poll status → COMPLETED: download MP4, settle charge, update template
-//   - FAILED: tandai job + template error
+//   - FAILED transient (mis. "generation time out") → auto-retry maks 2×
+//   - FAILED permanen / retry habis: tandai job + template error
 //   - IN_QUEUE / IN_PROGRESS: skip (poll lagi nanti)
 //
 // Race-safe: finalize (DONE/FAILED) pakai claim kondisional updateMany
@@ -653,6 +785,8 @@ export async function pollAndFinalizePendingVideos(): Promise<{
   failed: number
   stillRunning: number
 }> {
+  await sweepOrphanedRetryJobs()
+
   const jobs = await prisma.generationJob.findMany({
     where: {
       type: 'HOST_VIDEO',
@@ -680,8 +814,30 @@ export async function pollAndFinalizePendingVideos(): Promise<{
         continue
       }
       if (status.status === 'FAILED') {
+        const payload = (job.inputPayload as Record<string, unknown> | null) ?? {}
+        const retryCount =
+          typeof payload.klingRetryCount === 'number' ? payload.klingRetryCount : 0
+        const rawErr = status.rawError ?? 'Kling FAILED'
+        // Transient (mis. "generation time out") → resubmit otomatis.
+        // Scene tetap GENERATING selama retry, UI tetap tampil progres.
+        if (isTransientKlingTaskFailure(rawErr) && retryCount < MAX_KLING_AUTO_RETRIES) {
+          await retryVideoJobOnce(
+            {
+              id: job.id,
+              model: job.model,
+              providerTaskId: job.providerTaskId,
+              hostTemplateId: job.hostTemplateId,
+            },
+            payload,
+            retryCount,
+            rawErr,
+          )
+          stillRunning++
+          continue
+        }
         failed++
-        await markVideoJobFailed(job.id, job.hostTemplateId, sceneId, status.rawError ?? 'Kling FAILED')
+        const retrySuffix = retryCount > 0 ? ` (sudah dicoba ${retryCount + 1}× otomatis)` : ''
+        await markVideoJobFailed(job.id, job.hostTemplateId, sceneId, rawErr + retrySuffix)
         continue
       }
       // COMPLETED — fetch result & download.

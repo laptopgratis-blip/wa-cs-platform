@@ -29,6 +29,7 @@ import {
   pollKlingLipsync,
   submitKlingLipsync,
 } from '@/lib/services/host-gen/kling'
+import { isTransientKlingTaskFailure } from '@/lib/services/host-gen/kling-retry'
 import { computeMediaCharge, executeMediaSync } from '@/lib/services/media-charge'
 import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
@@ -40,6 +41,10 @@ const CLIPS_URL_PREFIX = '/uploads/clips'
 
 const POLL_INTERVAL_MS = 5_000
 const POLL_TIMEOUT_MS = 300_000 // 5 menit max per lipsync (Kling sering 2-4 menit)
+// Retry inline dibatasi 1 resubmit (lebih ketat dari MAX global 2) — pipeline
+// ini ditunggu synchronous oleh POST /clips; tiap resubmit bisa menambah wall
+// time sampai ~5 menit poll. 1 resubmit sudah menutup mayoritas transient.
+const MAX_INLINE_LIPSYNC_RETRIES = 1
 
 export interface GenerateClipInput {
   hostTemplateId: string
@@ -205,8 +210,9 @@ export async function generateClip(
     return fail(new Error(`Audio gen: ${(e as Error).message}`))
   }
 
-  // Step 3: build adaptive Kling prompt + submit lipsync
-  let klingRequestId: string
+  // Step 3: build adaptive Kling prompt + rakit input lipsync (sekali saja —
+  // input yang sama dipakai ulang kalau submit di-retry di Step 4).
+  let submitInput: Parameters<typeof submitKlingLipsync>[0]
   try {
     await prisma.liveClip.update({
       where: { id: clipId },
@@ -238,7 +244,7 @@ export async function generateClip(
     // Lipsync source: prioritas sourceVideoId (Kling-internal videos[0].id,
     // BUKAN task_id) → sourceVideoUrl (https Kling CDN 30-day valid URL).
     // Audio: URL kalau public base ada, base64 fallback untuk dev localhost.
-    const submitInput: Parameters<typeof submitKlingLipsync>[0] = {
+    submitInput = {
       prompt: motionPrompt,
     }
     if (input.sourceVideoId) {
@@ -263,20 +269,54 @@ export async function generateClip(
       submitInput.audioUrl = `${publicBase.replace(/\/$/, '')}${audioResult.audioUrl}`
     }
 
-    const submitResult = await submitKlingLipsync(submitInput)
-    klingRequestId = submitResult.requestId
-    await prisma.liveClip.update({
-      where: { id: clipId },
-      data: { klingJobId: klingRequestId },
-    })
   } catch (e) {
     return fail(new Error(`Kling submit: ${(e as Error).message}`))
   }
 
-  // Step 4: poll + download + billing Kling lipsync per detik output
+  // Step 4: submit + poll dengan bounded auto-retry, lalu download + billing
+  // Kling lipsync per detik output. Yang jalan SEKALI (di luar loop): TTS
+  // (step 2, sudah di-charge — audio yang sama dipakai ulang), billing
+  // lipsync, download, transcode, embedding.
   let videoPath: string
   try {
-    const polled = await pollUntilDone(klingRequestId)
+    let polled: { videoUrl: string; durationSeconds: number }
+    let attempt = 0
+    for (;;) {
+      const submitResult = await submitKlingLipsync(submitInput)
+      // klingJobId di-update tiap attempt supaya DB selalu menunjuk task
+      // Kling yang sedang hidup.
+      await prisma.liveClip.update({
+        where: { id: clipId },
+        data: { klingJobId: submitResult.requestId },
+      })
+      try {
+        polled = await pollUntilDone(submitResult.requestId)
+        break
+      } catch (pollErr) {
+        const msg = (pollErr as Error).message
+        // Retry HANYA untuk task-level failure dari Kling ("Kling lipsync
+        // failed: <task_status_msg>") yang transient. Local poll timeout
+        // (>300s) TIDAK di-retry — task mungkin masih jalan di server Kling,
+        // resubmit berarti dobel task + dobel biaya.
+        const taskErr = msg.startsWith('Kling lipsync failed: ')
+          ? msg.slice('Kling lipsync failed: '.length)
+          : null
+        if (
+          taskErr &&
+          isTransientKlingTaskFailure(taskErr) &&
+          attempt < MAX_INLINE_LIPSYNC_RETRIES
+        ) {
+          attempt++
+          console.warn(
+            `[generate-clip ${clipId}] lipsync gagal transient ("${taskErr.slice(0, 80)}") — auto-retry ke-${attempt}`,
+          )
+          continue
+        }
+        throw attempt > 0
+          ? new Error(`${msg} (sudah dicoba ${attempt + 1}× otomatis)`)
+          : pollErr
+      }
+    }
     const downloaded = await downloadClipMp4(polled.videoUrl, clipId)
     videoPath = downloaded.videoPath
     const seconds = Math.max(1, Math.round(polled.durationSeconds || 0))
