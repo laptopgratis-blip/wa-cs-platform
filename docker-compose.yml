@@ -57,7 +57,12 @@ services:
       - .env.production
     environment:
       # Override URL service WA — pakai container name di network internal.
-      - WA_SERVICE_URL=http://wa-service:3001
+      # PENTING: pakai container_name (unik), BUKAN alias service `wa-service`.
+      # Network traefik-public di-share antar-project compose; project lain
+      # (cleanoz) juga punya service bernama `wa-service` → Docker DNS
+      # round-robin ke dua container → ±50% request nyasar → 401 → QR gagal
+      # muncul (insiden hulao.id 2026-07-05).
+      - WA_SERVICE_URL=http://hulao-wa-service:3001
     volumes:
       # Persist gambar bukti transfer & gambar LP supaya tidak hilang saat
       # container di-recreate. Mount langsung ke /app/public/uploads di image.
@@ -191,7 +196,8 @@ services:
     env_file:
       - .env.production
     environment:
-      - NEXTJS_URL=http://nextjs:3000
+      # container_name unik, bukan alias `nextjs` — lihat catatan WA_SERVICE_URL.
+      - NEXTJS_URL=http://hulao-nextjs:3000
       - PORT=3002
     volumes:
       # Screenshot debug + cookie session storage (sessions tidak strict

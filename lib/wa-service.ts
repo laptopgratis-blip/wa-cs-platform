@@ -38,6 +38,11 @@ async function request<T>(
       },
       // wa-service jalan di jaringan lokal — jangan di-cache.
       cache: 'no-store',
+      // Timeout wajib: kalau wa-service macet (mis. GC thrashing saat OOM),
+      // tanpa ini request Next ikut menggantung > 100 dtk → Cloudflare 524
+      // (halaman HTML) → browser error "unexpected token '<'" alih-alih
+      // pesan error JSON yang jelas.
+      signal: init.signal ?? AbortSignal.timeout(15_000),
     })
     const json = (await res.json().catch(() => null)) as ServiceResponse<T> | null
     if (!json) {

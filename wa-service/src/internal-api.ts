@@ -141,6 +141,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<ApiResp
 }
 
 export const internalApi = {
+  // Daftar session yang layak di-restore saat boot (status DB CONNECTED/
+  // PAUSED). Dipakai restoreAll supaya folder credential sesi mati tidak ikut
+  // dihidupkan (reconnect-storm 408 + heap OOM).
+  getRestorableSessions() {
+    return request<{ ids: string[] }>('/api/internal/whatsapp/restorable')
+  },
+
   getSoul(sessionId: string) {
     return request<InternalSoulConfig>(
       `/api/internal/soul/${encodeURIComponent(sessionId)}`,

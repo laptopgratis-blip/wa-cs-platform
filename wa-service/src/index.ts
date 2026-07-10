@@ -391,6 +391,10 @@ httpServer.listen(PORT, () => {
 // Graceful shutdown: putus semua socket Baileys supaya credentials ter-flush.
 async function shutdown(signal: string, exitCode = 0) {
   console.log(`[wa-service] menerima ${signal}, shutting down...`)
+  // Status DISCONNECTED massal di bawah JANGAN sampai ke DB — cuma restart,
+  // bukan disconnect beneran. DB harus tetap ingat sesi mana yang CONNECTED
+  // supaya restoreAll boot berikutnya bisa filter.
+  manager.beginShutdown()
   for (const state of manager.list()) {
     await manager.disconnect(state.sessionId, false).catch(() => {})
   }

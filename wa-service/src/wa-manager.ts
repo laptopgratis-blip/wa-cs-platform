@@ -198,14 +198,44 @@ export class WaManager {
     this.sessionsDir = sessionsDir
   }
 
-  // Restore semua sesi yang punya credentials di disk saat boot.
+  // Restore sesi yang punya credentials di disk saat boot — TAPI hanya yang
+  // status DB-nya CONNECTED/PAUSED. Restore buta semua folder (insiden
+  // 2026-07-05: 352 folder, cuma 76 CONNECTED) bikin ratusan sesi mati
+  // reconnect-loop 408 selamanya → heap OOM → crash-restart berulang.
   async restoreAll(): Promise<string[]> {
     await fs.mkdir(this.sessionsDir, { recursive: true })
     const entries = await fs.readdir(this.sessionsDir, { withFileTypes: true })
+
+    // Next.js boot SETELAH wa-service (compose depends_on) — retry ambil
+    // daftar restorable dulu. Kalau tetap gagal, fail-open restore semua
+    // (perilaku lama) supaya sesi user tidak mati cuma karena Next telat boot.
+    let restorable: Set<string> | null = null
+    for (let attempt = 1; attempt <= 20; attempt++) {
+      const res = await internalApi.getRestorableSessions()
+      if (res.success && res.data) {
+        restorable = new Set(res.data.ids)
+        break
+      }
+      console.warn(
+        `[wa-manager] daftar restorable belum tersedia (percobaan ${attempt}/20): ${res.error}`,
+      )
+      await sleep(6000)
+    }
+    if (!restorable) {
+      console.error(
+        '[wa-manager] gagal ambil daftar restorable — fail-open: restore semua folder',
+      )
+    }
+
     const restored: string[] = []
+    let skipped = 0
     let i = 0
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
+      if (restorable && !restorable.has(entry.name)) {
+        skipped += 1
+        continue
+      }
       try {
         await this.connect(entry.name)
         restored.push(entry.name)
@@ -217,6 +247,11 @@ export class WaManager {
       } catch (err) {
         console.error(`[wa-manager] gagal restore ${entry.name}:`, err)
       }
+    }
+    if (skipped > 0) {
+      console.log(
+        `[wa-manager] ${skipped} folder sesi non-aktif di-skip (credential tetap di disk, hidup lagi via /connect)`,
+      )
     }
     return restored
   }
@@ -1433,6 +1468,15 @@ export class WaManager {
     }
   }
 
+  // Saat graceful shutdown, JANGAN persist status ke DB. disconnect() massal
+  // di handler SIGTERM menandai semua sesi DISCONNECTED — padahal service cuma
+  // restart. Kalau ikut ke DB, daftar restorable (status CONNECTED/PAUSED)
+  // kosong saat boot berikutnya → tidak ada sesi yang hidup lagi.
+  private shuttingDown = false
+  beginShutdown(): void {
+    this.shuttingDown = true
+  }
+
   private updateState(entry: SessionEntry, patch: Partial<SessionState>): void {
     const prevStatus = entry.state.status
     const prevPhone = entry.state.phoneNumber
@@ -1460,7 +1504,7 @@ export class WaManager {
       Boolean(entry.state.phoneNumber) && entry.state.phoneNumber !== prevPhone
     const nameChanged =
       Boolean(entry.state.displayName) && entry.state.displayName !== prevName
-    if (statusChanged || phoneChanged || nameChanged) {
+    if ((statusChanged || phoneChanged || nameChanged) && !this.shuttingDown) {
       internalApi
         .updateSessionStatus(entry.state.sessionId, {
           status: entry.state.status,
