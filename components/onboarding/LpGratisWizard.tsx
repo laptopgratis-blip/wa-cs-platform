@@ -536,7 +536,7 @@ function Step2Upload({
     if (!confirm('Hapus foto ini?')) return
     setDeletingId(imgId)
     try {
-      const res = await fetch(`/api/lp/images?id=${imgId}`, {
+      const res = await fetch(`/api/lp/images/${imgId}`, {
         method: 'DELETE',
       })
       if (!res.ok) {
