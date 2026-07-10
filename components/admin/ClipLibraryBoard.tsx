@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 import { BaselineComposer } from './BaselineComposer'
 import { BulkGenerateModal } from './BulkGenerateModal'
 import { HostImageGallery } from './HostImageGallery'
+import { HostTitleEditable } from './HostTitleEditable'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -404,7 +405,14 @@ export function ClipLibraryBoard({
         <Link href={backHref} className="text-xs text-muted-foreground hover:underline">
           ← Kembali
         </Link>
-        <h1 className="text-xl font-semibold">🎙️ Klip Live — {hostName}</h1>
+        <h1>
+          <HostTitleEditable
+            hostId={hostId}
+            name={hostName}
+            prefix="🎙️ Klip Live — "
+            className="text-xl font-semibold"
+          />
+        </h1>
         <Card>
           <CardContent className="space-y-2 p-4">
             <div className="text-sm font-semibold">🖼️ Siapkan gambar host dulu</div>
@@ -430,7 +438,14 @@ export function ClipLibraryBoard({
         <Link href={backHref} className="text-xs text-muted-foreground hover:underline">
           ← Kembali
         </Link>
-        <h1 className="text-xl font-semibold">🎙️ Klip Live — {hostName}</h1>
+        <h1>
+          <HostTitleEditable
+            hostId={hostId}
+            name={hostName}
+            prefix="🎙️ Klip Live — "
+            className="text-xl font-semibold"
+          />
+        </h1>
         <Card>
           <CardContent className="space-y-3 p-4">
             <div className="text-sm font-semibold">
@@ -523,8 +538,13 @@ export function ClipLibraryBoard({
           <Link href={backHref} className="text-xs text-muted-foreground hover:underline">
             ← Kembali ke host list
           </Link>
-          <h1 className="mt-1 text-xl font-semibold">
-            🎙️ Klip Live — {hostName}
+          <h1 className="mt-1">
+            <HostTitleEditable
+              hostId={hostId}
+              name={hostName}
+              prefix="🎙️ Klip Live — "
+              className="text-xl font-semibold"
+            />
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Generate klip dengan suara natural + lip-sync presisi. Tiap klip akan jadi opsi untuk match pertanyaan customer live.

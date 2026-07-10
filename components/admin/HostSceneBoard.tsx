@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { HostImageGallery } from './HostImageGallery'
+import { HostTitleEditable } from './HostTitleEditable'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -257,7 +258,14 @@ export function HostSceneBoard({
           <CardContent className="space-y-3 p-4">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold">{host.name}</h1>
+                <h1>
+                  <HostTitleEditable
+                    hostId={hostId}
+                    name={host.name}
+                    className="text-2xl font-semibold"
+                    onRenamed={(n) => setHost((h) => (h ? { ...h, name: n } : h))}
+                  />
+                </h1>
                 <Badge className="bg-warm-100 text-warm-700">
                   {host.status.replace(/_/g, ' ')}
                 </Badge>
