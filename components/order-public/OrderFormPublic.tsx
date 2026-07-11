@@ -285,7 +285,17 @@ export function OrderFormPublic({
     null,
   )
   const [loadingCourier, setLoadingCourier] = useState(false)
+  // Pesan saat ongkir gagal diambil (kuota RajaOngkir habis / network) —
+  // dibedakan dari "memang tidak ada opsi" supaya customer tahu harus retry.
+  const [courierError, setCourierError] = useState<string | null>(null)
+  // Bump untuk re-trigger fetch ongkir dari tombol "Coba lagi".
+  const [courierRetryNonce, setCourierRetryNonce] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+
+  // COD: kalau penjual isi flat ongkir COD di form → pakai itu (skip
+  // RajaOngkir). Kalau kosong → COD ikut ongkir RajaOngkir seperti Transfer
+  // (sebelumnya ongkir COD selalu 0 — penjual rugi ongkir).
+  const codUsesFlat = form.shippingFlatCod != null
 
   // ─── Pixel Tracking (Phase 2) ────────────────────────────────────────────
   const [pixels, setPixels] = useState<BrowserPixel[]>([])
@@ -492,29 +502,29 @@ export function OrderFormPublic({
     return () => clearInterval(i)
   }, [flashEndsAt])
 
-  // Saat customer pilih destinasi + payment TRANSFER → fetch ongkir.
-  // Form digital (requireShipping=false) selalu skip — tidak ada alamat & ongkir.
+  // Saat customer pilih destinasi → fetch ongkir. Berlaku untuk TRANSFER dan
+  // juga COD tanpa flat rate (COD ikut ongkir RajaOngkir). COD dengan flat
+  // rate & form digital (requireShipping=false) skip — tidak perlu hit API.
   useEffect(() => {
-    if (!form.requireShipping) {
+    const needsCourierFetch =
+      form.requireShipping &&
+      (paymentMethod === 'TRANSFER' ||
+        (paymentMethod === 'COD' && !codUsesFlat))
+    if (
+      !needsCourierFetch ||
+      !destination ||
+      items.length === 0 ||
+      enabledCouriers.length === 0
+    ) {
       setCourierOptions([])
       setSelectedCourier(null)
       setShippingZone(null)
-      return
-    }
-    if (paymentMethod !== 'TRANSFER') {
-      setCourierOptions([])
-      setSelectedCourier(null)
-      setShippingZone(null)
-      return
-    }
-    if (!destination || items.length === 0 || enabledCouriers.length === 0) {
-      setCourierOptions([])
-      setSelectedCourier(null)
-      setShippingZone(null)
+      setCourierError(null)
       return
     }
     let cancelled = false
     setLoadingCourier(true)
+    setCourierError(null)
     ;(async () => {
       try {
         const res = await fetch('/api/orders/cost-preview', {
@@ -531,19 +541,33 @@ export function OrderFormPublic({
         const data = await res.json()
         if (cancelled) return
         if (!res.ok || !data.success) {
-          toast.error(data.error ?? 'Gagal ambil ongkir')
           setCourierOptions([])
           setShippingZone(null)
+          setCourierError(data.error ?? 'Gagal ambil ongkir. Coba lagi.')
           return
         }
         const services: CourierService[] = data.data.services ?? []
+        // degraded = kosong KARENA layanan ongkir lagi bermasalah (kuota
+        // habis), bukan karena tujuan tidak ter-cover kurir.
+        if (services.length === 0 && data.data.degraded) {
+          setCourierOptions([])
+          setShippingZone(null)
+          setCourierError(
+            'Layanan cek ongkir sedang sibuk. Coba lagi sebentar.',
+          )
+          return
+        }
         setCourierOptions(services)
         setShippingZone((data.data.zone as ShippingZonePreview | null) ?? null)
         // Auto-pick service termurah supaya UX cepet.
         const cheapest = services.slice().sort((a, b) => a.cost - b.cost)[0]
         if (cheapest) setSelectedCourier(cheapest)
       } catch {
-        if (!cancelled) toast.error('Gagal ambil ongkir')
+        if (!cancelled) {
+          setCourierOptions([])
+          setShippingZone(null)
+          setCourierError('Gagal ambil ongkir. Periksa koneksi & coba lagi.')
+        }
       } finally {
         if (!cancelled) setLoadingCourier(false)
       }
@@ -553,19 +577,22 @@ export function OrderFormPublic({
     }
   }, [
     paymentMethod,
+    codUsesFlat,
     destination,
     enabledCouriers,
     totalWeight,
     items.length,
     form.slug,
     form.requireShipping,
+    courierRetryNonce,
   ])
 
   // Computed totals (preview di client; server tetap re-hitung saat submit).
   // Form digital (requireShipping=false) tidak punya ongkir — selalu 0.
+  // COD: flat rate kalau penjual set, kalau tidak ikut kurir RajaOngkir.
   const shippingCost = !form.requireShipping
     ? 0
-    : paymentMethod === 'COD'
+    : paymentMethod === 'COD' && codUsesFlat
       ? form.shippingFlatCod ?? 0
       : selectedCourier?.cost ?? 0
   // Subsidi zona ongkir — mirror rumus calculateOrderTotal di server supaya
@@ -650,7 +677,12 @@ export function OrderFormPublic({
         toast.error('Alamat lengkap minimal 5 karakter')
         return
       }
-      if (paymentMethod === 'TRANSFER' && !selectedCourier) {
+      // Kurir wajib untuk TRANSFER & COD tanpa flat rate (dua-duanya pakai
+      // ongkir RajaOngkir).
+      if (
+        (paymentMethod === 'TRANSFER' || !codUsesFlat) &&
+        !selectedCourier
+      ) {
         toast.error('Pilih kurir dulu')
         return
       }
@@ -1009,8 +1041,9 @@ export function OrderFormPublic({
         </CardContent>
       </Card>
 
-      {/* Pengiriman (RajaOngkir options for TRANSFER) */}
-      {form.requireShipping && paymentMethod === 'TRANSFER' && (
+      {/* Pengiriman (RajaOngkir options — TRANSFER & COD tanpa flat rate) */}
+      {form.requireShipping &&
+        (paymentMethod === 'TRANSFER' || !codUsesFlat) && (
         <Card className="mb-4">
           <CardContent className="p-4">
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-warm-900">
@@ -1029,6 +1062,19 @@ export function OrderFormPublic({
               <div className="flex items-center gap-2 text-sm text-warm-500">
                 <Loader2 className="size-4 animate-spin" />
                 Hitung ongkir…
+              </div>
+            ) : courierError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm text-amber-800">{courierError}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => setCourierRetryNonce((n) => n + 1)}
+                >
+                  Coba lagi
+                </Button>
               </div>
             ) : courierOptions.length === 0 ? (
               <p className="text-sm text-warm-500">
@@ -1164,10 +1210,10 @@ export function OrderFormPublic({
                 <div className="flex justify-between text-sm">
                   <span>
                     Ongkir{' '}
-                    {paymentMethod === 'TRANSFER' && selectedCourier
-                      ? `${selectedCourier.code.toUpperCase()} ${selectedCourier.service}`
-                      : paymentMethod === 'COD'
-                        ? '(COD)'
+                    {paymentMethod === 'COD' && codUsesFlat
+                      ? '(COD)'
+                      : selectedCourier
+                        ? `${selectedCourier.code.toUpperCase()} ${selectedCourier.service}`
                         : ''}
                   </span>
                   <span>

@@ -39,18 +39,24 @@ export function DestinationPicker({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PickedDestination[]>([])
   const [loading, setLoading] = useState(false)
+  // Pesan saat search GAGAL (kuota RajaOngkir habis / rate limit / network) —
+  // dibedakan dari hasil kosong biasa supaya user tahu bukan salah ketik.
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const inputId = useId()
 
-  // Debounce search 300ms.
+  // Debounce 500ms + minimal 3 huruf — tiap query unik yang lolos bisa makan
+  // kuota Komerce (500 hit/hari), jadi jangan tembak tiap ketukan.
   useEffect(() => {
-    if (query.trim().length < 2) {
+    if (query.trim().length < 3) {
       setResults([])
+      setErrorMsg(null)
       return
     }
     let cancelled = false
     setLoading(true)
+    setErrorMsg(null)
     const handle = setTimeout(async () => {
       try {
         const apiUrl = endpoint
@@ -61,15 +67,26 @@ export function DestinationPicker({
         if (cancelled) return
         if (data.success && Array.isArray(data.data?.items)) {
           setResults(data.data.items)
+          // degraded = kosong karena upstream lagi bermasalah, bukan karena
+          // memang tidak ada — jangan bilang "tidak ditemukan".
+          setErrorMsg(
+            data.data.items.length === 0 && data.data.degraded
+              ? 'Layanan cek alamat sedang sibuk. Coba lagi sebentar.'
+              : null,
+          )
         } else {
           setResults([])
+          setErrorMsg(data.error ?? 'Gagal cari alamat. Coba lagi.')
         }
       } catch {
-        if (!cancelled) setResults([])
+        if (!cancelled) {
+          setResults([])
+          setErrorMsg('Gagal cari alamat. Periksa koneksi & coba lagi.')
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
-    }, 300)
+    }, 500)
     return () => {
       cancelled = true
       clearTimeout(handle)
@@ -134,7 +151,7 @@ export function DestinationPicker({
             disabled={disabled}
             autoComplete="off"
           />
-          {open && (query.trim().length >= 2 || loading) && (
+          {open && (query.trim().length >= 3 || loading) && (
             <div
               className={cn(
                 'absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-lg border bg-card shadow-lg',
@@ -145,6 +162,8 @@ export function DestinationPicker({
                   <Loader2 className="size-4 animate-spin" />
                   Mencari…
                 </div>
+              ) : errorMsg ? (
+                <p className="px-3 py-3 text-sm text-amber-700">{errorMsg}</p>
               ) : results.length === 0 ? (
                 <p className="px-3 py-3 text-sm text-warm-500">
                   Tidak ditemukan. Coba ketik nama kota atau kecamatan.

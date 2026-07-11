@@ -10,6 +10,16 @@ import type { Product } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { calculateShippingCost } from '@/lib/services/rajaongkir'
 
+// Dilempar saat customer sudah pilih kurir tapi ongkirnya tidak bisa
+// dihitung (kuota RajaOngkir habis / kurir-service tidak valid lagi).
+// JANGAN diam-diam lolos dengan ongkir 0 — penjual rugi. Route submit
+// catch ini → balas 503 dengan pesan aman untuk customer.
+export class OngkirUnavailableError extends Error {
+  constructor() {
+    super('Ongkir sedang tidak bisa dihitung. Coba lagi beberapa saat.')
+  }
+}
+
 export interface PricingItemSnapshot {
   productId: string
   // Phase 5 (2026-05-08): kalau produk punya varian, customer wajib kirim
@@ -226,7 +236,7 @@ export async function calculateOrderTotal(
       where: { userId: input.userId },
     })
     if (profile?.originCityId) {
-      const services = await calculateShippingCost({
+      const { services } = await calculateShippingCost({
         origin: Number(profile.originCityId),
         destination: input.shippingDestinationId,
         weight: Math.max(totalWeight, profile.defaultWeightGrams),
@@ -235,13 +245,17 @@ export async function calculateOrderTotal(
       const match = services.find(
         (s) => s.code === input.selectedCourier && s.service === input.selectedService,
       )
-      if (match) {
-        shippingCost = match.cost
-        shippingCourier = match.code
-        shippingService = match.service
-        shippingEtd = match.etd
-        shippingDescription = match.description
+      if (!match) {
+        // Kurir sudah dipilih customer tapi cost tidak ketemu (kuota habis
+        // tanpa cache, atau service berubah). Gagalkan submit daripada
+        // order tercatat dengan ongkir 0.
+        throw new OngkirUnavailableError()
       }
+      shippingCost = match.cost
+      shippingCourier = match.code
+      shippingService = match.service
+      shippingEtd = match.etd
+      shippingDescription = match.description
     }
   }
 

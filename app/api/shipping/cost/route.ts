@@ -41,8 +41,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const services = await calculateShippingCost(parsed.data)
-    return jsonOk({ services })
+    const { services, degraded } = await calculateShippingCost(parsed.data)
+    return jsonOk({ services, degraded })
   } catch (err) {
     console.error('[POST /api/shipping/cost] gagal:', err)
     return jsonError('Gagal hitung ongkir. Coba lagi sebentar.', 500)
