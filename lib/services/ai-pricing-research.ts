@@ -13,17 +13,37 @@ const RESEARCH_MODEL = 'claude-sonnet-4-5'
 // JSON output).
 const MAX_TOKENS = 8000
 
-const PROMPT = `Cari harga API resmi terkini untuk semua model AI berikut dari sumber resmi.
+// Provider yang di-cover research (KLING/ELEVENLABS di katalog dikelola
+// manual — harga mereka bukan per-token dan tidak ada di halaman pricing
+// berbentuk tabel token).
+const RESEARCH_PROVIDERS = ['ANTHROPIC', 'OPENAI', 'GOOGLE'] as const
 
-Sumber resmi:
-- https://www.anthropic.com/pricing
-- https://openai.com/api/pricing
-- https://ai.google.dev/pricing
+// Fallback kalau katalog DB kosong — hanya seed awal, BUKAN sumber utama.
+const DEFAULT_CATALOG: Record<string, string[]> = {
+  ANTHROPIC: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5'],
+  OPENAI: ['gpt-5', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini'],
+  GOOGLE: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+}
 
-Models yang harus dicari:
-ANTHROPIC: claude-opus-4-5, claude-sonnet-4-5, claude-haiku-4-5
-OPENAI: gpt-5, gpt-5-mini, gpt-4.1, gpt-4o, gpt-4o-mini
-GOOGLE: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite
+// Prompt dibangun dinamis: daftar model TIDAK di-hardcode (incident
+// 2026-07-11: daftar lama tidak ada lagi di halaman pricing resmi → Claude
+// patuh "skip yang tidak ketemu" → balas array kosong → research selalu
+// gagal). Sekarang: minta SEMUA model aktif di halaman pricing + cek model
+// katalog kami kalau masih tercantum.
+function buildPrompt(catalog: Record<string, string[]>): string {
+  const catalogLines = RESEARCH_PROVIDERS.map(
+    (p) => `${p}: ${(catalog[p] ?? []).join(', ') || '(kosong)'}`,
+  ).join('\n')
+
+  return `Cari harga API resmi TERKINI dari halaman pricing resmi berikut (pakai web search):
+- https://platform.claude.com/docs/en/pricing (Anthropic)
+- https://openai.com/api/pricing (OpenAI)
+- https://ai.google.dev/pricing (Google)
+
+Yang harus dikembalikan:
+1. SEMUA model text-generation yang SAAT INI tercantum di halaman pricing resmi masing-masing provider (model generasi terbaru). Maksimal 10 model per provider, prioritaskan model utama.
+2. Model dari katalog kami di bawah ini — sertakan hanya kalau harganya masih tercantum di sumber resmi:
+${catalogLines}
 
 Return HANYA JSON array berikut format ini, tanpa markdown atau penjelasan tambahan:
 [
@@ -34,13 +54,18 @@ Return HANYA JSON array berikut format ini, tanpa markdown atau penjelasan tamba
     "inputPricePer1M": 1.0,
     "outputPricePer1M": 5.0,
     "contextWindow": 200000,
-    "sourceUrl": "https://www.anthropic.com/pricing",
-    "notes": "harga resmi per Mei 2026"
+    "sourceUrl": "https://platform.claude.com/docs/en/pricing",
+    "notes": "harga resmi"
   }
 ]
 
-Untuk model yang tidak ditemukan harganya, skip jangan dimasukkan.
-Pastikan harga dalam USD per 1 juta token.`
+Aturan:
+- provider hanya boleh: ANTHROPIC | OPENAI | GOOGLE
+- modelId = ID resmi yang dipakai di API (bukan nama marketing)
+- Harga dalam USD per 1 juta token
+- Model yang tidak ketemu harganya: skip, jangan dikarang
+- Kalau TIDAK ADA SATUPUN yang ketemu, return array kosong []`
+}
 
 const itemSchema = z.object({
   provider: z.enum(['ANTHROPIC', 'OPENAI', 'GOOGLE']),
@@ -49,7 +74,9 @@ const itemSchema = z.object({
   inputPricePer1M: z.number().nonnegative().max(10_000),
   outputPricePer1M: z.number().nonnegative().max(10_000),
   contextWindow: z.number().int().positive().max(10_000_000).optional().nullable(),
-  sourceUrl: z.string().url().optional().nullable(),
+  // Bukan .url() — Claude kadang tulis "anthropic.com/pricing" tanpa scheme;
+  // field display-only, jangan sampai satu item gugur karena ini.
+  sourceUrl: z.string().max(300).optional().nullable(),
   notes: z.string().max(500).optional().nullable(),
 })
 
@@ -123,10 +150,30 @@ export async function runResearch(logId: string): Promise<ResearchOutcome> {
     updated: [],
     unchanged: [],
   }
+  // Di luar try supaya catch bisa menyimpan raw response ke log — sebelumnya
+  // error bilang "cek raw response di log" tapi rawResponse tidak pernah
+  // disimpan di path gagal.
+  let text = ''
 
   try {
     const apiKey = await getAnthropicKey()
     const client = new Anthropic({ apiKey })
+
+    // Daftar model katalog dari DB — sumber utama; fallback default kalau
+    // katalog kosong. Jangan hardcode: halaman pricing berganti generasi
+    // model dan daftar statis pasti basi.
+    const presets = await prisma.aiModelPreset.findMany({
+      where: { provider: { in: [...RESEARCH_PROVIDERS] } },
+      select: { provider: true, modelId: true },
+    })
+    const catalog: Record<string, string[]> = {}
+    for (const p of presets) {
+      const list = catalog[p.provider] ?? []
+      catalog[p.provider] = [...list, p.modelId]
+    }
+    const prompt = buildPrompt(
+      presets.length > 0 ? catalog : DEFAULT_CATALOG,
+    )
 
     const message = await client.messages.create({
       model: RESEARCH_MODEL,
@@ -139,10 +186,10 @@ export async function runResearch(logId: string): Promise<ResearchOutcome> {
           max_uses: 6,
         } as unknown as Anthropic.Messages.Tool,
       ],
-      messages: [{ role: 'user', content: PROMPT }],
+      messages: [{ role: 'user', content: prompt }],
     })
 
-    const text = extractFinalText(message)
+    text = extractFinalText(message)
     let parsed: unknown
     try {
       parsed = parseJsonArray(text)
@@ -154,6 +201,13 @@ export async function runResearch(logId: string): Promise<ResearchOutcome> {
 
     if (!Array.isArray(parsed)) {
       throw new Error('Response Claude bukan array JSON')
+    }
+
+    if (parsed.length === 0) {
+      throw new Error(
+        'Claude tidak menemukan harga satu model pun di sumber resmi. ' +
+          'Kemungkinan halaman pricing berubah struktur — cek raw response di riwayat research.',
+      )
     }
 
     // Validate setiap item; collect yang valid, log yang invalid.
@@ -172,7 +226,7 @@ export async function runResearch(logId: string): Promise<ResearchOutcome> {
 
     if (items.length === 0) {
       throw new Error(
-        'Tidak ada item valid dari Claude. Cek raw response di log.',
+        'Semua item dari Claude gagal validasi. Cek raw response di riwayat research.',
       )
     }
 
@@ -249,6 +303,9 @@ export async function runResearch(logId: string): Promise<ResearchOutcome> {
         data: {
           status: 'FAILED',
           error: errMsg,
+          // Simpan raw response juga saat gagal — dibutuhkan untuk debug
+          // kenapa hasil kosong/invalid.
+          rawResponse: text || null,
           completedAt: new Date(),
         },
       })
