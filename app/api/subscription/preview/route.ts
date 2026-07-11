@@ -13,6 +13,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { computeUpgradeCredit } from '@/lib/services/subscription'
 import {
   VALID_DURATIONS,
   calculateSubscriptionPriceFull,
@@ -79,6 +80,16 @@ export async function GET(req: Request) {
     })
     .then((b) => b?.balance ?? 0)
 
+  // Kredit proration: sisa nilai subscription aktif ber-tier lebih rendah
+  // dipotongkan dari harga (mirror logic checkout — angka preview = final).
+  const credit = await computeUpgradeCredit({
+    userId: session.user.id,
+    targetTier: pkg.tier,
+    pricePerToken,
+  })
+  const appliedCredit = Math.min(credit.creditTokens, calc.priceFinalTokens)
+  const tokensDue = calc.priceFinalTokens - appliedCredit
+
   return jsonOk({
     package: {
       id: pkg.id,
@@ -94,10 +105,19 @@ export async function GET(req: Request) {
     priceBase: calc.priceBase,
     discountAmount: calc.discountAmount,
     priceIdr: calc.priceFinal,
+    // Harga penuh dalam token (sebelum kredit) — untuk tampilan rincian.
     tokenAmount: calc.priceFinalTokens,
+    // Kredit upgrade & jumlah yang benar-benar akan dipotong dari saldo.
+    creditTokens: appliedCredit,
+    creditSources: credit.sources.map((s) => ({
+      packageName: s.packageName,
+      endDate: s.endDate.toISOString(),
+      creditTokens: s.creditTokens,
+    })),
+    tokensDue,
     pricePerToken,
     currentBalance: balance,
-    sufficientBalance: balance >= calc.priceFinalTokens,
-    shortageTokens: Math.max(0, calc.priceFinalTokens - balance),
+    sufficientBalance: balance >= tokensDue,
+    shortageTokens: Math.max(0, tokensDue - balance),
   })
 }

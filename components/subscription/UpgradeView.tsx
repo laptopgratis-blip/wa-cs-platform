@@ -55,7 +55,17 @@ interface PreviewData {
   priceBase: number
   discountAmount: number
   priceIdr: number
+  // Harga penuh dalam token (sebelum kredit upgrade).
   tokenAmount: number
+  // Kredit proration dari sisa subscription aktif tier lebih rendah.
+  creditTokens: number
+  creditSources: Array<{
+    packageName: string
+    endDate: string
+    creditTokens: number
+  }>
+  // Yang benar-benar dipotong dari saldo = tokenAmount - creditTokens.
+  tokensDue: number
   pricePerToken: number
   currentBalance: number
   sufficientBalance: boolean
@@ -243,6 +253,20 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                       Rp {preview.priceIdr.toLocaleString('id-ID')}
                     </span>
                   </li>
+                  {preview.creditTokens > 0 && (
+                    <li className="flex justify-between text-emerald-700">
+                      <span>
+                        Kredit sisa{' '}
+                        {preview.creditSources
+                          .map((s) => s.packageName)
+                          .join(', ')}{' '}
+                        (otomatis)
+                      </span>
+                      <span className="tabular-nums">
+                        − {preview.creditTokens.toLocaleString('id-ID')} token
+                      </span>
+                    </li>
+                  )}
                 </ul>
               </div>
 
@@ -270,8 +294,15 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                       Akan dipotong dari saldo
                     </div>
                     <div className="font-mono text-2xl font-bold tabular-nums text-warm-900">
-                      {preview.tokenAmount.toLocaleString('id-ID')} token
+                      {preview.tokensDue.toLocaleString('id-ID')} token
                     </div>
+                    {preview.creditTokens > 0 && (
+                      <div className="text-xs text-emerald-700">
+                        Sudah dipotong kredit upgrade{' '}
+                        {preview.creditTokens.toLocaleString('id-ID')} token —
+                        sisa plan lama tidak hangus.
+                      </div>
+                    )}
                     <div className="mt-1 text-xs text-warm-600">
                       Konversi 1 token = Rp{' '}
                       {preview.pricePerToken.toLocaleString('id-ID')} (kurs
@@ -291,7 +322,7 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                         Setelah aktivasi:{' '}
                         <span className="font-mono font-semibold tabular-nums">
                           {(
-                            preview.currentBalance - preview.tokenAmount
+                            preview.currentBalance - preview.tokensDue
                           ).toLocaleString('id-ID')}{' '}
                           token
                         </span>

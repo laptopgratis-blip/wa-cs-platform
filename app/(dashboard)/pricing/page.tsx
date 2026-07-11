@@ -6,6 +6,7 @@ import { PricingView } from '@/components/subscription/PricingView'
 import { authOptions } from '@/lib/auth'
 import { TIER_VISITOR_CAP } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
+import { computeUpgradeCredit } from '@/lib/services/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,9 +30,20 @@ export default async function PricingPage() {
     },
   })
 
+  // pricePerToken aktif — dipakai PricingView untuk hitung token equivalent
+  // di tiap kartu plan. Default Rp 2/token kalau setting belum ada.
+  const settings = await prisma.pricingSettings
+    .findFirst({ select: { pricePerToken: true } })
+    .catch(() => null)
+  const pricePerToken = settings?.pricePerToken ?? 2
+
   // Plan badge utk current user — supaya CTA bisa beda kalau sudah subscribe.
   let currentTier: string | null = null
   let currentBalance: number | null = null
+  // Kredit proration per tier target (sisa subscription aktif tier lebih
+  // rendah) — supaya badge "saldo cukup/kurang" di kartu pakai angka yang
+  // sama dengan preview & checkout.
+  const upgradeCredits: Record<string, number> = {}
   if (session) {
     const [quota, balance] = await Promise.all([
       prisma.userQuota.findUnique({
@@ -45,14 +57,21 @@ export default async function PricingPage() {
     ])
     currentTier = quota?.tier ?? 'FREE'
     currentBalance = balance?.balance ?? 0
-  }
 
-  // pricePerToken aktif — dipakai PricingView untuk hitung token equivalent
-  // di tiap kartu plan. Default Rp 2/token kalau setting belum ada.
-  const settings = await prisma.pricingSettings
-    .findFirst({ select: { pricePerToken: true } })
-    .catch(() => null)
-  const pricePerToken = settings?.pricePerToken ?? 2
+    const tiers = Array.from(new Set(packages.map((p) => p.tier)))
+    const credits = await Promise.all(
+      tiers.map((tier) =>
+        computeUpgradeCredit({
+          userId: session.user.id,
+          targetTier: tier,
+          pricePerToken,
+        }),
+      ),
+    )
+    tiers.forEach((tier, i) => {
+      upgradeCredits[tier] = credits[i]?.creditTokens ?? 0
+    })
+  }
 
   return (
     <PricingView
@@ -60,6 +79,7 @@ export default async function PricingPage() {
       isLoggedIn={Boolean(session)}
       currentTier={currentTier}
       currentBalance={currentBalance}
+      upgradeCredits={upgradeCredits}
       pricePerToken={pricePerToken}
       visitorCap={TIER_VISITOR_CAP}
     />

@@ -60,6 +60,7 @@ export async function POST(req: Request) {
       durationMonths: result.durationMonths,
       priceIdr: result.priceIdr,
       tokenAmount: result.tokenAmount,
+      creditTokens: result.creditTokens,
       pricePerToken: result.pricePerToken,
       startDate: result.startDate.toISOString(),
       endDate: result.endDate.toISOString(),

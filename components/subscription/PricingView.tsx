@@ -18,6 +18,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DURATION_DISCOUNTS,
   calculateSubscriptionPriceFull,
   convertIdrToTokens,
@@ -42,12 +50,29 @@ interface Props {
   // Saldo token user — null kalau belum login. Dipakai untuk badge "saldo
   // cukup" / "kurang X token" di tiap kartu.
   currentBalance: number | null
+  // Kredit proration per tier target — sisa nilai subscription aktif user
+  // yang ber-tier lebih rendah (dihitung server, mirror preview/checkout).
+  // Kosong kalau belum login / tidak ada subscription aktif.
+  upgradeCredits: Record<string, number>
   // Konversi IDR → token. Snapshot dari PricingSettings.pricePerToken aktif
   // saat page render. Default 2 (Rp 2/token).
   pricePerToken: number
   // Cap visitor per bulan per tier, dari lib/lp-quota.ts (sumber enforcement).
   // Jangan hardcode angka di sini — biar selalu sinkron dgn kuota asli.
   visitorCap: Record<string, number>
+}
+
+// Info untuk dialog "saldo kurang" — muncul saat user klik plan yang
+// saldo-nya belum cukup (pengganti redirect diam-diam ke /billing yang
+// bikin bingung: "kok Power tidak bisa dipilih?").
+interface ShortageDialogInfo {
+  pkgName: string
+  durationLabel: string
+  tokensDue: number
+  creditTokens: number
+  balance: number
+  shortage: number
+  pricePerToken: number
 }
 
 const TIER_ICON: Record<string, typeof Sparkles> = {
@@ -84,7 +109,7 @@ const FAQ = [
   },
   {
     q: 'Bagaimana cara upgrade ke plan lebih tinggi?',
-    a: 'Beli plan baru dengan tier lebih tinggi. Subscription lama akan auto-expire saat plan baru aktif (no overlap).',
+    a: 'Beli plan baru dengan tier lebih tinggi. Sisa masa aktif plan lama otomatis dikreditkan sebagai potongan token saat checkout — tidak ada nilai yang hangus.',
   },
 ]
 
@@ -93,11 +118,15 @@ export function PricingView({
   isLoggedIn,
   currentTier,
   currentBalance,
+  upgradeCredits,
   pricePerToken,
   visitorCap,
 }: Props) {
   const router = useRouter()
   const [duration, setDuration] = useState<number>(1)
+  const [shortageInfo, setShortageInfo] = useState<ShortageDialogInfo | null>(
+    null,
+  )
 
   const durationConfig = DURATION_DISCOUNTS.find((d) => d.months === duration)
 
@@ -193,12 +222,19 @@ export function PricingView({
           const monthly = Math.round(calc.priceFinal / duration)
           const monthlyTokens = convertIdrToTokens(monthly, pricePerToken)
           const isCurrent = currentTier === pkg.tier
+          // Kredit proration (sisa subscription aktif tier lebih rendah) —
+          // yang benar-benar dipotong = harga − kredit. Mirror preview API.
+          const creditTokens = Math.min(
+            upgradeCredits[pkg.tier] ?? 0,
+            calc.priceFinalTokens,
+          )
+          const tokensDue = calc.priceFinalTokens - creditTokens
           // Untuk badge "saldo cukup / kurang X" — hanya tampil kalau user
           // sudah login (currentBalance != null). Public visitor lihat info
           // token saja tanpa badge saldo.
           const balanceStatus =
             currentBalance != null
-              ? currentBalance >= calc.priceFinalTokens
+              ? currentBalance >= tokensDue
                 ? ('sufficient' as const)
                 : ('insufficient' as const)
               : null
@@ -224,6 +260,11 @@ export function PricingView({
               }}
               priceLabel={`${calc.priceFinalTokens.toLocaleString('id-ID')} token`}
               priceSubLabel={`≈ ${monthlyTokens.toLocaleString('id-ID')} token/bulan · setara Rp ${calc.priceFinal.toLocaleString('id-ID')} (Rp ${monthly.toLocaleString('id-ID')}/bln)`}
+              creditLabel={
+                creditTokens > 0
+                  ? `Kredit upgrade −${creditTokens.toLocaleString('id-ID')} token (sisa plan aktif) → bayar ${tokensDue.toLocaleString('id-ID')} token`
+                  : undefined
+              }
               discountLabel={
                 durationConfig && durationConfig.discountPct > 0
                   ? `Hemat ${durationConfig.discountPct}%`
@@ -232,7 +273,7 @@ export function PricingView({
               balanceStatus={balanceStatus}
               shortageTokens={
                 balanceStatus === 'insufficient' && currentBalance != null
-                  ? calc.priceFinalTokens - currentBalance
+                  ? tokensDue - currentBalance
                   : undefined
               }
               ctaLabel={
@@ -245,7 +286,18 @@ export function PricingView({
               ctaDisabled={isCurrent}
               onClick={() => {
                 if (balanceStatus === 'insufficient') {
-                  router.push('/billing')
+                  // Jangan diam-diam lempar ke /billing — jelaskan dulu
+                  // kenapa & berapa kurangnya (incident customer 2026-07-11
+                  // yang mengira Power "tidak bisa diklik").
+                  setShortageInfo({
+                    pkgName: pkg.name,
+                    durationLabel: durationConfig?.label ?? `${duration} bulan`,
+                    tokensDue,
+                    creditTokens,
+                    balance: currentBalance ?? 0,
+                    shortage: tokensDue - (currentBalance ?? 0),
+                    pricePerToken,
+                  })
                   return
                 }
                 handleSelect(pkg)
@@ -255,6 +307,71 @@ export function PricingView({
           )
         })}
       </div>
+
+      {/* Dialog saldo kurang */}
+      <Dialog
+        open={shortageInfo !== null}
+        onOpenChange={(open) => {
+          if (!open) setShortageInfo(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Saldo token belum cukup</DialogTitle>
+            <DialogDescription>
+              Paket {shortageInfo?.pkgName} ({shortageInfo?.durationLabel})
+              butuh top-up dulu sebelum bisa diaktifkan.
+            </DialogDescription>
+          </DialogHeader>
+          {shortageInfo && (
+            <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-sm">
+              <div className="flex justify-between">
+                <span>
+                  Biaya {shortageInfo.pkgName} {shortageInfo.durationLabel}
+                </span>
+                <span className="font-mono tabular-nums">
+                  {shortageInfo.tokensDue.toLocaleString('id-ID')} token
+                </span>
+              </div>
+              {shortageInfo.creditTokens > 0 && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Sudah termasuk kredit sisa plan aktif</span>
+                  <span className="font-mono tabular-nums">
+                    −{shortageInfo.creditTokens.toLocaleString('id-ID')}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span>Saldo kamu</span>
+                <span className="font-mono tabular-nums">
+                  {shortageInfo.balance.toLocaleString('id-ID')} token
+                </span>
+              </div>
+              <div className="flex justify-between border-t pt-1.5 font-semibold text-rose-700">
+                <span>Kurang</span>
+                <span className="font-mono tabular-nums">
+                  {shortageInfo.shortage.toLocaleString('id-ID')} token (~Rp{' '}
+                  {(
+                    shortageInfo.shortage * shortageInfo.pricePerToken
+                  ).toLocaleString('id-ID')}
+                  )
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShortageInfo(null)}>
+              Pilih Durasi Lain
+            </Button>
+            <Button
+              className="bg-primary-500 hover:bg-primary-600"
+              onClick={() => router.push('/billing')}
+            >
+              Top-up Token Sekarang
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* FAQ */}
       <section className="mx-auto max-w-3xl space-y-4 pt-6">
@@ -290,6 +407,8 @@ interface PlanCardProps {
   features: Record<string, string | boolean>
   priceLabel: string
   priceSubLabel?: string
+  // Info kredit proration upgrade (mis. "Kredit upgrade −39.500 token ...").
+  creditLabel?: string
   discountLabel?: string
   // Saldo status — null kalau user belum login (no badge), 'sufficient' kalau
   // saldo cukup, 'insufficient' kalau kurang (tampil shortageTokens).
@@ -309,6 +428,7 @@ function PlanCard({
   features,
   priceLabel,
   priceSubLabel,
+  creditLabel,
   discountLabel,
   balanceStatus,
   shortageTokens,
@@ -348,6 +468,11 @@ function PlanCard({
           </div>
           {priceSubLabel && (
             <div className="text-xs text-muted-foreground">{priceSubLabel}</div>
+          )}
+          {creditLabel && (
+            <div className="mt-1 text-xs font-medium text-emerald-700">
+              {creditLabel}
+            </div>
           )}
           {discountLabel && (
             <Badge

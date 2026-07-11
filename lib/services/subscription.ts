@@ -21,6 +21,15 @@ import { waService } from '@/lib/wa-service'
 // activate).
 type Db = Prisma.TransactionClient | typeof prisma
 
+// Urutan tier untuk menentukan "upgrade" (rank target > rank sumber).
+// FREE tidak pernah punya subscription row, tapi masuk map untuk kelengkapan.
+const TIER_RANK: Record<string, number> = {
+  FREE: 0,
+  STARTER: 1,
+  POPULAR: 2,
+  POWER: 3,
+}
+
 // Format tanggal Indonesia "5 Mei 2026" — dipakai banyak di message body.
 function formatDateId(d: Date): string {
   return d.toLocaleDateString('id-ID', {
@@ -278,6 +287,93 @@ import {
 
 const DEFAULT_PRICE_PER_TOKEN_RP = 2
 
+// ─── UPGRADE CREDIT (proration) ────────────────────────────────────────
+// Saat user upgrade ke tier LEBIH TINGGI padahal masih punya subscription
+// aktif, sisa nilai plan lama dikreditkan sebagai potongan token — jangan
+// hangus (kasus nyata 2026-07-11: user beli Popular, sejam kemudian mau
+// Power; tanpa kredit, 39.500 token Popular-nya terbuang).
+//
+// Rumus per subscription aktif ber-tier lebih rendah:
+//   tokenDibayar × porsiWaktuTersisa, dibulatkan ke bawah.
+// tokenDibayar dari invoice PAID terakhir (tokenAmount); fallback konversi
+// priceFinal pakai pricePerToken saat ini (invoice legacy pre-token).
+// Extend plan sama tidak lewat sini (tier sama → bukan upgrade, tetap
+// akumulasi endDate seperti biasa). Downgrade juga tidak dapat kredit.
+
+export interface UpgradeCreditSource {
+  subscriptionId: string
+  packageName: string
+  tier: string
+  endDate: Date
+  creditTokens: number
+}
+
+export interface UpgradeCreditInfo {
+  creditTokens: number
+  sources: UpgradeCreditSource[]
+}
+
+export async function computeUpgradeCredit(input: {
+  userId: string
+  targetTier: string
+  pricePerToken: number
+  db?: Db
+}): Promise<UpgradeCreditInfo> {
+  const db = input.db ?? prisma
+  const targetRank = TIER_RANK[input.targetTier] ?? 0
+  const now = new Date()
+
+  const activeSubs = await db.subscription.findMany({
+    where: {
+      userId: input.userId,
+      status: 'ACTIVE',
+      isLifetime: false,
+      endDate: { gt: now },
+    },
+    include: {
+      lpPackage: { select: { name: true, tier: true } },
+      invoices: {
+        where: { status: 'PAID' },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { tokenAmount: true },
+      },
+    },
+  })
+
+  const sources: UpgradeCreditSource[] = []
+  for (const sub of activeSubs) {
+    const sourceRank = TIER_RANK[sub.lpPackage.tier] ?? 0
+    if (sourceRank >= targetRank) continue // bukan upgrade dari sub ini
+
+    const totalMs = sub.endDate.getTime() - sub.startDate.getTime()
+    if (totalMs <= 0) continue
+    // Sub hasil extend bisa punya startDate di masa depan → sisa = penuh.
+    const remainMs =
+      sub.endDate.getTime() - Math.max(now.getTime(), sub.startDate.getTime())
+    const ratio = Math.min(1, Math.max(0, remainMs / totalMs))
+
+    const paidTokens =
+      sub.invoices[0]?.tokenAmount ??
+      Math.round(sub.priceFinal / input.pricePerToken)
+    const creditTokens = Math.floor(paidTokens * ratio)
+    if (creditTokens <= 0) continue
+
+    sources.push({
+      subscriptionId: sub.id,
+      packageName: sub.lpPackage.name,
+      tier: sub.lpPackage.tier,
+      endDate: sub.endDate,
+      creditTokens,
+    })
+  }
+
+  return {
+    creditTokens: sources.reduce((sum, s) => sum + s.creditTokens, 0),
+    sources,
+  }
+}
+
 export interface CheckoutWithTokensResult {
   subscriptionId: string
   invoiceId: string
@@ -285,7 +381,10 @@ export interface CheckoutWithTokensResult {
   packageName: string
   durationMonths: number
   priceIdr: number
+  // Token yang benar-benar dipotong dari saldo (setelah kredit upgrade).
   tokenAmount: number
+  // Kredit proration dari sisa subscription lama (0 kalau bukan upgrade).
+  creditTokens: number
   pricePerToken: number
   startDate: Date
   endDate: Date
@@ -339,21 +438,37 @@ export async function checkoutSubscriptionWithTokens(input: {
   const endDate = addMonths(startDate, input.durationMonths)
 
   const invoiceNumber = generateInvoiceNumber()
-  const description = `Subscription ${pkg.name} (${input.durationMonths} bulan)`
 
   // Atomic — saldo cek + deduct + create subscription + invoice + activate quota.
   // Pakai $transaction supaya kalau salah satu step gagal, semuanya rollback.
   const result = await prisma.$transaction(async (tx) => {
-    // 1. Atomic deduct via WHERE balance >= cost. Kalau saldo turun di antara
+    // 0. Kredit proration untuk upgrade tier — hitung DI DALAM transaksi
+    //    supaya konsisten (sub lama tidak bisa dikredit dua kali oleh race).
+    const credit = await computeUpgradeCredit({
+      userId: input.userId,
+      targetTier: pkg.tier,
+      pricePerToken,
+      db: tx,
+    })
+    // Kredit tidak boleh melebihi harga paket baru (tidak ada saldo balik).
+    const appliedCredit = Math.min(credit.creditTokens, tokenCost)
+    const tokensDue = tokenCost - appliedCredit
+    const creditNote =
+      appliedCredit > 0
+        ? ` — kredit upgrade ${appliedCredit.toLocaleString('id-ID')} token dari sisa ${credit.sources.map((s) => s.packageName).join(', ')}`
+        : ''
+    const description = `Subscription ${pkg.name} (${input.durationMonths} bulan)${creditNote}`
+
+    // 1. Atomic deduct via WHERE balance >= due. Kalau saldo turun di antara
     //    preview dan checkout (user pakai token di tab lain), updateMany count=0.
     const deduct = await tx.tokenBalance.updateMany({
       where: {
         userId: input.userId,
-        balance: { gte: tokenCost },
+        balance: { gte: tokensDue },
       },
       data: {
-        balance: { decrement: tokenCost },
-        totalUsed: { increment: tokenCost },
+        balance: { decrement: tokensDue },
+        totalUsed: { increment: tokensDue },
       },
     })
     if (deduct.count === 0) {
@@ -361,6 +476,20 @@ export async function checkoutSubscriptionWithTokens(input: {
       const err = new Error('INSUFFICIENT_TOKEN')
       ;(err as Error & { code?: string }).code = 'INSUFFICIENT_TOKEN'
       throw err
+    }
+
+    // 1b. Supersede subscription lama yang dikreditkan — status REPLACED
+    //     supaya: (a) tidak bisa dikredit lagi, (b) cron expire tidak
+    //     men-downgrade user ke FREE saat endDate lama lewat.
+    if (credit.sources.length > 0) {
+      await tx.subscription.updateMany({
+        where: { id: { in: credit.sources.map((s) => s.subscriptionId) } },
+        data: {
+          status: 'REPLACED',
+          cancelledAt: new Date(),
+          cancelledReason: `Upgrade ke ${pkg.name} — sisa nilai dikreditkan ${appliedCredit.toLocaleString('id-ID')} token`,
+        },
+      })
     }
 
     // 2. Create Subscription ACTIVE (langsung, no PENDING).
@@ -390,7 +519,7 @@ export async function checkoutSubscriptionWithTokens(input: {
         status: 'PAID',
         paidAt: new Date(),
         paymentMethod: 'TOKEN_BALANCE',
-        tokenAmount: tokenCost,
+        tokenAmount: tokensDue,
         // expiresAt — tidak relevan untuk TOKEN_BALANCE (langsung paid),
         // tapi field NOT NULL di schema. Pakai endDate sebagai placeholder
         // logis (invoice valid sampai subscription berakhir).
@@ -403,9 +532,9 @@ export async function checkoutSubscriptionWithTokens(input: {
     await tx.tokenTransaction.create({
       data: {
         userId: input.userId,
-        amount: -tokenCost,
+        amount: -tokensDue,
         type: 'USAGE',
-        description: `LP Subscription: ${pkg.name} (${input.durationMonths} bln)`,
+        description: `LP Subscription: ${pkg.name} (${input.durationMonths} bln)${creditNote}`,
         reference: inv.id,
       },
     })
@@ -445,6 +574,8 @@ export async function checkoutSubscriptionWithTokens(input: {
       subscriptionId: sub.id,
       invoiceId: inv.id,
       remainingBalance: balanceRow?.balance ?? 0,
+      tokensDue,
+      appliedCredit,
     }
   })
 
@@ -455,7 +586,7 @@ export async function checkoutSubscriptionWithTokens(input: {
     type: 'PAYMENT_SUCCESS',
     channel: 'IN_APP',
     title: '✅ Subscription Aktif!',
-    message: `Plan ${pkg.name} (${input.durationMonths} bulan) sudah aktif sampai ${formatDateId(endDate)}. Dipotong ${tokenCost.toLocaleString('id-ID')} token dari saldo.`,
+    message: `Plan ${pkg.name} (${input.durationMonths} bulan) sudah aktif sampai ${formatDateId(endDate)}. Dipotong ${result.tokensDue.toLocaleString('id-ID')} token dari saldo${result.appliedCredit > 0 ? ` (sudah termasuk kredit upgrade ${result.appliedCredit.toLocaleString('id-ID')} token)` : ''}.`,
     link: '/billing/subscription',
   }).catch((err) => console.error('[subscription] notif gagal:', err))
 
@@ -472,7 +603,8 @@ export async function checkoutSubscriptionWithTokens(input: {
     packageName: pkg.name,
     durationMonths: input.durationMonths,
     priceIdr: calc.priceFinal,
-    tokenAmount: tokenCost,
+    tokenAmount: result.tokensDue,
+    creditTokens: result.appliedCredit,
     pricePerToken,
     startDate,
     endDate,
@@ -493,6 +625,28 @@ export async function expireSubscription(subscriptionId: string): Promise<void> 
   if (!sub) return
   if (sub.status !== 'ACTIVE') return // already expired/cancelled
   if (sub.isLifetime) return // lifetime grandfathered tidak boleh expire
+
+  // Guard: kalau user masih punya subscription ACTIVE LAIN yang belum
+  // berakhir (mis. sudah upgrade tier — sub lama tertinggal ACTIVE di era
+  // sebelum status REPLACED), expire baris ini SAJA tanpa downgrade quota.
+  // Tanpa guard ini, user Power bisa mendadak turun ke FREE cuma karena
+  // endDate sub lamanya lewat.
+  const otherActive = await prisma.subscription.findFirst({
+    where: {
+      userId: sub.userId,
+      id: { not: subscriptionId },
+      status: 'ACTIVE',
+      endDate: { gt: new Date() },
+    },
+    select: { id: true },
+  })
+  if (otherActive) {
+    await prisma.subscription.update({
+      where: { id: subscriptionId },
+      data: { status: 'EXPIRED' },
+    })
+    return // jangan downgrade & jangan kirim notif "turun ke FREE"
+  }
 
   await prisma.$transaction([
     prisma.subscription.update({
