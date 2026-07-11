@@ -437,7 +437,7 @@ export async function resolveShippingFromMessage(
     // pakai nama resmi (city_name resmi yang akan kita match).
     const searchQuery = CITY_ALIASES[candidate] ?? candidate
 
-    const destinations = await searchDestinations(
+    const { items: destinations } = await searchDestinations(
       searchQuery,
       DESTINATION_SEARCH_LIMIT,
     )
@@ -449,7 +449,7 @@ export async function resolveShippingFromMessage(
     const dest = pickBestDestination(searchQuery, destinations)
     if (!dest) continue
 
-    const services = await calculateShippingCost({
+    const { services } = await calculateShippingCost({
       origin: Number(profile.originCityId),
       destination: dest.id,
       weight: profile.defaultWeightGrams,

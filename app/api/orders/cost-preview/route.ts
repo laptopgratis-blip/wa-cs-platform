@@ -3,13 +3,14 @@
 // dari OrderForm.user.shippingProfile (validated by slug).
 //
 // Body: { slug, destination (number), weight (number) }
-import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
+import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
 import { describeZone, findMatchingZone } from '@/lib/services/order-pricing'
 import { calculateShippingCost } from '@/lib/services/rajaongkir'
+import { checkCostPreviewLimit } from '@/lib/services/shipping-rate-limit'
 
 const schema = z.object({
   slug: z.string().min(1),
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(json)
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Data tidak valid')
+  }
+
+  const limit = checkCostPreviewLimit(getClientIp(req))
+  if (!limit.ok) {
+    return jsonError(
+      'Terlalu banyak permintaan ongkir. Tunggu sebentar lalu coba lagi.',
+      429,
+    )
   }
 
   try {
@@ -49,7 +58,7 @@ export async function POST(req: Request) {
       return jsonError('Penjual belum setup pengiriman', 400)
     }
 
-    const services = await calculateShippingCost({
+    const { services, degraded } = await calculateShippingCost({
       origin: Number(profile.originCityId),
       destination: parsed.data.destination,
       weight: parsed.data.weight,
@@ -67,6 +76,7 @@ export async function POST(req: Request) {
 
     return jsonOk({
       services,
+      degraded,
       zone: zone
         ? {
             name: zone.name,

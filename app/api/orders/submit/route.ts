@@ -15,7 +15,10 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { notifyNewOrder } from '@/lib/services/order-notif'
-import { calculateOrderTotal } from '@/lib/services/order-pricing'
+import {
+  OngkirUnavailableError,
+  calculateOrderTotal,
+} from '@/lib/services/order-pricing'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { submitOrderSchema } from '@/lib/validations/submit-order'
@@ -88,7 +91,12 @@ export async function POST(req: Request) {
       if (addr.length < 5) {
         return jsonError('Alamat lengkap minimal 5 karakter', 400)
       }
-      if (data.paymentMethod === 'TRANSFER') {
+      // Tujuan & kurir wajib untuk TRANSFER dan juga COD tanpa flat rate —
+      // dua-duanya pakai ongkir RajaOngkir. COD dengan flat rate cukup alamat.
+      const needsCourier =
+        data.paymentMethod === 'TRANSFER' ||
+        (data.paymentMethod === 'COD' && form.shippingFlatCod == null)
+      if (needsCourier) {
         if (
           !data.shippingDestinationId ||
           !data.shippingCourier ||
@@ -336,6 +344,12 @@ export async function POST(req: Request) {
     if (err instanceof FlashSaleQuotaError) {
       console.warn('[POST /api/orders/submit] klaim flash sale gagal:', err.message)
       return jsonError(err.message, 400)
+    }
+    // Ongkir tidak bisa dihitung (kuota RajaOngkir habis tanpa cache) —
+    // bukan bug server. Customer bisa coba lagi sebentar lagi.
+    if (err instanceof OngkirUnavailableError) {
+      console.warn('[POST /api/orders/submit] ongkir unavailable')
+      return jsonError(err.message, 503)
     }
     console.error('[POST /api/orders/submit] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)

@@ -23,8 +23,8 @@ export async function GET(req: Request) {
   }
 
   try {
-    const items = await searchDestinations(q, limit)
-    return jsonOk({ items })
+    const { items, degraded } = await searchDestinations(q, limit)
+    return jsonOk({ items, degraded })
   } catch (err) {
     console.error('[GET /api/shipping/destinations] gagal:', err)
     return jsonError('Gagal cari alamat. Coba lagi sebentar.', 500)

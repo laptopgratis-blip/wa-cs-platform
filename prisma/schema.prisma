@@ -2030,6 +2030,29 @@ model ShippingDestinationCache {
   updatedAt DateTime @updatedAt
 }
 
+// Master destinasi Komerce yang pernah di-fetch — dipakai untuk search LOKAL
+// dulu sebelum hit upstream (hemat kuota Starter 500 hit/hari; incident kuota
+// jebol lagi 2026-07-10 walau sudah ada exact-query cache). Terisi otomatis
+// dari hasil searchDestinations + backfill one-time di migration dari payload
+// ShippingDestinationCache. id = Komerce destination id (dipakai juga oleh
+// calculate/domestic-cost).
+model ShippingDestination {
+  id              Int      @id
+  label           String
+  provinceName    String
+  cityName        String
+  districtName    String
+  subdistrictName String
+  zipCode         String
+  // Gabungan lowercase "subdistrict district city province zip" untuk
+  // contains-search lokal tanpa hit upstream.
+  searchText      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([searchText])
+}
+
 // ─────────────────────────────────────────
 // PIXEL TRACKING (Phase 1, 2026-05-07) — fitur khusus paket POWER:
 // Browser pixel + Server-side CAPI untuk Meta, Google Ads, TikTok.
