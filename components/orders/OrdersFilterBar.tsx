@@ -2,7 +2,21 @@
 
 // Filter bar untuk /pesanan: smart filter chips + tabs + search + date + payment method.
 // Smart chips override tab (lebih spesifik). Klik chip aktif = clear chip.
-import { LayoutGrid, List, Search, X } from 'lucide-react'
+import {
+  AlertCircle,
+  Bot,
+  Calendar,
+  CalendarDays,
+  CalendarRange,
+  ClipboardList,
+  Clock,
+  LayoutGrid,
+  List,
+  Package,
+  Search,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,50 +43,55 @@ const TABS: Array<{ key: keyof OrdersCounts; label: string }> = [
 const SMART_CHIPS: Array<{
   key: SmartFilter
   label: string
-  emoji: string
+  icon: LucideIcon
   description: string
 }> = [
   {
     key: 'urgent',
     label: 'Urgent',
-    emoji: '🔴',
+    icon: AlertCircle,
     description: 'Belum bayar > 12 jam',
   },
   {
     key: 'need_ship',
     label: 'Perlu Kirim',
-    emoji: '📦',
+    icon: Package,
     description: 'PAID + belum dikirim',
   },
   {
     key: 'need_tracking',
     label: 'Butuh Resi',
-    emoji: '📋',
+    icon: ClipboardList,
     description: 'Dikirim tapi resi kosong',
   },
-  { key: 'today', label: 'Hari Ini', emoji: '📆', description: 'Order hari ini' },
+  {
+    key: 'today',
+    label: 'Hari Ini',
+    icon: CalendarDays,
+    description: 'Order hari ini',
+  },
   {
     key: 'yesterday',
     label: 'Kemarin',
-    emoji: '🗓️',
+    icon: Calendar,
     description: 'Order kemarin',
   },
   {
     key: 'this_week',
     label: 'Minggu Ini',
-    emoji: '📅',
+    icon: CalendarRange,
     description: '7 hari terakhir',
   },
   {
     key: 'unpaid_24h',
     label: 'Belum Bayar > 24 jam',
-    emoji: '⏰',
+    icon: Clock,
     description: 'PENDING/WAITING_CONFIRMATION lewat 24 jam',
   },
   {
     key: 'auto_confirmed',
     label: 'Auto-Confirmed',
-    emoji: '🤖',
+    icon: Bot,
     description: 'Order yang status PAID-nya di-set otomatis (BCA/Moota)',
   },
 ]
@@ -140,19 +159,23 @@ export function OrdersFilterBar({
         {SMART_CHIPS.map((c) => {
           const active = smart === c.key
           const showBadge = c.key === 'urgent' && urgentCount > 0
+          const ChipIcon = c.icon
           return (
             <button
               key={c.key}
               type="button"
               title={c.description}
               onClick={() => onSmartChange(active ? null : c.key)}
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition ${
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${
                 active
                   ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
                   : 'border-warm-300 bg-white text-warm-700 hover:bg-warm-100 dark:bg-warm-900 dark:text-warm-200'
               }`}
             >
-              <span>{c.emoji}</span>
+              <ChipIcon
+                className={`size-3.5 ${active ? '' : 'text-warm-400'}`}
+                aria-hidden
+              />
               <span className="font-medium">{c.label}</span>
               {showBadge && (
                 <Badge

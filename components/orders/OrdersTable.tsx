@@ -23,7 +23,9 @@ import {
 import Link from 'next/link'
 import { useState } from 'react'
 
+import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -139,18 +141,15 @@ export function OrdersTable({
           </TableHeader>
           <TableBody>
             {loading && orders.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={totalColCount} className="py-8 text-center">
-                  <Loader2 className="inline size-5 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={Math.min(totalColCount, 8)} />
             ) : orders.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={totalColCount}
-                  className="py-12 text-center text-muted-foreground"
-                >
-                  Tidak ada pesanan dengan filter ini.
+                <TableCell colSpan={totalColCount}>
+                  <EmptyState
+                    icon={Package}
+                    title="Tidak ada pesanan dengan filter ini"
+                    description="Coba longgarkan filter atau ganti periode tanggal."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
