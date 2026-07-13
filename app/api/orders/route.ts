@@ -21,24 +21,16 @@ import type { Prisma } from '@prisma/client'
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
-import { buildOrderBaseWhere } from '@/lib/order-filters'
+import {
+  DAY_MS,
+  buildOrderBaseWhere,
+  buildSmartFilter,
+  buildTabFilter,
+  parseSmart,
+  parseTab,
+  startOfTodayWib,
+} from '@/lib/order-filters'
 import { prisma } from '@/lib/prisma'
-import type { OrderTab } from '@/lib/validations/order'
-
-// "Urgent threshold" untuk filter `urgent` — order yang butuh action SEKARANG.
-// 12 jam = ambang konservatif: customer rata-rata expect respon < 1 hari kerja.
-const URGENT_HOURS = 12
-
-// Batas "hari ini/kemarin" dihitung dalam WIB (UTC+7), BUKAN jam server.
-// Server jalan di UTC — tanpa offset ini "hari ini" baru mulai 07:00 WIB,
-// sehingga penjualan live malam (19:30–07:00 WIB) hilang dari strip revenue.
-const WIB_OFFSET_MS = 7 * 60 * 60 * 1000
-const DAY_MS = 24 * 60 * 60 * 1000
-function startOfTodayWib(now: Date = new Date()): Date {
-  const shifted = new Date(now.getTime() + WIB_OFFSET_MS)
-  shifted.setUTCHours(0, 0, 0, 0)
-  return new Date(shifted.getTime() - WIB_OFFSET_MS)
-}
 
 // Periode strip statistik (kartu di atas /pesanan) — terpisah dari filter
 // list. Preset relatif (12h/24h/7d) supaya sesi live malam yang melewati
@@ -83,115 +75,6 @@ function resolveStatsWindow(
     case 'today':
     default:
       return { start: startOfTodayWib(now), end: null }
-  }
-}
-
-function buildTabFilter(tab: OrderTab): Prisma.UserOrderWhereInput {
-  switch (tab) {
-    case 'pending':
-      return { paymentStatus: 'PENDING' }
-    case 'paid':
-      return {
-        paymentStatus: 'PAID',
-        deliveryStatus: { notIn: ['DELIVERED', 'CANCELLED'] },
-      }
-    case 'shipped':
-      return { deliveryStatus: 'SHIPPED' }
-    case 'completed':
-      return { deliveryStatus: 'DELIVERED' }
-    case 'all':
-    default:
-      return {}
-  }
-}
-
-function parseTab(value: string | null): OrderTab {
-  switch (value) {
-    case 'pending':
-    case 'paid':
-    case 'shipped':
-    case 'completed':
-      return value
-    default:
-      return 'all'
-  }
-}
-
-type SmartFilter =
-  | 'urgent'
-  | 'need_ship'
-  | 'need_tracking'
-  | 'today'
-  | 'yesterday'
-  | 'this_week'
-  | 'auto_confirmed'
-  | 'unpaid_24h'
-
-function parseSmart(v: string | null): SmartFilter | null {
-  switch (v) {
-    case 'urgent':
-    case 'need_ship':
-    case 'need_tracking':
-    case 'today':
-    case 'yesterday':
-    case 'this_week':
-    case 'auto_confirmed':
-    case 'unpaid_24h':
-      return v
-    default:
-      return null
-  }
-}
-
-function buildSmartFilter(f: SmartFilter): Prisma.UserOrderWhereInput {
-  const now = new Date()
-  switch (f) {
-    case 'urgent': {
-      // PENDING atau WAITING_CONFIRMATION yang umurnya > URGENT_HOURS jam.
-      const cutoff = new Date(now.getTime() - URGENT_HOURS * 60 * 60 * 1000)
-      return {
-        paymentStatus: { in: ['PENDING', 'WAITING_CONFIRMATION'] },
-        createdAt: { lte: cutoff },
-      }
-    }
-    case 'need_ship':
-      return {
-        paymentStatus: 'PAID',
-        deliveryStatus: { in: ['PENDING', 'PROCESSING'] },
-      }
-    case 'need_tracking':
-      return {
-        deliveryStatus: 'SHIPPED',
-        OR: [{ trackingNumber: null }, { trackingNumber: '' }],
-      }
-    case 'today': {
-      return { createdAt: { gte: startOfTodayWib(now) } }
-    }
-    case 'yesterday': {
-      const todayStart = startOfTodayWib(now)
-      return {
-        createdAt: {
-          gte: new Date(todayStart.getTime() - DAY_MS),
-          lt: todayStart,
-        },
-      }
-    }
-    case 'this_week': {
-      const start = new Date(now)
-      start.setDate(start.getDate() - 7)
-      return { createdAt: { gte: start } }
-    }
-    case 'auto_confirmed':
-      // Order yang status PAID-nya di-set otomatis oleh BCA Auto-Reader / Moota,
-      // bukan manual. Untuk audit: cek mana yang machine-confirmed vs manual.
-      return { autoConfirmedBy: { not: null } }
-    case 'unpaid_24h': {
-      const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000)
-      return {
-        paymentStatus: { in: ['PENDING', 'WAITING_CONFIRMATION'] },
-        createdAt: { lte: cutoff },
-      }
-    }
   }
 }
 

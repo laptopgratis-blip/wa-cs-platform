@@ -1,14 +1,13 @@
 // GET /api/orders/export?tab=all&from=...&to=...
-// Generate CSV pesanan user untuk download. Filter base (q/tag/tanggal/metode
-// bayar/produk/GUDANG) dibagi dengan GET /api/orders via lib/order-filters →
-// isi CSV SELALU sama dengan list. Tab di-apply di atasnya. (Smart filter `f`
-// belum di-handle di export.)
+// Generate CSV pesanan user untuk download. Filter (base q/tag/tanggal/metode
+// bayar/produk/GUDANG + tab + smart filter) dibagi PENUH dengan GET /api/orders
+// via lib/order-filters.buildOrderWhere → isi CSV SELALU sama dengan list.
 //
 // Schema CSV di-extend 2026-05-19: tambah invoice number, email, items (form
 // produk), shipping breakdown, bukti transfer URL. 2026-07-13: kolom Gudang +
-// fix filter per-gudang tidak terpakai di export.
+// fix filter per-gudang & smart tidak terpakai di export.
 import { jsonError, requireSession } from '@/lib/api'
-import { buildOrderBaseWhere } from '@/lib/order-filters'
+import { buildOrderWhere } from '@/lib/order-filters'
 import { prisma } from '@/lib/prisma'
 
 const HEADERS = [
@@ -80,19 +79,10 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url)
-  const tab = url.searchParams.get('tab')
 
   try {
-    // Base filter (termasuk warehouseId) sama persis dengan list.
-    const where = buildOrderBaseWhere(url.searchParams, session.user.id)
-    // Tab di-apply di atas base (samakan dgn buildTabFilter di GET /api/orders).
-    if (tab === 'pending') where.paymentStatus = 'PENDING'
-    if (tab === 'paid') {
-      where.paymentStatus = 'PAID'
-      where.deliveryStatus = { notIn: ['DELIVERED', 'CANCELLED'] }
-    }
-    if (tab === 'shipped') where.deliveryStatus = 'SHIPPED'
-    if (tab === 'completed') where.deliveryStatus = 'DELIVERED'
+    // Filter penuh (base + tab/smart) SAMA PERSIS dengan GET /api/orders.
+    const where = buildOrderWhere(url.searchParams, session.user.id)
 
     const orders = await prisma.userOrder.findMany({
       where,
