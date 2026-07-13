@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { OrderFollowUpSection } from '@/components/followup/OrderFollowUpSection'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -71,6 +72,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState('')
   const [deliveryStatus, setDeliveryStatus] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('')
@@ -142,7 +144,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
   async function handleDelete() {
     if (!data) return
-    if (!confirm('Yakin hapus pesanan ini? Tidak bisa di-undo.')) return
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     try {
       const res = await fetch(`/api/orders/${data.id}`, { method: 'DELETE' })
@@ -370,7 +372,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
             <div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
-                onClick={handleDelete}
+                onClick={() => setConfirmDeleteOpen(true)}
                 disabled={deleting || saving}
                 className="text-destructive hover:text-destructive"
               >
@@ -394,6 +396,15 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
           </div>
         )}
       </DialogContent>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Yakin hapus pesanan ini?"
+        description="Pesanan dihapus permanen dan tidak bisa di-undo."
+        isLoading={deleting}
+        onConfirm={handleDelete}
+      />
     </Dialog>
   )
 }

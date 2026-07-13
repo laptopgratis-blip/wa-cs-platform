@@ -14,8 +14,10 @@ import { Columns, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 import { ColumnPickerModal } from './ColumnPickerModal'
 import { OrderCardView } from './OrderCardView'
@@ -42,6 +44,14 @@ export type { OrderListItem, OrdersCounts } from './types'
 
 const VIEW_KEY = 'hulao.orders.view'
 const PAGE_LIMIT = 50
+
+// Label aksi bulk untuk judul dialog konfirmasi.
+const BULK_LABEL: Record<QuickAction, string> = {
+  mark_paid: 'lunas',
+  mark_shipped: 'dikirim',
+  mark_delivered: 'selesai',
+  reject: 'tolak',
+}
 
 const ZERO_COUNTS: OrdersCounts = {
   all: 0,
@@ -92,6 +102,9 @@ export function OrdersList() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Konfirmasi bulk action — pengganti window.confirm() + prompt().
+  const [pendingBulk, setPendingBulk] = useState<QuickAction | null>(null)
+  const [bulkRejectReason, setBulkRejectReason] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
 
@@ -293,24 +306,8 @@ export function OrdersList() {
   async function bulkAction(action: QuickAction) {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
-    const labelMap: Record<QuickAction, string> = {
-      mark_paid: 'lunas',
-      mark_shipped: 'dikirim',
-      mark_delivered: 'selesai',
-      reject: 'tolak',
-    }
-    if (
-      !confirm(
-        `Tandai ${ids.length} pesanan sebagai ${labelMap[action]}?`,
-      )
-    ) {
-      return
-    }
-    let cancelledReason: string | undefined
-    if (action === 'reject') {
-      cancelledReason =
-        window.prompt('Alasan penolakan (opsional):')?.trim() || undefined
-    }
+    const cancelledReason =
+      action === 'reject' ? bulkRejectReason.trim() || undefined : undefined
 
     setBulkBusy(true)
     try {
@@ -543,10 +540,48 @@ export function OrdersList() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={pendingBulk !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingBulk(null)
+        }}
+        title={`Tandai ${selectedIds.size} pesanan sebagai ${
+          pendingBulk ? BULK_LABEL[pendingBulk] : ''
+        }?`}
+        description={
+          pendingBulk === 'reject' ? (
+            <span className="block space-y-2">
+              <span className="block">
+                Pesanan yang ditolak akan berstatus batal.
+              </span>
+              <Textarea
+                rows={2}
+                value={bulkRejectReason}
+                onChange={(e) => setBulkRejectReason(e.target.value)}
+                placeholder="Alasan penolakan (opsional)"
+              />
+            </span>
+          ) : (
+            'Status pembayaran/pengiriman pesanan terpilih akan di-update sekaligus.'
+          )
+        }
+        confirmLabel="Ya, Lanjutkan"
+        variant={pendingBulk === 'reject' ? 'destructive' : 'default'}
+        isLoading={bulkBusy}
+        onConfirm={async () => {
+          if (!pendingBulk) return
+          await bulkAction(pendingBulk)
+          setPendingBulk(null)
+        }}
+      />
+
       <OrdersBulkActionBar
         selectedCount={selectedIds.size}
         busy={bulkBusy}
-        onAction={bulkAction}
+        onAction={(a) => {
+          setBulkRejectReason('')
+          setPendingBulk(a)
+        }}
         onClear={() => setSelectedIds(new Set())}
       />
 

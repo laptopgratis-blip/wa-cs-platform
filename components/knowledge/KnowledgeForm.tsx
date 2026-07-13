@@ -19,6 +19,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import type { KnowledgeListItem } from '@/components/knowledge/KnowledgeList'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,6 +99,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
   const [isSuggesting, setSuggesting] = useState(false)
   const [isSubmitting, setSubmitting] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setState((s) => ({ ...s, [key]: value }))
@@ -286,7 +288,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
 
   async function handleDelete() {
     if (!initial?.id) return
-    if (!confirm('Yakin hapus pengetahuan ini?')) return
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     try {
       const res = await fetch(`/api/knowledge/${initial.id}`, {
@@ -550,7 +552,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={handleDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={isDeleting || isSubmitting}
               className="text-destructive hover:text-destructive"
             >
@@ -577,6 +579,15 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Yakin hapus pengetahuan ini?"
+        description="AI tidak akan memakai info ini lagi saat menjawab customer."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
