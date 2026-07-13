@@ -173,6 +173,11 @@ function OrderCard({
                   {(order.shippingSubsidyRp ?? 0).toLocaleString('id-ID')}
                 </p>
               )}
+              {order.originSnapshot?.name && (
+                <p className="text-warm-600">
+                  📦 Dikirim dari: {order.originSnapshot.name}
+                </p>
+              )}
               <p className="font-bold text-warm-900">
                 Total: Rp{' '}
                 {((order.totalRp ?? order.totalAmount) ?? 0).toLocaleString(

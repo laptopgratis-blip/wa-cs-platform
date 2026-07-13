@@ -17,11 +17,11 @@ import {
   isFlashSaleActive,
 } from '@/lib/services/order-pricing'
 import {
-  calculateShippingCost,
   searchDestinations,
   type RajaongkirDestination,
   type ShippingService,
 } from '@/lib/services/rajaongkir'
+import { pickBestWarehouse } from '@/lib/services/warehouse-selector'
 
 const PRODUCT_LIMIT = 20
 const DEFAULT_COURIERS = ['jne', 'sicepat', 'jnt', 'anteraja']
@@ -465,7 +465,9 @@ export async function resolveShippingFromMessage(
       defaultWeightGrams: true,
     },
   })
-  if (!profile?.originCityId) return null
+  // Profil wajib untuk kurir & berat default; origin gudang di-resolve oleh
+  // selector (mendukung user yang cuma punya gudang tanpa originCityId lama).
+  if (!profile) return null
 
   const couriers =
     profile.enabledCouriers.length > 0
@@ -490,22 +492,24 @@ export async function resolveShippingFromMessage(
     const dest = pickBestDestination(searchQuery, destinations)
     if (!dest) continue
 
-    const { services } = await calculateShippingCost({
-      origin: Number(profile.originCityId),
-      destination: dest.id,
+    const pick = await pickBestWarehouse({
+      userId,
+      destinationId: dest.id,
+      destCityName: dest.city_name,
+      destProvinceName: dest.province_name,
       weight: profile.defaultWeightGrams,
       couriers,
     })
-    if (services.length === 0) continue
+    if (!pick || pick.services.length === 0) continue
 
     return formatShippingResult({
       candidate,
       destination: dest.label,
       cityName: dest.city_name,
       provinceName: dest.province_name,
-      origin: profile.originCityName ?? 'origin',
+      origin: pick.name || profile.originCityName || 'origin',
       weight: profile.defaultWeightGrams,
-      services,
+      services: pick.services,
       userId,
       applySubsidyRules: options.applySubsidyRules,
     })

@@ -73,6 +73,7 @@ model User {
   orderTags                    OrderTag[]
   orderViewPreference          UserOrderViewPreference?
   shippingZones                ShippingZone[]
+  warehouses                   Warehouse[]
   pixelIntegrations            PixelIntegration[]
   pixelEventLogs               PixelEventLog[]
   // Bank Mutation Auto-Reader (Phase 1, 2026-05-08, BETA) — 1:1, hanya
@@ -1615,6 +1616,12 @@ model UserOrder {
   appliedZoneId   String?
   appliedZoneName String?
 
+  // Multi-gudang (2026-07-13, Fase 0): gudang asal terpilih (termurah) saat
+  // order dibuat. SetNull saat gudang dihapus — originSnapshot simpan
+  // nama+kota gudang supaya penjual tetap tahu asal kirim untuk fulfillment.
+  warehouseId    String?
+  originSnapshot Json?
+
   bankAccountSnapshot Json?
   uniqueCode          Int?
 
@@ -1655,6 +1662,7 @@ model UserOrder {
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   contact        Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
   orderSession   OrderSession?   @relation(fields: [orderSessionId], references: [id], onDelete: SetNull)
+  warehouse      Warehouse?      @relation("OrderWarehouse", fields: [warehouseId], references: [id], onDelete: SetNull)
   pixelEventLogs PixelEventLog[]
   followUpQueue  FollowUpQueue[]
   review         OrderReview?
@@ -1898,6 +1906,35 @@ model UserShippingProfile {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Multi-gudang (2026-07-13, Fase 0). User bisa punya >1 gudang; saat customer
+// isi alamat, selector pilih gudang termurah untuk hemat ongkir. originId =
+// Komerce destination ID (subdistrict-level) — sumber ongkir, sama seperti
+// UserShippingProfile.originCityId lama. regionCode di-derive dari provinsi
+// (peta statis 34 provinsi → 7 region) untuk prefilter kandidat sebelum
+// cost-compare. Backfill: 1 Warehouse default per user dari UserShippingProfile.
+model Warehouse {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name         String // "Gudang Bandung", "Gudang Surabaya"
+  originId     Int    // Komerce destination ID kota/subdistrict asal
+  cityName     String
+  provinceName String
+  // JAWA | SUMATERA | KALIMANTAN | SULAWESI | BALINUSRA | MALUKU | PAPUA | LAINNYA
+  regionCode   String @default("LAINNYA")
+
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  orders UserOrder[] @relation("OrderWarehouse")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
 }
 
 // Form order publik. User bikin form, dapat slug, share link ke customer.

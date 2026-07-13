@@ -244,6 +244,11 @@ export async function POST(req: Request) {
           appliedZoneId: pricing.appliedZoneId,
           appliedZoneName: pricing.appliedZoneName,
 
+          // Multi-gudang: gudang asal terpilih (termurah) + snapshot nama/kota
+          // untuk fulfillment walau gudang dihapus belakangan.
+          warehouseId: pricing.warehouseId,
+          originSnapshot: (pricing.originSnapshot ?? undefined) as never,
+
           bankAccountSnapshot:
             bankSnapshot.length > 0 ? (bankSnapshot as never) : undefined,
           uniqueCode: code,

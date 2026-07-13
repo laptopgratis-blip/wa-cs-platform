@@ -46,6 +46,7 @@ import {
   Users,
   Video,
   Wallet,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -178,6 +179,9 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Produk', href: '/products', icon: ShoppingCart },
       { label: 'Form Order', href: '/order-forms', icon: FileText },
       { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
+      // Multi-gudang (2026-07-13) — setup >1 gudang; sistem auto pilih gudang
+      // termurah saat customer isi alamat.
+      { label: 'Gudang', href: '/warehouses', icon: Warehouse },
       // Follow-Up Order System (2026-05-08) — pesan otomatis ke customer
       // berdasarkan event order + delay hari.
       { label: 'Follow-Up', href: '/pesanan/follow-up', icon: BellRing },

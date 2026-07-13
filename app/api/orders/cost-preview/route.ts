@@ -9,8 +9,8 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
 import { prisma } from '@/lib/prisma'
 import { describeZone, findMatchingZone } from '@/lib/services/order-pricing'
-import { calculateShippingCost } from '@/lib/services/rajaongkir'
 import { checkCostPreviewLimit } from '@/lib/services/shipping-rate-limit'
+import { pickBestWarehouse } from '@/lib/services/warehouse-selector'
 
 const schema = z.object({
   slug: z.string().min(1),
@@ -44,7 +44,11 @@ export async function POST(req: Request) {
         user: {
           select: {
             shippingProfile: {
-              select: { originCityId: true, enabledCouriers: true },
+              select: {
+                originCityId: true,
+                enabledCouriers: true,
+                defaultWeightGrams: true,
+              },
             },
           },
         },
@@ -54,16 +58,27 @@ export async function POST(req: Request) {
       return jsonError('Form tidak ditemukan / tidak aktif', 404)
     }
     const profile = form.user.shippingProfile
-    if (!profile?.originCityId || profile.enabledCouriers.length === 0) {
+    if (!profile || profile.enabledCouriers.length === 0) {
       return jsonError('Penjual belum setup pengiriman', 400)
     }
 
-    const { services, degraded } = await calculateShippingCost({
-      origin: Number(profile.originCityId),
-      destination: parsed.data.destination,
-      weight: parsed.data.weight,
+    // Multi-gudang: pilih gudang termurah untuk tujuan ini. Selector fallback
+    // ke origin UserShippingProfile kalau penjual belum punya gudang.
+    const pick = await pickBestWarehouse({
+      userId: form.userId,
+      destinationId: parsed.data.destination,
+      destCityName: parsed.data.cityName,
+      destProvinceName: parsed.data.provinceName,
+      // Floor berat ke defaultWeightGrams penjual — sama dengan
+      // calculateOrderTotal saat submit — supaya berat (dan gudang yang
+      // dipilih) identik preview↔submit, dan estimasi ongkir = final.
+      weight: Math.max(parsed.data.weight, profile.defaultWeightGrams),
       couriers: profile.enabledCouriers as string[],
     })
+    if (!pick) {
+      return jsonError('Penjual belum setup pengiriman', 400)
+    }
+    const { services, degraded } = pick
 
     // Zona subsidi ongkir untuk tujuan ini (kalau ada) — client pakai untuk
     // tampilkan ongkir setelah subsidi + keterangannya, konsisten dengan
@@ -77,6 +92,8 @@ export async function POST(req: Request) {
     return jsonOk({
       services,
       degraded,
+      // Info gudang asal → form tampilkan "📦 Dikirim dari <nama gudang>".
+      warehouse: { name: pick.name, cityName: pick.cityName },
       zone: zone
         ? {
             name: zone.name,

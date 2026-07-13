@@ -8,7 +8,37 @@
 import type { Product } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { calculateShippingCost } from '@/lib/services/rajaongkir'
+import {
+  pickBestWarehouse,
+  pickNearestWarehouse,
+} from '@/lib/services/warehouse-selector'
+
+// Snapshot gudang asal saat order dibuat — disimpan di UserOrder.originSnapshot
+// supaya penjual tetap tahu kirim dari mana walau gudang di-edit/dihapus.
+export interface OriginSnapshot {
+  warehouseId: string | null
+  name: string
+  cityName: string
+  provinceName: string
+  originId: number
+}
+
+// Origin (dari pickBestWarehouse / pickNearestWarehouse) → snapshot order.
+function toOriginSnapshot(o: {
+  warehouseId: string | null
+  originId: number
+  name: string
+  cityName: string
+  provinceName: string
+}): OriginSnapshot {
+  return {
+    warehouseId: o.warehouseId,
+    name: o.name,
+    cityName: o.cityName,
+    provinceName: o.provinceName,
+    originId: o.originId,
+  }
+}
 
 // Dilempar saat customer sudah pilih kurir tapi ongkirnya tidak bisa
 // dihitung (kuota RajaOngkir habis / kurir-service tidak valid lagi).
@@ -52,6 +82,10 @@ export interface PricingResult {
   appliedZoneId: string | null
   appliedZoneName: string | null
   appliedZoneDescription: string | null
+  // Multi-gudang: gudang asal terpilih (termurah). null = COD flat / digital /
+  // fallback legacy tanpa gudang.
+  warehouseId: string | null
+  originSnapshot: OriginSnapshot | null
 }
 
 interface CalculateInput {
@@ -221,28 +255,53 @@ export async function calculateOrderTotal(
   let shippingService: string | null = null
   let shippingEtd: string | null = null
   let shippingDescription: string | null = null
+  let warehouseId: string | null = null
+  let originSnapshot: OriginSnapshot | null = null
 
   if (input.paymentMethod === 'COD' && input.flatCodCost != null) {
-    // COD pakai flat rate.
+    // COD pakai flat rate — tak hitung ongkir. Tapi paket tetap dikirim dari
+    // suatu gudang, jadi tetapkan gudang terdekat (0 panggilan RajaOngkir)
+    // supaya fulfillment tahu kirim dari mana.
     shippingCost = input.flatCodCost
     shippingCourier = 'COD'
+    const nearest = await pickNearestWarehouse({
+      userId: input.userId,
+      destCityName: input.shippingCityName,
+      destProvinceName: input.shippingProvinceName,
+    })
+    if (nearest) {
+      warehouseId = nearest.warehouseId
+      originSnapshot = toOriginSnapshot(nearest)
+    }
   } else if (
     input.shippingDestinationId &&
     input.selectedCourier &&
     input.selectedService
   ) {
-    // Pakai RajaOngkir. Origin dari UserShippingProfile.
+    // Pakai RajaOngkir. Multi-gudang: pilih gudang asal TERMURAH untuk tujuan
+    // ini (selector fallback ke UserShippingProfile origin kalau belum ada
+    // gudang). Kirim `couriers` = enabledCouriers PENUH — sama persis dengan
+    // cost-preview — supaya cache-key & gudang terpilih deterministik
+    // preview↔submit (kalau beda, customer bisa lihat ongkir gudang A tapi
+    // tercatat kirim dari gudang B).
     const profile = await prisma.userShippingProfile.findUnique({
       where: { userId: input.userId },
+      select: { enabledCouriers: true, defaultWeightGrams: true },
     })
-    if (profile?.originCityId) {
-      const { services } = await calculateShippingCost({
-        origin: Number(profile.originCityId),
-        destination: input.shippingDestinationId,
-        weight: Math.max(totalWeight, profile.defaultWeightGrams),
-        couriers: [input.selectedCourier],
-      })
-      const match = services.find(
+    const couriers =
+      profile && profile.enabledCouriers.length > 0
+        ? profile.enabledCouriers
+        : [input.selectedCourier]
+    const pick = await pickBestWarehouse({
+      userId: input.userId,
+      destinationId: input.shippingDestinationId,
+      destCityName: input.shippingCityName,
+      destProvinceName: input.shippingProvinceName,
+      weight: Math.max(totalWeight, profile?.defaultWeightGrams ?? 500),
+      couriers,
+    })
+    if (pick) {
+      const match = pick.services.find(
         (s) => s.code === input.selectedCourier && s.service === input.selectedService,
       )
       if (!match) {
@@ -256,6 +315,8 @@ export async function calculateOrderTotal(
       shippingService = match.service
       shippingEtd = match.etd
       shippingDescription = match.description
+      warehouseId = pick.warehouseId
+      originSnapshot = toOriginSnapshot(pick)
     }
   }
 
@@ -306,5 +367,7 @@ export async function calculateOrderTotal(
     appliedZoneId,
     appliedZoneName,
     appliedZoneDescription,
+    warehouseId,
+    originSnapshot,
   }
 }
