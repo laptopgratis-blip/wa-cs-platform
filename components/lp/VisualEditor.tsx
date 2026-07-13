@@ -10,6 +10,7 @@
 import { Eye, Info, RotateCw, Scissors, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { InlineEditPopover, type PopoverAction } from '@/components/lp/InlineEditPopover'
 import {
@@ -264,6 +265,8 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
   >(null)
   // Clipboard untuk fitur Cut → Paste antar elemen.
   const [clipboard, setClipboard] = useState<string | null>(null)
+  // Index elemen yang menunggu konfirmasi hapus — pengganti window.confirm().
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null)
 
   // Debounce update srcDoc — supaya iframe tidak re-mount setiap keystroke.
   useEffect(() => {
@@ -393,9 +396,8 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
         break
       }
       case 'delete':
-        if (!window.confirm('Yakin hapus bagian ini?')) return
-        next = deleteElement(next, idx)
-        break
+        setPendingDelete(idx)
+        return
       case 'paste-before':
         if (!clipboard) return
         next = pasteElement(next, idx, clipboard, 'before')
@@ -505,6 +507,21 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
           onClose={() => setSelected(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null)
+        }}
+        title="Yakin hapus bagian ini?"
+        description="Bagian yang dihapus hilang dari halaman (masih bisa balik lewat riwayat versi HTML)."
+        onConfirm={() => {
+          if (pendingDelete === null) return
+          onChange(deleteElement(htmlContent, pendingDelete))
+          setSelected(null)
+          setPendingDelete(null)
+        }}
+      />
     </div>
   )
 }

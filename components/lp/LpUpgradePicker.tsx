@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -108,8 +109,12 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
   if (packages.length === 0) {
     return (
       <Card>
-        <CardContent className="py-16 text-center text-sm text-muted-foreground">
-          Belum ada paket LP yang aktif. Hubungi admin.
+        <CardContent>
+          <EmptyState
+            icon={Layers}
+            title="Belum ada paket LP yang aktif"
+            description="Hubungi admin untuk mengaktifkan paket upgrade."
+          />
         </CardContent>
       </Card>
     )

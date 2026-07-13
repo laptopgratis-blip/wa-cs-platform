@@ -5,6 +5,7 @@
 import {
   Archive,
   BarChart3,
+  CalendarDays,
   CalendarPlus,
   CheckCircle2,
   Clipboard,
@@ -251,7 +252,7 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
             <Badge className={`text-xs ${statusInfo.cls}`}>{statusInfo.label}</Badge>
           )}
         </div>
-        <h1 className="font-display text-2xl font-bold text-warm-900">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl dark:text-warm-50">
           {piece.title}
         </h1>
         {piece.brief && (
@@ -278,8 +279,9 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
       {/* Schedule indicator */}
       {scheduledFor && (
         <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-3 text-sm">
-          <span className="text-blue-900">
-            📅 Dijadwalkan{' '}
+          <span className="flex items-center gap-1.5 text-blue-900">
+            <CalendarDays className="size-4 shrink-0" aria-hidden />
+            Dijadwalkan{' '}
             <strong>
               {new Date(scheduledFor).toLocaleString('id-ID', {
                 dateStyle: 'full',

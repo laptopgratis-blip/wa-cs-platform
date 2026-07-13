@@ -1,10 +1,11 @@
 // /lms/courses/[courseId]/analytics — dashboard analytics seller per course (Phase 5).
-import { ArrowLeft, BarChart3 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { CourseAnalyticsClient } from '@/components/lms-lab/CourseAnalyticsClient'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { getCourseForOwner } from '@/lib/services/lms/course'
@@ -32,16 +33,10 @@ export default async function CourseAnalyticsPage({ params }: Params) {
             Kembali ke Course Saya
           </Link>
         </Button>
-        <div className="mb-1 flex items-center gap-2">
-          <BarChart3 className="size-5 text-primary-500" />
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Analytics — {course.title}
-          </h1>
-        </div>
-        <p className="text-sm text-warm-500">
-          Performa course: enrollment, completion, dropout per lesson. Update
-          realtime saat student progress.
-        </p>
+        <PageHeader
+          title={`Analytics — ${course.title}`}
+          description="Performa course: enrollment, completion, dropout per lesson. Update realtime saat student progress."
+        />
       </div>
 
       <CourseAnalyticsClient courseId={course.id} />
