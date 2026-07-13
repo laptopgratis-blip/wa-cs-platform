@@ -21,6 +21,7 @@ import type { Prisma } from '@prisma/client'
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { buildOrderBaseWhere } from '@/lib/order-filters'
 import { prisma } from '@/lib/prisma'
 import type { OrderTab } from '@/lib/validations/order'
 
@@ -254,25 +255,15 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const tab = parseTab(url.searchParams.get('tab'))
-  const q = (url.searchParams.get('q') ?? '').trim()
-  const fromRaw = url.searchParams.get('from')
-  const toRaw = url.searchParams.get('to')
-  const pmRaw = url.searchParams.get('pm')?.toUpperCase()
   const smart = parseSmart(url.searchParams.get('f'))
   const statsRange = parseStatsRange(url.searchParams.get('statsRange'))
   const statsFromRaw = url.searchParams.get('statsFrom')
   const statsToRaw = url.searchParams.get('statsTo')
-  const productIdRaw = url.searchParams.get('productId')?.trim() || null
-  const warehouseIdRaw = url.searchParams.get('warehouseId')?.trim() || null
   const cursor = url.searchParams.get('cursor')
   const limit = Math.min(
     Math.max(Number(url.searchParams.get('limit') ?? 50), 1),
     100,
   )
-  // Optional tag filter — bisa multi via repeat param `?tag=ID&tag=ID` atau
-  // CSV single param `?tag=ID,ID`. Filter additive ke smart/tab.
-  const tagIdsRaw = url.searchParams.getAll('tag').flatMap((v) => v.split(','))
-  const tagIds = tagIdsRaw.map((s) => s.trim()).filter(Boolean)
   // Optional sort: hanya kolom yang sortable di server. Default tetap
   // createdAt desc kalau tidak diisi.
   const sortRaw = url.searchParams.get('sort')
@@ -289,56 +280,9 @@ export async function GET(req: Request) {
   const sortDir: 'asc' | 'desc' = dirRaw === 'asc' ? 'asc' : 'desc'
 
   try {
-    const baseWhere: Prisma.UserOrderWhereInput = {
-      userId: session.user.id,
-    }
-    if (q) {
-      baseWhere.OR = [
-        { customerName: { contains: q, mode: 'insensitive' } },
-        { customerPhone: { contains: q, mode: 'insensitive' } },
-        { customerEmail: { contains: q, mode: 'insensitive' } },
-        { notes: { contains: q, mode: 'insensitive' } },
-        { notesAdmin: { contains: q, mode: 'insensitive' } },
-        { invoiceNumber: { contains: q, mode: 'insensitive' } },
-        { trackingNumber: { contains: q, mode: 'insensitive' } },
-      ]
-    }
-    if (tagIds.length > 0) {
-      // Match order yang punya MINIMAL satu dari tag yang dipilih (OR semantic).
-      baseWhere.tags = { some: { id: { in: tagIds } } }
-    }
-    const dateRange: Prisma.DateTimeFilter = {}
-    if (fromRaw) {
-      const d = new Date(fromRaw)
-      if (!Number.isNaN(d.getTime())) dateRange.gte = d
-    }
-    if (toRaw) {
-      const d = new Date(toRaw)
-      if (!Number.isNaN(d.getTime())) dateRange.lte = d
-    }
-    if (Object.keys(dateRange).length > 0) {
-      baseWhere.createdAt = dateRange
-    }
-    if (pmRaw === 'COD' || pmRaw === 'TRANSFER') {
-      baseWhere.paymentMethod = pmRaw
-    }
-    // Filter by productId di items JSON. Pakai PostgreSQL JSONB containment
-    // (`@>`) — items adalah array of objects { productId, qty, price?, ... },
-    // jadi `array_contains: [{productId}]` match item array yang punya minimal
-    // satu element dengan productId tsb. Property lain di element tidak harus
-    // exact (semantics @> di Postgres). Defensive: skip kalau productId palsu
-    // (mis. dari URL hack) — paling fail match alami.
-    if (productIdRaw) {
-      baseWhere.items = {
-        array_contains: [{ productId: productIdRaw }],
-      }
-    }
-    // Filter gudang asal (fulfillment per gudang). '__none__' = order tanpa
-    // gudang (gudang sudah dihapus, atau order lama sebelum fitur multi-gudang).
-    if (warehouseIdRaw) {
-      baseWhere.warehouseId =
-        warehouseIdRaw === '__none__' ? null : warehouseIdRaw
-    }
+    // Base filter (q/tag/tanggal/pm/produk/gudang) — dibagi dengan /export via
+    // lib/order-filters supaya isi CSV selalu sama dengan list.
+    const baseWhere = buildOrderBaseWhere(url.searchParams, session.user.id)
 
     // Smart filter di-apply di atas baseWhere TAPI overrides tab kalau ada.
     // Reasoning: kalau user pilih chip "Urgent", expectation-nya lihat semua

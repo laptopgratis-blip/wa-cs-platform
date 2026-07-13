@@ -1,13 +1,14 @@
 // GET /api/orders/export?tab=all&from=...&to=...
-// Generate CSV pesanan user untuk download. Filter sama dengan /api/orders.
+// Generate CSV pesanan user untuk download. Filter base (q/tag/tanggal/metode
+// bayar/produk/GUDANG) dibagi dengan GET /api/orders via lib/order-filters →
+// isi CSV SELALU sama dengan list. Tab di-apply di atasnya. (Smart filter `f`
+// belum di-handle di export.)
 //
 // Schema CSV di-extend 2026-05-19: tambah invoice number, email, items (form
-// produk), shipping breakdown, bukti transfer URL. User report sebelumnya
-// data items + bukti tidak muncul di export, padahal admin butuh untuk
-// rekonsiliasi + audit.
-import type { Prisma } from '@prisma/client'
-
+// produk), shipping breakdown, bukti transfer URL. 2026-07-13: kolom Gudang +
+// fix filter per-gudang tidak terpakai di export.
 import { jsonError, requireSession } from '@/lib/api'
+import { buildOrderBaseWhere } from '@/lib/order-filters'
 import { prisma } from '@/lib/prisma'
 
 const HEADERS = [
@@ -21,6 +22,7 @@ const HEADERS = [
   'Provinsi',
   'Kota',
   'Kode Pos',
+  'Gudang Asal',
   'Items (produk × qty @ harga)',
   'Total',
   'Metode Bayar',
@@ -79,11 +81,11 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url)
   const tab = url.searchParams.get('tab')
-  const fromRaw = url.searchParams.get('from')
-  const toRaw = url.searchParams.get('to')
 
   try {
-    const where: Prisma.UserOrderWhereInput = { userId: session.user.id }
+    // Base filter (termasuk warehouseId) sama persis dengan list.
+    const where = buildOrderBaseWhere(url.searchParams, session.user.id)
+    // Tab di-apply di atas base (samakan dgn buildTabFilter di GET /api/orders).
     if (tab === 'pending') where.paymentStatus = 'PENDING'
     if (tab === 'paid') {
       where.paymentStatus = 'PAID'
@@ -91,17 +93,6 @@ export async function GET(req: Request) {
     }
     if (tab === 'shipped') where.deliveryStatus = 'SHIPPED'
     if (tab === 'completed') where.deliveryStatus = 'DELIVERED'
-
-    const dateRange: Prisma.DateTimeFilter = {}
-    if (fromRaw) {
-      const d = new Date(fromRaw)
-      if (!Number.isNaN(d.getTime())) dateRange.gte = d
-    }
-    if (toRaw) {
-      const d = new Date(toRaw)
-      if (!Number.isNaN(d.getTime())) dateRange.lte = d
-    }
-    if (Object.keys(dateRange).length > 0) where.createdAt = dateRange
 
     const orders = await prisma.userOrder.findMany({
       where,
@@ -118,6 +109,7 @@ export async function GET(req: Request) {
         shippingCityName: true,
         shippingPostalCode: true,
         shippingAddress: true,
+        originSnapshot: true,
         items: true,
         totalAmount: true,
         paymentMethod: true,
@@ -165,6 +157,7 @@ export async function GET(req: Request) {
           o.shippingProvinceName ?? '',
           o.shippingCityName ?? '',
           o.shippingPostalCode ?? '',
+          (o.originSnapshot as { name?: string } | null)?.name ?? '',
           formatItems(o.items),
           o.totalAmount?.toString() ?? '',
           o.paymentMethod,
