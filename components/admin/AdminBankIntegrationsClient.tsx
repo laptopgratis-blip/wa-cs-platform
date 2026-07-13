@@ -7,6 +7,9 @@ import { AlertTriangle, Loader2, ShieldAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -112,34 +115,30 @@ export function AdminBankIntegrationsClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <ShieldAlert className="h-6 w-6" />
-            Bank Integrations (BETA)
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Monitor + kill switch untuk fitur Bank Mutation Auto-Reader.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirmUnblockAll(true)}
-          >
-            Unblock All
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setConfirmBlockAll(true)}
-          >
-            <AlertTriangle className="h-4 w-4 mr-1" />
-            Block All
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Bank Integrations (BETA)"
+        icon={ShieldAlert}
+        description="Monitor + kill switch untuk fitur Bank Mutation Auto-Reader."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmUnblockAll(true)}
+            >
+              Unblock All
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setConfirmBlockAll(true)}
+            >
+              <AlertTriangle className="h-4 w-4 mr-1" />
+              Block All
+            </Button>
+          </>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -149,13 +148,15 @@ export function AdminBankIntegrationsClient() {
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-12 text-center">
-              <Loader2 className="h-6 w-6 animate-spin inline" />
+            <div className="p-4">
+              <CardGridSkeleton count={2} />
             </div>
           ) : items.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              Belum ada user yang aktivasi.
-            </div>
+            <EmptyState
+              icon={ShieldAlert}
+              title="Belum ada user yang aktivasi"
+              description="Integrasi bank yang diaktifkan user bakal termonitor di sini."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

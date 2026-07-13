@@ -2,11 +2,14 @@
 
 // CRUD Paket Upgrade Landing Page. Pola Sheet form sama dengan PackagesManager.
 import type { LpTier } from '@prisma/client'
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Globe, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -184,22 +187,18 @@ export function LpPackagesManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Paket Upgrade Landing Page
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Atur paket yang user bisa beli untuk upgrade kuota LP & storage.
-          </p>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" /> Tambah Paket
-        </Button>
-      </div>
+      <PageHeader
+        title="Paket Upgrade Landing Page"
+        description="Atur paket yang user bisa beli untuk upgrade kuota LP & storage."
+        actions={
+          <Button
+            onClick={openCreate}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" /> Tambah Paket
+          </Button>
+        }
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -218,15 +217,15 @@ export function LpPackagesManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={9} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
-                  Belum ada paket.
+                <TableCell colSpan={9}>
+                  <EmptyState
+                    icon={Globe}
+                    title="Belum ada paket"
+                    description="Tambahkan paket upgrade LP pertama supaya user bisa beli."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

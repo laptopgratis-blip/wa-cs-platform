@@ -5,6 +5,10 @@ import { GraduationCap, Loader2, Pencil, Plus, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -76,6 +80,7 @@ export function LmsPackagesManager() {
   const [packages, setPackages] = useState<LmsPkg[]>([])
   const [loading, setLoading] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [seedConfirmOpen, setSeedConfirmOpen] = useState(false)
   const [editing, setEditing] = useState<LmsPkg | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -149,12 +154,7 @@ export function LmsPackagesManager() {
   }
 
   async function seedDefaults() {
-    if (
-      !confirm(
-        'Seed 4 tier default (FREE/BASIC/PRO/UNLIMITED)? Idempotent — yang sudah ada di-skip.',
-      )
-    )
-      return
+    setSeedConfirmOpen(false)
     setSeeding(true)
     try {
       const res = await fetch('/api/admin/lms-packages/seed', {
@@ -176,54 +176,47 @@ export function LmsPackagesManager() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <GraduationCap className="size-5 text-primary-500" />
-            <h1 className="font-display text-2xl font-extrabold tracking-tight">
-              Paket LMS
-            </h1>
-          </div>
-          <p className="text-sm text-warm-500">
-            Plan upgrade untuk LMS — student per course, jumlah course, file
-            storage. User bayar pakai saldo token. Muncul di /pricing-lms.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {packages.length === 0 && (
+      <PageHeader
+        title="Paket LMS"
+        description="Plan upgrade untuk LMS — student per course, jumlah course, file storage. User bayar pakai saldo token. Muncul di /pricing-lms."
+        actions={
+          <>
+            {packages.length === 0 && (
+              <Button
+                onClick={() => setSeedConfirmOpen(true)}
+                disabled={seeding}
+                variant="outline"
+              >
+                {seeding ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 size-4" />
+                )}
+                Seed Default Tier
+              </Button>
+            )}
             <Button
-              onClick={seedDefaults}
-              disabled={seeding}
-              variant="outline"
+              onClick={openCreate}
+              className="bg-primary-500 text-white hover:bg-primary-600"
             >
-              {seeding ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 size-4" />
-              )}
-              Seed Default Tier
+              <Plus className="mr-2 size-4" />
+              Tambah Plan
             </Button>
-          )}
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white hover:bg-primary-600"
-          >
-            <Plus className="mr-2 size-4" />
-            Tambah Plan
-          </Button>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="rounded-xl border border-warm-200 bg-card">
         {loading ? (
-          <div className="py-16 text-center text-sm text-warm-500">
-            Loading...
+          <div className="p-4">
+            <CardGridSkeleton count={2} />
           </div>
         ) : packages.length === 0 ? (
-          <div className="py-16 text-center text-sm text-warm-500">
-            Belum ada plan. Klik <strong>Seed Default Tier</strong> untuk
-            generate FREE/BASIC/PRO/UNLIMITED.
-          </div>
+          <EmptyState
+            icon={GraduationCap}
+            title="Belum ada plan"
+            description="Klik Seed Default Tier untuk generate FREE/BASIC/PRO/UNLIMITED."
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -482,6 +475,16 @@ export function LmsPackagesManager() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={seedConfirmOpen}
+        onOpenChange={setSeedConfirmOpen}
+        title="Seed 4 tier default?"
+        description="FREE/BASIC/PRO/UNLIMITED dibuat sekali — yang sudah ada di-skip (idempotent)."
+        confirmLabel="Ya, Seed"
+        variant="default"
+        onConfirm={seedDefaults}
+      />
     </div>
   )
 }

@@ -1,11 +1,14 @@
 'use client'
 
 // CRUD Token Packages.
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Box, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -152,22 +155,18 @@ export function PackagesManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Token Packages
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Atur paket token yang bisa dibeli user.
-          </p>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" /> Tambah Paket
-        </Button>
-      </div>
+      <PageHeader
+        title="Token Packages"
+        description="Atur paket token yang bisa dibeli user."
+        actions={
+          <Button
+            onClick={openCreate}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" /> Tambah Paket
+          </Button>
+        }
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -185,15 +184,15 @@ export function PackagesManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={8} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                  Belum ada paket.
+                <TableCell colSpan={8}>
+                  <EmptyState
+                    icon={Box}
+                    title="Belum ada paket"
+                    description="Tambahkan paket token pertama supaya user bisa top-up."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

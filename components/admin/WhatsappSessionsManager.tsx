@@ -14,6 +14,9 @@ import {
 import { useEffect, useState } from 'react'
 
 import { StatusBadge } from '@/components/whatsapp/StatusBadge'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -134,15 +137,10 @@ export function WhatsappSessionsManager() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          WhatsApp Sessions
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Semua sesi WhatsApp lintas user — nomor, status, model AI, dan
-          pemiliknya.
-        </p>
-      </div>
+      <PageHeader
+        title="WhatsApp Sessions"
+        description="Semua sesi WhatsApp lintas user — nomor, status, model AI, dan pemiliknya."
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
@@ -206,21 +204,15 @@ export function WhatsappSessionsManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={9}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={9} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={9}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  Tidak ada sesi yang cocok.
+                <TableCell colSpan={9}>
+                  <EmptyState
+                    icon={Search}
+                    title="Tidak ada sesi yang cocok"
+                    description="Coba ubah kata kunci atau filter status."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

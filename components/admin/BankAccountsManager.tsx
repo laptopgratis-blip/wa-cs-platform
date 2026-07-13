@@ -5,6 +5,10 @@ import { Building2, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,6 +35,8 @@ interface BankAccountRow {
 export function BankAccountsManager() {
   const [rows, setRows] = useState<BankAccountRow[]>([])
   const [isLoading, setLoading] = useState(true)
+  const [deleteTarget, setDeleteTarget] = useState<BankAccountRow | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<BankAccountRow | null>(null)
   const [bankName, setBankName] = useState('')
@@ -111,46 +117,56 @@ export function BankAccountsManager() {
     void load()
   }
 
-  async function remove(b: BankAccountRow) {
-    if (!confirm(`Hapus rekening "${b.bankName} — ${b.accountNumber}"?`)) return
-    const res = await fetch(`/api/admin/bank-accounts/${b.id}`, { method: 'DELETE' })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (!res.ok || !json.success) {
-      toast.error(json.error || 'Gagal menghapus')
-      return
+  async function remove() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/admin/bank-accounts/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      const json = (await res.json()) as { success: boolean; error?: string }
+      if (!res.ok || !json.success) {
+        toast.error(json.error || 'Gagal menghapus')
+        return
+      }
+      setDeleteTarget(null)
+      toast.success('Rekening dihapus')
+      void load()
+    } finally {
+      setIsDeleting(false)
     }
-    toast.success('Rekening dihapus')
-    void load()
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Rekening Bank
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Rekening tujuan transfer manual yang muncul di halaman checkout user.
-          </p>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" /> Tambah Rekening
-        </Button>
-      </div>
+      <PageHeader
+        title="Rekening Bank"
+        description="Rekening tujuan transfer manual yang muncul di halaman checkout user."
+        actions={
+          <Button
+            onClick={openCreate}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" /> Tambah Rekening
+          </Button>
+        }
+      />
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <CardGridSkeleton count={3} />
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center text-sm text-muted-foreground">
-            Belum ada rekening bank. Tambahkan minimal satu rekening agar user bisa
-            transfer manual.
+          <CardContent>
+            <EmptyState
+              icon={Building2}
+              title="Belum ada rekening bank"
+              description="Tambahkan minimal satu rekening agar user bisa transfer manual."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 size-4" /> Tambah Rekening Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -195,7 +211,7 @@ export function BankAccountsManager() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => remove(b)}
+                      onClick={() => setDeleteTarget(b)}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="size-4" />
@@ -260,6 +276,17 @@ export function BankAccountsManager() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus rekening "${deleteTarget?.bankName ?? ''} — ${deleteTarget?.accountNumber ?? ''}"?`}
+        description="Rekening ini tidak akan muncul lagi di halaman checkout user."
+        isLoading={isDeleting}
+        onConfirm={remove}
+      />
     </div>
   )
 }

@@ -6,12 +6,15 @@
 // - Tombol edit role / hapus disabled untuk diri sendiri.
 // - Validasi server tetap jadi sumber kebenaran (cek admin-terakhir, dll.)
 //   — UI hanya mengurangi friksi, bukan satu-satunya gate.
-import { Coins, Loader2, Pencil, Search, Shield, Trash2 } from 'lucide-react'
+import { Coins, Loader2, Pencil, Search, Shield, Trash2, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -248,14 +251,10 @@ export function UsersManager() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Users
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Lihat user platform, saldo token, top-up manual, edit profil, dan hapus user.
-        </p>
-      </div>
+      <PageHeader
+        title="Users"
+        description="Lihat user platform, saldo token, top-up manual, edit profil, dan hapus user."
+      />
 
       <div className="relative max-w-sm">
         <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -287,15 +286,15 @@ export function UsersManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={8} />
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                  Tidak ada user yang cocok.
+                <TableCell colSpan={8}>
+                  <EmptyState
+                    icon={Users}
+                    title="Tidak ada user yang cocok"
+                    description="Coba ubah kata kunci pencarian."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
