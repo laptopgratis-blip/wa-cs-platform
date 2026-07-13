@@ -27,6 +27,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { DURATION_DISCOUNTS } from '@/lib/subscription-pricing'
 import { cn } from '@/lib/utils'
@@ -152,16 +153,11 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-8">
-      <header className="space-y-1">
-        <h1 className="font-display text-2xl font-extrabold">
-          Upgrade ke {pkg.name}
-        </h1>
-        <p className="text-sm text-warm-600">
-          Bayar pakai saldo token. Aktivasi instan, tidak ada konfirmasi
-          manual atau upload bukti transfer.
-        </p>
-      </header>
+    <div className="mx-auto h-full max-w-3xl space-y-6 overflow-y-auto p-4 md:p-8">
+      <PageHeader
+        title={`Upgrade ke ${pkg.name}`}
+        description="Bayar pakai saldo token. Aktivasi instan, tidak ada konfirmasi manual atau upload bukti transfer."
+      />
 
       <Card>
         <CardContent className="space-y-5 p-6">

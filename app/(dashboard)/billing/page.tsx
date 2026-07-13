@@ -15,6 +15,7 @@ import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -174,15 +175,10 @@ export default async function BillingPage({
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Billing & Saldo Token
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Saldo token kamu = bahan bakar semua fitur Hulao. Berlangganan paket,
-          generate konten, balas WA pakai AI — semua potong dari saldo.
-        </p>
-      </div>
+      <PageHeader
+        title="Billing & Saldo Token"
+        description="Saldo token kamu = bahan bakar semua fitur Hulao. Berlangganan paket, generate konten, balas WA pakai AI — semua potong dari saldo."
+      />
 
       <PostPublishReturnBanner />
 

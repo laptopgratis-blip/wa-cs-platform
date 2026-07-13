@@ -5,6 +5,9 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -59,26 +62,29 @@ export function JobsClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div>
         <Link href="/integrations/bank-mutation">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" className="mb-2 -ml-2">
             <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
           </Button>
         </Link>
-        <h1 className="text-xl font-bold">Scrape Job Logs</h1>
+        <PageHeader
+          title="Scrape Job Logs"
+          description="Riwayat eksekusi scraper mutasi — status, durasi, dan error tiap run."
+        />
       </div>
 
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-12 text-center">
-              <Loader2 className="h-6 w-6 animate-spin inline mr-2" />
-              Memuat...
+            <div className="p-4">
+              <CardGridSkeleton count={2} />
             </div>
           ) : jobs.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              Belum ada job log.
-            </div>
+            <EmptyState
+              title="Belum ada job log"
+              description="Log muncul setelah scraper jalan (terjadwal atau manual)."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

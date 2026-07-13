@@ -15,6 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import {
   Dialog,
   DialogContent,
@@ -148,23 +150,18 @@ export function SubscriptionDashboard() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="mr-2 size-5 animate-spin" />
-        Memuat...
+      <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-8">
+        <CardGridSkeleton count={2} />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <header>
-        <h1 className="font-display text-2xl font-extrabold">
-          Subscription Plan
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Kelola plan aktif & lihat history pembayaran subscription.
-        </p>
-      </header>
+    <div className="mx-auto h-full max-w-4xl space-y-6 overflow-y-auto p-4 md:p-8">
+      <PageHeader
+        title="Subscription Plan"
+        description="Kelola plan aktif & lihat history pembayaran subscription."
+      />
 
       {/* Current subscription */}
       <Card>

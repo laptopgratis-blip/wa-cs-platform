@@ -31,6 +31,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -166,34 +167,38 @@ export function BankMutationClient({ initial }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Banknote className="h-6 w-6" />
-            Auto-Confirm Pembayaran
-            <Badge variant="outline" className="border-orange-400 bg-orange-50 text-orange-700">
+      <PageHeader
+        title="Auto-Confirm Pembayaran"
+        icon={Banknote}
+        description={
+          <span className="flex items-center gap-2">
+            Otomatis baca mutasi BCA & konfirmasi order TRANSFER tanpa approve
+            manual.
+            <Badge
+              variant="outline"
+              className="border-primary-400 bg-primary-50 text-primary-700"
+            >
               BETA
             </Badge>
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Otomatis baca mutasi BCA & konfirmasi order TRANSFER tanpa approve manual.
-          </p>
-        </div>
-        {integration?.hasCredentials && (
-          <div className="flex gap-2">
-            <Link href="/integrations/bank-mutation/mutations">
-              <Button variant="outline" size="sm">
-                Lihat Mutasi
-              </Button>
-            </Link>
-            <Link href="/integrations/bank-mutation/jobs">
-              <Button variant="outline" size="sm">
-                Logs
-              </Button>
-            </Link>
-          </div>
-        )}
-      </div>
+          </span>
+        }
+        actions={
+          integration?.hasCredentials ? (
+            <>
+              <Link href="/integrations/bank-mutation/mutations">
+                <Button variant="outline" size="sm">
+                  Lihat Mutasi
+                </Button>
+              </Link>
+              <Link href="/integrations/bank-mutation/jobs">
+                <Button variant="outline" size="sm">
+                  Logs
+                </Button>
+              </Link>
+            </>
+          ) : undefined
+        }
+      />
 
       <BetaDisclaimerBanner />
 

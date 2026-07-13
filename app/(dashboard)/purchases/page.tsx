@@ -6,12 +6,15 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
+  Receipt,
   XCircle,
 } from 'lucide-react'
 import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -134,18 +137,20 @@ export default async function PurchaseHistoryPage() {
             Kembali ke Billing
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Riwayat Pembelian
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Semua riwayat pembelian token via Payment Gateway dan Transfer Manual.
-        </p>
+        <PageHeader
+          title="Riwayat Pembelian"
+          description="Semua riwayat pembelian token via Payment Gateway dan Transfer Manual."
+        />
       </div>
 
       {isEmpty && (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada riwayat pembelian.
+          <CardContent>
+            <EmptyState
+              icon={Receipt}
+              title="Belum ada riwayat pembelian"
+              description="Pembelian token pertamamu bakal tercatat di sini."
+            />
           </CardContent>
         </Card>
       )}

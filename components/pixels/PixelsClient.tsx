@@ -18,6 +18,8 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -65,11 +67,12 @@ interface PixelsClientProps {
   limit: number
 }
 
-const PLATFORM_EMOJI: Record<string, string> = {
-  META: '📘',
-  GOOGLE_ADS: '🎯',
-  GA4: '📊',
-  TIKTOK: '🎵',
+// Inisial platform sebagai avatar huruf — ikon brand tidak tersedia di lucide.
+const PLATFORM_INITIAL: Record<string, { label: string; cls: string }> = {
+  META: { label: 'M', cls: 'bg-blue-100 text-blue-700' },
+  GOOGLE_ADS: { label: 'G', cls: 'bg-amber-100 text-amber-700' },
+  GA4: { label: 'GA', cls: 'bg-emerald-100 text-emerald-700' },
+  TIKTOK: { label: 'T', cls: 'bg-warm-900 text-white' },
 }
 
 interface FormState {
@@ -134,6 +137,11 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   function openCreate(platform: PixelPlatform) {
     setEditingId(null)
@@ -242,10 +250,11 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Hapus integrasi "${name}"?`)) return
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
     try {
-      const res = await fetch(`/api/integrations/pixels/${id}`, {
+      const res = await fetch(`/api/integrations/pixels/${deleteTarget.id}`, {
         method: 'DELETE',
       })
       const data = await res.json()
@@ -253,10 +262,13 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
         toast.error(data.error ?? 'Gagal menghapus')
         return
       }
+      setDeleteTarget(null)
       await refreshList()
       toast.success('Integrasi dihapus')
     } catch {
       toast.error('Terjadi kesalahan jaringan')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -306,27 +318,28 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
   )
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-6 md:py-8">
-      <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Pixel Tracking
-          </h1>
-          <p className="mt-1 text-sm text-warm-600">
+    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        className="mb-6"
+        title="Pixel Tracking"
+        description={
+          <>
             Pasang pixel iklan untuk track conversion dari Meta, Google, dan
             TikTok. Server-side (CAPI) lebih akurat & tidak terblok adblock.
             <span className="ml-1 text-warm-500">
               ({items.length}/{limit} integrasi)
             </span>
-          </p>
-        </div>
-        <Button asChild variant="outline">
-          <Link href="/integrations/pixels/logs">
-            <FileText className="mr-1 size-4" />
-            Lihat Logs
-          </Link>
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/integrations/pixels/logs">
+              <FileText className="mr-1 size-4" />
+              Lihat Logs
+            </Link>
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {PIXEL_PLATFORMS.map((platform) => {
@@ -335,7 +348,14 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
             <Card key={platform}>
               <CardContent className="p-4">
                 <div className="mb-3 flex items-center gap-2">
-                  <span className="text-xl">{PLATFORM_EMOJI[platform]}</span>
+                  <span
+                    aria-hidden
+                    className={`flex size-7 items-center justify-center rounded-lg text-xs font-bold ${
+                      PLATFORM_INITIAL[platform]?.cls ?? 'bg-warm-100 text-warm-700'
+                    }`}
+                  >
+                    {PLATFORM_INITIAL[platform]?.label ?? '?'}
+                  </span>
                   <h2 className="font-semibold text-warm-900">
                     {PIXEL_PLATFORM_LABELS[platform]}
                   </h2>
@@ -343,7 +363,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
 
                 {list.length === 0 ? (
                   <div className="mb-3 rounded-lg border border-dashed bg-warm-50 p-3 text-center">
-                    <p className="text-sm text-warm-600">⚪ Belum dipasang</p>
+                    <p className="text-sm text-warm-500">Belum dipasang</p>
                   </div>
                 ) : (
                   <ul className="mb-3 space-y-2">
@@ -397,7 +417,10 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                             variant="outline"
                             className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
                             onClick={() =>
-                              handleDelete(item.id, item.displayName)
+                              setDeleteTarget({
+                                id: item.id,
+                                name: item.displayName,
+                              })
                             }
                           >
                             <Trash2 className="size-3" />
@@ -786,6 +809,17 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus integrasi "${deleteTarget?.name ?? ''}"?`}
+        description="Pixel berhenti track conversion dari form order yang memakainya."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
