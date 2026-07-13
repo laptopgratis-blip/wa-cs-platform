@@ -3,7 +3,7 @@
 // Card view untuk /pesanan — layout kaya detail per order. Cocok saat user mau
 // cek visual breakdown harga, alamat lengkap, pixel status. Default-nya
 // tabel padat (lebih cocok untuk bulk operasional).
-import { ExternalLink, Loader2, MessageCircle } from 'lucide-react'
+import { ExternalLink, Loader2, MessageCircle, Warehouse } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 
@@ -174,8 +174,9 @@ function OrderCard({
                 </p>
               )}
               {order.originSnapshot?.name && (
-                <p className="text-warm-600">
-                  📦 Dikirim dari: {order.originSnapshot.name}
+                <p className="flex items-center gap-1 text-warm-600">
+                  <Warehouse className="size-3.5 shrink-0" />
+                  Dikirim dari: {order.originSnapshot.name}
                 </p>
               )}
               <p className="font-bold text-warm-900">

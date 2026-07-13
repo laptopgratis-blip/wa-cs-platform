@@ -15,6 +15,7 @@ import {
   Loader2,
   MessageCircle,
   Tag,
+  Warehouse,
   X,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -421,6 +422,15 @@ function renderCell(
     case 'order-form-name':
       return order.orderForm?.name ? (
         <span className="text-xs">{order.orderForm.name}</span>
+      ) : (
+        <DashCell />
+      )
+    case 'warehouse':
+      return order.originSnapshot?.name ? (
+        <span className="inline-flex items-center gap-1 text-xs">
+          <Warehouse className="size-3.5 shrink-0 text-warm-500" />
+          {order.originSnapshot.name}
+        </span>
       ) : (
         <DashCell />
       )

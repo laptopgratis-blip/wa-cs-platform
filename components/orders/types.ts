@@ -12,6 +12,19 @@ export interface OrderTagBadge {
   color: string
 }
 
+// Ringkasan pesanan "perlu dikemas" per gudang — strip fulfillment di /pesanan.
+export interface WarehouseSummaryItem {
+  warehouseId: string
+  name: string
+  isActive: boolean
+  count: number
+}
+export interface WarehouseSummary {
+  warehouses: WarehouseSummaryItem[]
+  noneCount: number
+  total: number
+}
+
 export interface OrderListItem {
   id: string
   customerName: string

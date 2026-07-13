@@ -263,6 +263,7 @@ export async function GET(req: Request) {
   const statsFromRaw = url.searchParams.get('statsFrom')
   const statsToRaw = url.searchParams.get('statsTo')
   const productIdRaw = url.searchParams.get('productId')?.trim() || null
+  const warehouseIdRaw = url.searchParams.get('warehouseId')?.trim() || null
   const cursor = url.searchParams.get('cursor')
   const limit = Math.min(
     Math.max(Number(url.searchParams.get('limit') ?? 50), 1),
@@ -331,6 +332,12 @@ export async function GET(req: Request) {
       baseWhere.items = {
         array_contains: [{ productId: productIdRaw }],
       }
+    }
+    // Filter gudang asal (fulfillment per gudang). '__none__' = order tanpa
+    // gudang (gudang sudah dihapus, atau order lama sebelum fitur multi-gudang).
+    if (warehouseIdRaw) {
+      baseWhere.warehouseId =
+        warehouseIdRaw === '__none__' ? null : warehouseIdRaw
     }
 
     // Smart filter di-apply di atas baseWhere TAPI overrides tab kalau ada.

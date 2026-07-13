@@ -32,6 +32,7 @@ export type OrderColumnRenderType =
   | 'tracking-number'
   | 'notes-admin' // inline edit
   | 'order-form-name'
+  | 'warehouse' // gudang asal (originSnapshot) — fulfillment multi-gudang
 
 export interface OrderColumn {
   key: string
@@ -255,6 +256,15 @@ export const ORDER_COLUMNS: OrderColumn[] = [
     defaultVisible: true,
     sortable: false,
     renderType: 'badge-delivery-status',
+    width: 'min-w-[120px]',
+  },
+  {
+    key: 'warehouse',
+    label: 'Gudang',
+    category: 'shipping',
+    defaultVisible: false,
+    sortable: false,
+    renderType: 'warehouse',
     width: 'min-w-[120px]',
   },
   {

@@ -10,7 +10,7 @@
 // Phase 1 Custom Columns (2026-05-08): kolom yang aktif + sort di-persist ke
 // server via UserOrderViewPreference (hook useViewPreference). Tabel render
 // driven by `visibleColumns`. Tags + Notes Admin via inline edit.
-import { Columns, Download, Loader2 } from 'lucide-react'
+import { Columns, Download, Loader2, Printer } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -23,6 +23,7 @@ import { OrdersBulkActionBar } from './OrdersBulkActionBar'
 import { OrdersFilterBar } from './OrdersFilterBar'
 import { OrdersStatsStrip } from './OrdersStatsStrip'
 import { OrdersTable } from './OrdersTable'
+import { OrdersWarehouseStrip } from './OrdersWarehouseStrip'
 import { TagPickerDialog } from './TagPickerDialog'
 import type {
   OrderListItem,
@@ -33,6 +34,7 @@ import type {
   SmartFilter,
   StatsRange,
   ViewMode,
+  WarehouseSummary,
 } from './types'
 import { useViewPreference } from './useViewPreference'
 
@@ -71,6 +73,10 @@ export function OrdersList() {
   const [statsFrom, setStatsFrom] = useState('')
   const [statsTo, setStatsTo] = useState('')
   const [productId, setProductId] = useState<string | null>(null)
+  // Filter gudang (fulfillment). null = semua; id gudang / WAREHOUSE_NONE.
+  const [warehouseId, setWarehouseId] = useState<string | null>(null)
+  const [warehouseSummary, setWarehouseSummary] =
+    useState<WarehouseSummary | null>(null)
   // List produk milik user untuk dropdown filter — load sekali saat mount.
   // Limit 100 sesuai PRODUCT_LIMIT_PER_USER, jadi tidak butuh pagination.
   const [productOptions, setProductOptions] = useState<
@@ -140,6 +146,28 @@ export function OrdersList() {
     }
   }, [])
 
+  // Ringkasan "perlu dikemas" per gudang untuk strip fulfillment. Refetch saat
+  // reload (mis. setelah bulk Tandai Dikirim) supaya angka turun realtime.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/orders/warehouse-summary', {
+          cache: 'no-store',
+        })
+        const json = await res.json()
+        if (!cancelled && json.success) {
+          setWarehouseSummary(json.data as WarehouseSummary)
+        }
+      } catch {
+        // Strip opsional — kalau gagal, tak tampil. Bukan kritis.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [reloadKey])
+
   // Build query string dari filter.
   const queryString = useMemo(() => {
     const p = new URLSearchParams()
@@ -154,6 +182,7 @@ export function OrdersList() {
     }
     if (paymentMethod) p.set('pm', paymentMethod)
     if (productId) p.set('productId', productId)
+    if (warehouseId) p.set('warehouseId', warehouseId)
     if (viewPref.sortColumn) p.set('sort', viewPref.sortColumn)
     if (viewPref.sortDirection) p.set('dir', viewPref.sortDirection)
     p.set('statsRange', statsRange)
@@ -175,6 +204,7 @@ export function OrdersList() {
     to,
     paymentMethod,
     productId,
+    warehouseId,
     statsRange,
     statsFrom,
     statsTo,
@@ -428,6 +458,7 @@ export function OrdersList() {
     setTo('')
     setPaymentMethod(null)
     setProductId(null)
+    setWarehouseId(null)
   }
 
   return (
@@ -457,6 +488,19 @@ export function OrdersList() {
             <Download className="mr-2 size-4" />
             Export CSV
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const p = new URLSearchParams()
+              if (warehouseId) p.set('warehouseId', warehouseId)
+              const qs = p.toString()
+              window.open(`/packing${qs ? `?${qs}` : ''}`, '_blank')
+            }}
+            title="Cetak daftar paket siap kemas (per gudang bila difilter)"
+          >
+            <Printer className="mr-2 size-4" />
+            Cetak Packing
+          </Button>
         </div>
       </div>
 
@@ -476,6 +520,12 @@ export function OrdersList() {
           setSmart('urgent')
           setTab('all')
         }}
+      />
+
+      <OrdersWarehouseStrip
+        summary={warehouseSummary}
+        active={warehouseId}
+        onSelect={setWarehouseId}
       />
 
       <OrdersFilterBar
