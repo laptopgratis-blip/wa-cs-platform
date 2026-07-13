@@ -3,13 +3,26 @@
 // Halaman utama /cara-jualan. Tampilkan template pre-built (atas) + flow yang
 // sudah dibuat user (bawah). Sheet editor di-share antara create dari template
 // dan edit existing.
-import { Pencil, Plus, ShoppingBag } from 'lucide-react'
+import {
+  CalendarDays,
+  CreditCard,
+  MessagesSquare,
+  PenLine,
+  Pencil,
+  Plus,
+  ShoppingBag,
+  Truck,
+  type LucideIcon,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { SalesFlowForm } from '@/components/sales-flow/SalesFlowForm'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -35,6 +48,16 @@ export interface SalesFlowListItem {
   steps: SalesFlowStepInput[]
   finalAction: SalesFlowFinalActionInput
   isActive: boolean
+}
+
+// Ikon per template — pengganti emoji dari data supaya konsisten dengan icon
+// set lucide di seluruh dashboard.
+const TEMPLATE_ICON: Record<TemplatePreview['template'], LucideIcon> = {
+  COD: Truck,
+  TRANSFER: CreditCard,
+  BOOKING: CalendarDays,
+  CONSULTATION: MessagesSquare,
+  CUSTOM: PenLine,
 }
 
 interface TemplatePreview {
@@ -133,18 +156,18 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
         relevantFor={['SELL_WA']}
         matchMessage="Pilih template paling cocok dulu (COD / Transfer / Booking) — kamu bisa edit step-stepnya nanti. AI akan ikuti alur ini saat customer chat."
       />
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Cara Jualan
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Atur AI untuk terima pesanan otomatis dari customer — COD, Transfer,
-          Booking, atau buat alur sendiri.
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {activeCount} dari {limit} flow aktif
-        </p>
-      </div>
+      <PageHeader
+        title="Cara Jualan"
+        description={
+          <>
+            Atur AI untuk terima pesanan otomatis dari customer — COD, Transfer,
+            Booking, atau buat alur sendiri.
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {activeCount} dari {limit} flow aktif
+            </span>
+          </>
+        }
+      />
 
       {/* Template picker */}
       <div className="space-y-3">
@@ -152,15 +175,20 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
           Pilih template
         </h2>
         {loadingTpl ? (
-          <p className="text-sm text-muted-foreground">Memuat template…</p>
+          <CardGridSkeleton count={3} />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {templates.map((tpl) => (
+            {templates.map((tpl) => {
+              const TplIcon = TEMPLATE_ICON[tpl.template] ?? PenLine
+              return (
               <Card key={tpl.template} className="rounded-xl border-warm-200">
                 <CardContent className="space-y-3 p-5">
-                  <div className="flex items-center gap-2">
-                    <span aria-hidden className="text-2xl leading-none">
-                      {tpl.emoji}
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      aria-hidden
+                      className="flex size-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300"
+                    >
+                      <TplIcon className="size-5" />
                     </span>
                     <h3 className="font-display font-bold">{tpl.name}</h3>
                   </div>
@@ -178,7 +206,8 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
                   </Button>
                 </CardContent>
               </Card>
-            ))}
+              )
+            })}
           </div>
         )}
         {isFull && (
@@ -196,15 +225,12 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
         </h2>
         {flows.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-              <ShoppingBag className="size-10 text-muted-foreground" />
-              <div className="space-y-1">
-                <p className="font-medium">Belum ada flow yang dibuat</p>
-                <p className="text-sm text-muted-foreground">
-                  Pilih template di atas untuk mulai, atau buat alur custom dari
-                  nol.
-                </p>
-              </div>
+            <CardContent>
+              <EmptyState
+                icon={ShoppingBag}
+                title="Belum ada flow yang dibuat"
+                description="Pilih template di atas untuk mulai, atau buat alur custom dari nol."
+              />
             </CardContent>
           </Card>
         ) : (
@@ -296,7 +322,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
               {editing?.mode === 'edit'
                 ? `Atur Flow: ${editing.flow.name}`
                 : editing?.mode === 'create-from-template'
-                  ? `${editing.template.emoji} ${editing.template.name}`
+                  ? editing.template.name
                   : 'Atur Flow'}
             </SheetTitle>
             <SheetDescription>

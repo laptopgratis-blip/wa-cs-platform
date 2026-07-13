@@ -5,6 +5,7 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   Bot,
   CheckCircle2,
   Download,
@@ -531,7 +532,9 @@ function Bubble({
               isOutgoing ? 'opacity-80' : 'text-muted-foreground',
             )}
           >
-            <summary className="select-none">📊 Cost detail</summary>
+            <summary className="flex select-none items-center gap-1">
+              <BarChart3 className="size-3" aria-hidden /> Cost detail
+            </summary>
             <div className="mt-1 space-y-0.5 font-mono">
               {message.modelName && (
                 <div>Model: {message.modelName}</div>

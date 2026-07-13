@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -337,9 +338,9 @@ export function LiveRoomForm({
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">
-        {mode === 'create' ? 'Bikin Live Room' : 'Edit Live Room'}
-      </h1>
+      <PageHeader
+        title={mode === 'create' ? 'Bikin Live Room' : 'Edit Live Room'}
+      />
 
       <Card>
         <CardContent className="space-y-4 p-4">

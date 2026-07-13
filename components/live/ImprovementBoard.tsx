@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -121,11 +123,7 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
   }
 
   if (!data) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    )
+    return <CardGridSkeleton count={4} />
   }
 
   const pending = data.proposals.filter((p) => p.status === 'PENDING')
@@ -136,31 +134,27 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link
-            href={`/live-rooms/${roomId}/leads`}
-            className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
-          </Link>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Sparkles className="h-6 w-6" /> Optimasi AI — {data.room.name}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            AI analisa pattern win/lost + objection → usulkan perbaikan persona /
-            greeting. Anda approve atau tolak. Snapshot before disimpan supaya
-            bisa rollback kalau hasil tidak bagus.
-          </p>
-        </div>
-        <Button onClick={generate} disabled={generating}>
-          {generating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="mr-2 h-4 w-4" />
-          )}
-          Minta Usul Baru
-        </Button>
+      <div>
+        <Link
+          href={`/live-rooms/${roomId}/leads`}
+          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
+        </Link>
+        <PageHeader
+          title={`Optimasi AI — ${data.room.name}`}
+          description="AI analisa pattern win/lost + objection → usulkan perbaikan persona / greeting. Anda approve atau tolak. Snapshot before disimpan supaya bisa rollback kalau hasil tidak bagus."
+          actions={
+            <Button onClick={generate} disabled={generating}>
+              {generating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              Minta Usul Baru
+            </Button>
+          }
+        />
       </div>
 
       {/* PENDING */}

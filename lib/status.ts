@@ -36,6 +36,17 @@ export const enrollmentMeta: Record<string, StatusMeta> = {
   REVOKED: { label: 'Dicabut', tone: 'danger' },
 }
 
+// Host template CS Live AI — lihat components/admin/HostTemplatesManager.tsx.
+export const hostTemplateStatusMeta: Record<string, StatusMeta> = {
+  DRAFT: { label: 'Draft', tone: 'neutral' },
+  GENERATING_IMAGE: { label: 'Generate gambar…', tone: 'warning' },
+  IMAGE_READY: { label: 'Gambar siap', tone: 'info' },
+  GENERATING_VIDEO: { label: 'Generate video…', tone: 'warning' },
+  READY: { label: 'Siap pakai', tone: 'success' },
+  FAILED: { label: 'Gagal', tone: 'danger' },
+  REJECTED: { label: 'Ditolak', tone: 'danger' },
+}
+
 // Helper aman: ambil meta dari map, fallback ke neutral dengan label apa adanya
 // supaya status baru/tak dikenal tidak bikin UI kosong/crash.
 export function statusMeta(

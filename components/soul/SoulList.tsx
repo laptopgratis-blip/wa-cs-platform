@@ -6,6 +6,8 @@ import { Pencil, Plus, Sparkles, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { SoulForm, type SoulInitialValues } from '@/components/soul/SoulForm'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -114,38 +116,34 @@ export function SoulList({ souls }: SoulListProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Soul
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Atur kepribadian AI yang akan membalas pesan customer.
-          </p>
-        </div>
-        <Button
-          onClick={openCreate}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" />
-          Buat Soul
-        </Button>
-      </div>
+      <PageHeader
+        title="Soul"
+        description="Atur kepribadian AI yang akan membalas pesan customer."
+        actions={
+          <Button
+            onClick={openCreate}
+            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" />
+            Buat Soul
+          </Button>
+        }
+      />
 
       {souls.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <Sparkles className="size-8 text-muted-foreground" />
-            <div>
-              <p className="font-medium">Belum ada soul</p>
-              <p className="text-sm text-muted-foreground">
-                Buat soul pertamamu — AI butuh kepribadian sebelum bisa balas pesan.
-              </p>
-            </div>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 size-4" />
-              Buat Soul Pertama
-            </Button>
+          <CardContent>
+            <EmptyState
+              icon={Sparkles}
+              title="Belum ada soul"
+              description="Buat soul pertamamu — AI butuh kepribadian sebelum bisa balas pesan."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 size-4" />
+                  Buat Soul Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

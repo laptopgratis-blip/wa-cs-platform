@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -92,32 +95,28 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
   }
 
   if (!data) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    )
+    return <CardGridSkeleton count={4} />
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link
-            href="/live-rooms"
-            className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" /> Live Rooms
-          </Link>
-          <h1 className="text-2xl font-semibold">Leads — {data.room.name}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            <span className="font-mono">/live/{data.room.slug}</span>
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={refreshing}>
-          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+      <div>
+        <Link
+          href="/live-rooms"
+          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> Live Rooms
+        </Link>
+        <PageHeader
+          title={`Leads — ${data.room.name}`}
+          description={<span className="font-mono">/live/{data.room.slug}</span>}
+          actions={
+            <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={refreshing}>
+              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          }
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -143,8 +142,12 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
 
       {data.leads.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada lead masuk untuk room ini.
+          <CardContent>
+            <EmptyState
+              icon={MessageCircle}
+              title="Belum ada lead masuk"
+              description="Lead muncul otomatis begitu penonton ninggalin kontak di live room ini."
+            />
           </CardContent>
         </Card>
       ) : (

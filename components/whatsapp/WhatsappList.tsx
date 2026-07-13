@@ -2,7 +2,7 @@
 
 // Wrapper client untuk halaman /whatsapp — menampung daftar session,
 // modal tambah, dan refresh data setelah ada perubahan.
-import { Plus, RefreshCw } from 'lucide-react'
+import { MessageCircle, Plus, RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState, useTransition } from 'react'
 
@@ -13,6 +13,8 @@ import {
   type SoulOption,
   type WaSessionData,
 } from '@/components/whatsapp/WaSessionCard'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -48,43 +50,39 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            WhatsApp
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Hubungkan akun WhatsApp untuk mulai dilayani AI 24/7.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" aria-label="Segarkan daftar" onClick={refresh} disabled={isPending}>
-            <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button
-            onClick={openAdd}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
-            <Plus className="mr-2 size-4" />
-            Tambah WhatsApp
-          </Button>
-        </div>
-      </div>
-
-      {sessions.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <div className="text-3xl">📱</div>
-            <div>
-              <p className="font-medium">Belum ada WhatsApp tertaut</p>
-              <p className="text-sm text-muted-foreground">
-                Klik <strong>Tambah WhatsApp</strong> untuk pindai QR.
-              </p>
-            </div>
-            <Button onClick={openAdd}>
+      <PageHeader
+        title="WhatsApp"
+        description="Hubungkan akun WhatsApp untuk mulai dilayani AI 24/7."
+        actions={
+          <>
+            <Button variant="outline" size="icon" aria-label="Segarkan daftar" onClick={refresh} disabled={isPending}>
+              <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
+            </Button>
+            <Button
+              onClick={openAdd}
+              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+            >
               <Plus className="mr-2 size-4" />
               Tambah WhatsApp
             </Button>
+          </>
+        }
+      />
+
+      {sessions.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={MessageCircle}
+              title="Belum ada WhatsApp tertaut"
+              description="Pindai QR sekali, AI langsung siaga membalas chat masuk."
+              action={
+                <Button onClick={openAdd}>
+                  <Plus className="mr-2 size-4" />
+                  Tambah WhatsApp
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

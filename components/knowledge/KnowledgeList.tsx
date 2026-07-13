@@ -17,6 +17,8 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { KnowledgeForm } from '@/components/knowledge/KnowledgeForm'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -211,19 +213,18 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
 
   return (
     <>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Pengetahuan Bisnis
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
+      <PageHeader
+        title="Pengetahuan Bisnis"
+        description={
+          <>
             Tambahkan info yang AI perlu tahu untuk jawab customer dengan akurat.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Terpakai {items.length} dari {limit} entry
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Terpakai {items.length} dari {limit} entry
+            </span>
+          </>
+        }
+        actions={
+          <>
           {optimizeCandidates.length > 0 && (
             <Button
               variant="outline"
@@ -252,8 +253,9 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
             <Plus className="mr-2 size-4" />
             Tambah Pengetahuan
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {isFull && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
@@ -264,19 +266,18 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
 
       {items.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <BookOpen className="size-10 text-muted-foreground" />
-            <div className="space-y-1">
-              <p className="font-medium">Belum ada pengetahuan</p>
-              <p className="text-sm text-muted-foreground">
-                Mulai dengan info yang sering ditanyakan customer — testimoni,
-                FAQ, sertifikat, atau link katalog.
-              </p>
-            </div>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 size-4" />
-              Tambah Pengetahuan Pertama
-            </Button>
+          <CardContent>
+            <EmptyState
+              icon={BookOpen}
+              title="Belum ada pengetahuan"
+              description="Mulai dengan info yang sering ditanyakan customer — testimoni, FAQ, sertifikat, atau link katalog."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 size-4" />
+                  Tambah Pengetahuan Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
