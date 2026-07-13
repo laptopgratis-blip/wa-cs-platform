@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Gift,
   Loader2,
   MapPin,
   Minus,
@@ -1238,7 +1239,10 @@ export function OrderFormPublic({
               )}
               {shippingSubsidy > 0 && shippingZone && (
                 <div className="flex justify-between text-sm text-emerald-700">
-                  <span>🎉 {shippingZone.description}</span>
+                  <span className="flex items-center gap-1">
+                    <Gift className="size-3.5 shrink-0" aria-hidden />
+                    {shippingZone.description}
+                  </span>
                   <span>-Rp {formatNumber(shippingSubsidy)}</span>
                 </div>
               )}

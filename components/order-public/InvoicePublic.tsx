@@ -14,6 +14,7 @@ import {
   Truck,
   Upload,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
@@ -260,7 +261,10 @@ export function InvoicePublic({
                 <span className="truncate">
                   {it.name} × {it.qty}
                   {it.isFlashSale && (
-                    <span className="ml-1 text-amber-700">⚡</span>
+                    <Zap
+                      className="ml-1 inline size-3.5 text-amber-600"
+                      aria-label="Flash sale"
+                    />
                   )}
                 </span>
                 <span>Rp {formatNumber(it.price * it.qty)}</span>
