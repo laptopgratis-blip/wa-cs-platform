@@ -6,6 +6,7 @@ import { Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -184,20 +185,16 @@ export function ProfitabilityDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Profitability
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Cost API real, pendapatan, profit & margin per pesan AI.
-          </p>
-        </div>
-        <Button variant="outline" onClick={exportCsv}>
-          <Download className="mr-2 size-4" />
-          Export CSV
-        </Button>
-      </div>
+      <PageHeader
+        title="Profitability"
+        description="Cost API real, pendapatan, profit & margin per pesan AI."
+        actions={
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="mr-2 size-4" />
+            Export CSV
+          </Button>
+        }
+      />
 
       {/* Range filter */}
       <Card>

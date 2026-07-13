@@ -9,6 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 
@@ -62,14 +64,11 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
-      <div className="mb-7">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Admin Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Ringkasan platform — metrik utama untuk pantau pertumbuhan & operasional.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-7"
+        title="Admin Dashboard"
+        description="Ringkasan platform — metrik utama untuk pantau pertumbuhan & operasional."
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -109,9 +108,10 @@ export default async function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           {recentPayments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Belum ada pembayaran sukses.
-            </p>
+            <EmptyState
+              title="Belum ada pembayaran sukses"
+              description="Transaksi token yang berhasil bakal tampil di sini."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

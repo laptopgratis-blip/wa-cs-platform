@@ -16,6 +16,8 @@ import {
   YAxis,
 } from 'recharts'
 
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { formatNumber, formatRupiah } from '@/lib/format'
 
 type Preset = 'TODAY' | '7D' | '30D'
@@ -141,36 +143,31 @@ export function TokenCostDashboard() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Token &amp; Biaya AI</h1>
-          <p className="text-sm text-muted-foreground">
-            Biaya yang kita bayar ke tiap provider + log penggunaan per user.
-            Sumber: AiGenerationLog (semua fitur, termasuk CS WA).
-          </p>
-        </div>
-        <div className="flex gap-1.5">
-          {(['TODAY', '7D', '30D'] as Preset[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPreset(p)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                preset === p
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
-              }`}
-            >
-              {p === 'TODAY' ? 'Hari ini' : p === '7D' ? '7 hari' : '30 hari'}
-            </button>
-          ))}
-        </div>
-      </div>
+      <PageHeader
+        title="Token & Biaya AI"
+        description="Biaya yang kita bayar ke tiap provider + log penggunaan per user. Sumber: AiGenerationLog (semua fitur, termasuk CS WA)."
+        actions={
+          <div className="flex gap-1.5">
+            {(['TODAY', '7D', '30D'] as Preset[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPreset(p)}
+                className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  preset === p
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
+                }`}
+              >
+                {p === 'TODAY' ? 'Hari ini' : p === '7D' ? '7 hari' : '30 hari'}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-6 w-6 animate-spin text-warm-400" />
-        </div>
+        <CardGridSkeleton count={4} />
       ) : !summary ? (
         <p className="text-sm text-muted-foreground">Gagal memuat data.</p>
       ) : (

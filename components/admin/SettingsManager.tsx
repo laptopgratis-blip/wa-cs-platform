@@ -7,6 +7,8 @@ import { Loader2, Save } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -110,19 +112,13 @@ export function SettingsManager() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Pengaturan Platform
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Setting global yang dipakai di seluruh aplikasi.
-        </p>
-      </div>
+      <PageHeader
+        title="Pengaturan Platform"
+        description="Setting global yang dipakai di seluruh aplikasi."
+      />
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <CardGridSkeleton count={3} />
       ) : (
         <div className="space-y-4">
           {FIELDS.map((f) => {

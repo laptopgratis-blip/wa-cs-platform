@@ -12,6 +12,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,16 +66,16 @@ function estimateTokens(text: string): number {
 export function SoulSettingsManager() {
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Soul Settings
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Kurasi pilihan kepribadian dan gaya balas yang user lihat di SoulBuilder.
-          Instruksi AI di bawah adalah <strong>rahasia</strong> — tidak pernah
-          ditampilkan ke user biasa.
-        </p>
-      </div>
+      <PageHeader
+        title="Soul Settings"
+        description={
+          <>
+            Kurasi pilihan kepribadian dan gaya balas yang user lihat di
+            SoulBuilder. Instruksi AI di bawah adalah <strong>rahasia</strong> —
+            tidak pernah ditampilkan ke user biasa.
+          </>
+        }
+      />
 
       <Tabs defaultValue="personality" className="space-y-4">
         <TabsList>
@@ -241,15 +244,14 @@ function SoulOptionTable({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={4} cols={5} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                  Belum ada {labelSingular.toLowerCase()}. Tambahkan supaya muncul di SoulBuilder user.
+                <TableCell colSpan={5}>
+                  <EmptyState
+                    title={`Belum ada ${labelSingular.toLowerCase()}`}
+                    description="Tambahkan supaya muncul di SoulBuilder user."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

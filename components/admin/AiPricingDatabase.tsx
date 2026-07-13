@@ -39,6 +39,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -122,9 +123,9 @@ interface LogEntry {
 }
 
 const FRESHNESS_LABEL: Record<Freshness, string> = {
-  verified: '🟢 Verified',
-  stale: '🟡 Stale',
-  outdated: '🔴 Outdated',
+  verified: 'Verified',
+  stale: 'Stale',
+  outdated: 'Outdated',
 }
 
 const FRESHNESS_STYLE: Record<Freshness, string> = {
@@ -134,10 +135,10 @@ const FRESHNESS_STYLE: Record<Freshness, string> = {
 }
 
 const RESEARCH_STEPS = [
-  '🔍 Mencari harga di Anthropic...',
-  '🔍 Mencari harga di OpenAI...',
-  '🔍 Mencari harga di Google...',
-  '📊 Validasi & diff dengan database...',
+  'Mencari harga di Anthropic...',
+  'Mencari harga di OpenAI...',
+  'Mencari harga di Google...',
+  'Validasi & diff dengan database...',
 ]
 
 function formatPrice(v: number): string {
@@ -351,28 +352,24 @@ export function AiPricingDatabase() {
   return (
     <div className="space-y-6">
       {/* Section A — Header */}
-      <Card>
-        <CardContent className="flex items-center justify-between gap-4 py-4">
-          <div>
-            <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-              Database Harga API
-            </h1>
-            <p className="mt-1 text-sm text-warm-500">
-              {lastUpdated
-                ? `Terakhir di-update: ${formatDistanceToNow(new Date(lastUpdated), { addSuffix: true, locale: idLocale })}`
-                : 'Belum ada update'}
-            </p>
-          </div>
+      <PageHeader
+        title="Database Harga API"
+        description={
+          lastUpdated
+            ? `Terakhir di-update: ${formatDistanceToNow(new Date(lastUpdated), { addSuffix: true, locale: idLocale })}`
+            : 'Belum ada update'
+        }
+        actions={
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={Boolean(job && job.status === 'RUNNING')}
             className="bg-primary-500 text-white hover:bg-primary-600"
           >
             <Sparkles className="mr-2 size-4" />
-            🤖 Update via AI
+            Update via AI
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
 
       {/* Section C — Filter + Tabel */}
       <Card>
@@ -405,9 +402,9 @@ export function AiPricingDatabase() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Semua status</SelectItem>
-                  <SelectItem value="verified">🟢 Verified</SelectItem>
-                  <SelectItem value="stale">🟡 Stale</SelectItem>
-                  <SelectItem value="outdated">🔴 Outdated</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="stale">Stale</SelectItem>
+                  <SelectItem value="outdated">Outdated</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -675,7 +672,7 @@ export function AiPricingDatabase() {
                 )}
                 {job.diff.unchanged.length > 0 && (
                   <p className="text-sm text-muted-foreground">
-                    ✅ {job.diff.unchanged.length} model tidak berubah
+                    {job.diff.unchanged.length} model tidak berubah
                     (auto-skipped)
                   </p>
                 )}
@@ -831,7 +828,7 @@ function DiffRow({
                 ${d.after.inputPricePer1M.toFixed(2)}/$
                 {d.after.outputPricePer1M.toFixed(2)}
               </strong>{' '}
-              {naik ? '⚠️ naik' : '✓ turun'}
+              {naik ? '▲ naik' : '▼ turun'}
             </>
           ) : (
             <>

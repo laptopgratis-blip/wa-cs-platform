@@ -7,6 +7,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -115,6 +118,8 @@ export function ModelsManager() {
   const [deleteTarget, setDeleteTarget] = useState<AiModelRow | null>(null)
   const [isRecalculating, setRecalculating] = useState(false)
   const [confirmRugi, setConfirmRugi] = useState(false)
+  const [rugiConfirmOpen, setRugiConfirmOpen] = useState(false)
+  const [recalcConfirmOpen, setRecalcConfirmOpen] = useState(false)
 
   // Pricing settings — di-load sekali saat mount, dipakai untuk auto-calc
   // dan preview profitabilitas.
@@ -240,14 +245,11 @@ export function ModelsManager() {
     setModelId('')
   }
 
-  async function save() {
+  async function save(forceRugi = false) {
     // Kalau status RUGI dan admin belum konfirmasi → minta konfirmasi dulu.
-    if (preview.status === 'RUGI' && !confirmRugi) {
-      const ok = window.confirm(
-        `Margin sekarang ${preview.marginPct.toFixed(1)}% — model ini akan RUGI. Tetap simpan?`,
-      )
-      if (!ok) return
-      setConfirmRugi(true)
+    if (preview.status === 'RUGI' && !confirmRugi && !forceRugi) {
+      setRugiConfirmOpen(true)
+      return
     }
     setSaving(true)
     try {
@@ -300,10 +302,7 @@ export function ModelsManager() {
   }
 
   async function recalculateAll() {
-    const ok = window.confirm(
-      'Akan menghitung ulang costPerMessage semua model dengan mode Auto berdasarkan setting margin saat ini. Lanjut?',
-    )
-    if (!ok) return
+    setRecalcConfirmOpen(false)
     setRecalculating(true)
     try {
       const res = await fetch('/api/admin/models/recalculate-all', {
@@ -349,36 +348,32 @@ export function ModelsManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            AI Models
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Atur model AI yang tersedia untuk user dan biaya token per pesan.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={recalculateAll}
-            disabled={isRecalculating}
-          >
-            {isRecalculating ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 size-4" />
-            )}
-            Re-calculate Token Otomatis
-          </Button>
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
-            <Plus className="mr-2 size-4" /> Tambah Model
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="AI Models"
+        description="Atur model AI yang tersedia untuk user dan biaya token per pesan."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setRecalcConfirmOpen(true)}
+              disabled={isRecalculating}
+            >
+              {isRecalculating ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 size-4" />
+              )}
+              Re-calculate Token Otomatis
+            </Button>
+            <Button
+              onClick={openCreate}
+              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+            >
+              <Plus className="mr-2 size-4" /> Tambah Model
+            </Button>
+          </>
+        }
+      />
 
       <div className="rounded-md border">
         <Table>
@@ -395,15 +390,14 @@ export function ModelsManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={7} />
             ) : models.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  Belum ada model.
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    title="Belum ada model"
+                    description="Tambahkan model AI supaya user bisa pilih di pengaturan WA."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -695,7 +689,7 @@ export function ModelsManager() {
               Batal
             </Button>
             <Button
-              onClick={save}
+              onClick={() => void save()}
               disabled={isSaving}
               className={cn(
                 preview.status === 'RUGI' &&
@@ -723,6 +717,29 @@ export function ModelsManager() {
         }
         isLoading={isDeleting}
         onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        open={rugiConfirmOpen}
+        onOpenChange={setRugiConfirmOpen}
+        title="Model ini akan RUGI — tetap simpan?"
+        description={`Margin sekarang ${preview.marginPct.toFixed(1)}%. Biaya API lebih besar dari token yang dipotong dari user.`}
+        confirmLabel="Ya, Tetap Simpan"
+        onConfirm={() => {
+          setConfirmRugi(true)
+          setRugiConfirmOpen(false)
+          void save(true)
+        }}
+      />
+
+      <ConfirmDialog
+        open={recalcConfirmOpen}
+        onOpenChange={setRecalcConfirmOpen}
+        title="Hitung ulang cost semua model?"
+        description="costPerMessage semua model mode Auto dihitung ulang berdasarkan setting margin saat ini."
+        confirmLabel="Ya, Recalculate"
+        variant="default"
+        onConfirm={recalculateAll}
       />
     </div>
   )
