@@ -33,10 +33,8 @@ export default async function ProductsPage() {
   })
 
   return (
-    <>
-      <div className="container mx-auto max-w-5xl px-4 pt-6 md:pt-8">
-        <CsAiPromoBanner userId={session.user.id} />
-      </div>
+    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+      <CsAiPromoBanner userId={session.user.id} />
       <ProductsClient
         initialProducts={products.map((p) => ({
           ...p,
@@ -59,6 +57,6 @@ export default async function ProductsPage() {
         }))}
         limit={PRODUCT_LIMIT_PER_USER}
       />
-    </>
+    </div>
   )
 }

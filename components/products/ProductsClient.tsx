@@ -24,6 +24,8 @@ import { toast } from 'sonner'
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -482,7 +484,7 @@ export function ProductsClient({
   }
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-6 md:py-8">
+    <div className="mt-4">
       <div className="mb-4">
         <OnboardingHint
           hintId="products"
@@ -492,36 +494,39 @@ export function ProductsClient({
         />
       </div>
 
-      <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Produk
-          </h1>
-          <p className="mt-1 text-sm text-warm-600">
+      <PageHeader
+        className="mb-6"
+        title="Produk"
+        description={
+          <>
             Kelola produk yang tampil di Form Order kamu.
             <span className="ml-1 text-warm-500">
               ({products.length}/{limit})
             </span>
-          </p>
-        </div>
-        <Button onClick={openCreate} disabled={products.length >= limit}>
-          <Plus className="mr-2 size-4" />
-          Tambah Produk
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={openCreate} disabled={products.length >= limit}>
+            <Plus className="mr-2 size-4" />
+            Tambah Produk
+          </Button>
+        }
+      />
 
       {products.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <Package className="mb-3 size-10 text-warm-400" />
-            <p className="font-medium text-warm-700">Belum ada produk</p>
-            <p className="mt-1 text-sm text-warm-500">
-              Tambahkan produk pertama untuk dijual via Form Order.
-            </p>
-            <Button onClick={openCreate} className="mt-4">
-              <Plus className="mr-2 size-4" />
-              Tambah Produk Pertama
-            </Button>
+          <CardContent>
+            <EmptyState
+              icon={Package}
+              title="Belum ada produk"
+              description="Tambahkan produk pertama untuk dijual via Form Order."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 size-4" />
+                  Tambah Produk Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

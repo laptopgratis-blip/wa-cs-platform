@@ -10,7 +10,6 @@
 import {
   AlertCircle,
   Ban,
-  BellRing,
   Clock,
   History,
   Loader2,
@@ -21,7 +20,13 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -98,6 +103,11 @@ export function FollowUpClient({
   const [editing, setEditing] = useState<QueueItem | null>(null)
   const [editText, setEditText] = useState('')
   const [actionId, setActionId] = useState<string | null>(null)
+  // Konfirmasi aksi queue/blacklist — pengganti window.confirm().
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    kind: 'skip' | 'send' | 'unblock'
+    id: string
+  } | null>(null)
 
   const [reloadKey, setReloadKey] = useState(0)
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
@@ -140,7 +150,7 @@ export function FollowUpClient({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error ?? 'Gagal enable')
+        toast.error(json.error ?? 'Gagal enable')
       } else {
         window.location.reload()
       }
@@ -150,7 +160,6 @@ export function FollowUpClient({
   }
 
   async function handleSkip(id: string) {
-    if (!confirm('Skip item ini?')) return
     setActionId(id)
     try {
       const res = await fetch(`/api/followup/queue/${id}/skip`, {
@@ -158,7 +167,7 @@ export function FollowUpClient({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error)
+        toast.error(json.error ?? 'Gagal skip item')
       } else {
         setLoading(true)
         reload()
@@ -169,7 +178,6 @@ export function FollowUpClient({
   }
 
   async function handleSendNow(id: string) {
-    if (!confirm('Kirim sekarang ke customer?')) return
     setActionId(id)
     try {
       const res = await fetch(`/api/followup/queue/${id}/send-now`, {
@@ -177,7 +185,7 @@ export function FollowUpClient({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error)
+        toast.error(json.error ?? 'Gagal kirim pesan')
       } else {
         setLoading(true)
         reload()
@@ -203,7 +211,7 @@ export function FollowUpClient({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error)
+        toast.error(json.error ?? 'Gagal simpan perubahan')
       } else {
         setEditing(null)
         setLoading(true)
@@ -215,7 +223,6 @@ export function FollowUpClient({
   }
 
   async function handleUnblock(id: string) {
-    if (!confirm('Unblock customer ini?')) return
     setActionId(id)
     try {
       const res = await fetch(`/api/followup/blacklist/${id}`, {
@@ -223,7 +230,7 @@ export function FollowUpClient({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error)
+        toast.error(json.error ?? 'Gagal unblock customer')
       } else {
         setLoading(true)
         reload()
@@ -236,31 +243,32 @@ export function FollowUpClient({
   // Empty state — belum ada template.
   if (!hasTemplates) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="mb-4 flex items-center gap-2 text-2xl font-bold">
-          <BellRing className="size-6" />
-          Follow-Up Pesanan
-        </h1>
+      <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+        <PageHeader title="Follow-Up Pesanan" className="mb-4" />
         <Card>
-          <CardContent className="space-y-4 p-8 text-center">
-            <Sparkles className="mx-auto size-12 text-primary-500" />
-            <h2 className="text-xl font-semibold">
-              Aktifkan Follow-Up Otomatis
-            </h2>
-            <p className="text-muted-foreground">
-              Kirim pesan WhatsApp otomatis ke customer berdasarkan event
-              order — order masuk, pembayaran diterima, pesanan dikirim, dan
-              N hari setelah event.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Paket template default akan dibuat untuk Anda (reminder bayar,
-              info kirim, nurture lead Live, testimoni, dll). Bisa di-edit kapan
-              saja di /pesanan/templates.
-            </p>
-            <Button onClick={handleEnable} disabled={enabling}>
-              {enabling && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Aktifkan & Buat Template Default
-            </Button>
+          <CardContent>
+            <EmptyState
+              icon={Sparkles}
+              title="Aktifkan Follow-Up Otomatis"
+              description={
+                <>
+                  Kirim pesan WhatsApp otomatis ke customer berdasarkan event
+                  order — order masuk, pembayaran diterima, pesanan dikirim,
+                  dan N hari setelah event.
+                  <span className="mt-2 block">
+                    Paket template default akan dibuat untuk Anda (reminder
+                    bayar, info kirim, nurture lead Live, testimoni, dll). Bisa
+                    di-edit kapan saja di /pesanan/templates.
+                  </span>
+                </>
+              }
+              action={
+                <Button onClick={handleEnable} disabled={enabling}>
+                  {enabling && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Aktifkan & Buat Template Default
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -268,16 +276,17 @@ export function FollowUpClient({
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <BellRing className="size-6" />
-          Follow-Up Pesanan
-        </h1>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/pesanan/templates">Kelola Template</Link>
-        </Button>
-      </div>
+    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        title="Follow-Up Pesanan"
+        description="Pesan WA otomatis ke customer berdasarkan event order."
+        className="mb-4"
+        actions={
+          <Button asChild variant="outline" size="sm">
+            <Link href="/pesanan/templates">Kelola Template</Link>
+          </Button>
+        }
+      />
 
       {!waConnected && (
         <Alert variant="destructive" className="mb-4">
@@ -321,8 +330,8 @@ export function FollowUpClient({
             error={error}
             items={items as QueueItem[]}
             actionId={actionId}
-            onSkip={handleSkip}
-            onSendNow={handleSendNow}
+            onSkip={(id) => setPendingConfirm({ kind: 'skip', id })}
+            onSendNow={(id) => setPendingConfirm({ kind: 'send', id })}
             onEdit={openEdit}
           />
         </TabsContent>
@@ -332,8 +341,8 @@ export function FollowUpClient({
             error={error}
             items={items as QueueItem[]}
             actionId={actionId}
-            onSkip={handleSkip}
-            onSendNow={handleSendNow}
+            onSkip={(id) => setPendingConfirm({ kind: 'skip', id })}
+            onSendNow={(id) => setPendingConfirm({ kind: 'send', id })}
             onEdit={openEdit}
           />
         </TabsContent>
@@ -350,10 +359,43 @@ export function FollowUpClient({
             error={error}
             items={items as BlacklistItem[]}
             actionId={actionId}
-            onUnblock={handleUnblock}
+            onUnblock={(id) => setPendingConfirm({ kind: 'unblock', id })}
           />
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingConfirm(null)
+        }}
+        title={
+          pendingConfirm?.kind === 'skip'
+            ? 'Skip item follow-up ini?'
+            : pendingConfirm?.kind === 'send'
+              ? 'Kirim sekarang ke customer?'
+              : 'Unblock customer ini?'
+        }
+        description={
+          pendingConfirm?.kind === 'skip'
+            ? 'Pesan tidak akan dikirim untuk jadwal ini.'
+            : pendingConfirm?.kind === 'send'
+              ? 'Pesan WhatsApp langsung terkirim tanpa menunggu jadwal.'
+              : 'Customer akan menerima pesan follow-up lagi ke depannya.'
+        }
+        confirmLabel={
+          pendingConfirm?.kind === 'send' ? 'Ya, Kirim' : 'Ya, Lanjutkan'
+        }
+        variant={pendingConfirm?.kind === 'skip' ? 'destructive' : 'default'}
+        onConfirm={() => {
+          if (!pendingConfirm) return
+          const { kind, id } = pendingConfirm
+          setPendingConfirm(null)
+          if (kind === 'skip') void handleSkip(id)
+          else if (kind === 'send') void handleSendNow(id)
+          else void handleUnblock(id)
+        }}
+      />
 
       <Dialog
         open={editing !== null}
@@ -411,12 +453,16 @@ function QueueList({
   onEdit: (item: QueueItem) => void
 }) {
   if (loading) {
-    return <Loader2 className="mx-auto size-6 animate-spin" />
+    return <CardGridSkeleton count={2} />
   }
   if (error) return <p className="text-destructive">{error}</p>
   if (items.length === 0) {
     return (
-      <p className="text-center text-muted-foreground">Tidak ada item.</p>
+      <EmptyState
+        icon={Clock}
+        title="Tidak ada item"
+        description="Follow-up terjadwal untuk tab ini bakal muncul di sini."
+      />
     )
   }
   return (
@@ -483,10 +529,16 @@ function LogList({
   error: string | null
   items: LogItem[]
 }) {
-  if (loading) return <Loader2 className="mx-auto size-6 animate-spin" />
+  if (loading) return <CardGridSkeleton count={2} />
   if (error) return <p className="text-destructive">{error}</p>
   if (items.length === 0) {
-    return <p className="text-center text-muted-foreground">Belum ada riwayat.</p>
+    return (
+      <EmptyState
+        icon={History}
+        title="Belum ada riwayat"
+        description="Pesan follow-up yang sudah terkirim (atau gagal) tercatat di sini."
+      />
+    )
   }
   return (
     <div className="space-y-2">
@@ -496,14 +548,10 @@ function LogList({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <Badge
-                    className={
-                      log.status === 'SENT' ? 'bg-emerald-600' : ''
-                    }
-                    variant={log.status === 'SENT' ? 'default' : 'destructive'}
-                  >
-                    {log.status}
-                  </Badge>
+                  <StatusBadge
+                    tone={log.status === 'SENT' ? 'success' : 'danger'}
+                    label={log.status === 'SENT' ? 'Terkirim' : 'Gagal'}
+                  />
                   <Badge variant="outline">{log.source}</Badge>
                   <span className="text-sm">{log.customerPhone}</span>
                 </div>
@@ -538,10 +586,16 @@ function BlacklistList({
   actionId: string | null
   onUnblock: (id: string) => void
 }) {
-  if (loading) return <Loader2 className="mx-auto size-6 animate-spin" />
+  if (loading) return <CardGridSkeleton count={2} />
   if (error) return <p className="text-destructive">{error}</p>
   if (items.length === 0) {
-    return <p className="text-center text-muted-foreground">Tidak ada blacklist.</p>
+    return (
+      <EmptyState
+        icon={Ban}
+        title="Tidak ada blacklist"
+        description="Customer yang minta berhenti di-follow-up bakal masuk daftar ini."
+      />
+    )
   }
   return (
     <div className="space-y-2">

@@ -14,6 +14,7 @@ import { Columns, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 
 import { ColumnPickerModal } from './ColumnPickerModal'
@@ -432,33 +433,29 @@ export function OrdersList() {
 
   return (
     <>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Pesanan Masuk
-          </h1>
-          <p className="mt-0.5 text-sm text-warm-500">
-            Kelola order COD & Transfer dari semua channel.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setColumnPickerOpen(true)}
-            title="Atur kolom yang tampil di tabel"
-          >
-            <Columns className="mr-2 size-4" />
-            Kolom
-            <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
-              {viewPref.visibleColumns.length}
-            </span>
-          </Button>
-          <Button variant="outline" onClick={exportCsv}>
-            <Download className="mr-2 size-4" />
-            Export CSV
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Pesanan Masuk"
+        description="Kelola order COD & Transfer dari semua channel."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setColumnPickerOpen(true)}
+              title="Atur kolom yang tampil di tabel"
+            >
+              <Columns className="mr-2 size-4" />
+              Kolom
+              <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
+                {viewPref.visibleColumns.length}
+              </span>
+            </Button>
+            <Button variant="outline" onClick={exportCsv}>
+              <Download className="mr-2 size-4" />
+              Export CSV
+            </Button>
+          </>
+        }
+      />
 
       <OrdersStatsStrip
         todayCount={totals.todayCount}

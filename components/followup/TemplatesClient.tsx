@@ -12,8 +12,11 @@ import {
   Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -192,7 +195,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
         body: JSON.stringify({ isActive: !t.isActive }),
       })
       const json = await res.json()
-      if (!json.success) alert(json.error)
+      if (!json.success) toast.error(json.error ?? 'Gagal ubah status template')
       else {
         setLoading(true)
         reload()
@@ -210,7 +213,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
         method: 'DELETE',
       })
       const json = await res.json()
-      if (!json.success) alert(json.error)
+      if (!json.success) toast.error(json.error ?? 'Gagal hapus template')
       else {
         setDeleteTarget(null)
         setLoading(true)
@@ -228,27 +231,31 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
         method: 'POST',
       })
       const json = await res.json()
-      if (!json.success) alert(json.error)
+      if (!json.success) toast.error(json.error ?? 'Gagal kirim test')
       else
-        alert(
-          `Test terkirim ke ${json.data.to}.\n\nPreview:\n${json.data.preview}`,
-        )
+        toast.success(`Test terkirim ke ${json.data.to}`, {
+          description: json.data.preview,
+        })
     } finally {
       setActionId(null)
     }
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Template Follow-Up</h1>
-        <Button onClick={() => setCreating(true)}>
-          <Plus className="mr-1 size-4" /> Tambah Template
-        </Button>
-      </div>
+    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        title="Template Follow-Up"
+        description="Atur isi pesan otomatis per event order — aktif/nonaktif per template."
+        className="mb-6"
+        actions={
+          <Button onClick={() => setCreating(true)}>
+            <Plus className="mr-1 size-4" /> Tambah Template
+          </Button>
+        }
+      />
 
       {loading ? (
-        <Loader2 className="mx-auto size-6 animate-spin" />
+        <CardGridSkeleton count={4} />
       ) : error ? (
         <p className="text-destructive">{error}</p>
       ) : (
@@ -257,8 +264,9 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
             const items = grouped.get(trigger.value) ?? []
             return (
               <section key={trigger.value}>
-                <h2 className="mb-2 text-sm font-semibold uppercase text-muted-foreground">
-                  ━━━ {trigger.label} ━━━
+                <h2 className="mb-2 flex items-center gap-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  {trigger.label}
+                  <span className="h-px flex-1 bg-border" aria-hidden />
                 </h2>
                 {items.length === 0 ? (
                   <p className="text-sm italic text-muted-foreground">
@@ -459,7 +467,7 @@ function TemplateModal({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error ?? 'Gagal simpan')
+        toast.error(json.error ?? 'Gagal simpan')
       } else {
         onSaved()
       }

@@ -11,9 +11,12 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
+  CheckCircle2,
   ChevronRight,
   Loader2,
+  MapPin,
   MessageCircle,
+  Package,
   Tag,
   X,
 } from 'lucide-react'
@@ -289,7 +292,7 @@ function OrderRow({
               onClick={() => onQuickAction(order, 'mark_shipped')}
               title="Tandai Dikirim"
             >
-              📦
+              <Package className="size-3" />
             </Button>
           )}
           {isShipped && (
@@ -300,7 +303,7 @@ function OrderRow({
               onClick={() => onQuickAction(order, 'mark_delivered')}
               title="Tandai Selesai"
             >
-              ✅
+              <CheckCircle2 className="size-3" />
             </Button>
           )}
           {isUnpaid && (
@@ -517,8 +520,11 @@ function CustomerCell({ order }: { order: OrderListItem }) {
         {order.customerPhone}
       </p>
       {(order.shippingCityName || order.customerAddress) && (
-        <p className="line-clamp-1 text-[11px] text-muted-foreground">
-          📍 {order.shippingCityName ?? order.customerAddress}
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <MapPin className="size-3 shrink-0" aria-hidden />
+          <span className="line-clamp-1">
+            {order.shippingCityName ?? order.customerAddress}
+          </span>
         </p>
       )}
     </div>
@@ -576,9 +582,9 @@ function TagsCell({
 function AutoConfirmCell({ order }: { order: OrderListItem }) {
   if (!order.autoConfirmedBy) return <DashCell />
   const map: Record<string, string> = {
-    BCA_AUTO: '🤖 BCA Auto',
-    MOOTA: '🤖 Moota',
-    MANUAL: '👤 Manual',
+    BCA_AUTO: 'BCA Auto',
+    MOOTA: 'Moota',
+    MANUAL: 'Manual',
   }
   return (
     <Badge variant="outline" className="text-[10px]">
@@ -593,8 +599,16 @@ function PixelStatusCell({ order }: { order: OrderListItem }) {
   if (!lead && !purchase) return <DashCell />
   return (
     <div className="space-y-0.5 text-[10px]">
-      {lead && <div className="text-emerald-700">✓ Lead</div>}
-      {purchase && <div className="text-emerald-700">✓ Purchase</div>}
+      {lead && (
+        <div className="flex items-center gap-0.5 text-emerald-700">
+          <Check className="size-2.5" aria-hidden /> Lead
+        </div>
+      )}
+      {purchase && (
+        <div className="flex items-center gap-0.5 text-emerald-700">
+          <Check className="size-2.5" aria-hidden /> Purchase
+        </div>
+      )}
     </div>
   )
 }
