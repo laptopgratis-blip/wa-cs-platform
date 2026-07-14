@@ -166,7 +166,7 @@ export function MainWelcomeWizard({
           </div>
           <div>
             <h2 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 sm:text-3xl">
-              Selamat datang di Hulao! 👋
+              Selamat datang di Hulao!
             </h2>
             <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-warm-600 sm:text-base">
               Hulao adalah platform <strong>all-in-one</strong> untuk jualan
@@ -203,13 +203,15 @@ export function MainWelcomeWizard({
               Pakai satu, atau semua sekaligus. Kamu yang pilih.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          {/* Satu kolom penuh: kolom teks tetap lebar sehingga judul &
+              deskripsi tidak jadi "menara" sempit di dialog max-w-xl. */}
+          <div className="flex flex-col gap-2.5">
             {FEATURES.map((feature) => {
               const Icon = feature.icon
               return (
                 <div
                   key={feature.title}
-                  className="flex items-start gap-3 rounded-xl border border-warm-200 bg-white p-3.5"
+                  className="flex items-center gap-3.5 rounded-xl border border-warm-200 bg-white p-3.5"
                 >
                   <div
                     className={cn(
@@ -223,7 +225,7 @@ export function MainWelcomeWizard({
                     <p className="font-display text-sm font-bold leading-tight text-warm-900">
                       {feature.title}
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-warm-600">
+                    <p className="mt-0.5 text-xs leading-relaxed text-warm-600">
                       {feature.description}
                     </p>
                   </div>
