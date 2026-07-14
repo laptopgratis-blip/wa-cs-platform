@@ -54,3 +54,4 @@ secrets/
 
 # bank scraper debug screenshots (large binary, rotated)
 bank-scraper/screenshots/
+.claude/launch.json
