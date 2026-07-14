@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { formatShippingArea } from '@/lib/format'
 import { formatRelativeTime } from '@/lib/format-time'
 import { deliveryStatusMeta, paymentStatusMeta, statusMeta } from '@/lib/status'
 import {
@@ -522,7 +523,7 @@ function CustomerCell({ order }: { order: OrderListItem }) {
         <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <MapPin className="size-3 shrink-0" aria-hidden />
           <span className="line-clamp-1">
-            {order.shippingCityName ?? order.customerAddress}
+            {formatShippingArea(order) ?? order.customerAddress}
           </span>
         </p>
       )}
@@ -533,14 +534,13 @@ function CustomerCell({ order }: { order: OrderListItem }) {
 function AddressCell({ order }: { order: OrderListItem }) {
   const addr = order.shippingAddress ?? order.customerAddress
   if (!addr) return <DashCell />
+  const area = formatShippingArea(order)
   return (
     <div className="text-xs">
       <p className="line-clamp-2">{addr}</p>
-      {(order.shippingCityName || order.shippingProvinceName) && (
+      {(area || order.shippingProvinceName) && (
         <p className="text-[10px] text-warm-500">
-          {[order.shippingCityName, order.shippingProvinceName]
-            .filter(Boolean)
-            .join(', ')}
+          {[area, order.shippingProvinceName].filter(Boolean).join(', ')}
         </p>
       )}
     </div>

@@ -75,6 +75,8 @@ export default async function InvoicePage({ params }: PageProps) {
         customerPhone: order.customerPhone,
         shippingAddress: order.shippingAddress,
         shippingCityName: order.shippingCityName,
+        shippingDistrictName: order.shippingDistrictName,
+        shippingSubdistrictName: order.shippingSubdistrictName,
         shippingProvinceName: order.shippingProvinceName,
         shippingPostalCode: order.shippingPostalCode,
 

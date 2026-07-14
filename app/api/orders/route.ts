@@ -218,6 +218,8 @@ const ORDER_SELECT = {
   shippingCourier: true,
   shippingService: true,
   shippingCityName: true,
+  shippingDistrictName: true,
+  shippingSubdistrictName: true,
   shippingProvinceName: true,
   subtotalRp: true,
   flashSaleDiscountRp: true,

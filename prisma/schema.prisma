@@ -1600,6 +1600,11 @@ model UserOrder {
   shippingProvinceName String?
   shippingCityId       String?
   shippingCityName     String?
+  // Detail area dari master destinasi Komerce — kecamatan (district) &
+  // kelurahan (subdistrict). Wajib tampil di invoice/detail supaya admin
+  // gampang isi form ekspedisi (kota saja ambigu, kode pos bisa shared).
+  shippingDistrictName    String?
+  shippingSubdistrictName String?
   shippingAddress      String? @db.Text
   shippingPostalCode   String?
 

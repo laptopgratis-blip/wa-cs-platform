@@ -32,12 +32,18 @@ import {
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
 } from '@/lib/validations/order'
+import { formatShippingArea } from '@/lib/format'
 
 interface OrderDetail {
   id: string
   customerName: string
   customerPhone: string
   customerAddress: string | null
+  shippingCityName?: string | null
+  shippingDistrictName?: string | null
+  shippingSubdistrictName?: string | null
+  shippingProvinceName?: string | null
+  shippingPostalCode?: string | null
   items: { name: string; qty: number; price?: number | null }[]
   totalAmount: number | null
   paymentMethod: string
@@ -199,6 +205,20 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                   <span className="whitespace-pre-line">
                     {data.customerAddress}
                   </span>
+                </p>
+              )}
+              {formatShippingArea(data) && (
+                <p>
+                  <span className="text-muted-foreground">Area:</span>{' '}
+                  <span className="font-medium">
+                    {formatShippingArea(data)}
+                  </span>
+                  {data.shippingProvinceName && (
+                    <span>, {data.shippingProvinceName}</span>
+                  )}
+                  {data.shippingPostalCode && (
+                    <span> {data.shippingPostalCode}</span>
+                  )}
                 </p>
               )}
               {data.flowName && (

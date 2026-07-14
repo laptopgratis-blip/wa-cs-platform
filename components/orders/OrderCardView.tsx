@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { formatShippingArea } from '@/lib/format'
 import { formatRelativeTime } from '@/lib/format-time'
 
 import type { OrderListItem, QuickAction } from './types'
@@ -166,7 +167,15 @@ function OrderCard({
                 className="mt-0.5 size-3.5 shrink-0 text-warm-400"
                 aria-hidden
               />
-              <span className="line-clamp-2">{order.customerAddress}</span>
+              <span className="line-clamp-2">
+                {order.customerAddress}
+                {formatShippingArea(order) && (
+                  <span className="text-warm-500">
+                    {' '}
+                    · {formatShippingArea(order)}
+                  </span>
+                )}
+              </span>
             </p>
           )}
         </div>

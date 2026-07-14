@@ -36,6 +36,8 @@ export interface OrderListItem {
   shippingCourier?: string | null
   shippingService?: string | null
   shippingCityName?: string | null
+  shippingDistrictName?: string | null
+  shippingSubdistrictName?: string | null
   shippingProvinceName?: string | null
   subtotalRp?: number
   flashSaleDiscountRp?: number
