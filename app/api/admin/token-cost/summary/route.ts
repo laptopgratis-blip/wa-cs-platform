@@ -31,6 +31,24 @@ interface TimelineRow {
   provider: string
   apiCostRp: number
 }
+interface KlingUsageRow {
+  featureKey: string
+  modelName: string
+  calls: number
+  seconds: number
+  apiCostUsd: number
+  apiCostRp: number
+}
+interface KlingJobRow {
+  status: string
+  jobs: number
+  seconds: number
+  retries: number
+}
+interface KlingClipRow {
+  status: string
+  clips: number
+}
 
 export async function GET(req: Request) {
   try {
@@ -42,7 +60,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const { from, to } = parseRange(searchParams)
 
-    const [totals, byProvider, byFeature, timeline] = await Promise.all([
+    const [totals, byProvider, byFeature, timeline, klingUsage, klingJobs, klingClips] = await Promise.all([
       prisma.aiGenerationLog.aggregate({
         where: { createdAt: { gte: from, lt: to } },
         _count: { _all: true },
@@ -87,6 +105,40 @@ export async function GET(req: Request) {
         WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
         GROUP BY 1, 2
         ORDER BY 1 ASC`,
+      // ── Detail Kling ──
+      // Panggilan SUKSES yang ter-charge. Untuk media (KLING), kolom
+      // inputTokens berisi "units" = detik video (lihat lib/services/
+      // media-charge.ts) — jadi SUM(inputTokens) = total detik.
+      prisma.$queryRaw<KlingUsageRow[]>`
+        SELECT "featureKey",
+               "modelName",
+               COUNT(*)::int AS calls,
+               COALESCE(SUM("inputTokens"), 0)::int AS seconds,
+               COALESCE(SUM("apiCostUsd"), 0)::float8 AS "apiCostUsd",
+               COALESCE(SUM("apiCostRp"), 0)::float8 AS "apiCostRp"
+        FROM "AiGenerationLog"
+        WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
+          AND "provider" = 'KLING'
+        GROUP BY 1, 2
+        ORDER BY "apiCostUsd" DESC`,
+      // Submit host-video ke Kling (termasuk yang GAGAL/RETRY — tidak muncul
+      // di log charge). Menjelaskan selisih "panggilan" vs jumlah generate.
+      prisma.$queryRaw<KlingJobRow[]>`
+        SELECT "status"::text AS status,
+               COUNT(*)::int AS jobs,
+               COALESCE(SUM(NULLIF("inputPayload"->>'duration', '')::int), 0)::int AS seconds,
+               COALESCE(SUM(NULLIF("inputPayload"->>'klingRetryCount', '')::int), 0)::int AS retries
+        FROM "GenerationJob"
+        WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
+          AND "provider" = 'KLING'
+        GROUP BY 1`,
+      // Klip Live lipsync (pakai Kling juga) per status.
+      prisma.$queryRaw<KlingClipRow[]>`
+        SELECT "status"::text AS status, COUNT(*)::int AS clips
+        FROM "LiveClip"
+        WHERE "createdAt" >= ${from} AND "createdAt" < ${to}
+          AND "klingJobId" IS NOT NULL
+        GROUP BY 1`,
     ])
 
     return jsonOk({
@@ -103,6 +155,11 @@ export async function GET(req: Request) {
       byProvider,
       byFeature,
       timeline,
+      kling: {
+        usage: klingUsage,
+        jobs: klingJobs,
+        clips: klingClips,
+      },
     })
   } catch (err) {
     console.error('[GET /api/admin/token-cost/summary] gagal:', err)

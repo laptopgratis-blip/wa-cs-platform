@@ -66,12 +66,40 @@ interface TimelineRow {
   provider: string
   apiCostRp: number
 }
+interface KlingUsageRow {
+  featureKey: string
+  modelName: string
+  calls: number
+  seconds: number
+  apiCostUsd: number
+  apiCostRp: number
+}
+interface KlingJobRow {
+  status: string
+  jobs: number
+  seconds: number
+  retries: number
+}
+interface KlingClipRow {
+  status: string
+  clips: number
+}
 interface Summary {
   totals: Totals
   byProvider: ProviderRow[]
   byFeature: FeatureRow[]
   timeline: TimelineRow[]
+  kling?: {
+    usage: KlingUsageRow[]
+    jobs: KlingJobRow[]
+    clips: KlingClipRow[]
+  }
 }
+
+// Konversi USD → kredit Kling. Basis: top-up 1000 kredit = $140
+// (platform.klingai.com) → $0.14/kredit. Estimasi — akurasinya mengikuti
+// harga USD per model yang admin isi di /admin/ai-pricing.
+const KLING_USD_PER_CREDIT = 0.14
 interface UserRow {
   userId: string
   email: string | null
@@ -290,6 +318,9 @@ export function TokenCostDashboard() {
             </div>
           </Section>
 
+          {/* Detail Kling — kredit terpakai + penjelasan selisih panggilan */}
+          {summary.kling && <KlingDetailSection kling={summary.kling} />}
+
           {/* Per user */}
           <Section title="Penggunaan per User (klik untuk log rinci)">
             <div className="max-h-96 overflow-y-auto">
@@ -358,6 +389,135 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h2 className="mb-2 text-sm font-semibold text-warm-800">{title}</h2>
       {children}
     </div>
+  )
+}
+
+// Detail pemakaian Kling: kredit terpakai (dari USD) + selisih antara
+// submit generate vs panggilan yang ter-charge (gagal/retry tidak ditagih).
+function KlingDetailSection({
+  kling,
+}: {
+  kling: NonNullable<Summary['kling']>
+}) {
+  const totalUsd = kling.usage.reduce((s, r) => s + r.apiCostUsd, 0)
+  const totalCalls = kling.usage.reduce((s, r) => s + r.calls, 0)
+  const totalSeconds = kling.usage.reduce((s, r) => s + r.seconds, 0)
+  const totalCredits = totalUsd / KLING_USD_PER_CREDIT
+
+  const jobsBy = (status: string) =>
+    kling.jobs.find((j) => j.status === status)
+  const jobsDone = jobsBy('DONE')?.jobs ?? 0
+  const jobsFailed = jobsBy('FAILED')?.jobs ?? 0
+  const jobsRunning =
+    (jobsBy('RUNNING')?.jobs ?? 0) + (jobsBy('QUEUED')?.jobs ?? 0)
+  const totalRetries = kling.jobs.reduce((s, j) => s + j.retries, 0)
+
+  const clipsBy = (status: string) =>
+    kling.clips.find((c) => c.status === status)?.clips ?? 0
+  const clipsReady = clipsBy('READY')
+  const clipsFailed = clipsBy('FAILED')
+
+  const hasActivity =
+    totalCalls > 0 || kling.jobs.length > 0 || kling.clips.length > 0
+
+  return (
+    <Section title="Detail Kling — Kredit Terpakai">
+      {!hasActivity ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          Tidak ada pemakaian Kling di rentang ini.
+        </p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard
+              label="Est. Kredit Kling"
+              value={totalCredits.toLocaleString('id-ID', {
+                maximumFractionDigits: 1,
+              })}
+              sub={`asumsi $${KLING_USD_PER_CREDIT}/kredit (top-up $140 = 1.000)`}
+              accent="text-violet-600"
+            />
+            <StatCard
+              label="Biaya Kling (USD)"
+              value={`$${totalUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}`}
+              sub="dari harga di /admin/ai-pricing"
+            />
+            <StatCard
+              label="Video Ter-charge"
+              value={formatNumber(totalCalls)}
+              sub={`${formatNumber(totalSeconds)} detik total`}
+            />
+            <StatCard
+              label="Sukses / Gagal / Retry"
+              value={`${formatNumber(jobsDone + clipsReady)} / ${formatNumber(jobsFailed + clipsFailed)} / ${formatNumber(totalRetries)}`}
+              sub={
+                jobsRunning > 0
+                  ? `${formatNumber(jobsRunning)} masih proses`
+                  : 'host video + klip lipsync'
+              }
+            />
+          </div>
+
+          <div className="max-h-56 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-card">
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="py-2">Fitur</th>
+                  <th className="py-2">Model</th>
+                  <th className="py-2 text-right">Panggilan</th>
+                  <th className="py-2 text-right">Detik</th>
+                  <th className="py-2 text-right">USD</th>
+                  <th className="py-2 text-right">Est. Kredit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kling.usage.map((r, i) => (
+                  <tr
+                    key={`${r.featureKey}-${r.modelName}-${i}`}
+                    className="border-b last:border-0"
+                  >
+                    <td className="py-1.5 font-medium">{r.featureKey}</td>
+                    <td className="py-1.5 text-xs text-muted-foreground">
+                      {r.modelName}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {formatNumber(r.calls)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {formatNumber(r.seconds)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      ${r.apiCostUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="py-1.5 text-right font-medium tabular-nums text-violet-600">
+                      {(r.apiCostUsd / KLING_USD_PER_CREDIT).toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+                    </td>
+                  </tr>
+                ))}
+                {kling.usage.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                      Belum ada panggilan Kling yang ter-charge di rentang ini.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="rounded-lg bg-warm-50 p-3 text-xs leading-relaxed text-warm-600">
+            <strong>Kenapa jumlah panggilan bisa beda dengan jumlah klik
+            generate?</strong>{' '}
+            Tabel di atas hanya mencatat video yang <em>berhasil</em> dan
+            ter-charge. Generate yang gagal ({formatNumber(jobsFailed + clipsFailed)}{' '}
+            di rentang ini) dan auto-retry ({formatNumber(totalRetries)}×) tetap
+            memakai antrian Kling tapi tidak ditagih ke user — kredit Kling
+            untuk task gagal umumnya di-refund otomatis oleh Kling. Akurasi
+            kredit mengikuti harga USD per model di /admin/ai-pricing.
+          </p>
+        </div>
+      )}
+    </Section>
   )
 }
 

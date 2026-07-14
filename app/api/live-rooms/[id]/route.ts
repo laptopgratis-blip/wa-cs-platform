@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { checkHostUsable } from '@/lib/services/host-availability'
 import { sanitizeProductFormMap } from '@/lib/services/live/order-form'
 
 const updateSchema = z.object({
@@ -170,17 +171,8 @@ export async function PUT(
   }
 
   if (data.hostTemplateId) {
-    const host = await prisma.hostTemplate.findUnique({
-      where: { id: data.hostTemplateId },
-      select: { userId: true, isPublic: true, status: true, videoLoopUrl: true },
-    })
-    if (!host) return jsonError('Host template tidak ditemukan', 404)
-    if (host.userId !== session.user.id && !host.isPublic) {
-      return jsonError('Host tidak boleh dipakai (private milik user lain)', 403)
-    }
-    if (host.status !== 'READY' || !host.videoLoopUrl) {
-      return jsonError('Host belum siap (video belum di-generate)', 400)
-    }
+    const hostCheck = await checkHostUsable(data.hostTemplateId, session.user.id)
+    if (!hostCheck.ok) return jsonError(hostCheck.error, hostCheck.status)
   }
 
   const updated = await prisma.liveRoom.update({

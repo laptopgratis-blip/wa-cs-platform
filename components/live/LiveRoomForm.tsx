@@ -16,6 +16,7 @@ import { ProductPickerManager } from './ProductPickerManager'
 interface HostOption {
   id: string
   name: string
+  mode?: 'TTS_GENERATIVE' | 'NATIVE_LIBRARY'
   visualStyle: string | null
   videoLoopUrl: string | null
   sourceImageUrl: string | null
@@ -417,7 +418,7 @@ export function LiveRoomForm({
                       : 'border-warm-200 hover:border-warm-400'
                   }`}
                 >
-                  <div className="aspect-[9/16] bg-warm-100">
+                  <div className="relative aspect-[9/16] bg-warm-100">
                     {h.videoLoopUrl ? (
                       <video
                         src={h.videoLoopUrl}
@@ -427,7 +428,20 @@ export function LiveRoomForm({
                         muted
                         playsInline
                       />
+                    ) : h.sourceImageUrl ? (
+                      // Host Klip Live bisa tanpa video loop — pakai foto host.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={h.sourceImageUrl}
+                        alt={h.name}
+                        className="h-full w-full object-cover"
+                      />
                     ) : null}
+                    {h.mode === 'NATIVE_LIBRARY' && (
+                      <span className="absolute left-1.5 top-1.5 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                        Klip Live
+                      </span>
+                    )}
                   </div>
                   <div className="p-2">
                     <div className="truncate text-xs font-medium">{h.name}</div>

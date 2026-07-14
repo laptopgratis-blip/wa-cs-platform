@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { checkHostUsable } from '@/lib/services/host-availability'
 import { sanitizeProductFormMap } from '@/lib/services/live/order-form'
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,60}[a-z0-9])?$/
@@ -78,18 +79,10 @@ export async function POST(req: Request) {
     return jsonError(`Slug "${data.slug}" sudah dipakai. Pilih yang lain.`, 409)
   }
 
-  // Host template harus ada — punya admin (isPublic) atau punya user sendiri.
-  const host = await prisma.hostTemplate.findUnique({
-    where: { id: data.hostTemplateId },
-    select: { id: true, userId: true, isPublic: true, status: true, videoLoopUrl: true },
-  })
-  if (!host) return jsonError('Host template tidak ditemukan', 404)
-  if (host.userId !== session.user.id && !host.isPublic) {
-    return jsonError('Host template tidak boleh dipakai (private milik user lain)', 403)
-  }
-  if (host.status !== 'READY' || !host.videoLoopUrl) {
-    return jsonError('Host belum siap (video belum di-generate)', 400)
-  }
+  // Host template harus ada, boleh dipakai, dan siap per mode-nya
+  // (TTS: loop READY; Klip Live: minimal 1 klip READY).
+  const hostCheck = await checkHostUsable(data.hostTemplateId, session.user.id)
+  if (!hostCheck.ok) return jsonError(hostCheck.error, hostCheck.status)
 
   // Validasi semua productIds milik user ini.
   if (data.productIds.length > 0) {

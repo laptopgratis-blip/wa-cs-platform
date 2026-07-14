@@ -1,10 +1,12 @@
 // GET /api/host-templates — list host yang available untuk user di form
 // Live Room. Termasuk: (a) milik user sendiri, (b) public (admin library).
-// Hanya status=READY (videoLoopUrl ada) — yang siap dipakai.
+// Kesiapan per mode via HOST_USABLE_WHERE: TTS butuh READY+videoLoopUrl;
+// Klip Live cukup punya klip READY (statusnya memang berhenti di IMAGE_READY).
 import type { NextResponse } from 'next/server'
 
 import { jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { HOST_USABLE_WHERE } from '@/lib/services/host-availability'
 
 export async function GET() {
   let session
@@ -15,14 +17,16 @@ export async function GET() {
   }
   const rows = await prisma.hostTemplate.findMany({
     where: {
-      status: 'READY',
-      videoLoopUrl: { not: null },
-      OR: [{ userId: session.user.id }, { isPublic: true }],
+      AND: [
+        { OR: [{ userId: session.user.id }, { isPublic: true }] },
+        HOST_USABLE_WHERE,
+      ],
     },
     orderBy: [{ isPublic: 'desc' }, { createdAt: 'desc' }],
     select: {
       id: true,
       name: true,
+      mode: true,
       visualStyle: true,
       videoLoopUrl: true,
       sourceImageUrl: true,
