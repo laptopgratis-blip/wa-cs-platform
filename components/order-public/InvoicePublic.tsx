@@ -4,6 +4,7 @@
 // COD: tampilan ringkas + info bayar di tempat.
 // TRANSFER: list rekening + upload bukti / kirim via WA.
 import {
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Copy,
@@ -14,6 +15,7 @@ import {
   Truck,
   Upload,
   XCircle,
+  Zap,
 } from 'lucide-react'
 import Image from 'next/image'
 import { useEffect, useRef, useState } from 'react'
@@ -45,6 +47,8 @@ interface OrderData {
   customerPhone: string
   shippingAddress: string | null
   shippingCityName: string | null
+  shippingDistrictName: string | null
+  shippingSubdistrictName: string | null
   shippingProvinceName: string | null
   shippingPostalCode: string | null
   items: OrderItem[]
@@ -260,7 +264,10 @@ export function InvoicePublic({
                 <span className="truncate">
                   {it.name} × {it.qty}
                   {it.isFlashSale && (
-                    <span className="ml-1 text-amber-700">⚡</span>
+                    <Zap
+                      className="ml-1 inline size-3.5 text-amber-600"
+                      aria-label="Flash sale"
+                    />
                   )}
                 </span>
                 <span>Rp {formatNumber(it.price * it.qty)}</span>
@@ -308,10 +315,14 @@ export function InvoicePublic({
             </span>
           </div>
           {isTransfer && order.uniqueCode && (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-              ⚠️ Transfer dengan nominal <strong>persis Rp {formatNumber(order.totalRp)}</strong>{' '}
-              (termasuk kode unik <strong>{order.uniqueCode}</strong>) supaya
-              pembayaran cepat diverifikasi.
+            <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Transfer dengan nominal{' '}
+                <strong>persis Rp {formatNumber(order.totalRp)}</strong>{' '}
+                (termasuk kode unik <strong>{order.uniqueCode}</strong>) supaya
+                pembayaran cepat diverifikasi.
+              </span>
             </p>
           )}
 
@@ -323,14 +334,26 @@ export function InvoicePublic({
                 <p className="text-warm-600">{order.customerPhone}</p>
                 <p className="mt-1 text-warm-600">
                   {order.shippingAddress}
-                  {order.shippingCityName && (
-                    <>
-                      , {order.shippingCityName}
-                      {order.shippingProvinceName &&
-                        `, ${order.shippingProvinceName}`}
-                      {order.shippingPostalCode && ` ${order.shippingPostalCode}`}
-                    </>
-                  )}
+                  {(() => {
+                    // Kelurahan, Kecamatan, Kota, Provinsi — detail penuh
+                    // supaya gampang disalin ke form ekspedisi.
+                    const area = [
+                      order.shippingSubdistrictName,
+                      order.shippingDistrictName,
+                      order.shippingCityName,
+                      order.shippingProvinceName,
+                    ]
+                      .filter((p) => p && p !== '-')
+                      .join(', ')
+                    if (!area) return null
+                    return (
+                      <>
+                        , {area}
+                        {order.shippingPostalCode &&
+                          ` ${order.shippingPostalCode}`}
+                      </>
+                    )
+                  })()}
                 </p>
               </div>
             </>

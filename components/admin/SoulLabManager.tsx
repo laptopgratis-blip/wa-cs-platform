@@ -27,7 +27,10 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -225,6 +228,8 @@ export function SoulLabManager() {
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetsOpen, setPresetsOpen] = useState(false)
   const [savePresetOpen, setSavePresetOpen] = useState(false)
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
+  const [deletePresetId, setDeletePresetId] = useState<string | null>(null)
 
   // Load setup data
   useEffect(() => {
@@ -372,7 +377,7 @@ export function SoulLabManager() {
 
   async function cancelSimulation() {
     if (!activeSimId) return
-    if (!confirm('Stop simulasi?')) return
+    setStopConfirmOpen(false)
     try {
       const res = await fetch(`/api/admin/soul-lab/simulations/${activeSimId}/cancel`, {
         method: 'POST',
@@ -438,28 +443,16 @@ export function SoulLabManager() {
   }
 
   if (setupLoading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-warm-500" />
-      </div>
-    )
+    return <CardGridSkeleton count={3} />
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight text-warm-900">
-            <FlaskConical className="size-6 text-primary-600" />
-            Soul Testing Lab
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Simulasi 2 AI (penjual vs pembeli) untuk uji efektivitas Soul tanpa pakai WA
-            real. Hasil dievaluasi otomatis oleh Claude Sonnet.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Soul Testing Lab"
+        icon={FlaskConical}
+        description="Simulasi 2 AI (penjual vs pembeli) untuk uji efektivitas Soul tanpa pakai WA real. Hasil dievaluasi otomatis oleh Claude Sonnet."
+      />
 
       {/* Section A — Setup (sembunyi saat simulasi aktif untuk fokus) */}
       {!activeSimId && (
@@ -484,7 +477,7 @@ export function SoulLabManager() {
 
       {/* Section B — Live View */}
       {activeSim && activeSim.status === 'RUNNING' && (
-        <LiveSection sim={activeSim} onCancel={cancelSimulation} />
+        <LiveSection sim={activeSim} onCancel={() => setStopConfirmOpen(true)} />
       )}
 
       {/* Section C — Results */}
@@ -511,15 +504,7 @@ export function SoulLabManager() {
         onOpenChange={setPresetsOpen}
         presets={presets}
         onApply={applyPreset}
-        onDelete={async (id) => {
-          if (!confirm('Hapus preset?')) return
-          const res = await fetch(`/api/admin/soul-lab/presets/${id}`, { method: 'DELETE' })
-          const json = await res.json()
-          if (json.success) {
-            toast.success('Preset dihapus')
-            void loadPresets()
-          } else toast.error(json.error)
-        }}
+        onDelete={(id) => setDeletePresetId(id)}
       />
 
       {/* Save preset dialog */}
@@ -529,6 +514,37 @@ export function SoulLabManager() {
         onSave={async (name, desc) => {
           const ok = await savePreset(name, desc)
           if (ok) setSavePresetOpen(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={stopConfirmOpen}
+        onOpenChange={setStopConfirmOpen}
+        title="Stop simulasi?"
+        description="Simulasi yang berjalan dihentikan — hasil parsial tetap tersimpan."
+        confirmLabel="Ya, Stop"
+        onConfirm={cancelSimulation}
+      />
+
+      <ConfirmDialog
+        open={deletePresetId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeletePresetId(null)
+        }}
+        title="Hapus preset?"
+        description="Preset setup simulasi ini dihapus permanen."
+        onConfirm={async () => {
+          if (!deletePresetId) return
+          const res = await fetch(
+            `/api/admin/soul-lab/presets/${deletePresetId}`,
+            { method: 'DELETE' },
+          )
+          const json = await res.json()
+          if (json.success) {
+            toast.success('Preset dihapus')
+            void loadPresets()
+          } else toast.error(json.error)
+          setDeletePresetId(null)
         }}
       />
     </div>

@@ -3,7 +3,16 @@
 // Intent Wizard — 2 step: Q1 goal pick (4 card besar), Q2 kondisional
 // (cuma kalau Q1=SELL_PRODUCT, tanya pakai LP atau langsung WA). Hasil
 // disimpan via POST /api/onboarding/save-goal lalu redirect ke /dashboard.
-import { ArrowLeft, ArrowRight, Bot, GraduationCap, HelpCircle, ShoppingBag } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  FileText,
+  GraduationCap,
+  HelpCircle,
+  MessageCircle,
+  ShoppingBag,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -17,51 +26,51 @@ type FinalGoal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS' | null
 
 interface OptionCard {
   id: Q1Choice
-  emoji: string
   Icon: React.ComponentType<{ className?: string }>
   title: string
   description: string
   accent: string
+  iconCls: string
 }
 
 const Q1_OPTIONS: OptionCard[] = [
   {
     id: 'CS_AI',
-    emoji: '🤖',
     Icon: Bot,
     title: 'Mau WhatsApp dijawab otomatis 24 jam',
     description: 'Cocok untuk yang sibuk dan ingin AI menjawab pelanggan tanpa lelah.',
     accent: 'from-blue-50 to-indigo-50 border-blue-200 hover:border-blue-400',
+    iconCls: 'bg-blue-100 text-blue-600',
   },
   {
     id: 'SELL_PRODUCT',
-    emoji: '🛒',
     Icon: ShoppingBag,
     title: 'Mau jualan produk fisik',
     description: 'POD, dropship, atau brand sendiri. Kelola pesanan & pembayaran otomatis.',
     accent: 'from-orange-50 to-amber-50 border-orange-200 hover:border-orange-400',
+    iconCls: 'bg-amber-100 text-amber-700',
   },
   {
     id: 'LMS',
-    emoji: '🎓',
     Icon: GraduationCap,
     title: 'Mau jualan course / e-book / produk digital',
     description: 'Bikin kelas online, kasih akses otomatis setelah pembayaran.',
     accent: 'from-purple-50 to-fuchsia-50 border-purple-200 hover:border-purple-400',
+    iconCls: 'bg-purple-100 text-purple-600',
   },
   {
     id: 'SKIP',
-    emoji: '🤔',
     Icon: HelpCircle,
     title: 'Belum tahu / mau lihat-lihat dulu',
     description: 'Kamu bisa pilih tujuan nanti dari halaman pengaturan.',
     accent: 'from-warm-50 to-warm-100 border-warm-200 hover:border-warm-400',
+    iconCls: 'bg-warm-200 text-warm-600',
   },
 ]
 
 interface Q2Option {
   id: Q2Choice
-  emoji: string
+  Icon: React.ComponentType<{ className?: string }>
   title: string
   description: string
 }
@@ -69,13 +78,13 @@ interface Q2Option {
 const Q2_OPTIONS: Q2Option[] = [
   {
     id: 'WITH_LP',
-    emoji: '📄',
+    Icon: FileText,
     title: 'Pakai Landing Page',
     description: 'Bikin halaman jualan dengan AI, ada form order, hitung ongkir, follow-up otomatis. Cocok untuk traffic dari iklan.',
   },
   {
     id: 'WA_ONLY',
-    emoji: '💬',
+    Icon: MessageCircle,
     title: 'Langsung jualan di WA',
     description: 'Setup paling cepat. Pelanggan chat WA, AI tanya kebutuhan, kasih harga, langsung order.',
   },
@@ -151,7 +160,7 @@ export function IntentWizard() {
         <div className="flex flex-col gap-6">
           <div className="text-center">
             <h1 className="font-display text-3xl font-extrabold tracking-tight text-warm-900 md:text-4xl">
-              Selamat datang di Hulao! 👋
+              Selamat datang di Hulao!
             </h1>
             <p className="mx-auto mt-3 max-w-xl text-warm-600">
               Biar setup-nya cepat & nggak ribet, kasih tahu kami tujuan utamamu pakai Hulao.
@@ -170,8 +179,14 @@ export function IntentWizard() {
                   opt.accent,
                 )}
               >
-                <span className="text-4xl" aria-hidden>
-                  {opt.emoji}
+                <span
+                  aria-hidden
+                  className={cn(
+                    'flex size-12 items-center justify-center rounded-xl',
+                    opt.iconCls,
+                  )}
+                >
+                  <opt.Icon className="size-6" />
                 </span>
                 <div>
                   <p className="font-display text-base font-bold leading-tight text-warm-900">
@@ -223,8 +238,11 @@ export function IntentWizard() {
                   q2 === opt.id ? 'border-primary-500 bg-primary-50' : 'border-orange-200',
                 )}
               >
-                <span className="text-5xl" aria-hidden>
-                  {opt.emoji}
+                <span
+                  aria-hidden
+                  className="flex size-14 items-center justify-center rounded-xl bg-primary-100 text-primary-600"
+                >
+                  <opt.Icon className="size-7" />
                 </span>
                 <p className="font-display text-lg font-bold leading-tight text-warm-900">
                   {opt.title}

@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -72,15 +73,10 @@ export function PricingSettingsManager() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Pricing Settings
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Setting global yang dipakai semua tools profit (auto-calc model,
-          pricing calculator, dashboard profitability). Cache 60 detik.
-        </p>
-      </div>
+      <PageHeader
+        title="Pricing Settings"
+        description="Setting global yang dipakai semua tools profit (auto-calc model, pricing calculator, dashboard profitability). Cache 60 detik."
+      />
 
       <Card>
         <CardHeader>

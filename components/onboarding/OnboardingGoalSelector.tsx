@@ -8,7 +8,18 @@
 // Pakai endpoint existing /api/onboarding/save-goal — set goal baru →
 // onboardingDismissedAt=null otomatis (checklist muncul lagi). Progress step
 // di JSON tidak hilang, step yg tidak match goal baru auto-ignored saat resolve.
-import { ArrowRight, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  GraduationCap,
+  Lightbulb,
+  Loader2,
+  MessageCircle,
+  ShoppingCart,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -37,7 +48,8 @@ type Goal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
 
 interface GoalOption {
   id: Goal
-  emoji: string
+  Icon: React.ComponentType<{ className?: string }>
+  iconCls: string
   title: string
   short: string
   /** Background gradient class — flat strings, full Tailwind classes. */
@@ -51,7 +63,8 @@ interface GoalOption {
 const OPTIONS: GoalOption[] = [
   {
     id: 'CS_AI',
-    emoji: '🤖',
+    Icon: Bot,
+    iconCls: 'bg-blue-100 text-blue-600',
     title: 'CS AI',
     short: 'WhatsApp dijawab otomatis 24 jam',
     bgClass: 'bg-gradient-to-br from-blue-50 to-indigo-50',
@@ -60,7 +73,8 @@ const OPTIONS: GoalOption[] = [
   },
   {
     id: 'SELL_LP',
-    emoji: '🛒',
+    Icon: ShoppingCart,
+    iconCls: 'bg-amber-100 text-amber-700',
     title: 'Jualan + LP',
     short: 'Landing page + form order + ongkir + follow-up',
     bgClass: 'bg-gradient-to-br from-orange-50 to-amber-50',
@@ -69,7 +83,8 @@ const OPTIONS: GoalOption[] = [
   },
   {
     id: 'SELL_WA',
-    emoji: '💬',
+    Icon: MessageCircle,
+    iconCls: 'bg-emerald-100 text-emerald-600',
     title: 'Jualan WA',
     short: 'AI guide pelanggan langsung di WhatsApp',
     bgClass: 'bg-gradient-to-br from-emerald-50 to-teal-50',
@@ -78,7 +93,8 @@ const OPTIONS: GoalOption[] = [
   },
   {
     id: 'LMS',
-    emoji: '🎓',
+    Icon: GraduationCap,
+    iconCls: 'bg-purple-100 text-purple-600',
     title: 'Course / LMS',
     short: 'Bikin course online + akses otomatis',
     bgClass: 'bg-gradient-to-br from-purple-50 to-fuchsia-50',
@@ -209,8 +225,15 @@ export function OnboardingGoalSelector({ currentGoal, compact }: Props) {
                         <Check className="size-3" /> Aktif
                       </span>
                     )}
-                    <span className={cn(compact ? 'text-xl' : 'text-3xl')} aria-hidden>
-                      {opt.emoji}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'flex items-center justify-center rounded-lg',
+                        compact ? 'size-8' : 'size-11',
+                        opt.iconCls,
+                      )}
+                    >
+                      <opt.Icon className={compact ? 'size-4' : 'size-5'} />
                     </span>
                     <div className="flex-1">
                       <p
@@ -252,8 +275,9 @@ export function OnboardingGoalSelector({ currentGoal, compact }: Props) {
               })}
             </div>
             {!compact && (
-              <p className="mt-3 text-xs text-warm-500">
-                💡 Switching goal tidak menghapus progress lama. Kamu bisa balik
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-warm-500">
+                <Lightbulb className="size-3.5 shrink-0" aria-hidden />
+                Switching goal tidak menghapus progress lama. Kamu bisa balik
                 kapan saja — step yang sudah selesai tetap kebaca.
               </p>
             )}

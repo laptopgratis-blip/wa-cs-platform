@@ -1,8 +1,9 @@
 'use client'
 
-import { BarChart3, Layers, Pencil, Users } from 'lucide-react'
+import { BarChart3, GraduationCap, Layers, Pencil, Users } from 'lucide-react'
 import Link from 'next/link'
 
+import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatRupiah } from '@/lib/format'
@@ -35,11 +36,12 @@ export function CoursesList({ courses }: { courses: Course[] }) {
   if (courses.length === 0) {
     return (
       <Card>
-        <CardContent className="py-16 text-center">
-          <p className="text-sm text-warm-500">
-            Belum ada course. Klik <strong>Buat Course Baru</strong> di pojok
-            kanan atas untuk mulai.
-          </p>
+        <CardContent>
+          <EmptyState
+            icon={GraduationCap}
+            title="Belum ada course"
+            description="Klik Buat Course Baru di pojok kanan atas untuk mulai."
+          />
         </CardContent>
       </Card>
     )

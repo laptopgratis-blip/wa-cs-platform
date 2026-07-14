@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -117,11 +120,7 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
   }
 
   if (!data) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    )
+    return <CardGridSkeleton count={4} />
   }
 
   const totalTags = data.categories.reduce((acc, c) => acc + c.count, 0)
@@ -133,51 +132,54 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link
-            href={`/live-rooms/${roomId}/leads`}
-            className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
-          </Link>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6" /> Peta Objection — {data.room.name}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Apa alasan customer ragu / tidak jadi. AI baca transkrip → tag otomatis.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchData()}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          {data.unanalyzedSessions > 0 ? (
-            <Button size="sm" onClick={triggerAnalyze} disabled={analyzing}>
-              {analyzing ? (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="mr-2 h-3.5 w-3.5" />
-              )}
-              Analisa {data.unanalyzedSessions} session
-            </Button>
-          ) : null}
-        </div>
+      <div>
+        <Link
+          href={`/live-rooms/${roomId}/leads`}
+          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
+        </Link>
+        <PageHeader
+          title={`Peta Objection — ${data.room.name}`}
+          description="Apa alasan customer ragu / tidak jadi. AI baca transkrip → tag otomatis."
+          actions={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void fetchData()}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              {data.unanalyzedSessions > 0 ? (
+                <Button size="sm" onClick={triggerAnalyze} disabled={analyzing}>
+                  {analyzing ? (
+                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  )}
+                  Analisa {data.unanalyzedSessions} session
+                </Button>
+              ) : null}
+            </>
+          }
+        />
       </div>
 
       {totalTags === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada objection tagged.{' '}
-            {data.unanalyzedSessions > 0
-              ? `Ada ${data.unanalyzedSessions} session yang belum dianalisa — klik "Analisa" di atas.`
-              : 'Belum ada session yang punya cukup konversasi (≥2 pesan customer).'}
+          <CardContent>
+            <EmptyState
+              icon={BarChart3}
+              title="Belum ada objection tagged"
+              description={
+                data.unanalyzedSessions > 0
+                  ? `Ada ${data.unanalyzedSessions} session yang belum dianalisa — klik "Analisa" di atas.`
+                  : 'Belum ada session yang punya cukup konversasi (≥2 pesan customer).'
+              }
+            />
           </CardContent>
         </Card>
       ) : (

@@ -107,6 +107,16 @@ export async function POST(req: Request) {
       }
     }
 
+    // 3c. Resolve detail destinasi dari master lokal (bukan dari client) —
+    // province/city/district/subdistrict/zip jadi konsisten & tidak bisa
+    // dipalsukan. Master terisi otomatis saat customer search destinasi.
+    const destination =
+      form.requireShipping && data.shippingDestinationId
+        ? await prisma.shippingDestination.findUnique({
+            where: { id: data.shippingDestinationId },
+          })
+        : null
+
     // 4. Hitung total (sumber kebenaran — JANGAN trust client). Untuk form
     // digital semua field shipping di-clear supaya pricing engine skip ongkir.
     const pricing = await calculateOrderTotal({
@@ -209,20 +219,26 @@ export async function POST(req: Request) {
 
           shippingProvinceId: null,
           shippingProvinceName: form.requireShipping
-            ? data.shippingProvinceName ?? null
+            ? destination?.provinceName ?? data.shippingProvinceName ?? null
             : null,
           shippingCityId:
             form.requireShipping && data.shippingDestinationId
               ? String(data.shippingDestinationId)
               : null,
           shippingCityName: form.requireShipping
-            ? data.shippingCityName ?? null
+            ? destination?.cityName ?? data.shippingCityName ?? null
+            : null,
+          shippingDistrictName: form.requireShipping
+            ? destination?.districtName ?? null
+            : null,
+          shippingSubdistrictName: form.requireShipping
+            ? destination?.subdistrictName ?? null
             : null,
           shippingAddress: form.requireShipping
             ? data.shippingAddress ?? null
             : null,
           shippingPostalCode: form.requireShipping
-            ? data.shippingPostalCode ?? null
+            ? destination?.zipCode ?? data.shippingPostalCode ?? null
             : null,
 
           items: pricing.items as never,

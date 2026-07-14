@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 
 interface PageHeaderProps {
   title: string
-  description?: string
+  description?: ReactNode
   icon?: LucideIcon
   actions?: ReactNode
   className?: string
@@ -28,7 +28,7 @@ export function PageHeader({
       )}
     >
       <div>
-        <h1 className="flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
+        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl dark:text-warm-50">
           {Icon && <Icon className="size-6 text-primary-500" aria-hidden />}
           {title}
         </h1>
@@ -36,7 +36,9 @@ export function PageHeader({
           <p className="mt-1 text-sm text-warm-500">{description}</p>
         )}
       </div>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+      {actions && (
+        <div className="flex flex-wrap items-center gap-2">{actions}</div>
+      )}
     </div>
   )
 }

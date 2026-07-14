@@ -6,7 +6,9 @@ import { CheckCircle2, ExternalLink, Loader2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
 import { Pagination } from '@/components/shared/Pagination'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -271,17 +273,16 @@ function SubsTable({
   onClickInvoice: (id: string) => void
 }) {
   if (loading) {
-    return (
-      <div className="py-12 text-center">
-        <Loader2 className="mx-auto size-5 animate-spin" />
-      </div>
-    )
+    return <CardGridSkeleton count={2} />
   }
   if (subs.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Tidak ada subscription.
+        <CardContent>
+          <EmptyState
+            title="Tidak ada subscription"
+            description="Subscription user yang aktif bakal tampil di sini."
+          />
         </CardContent>
       </Card>
     )
@@ -356,11 +357,7 @@ function PendingTable({
   onView: (sub: Sub) => void
 }) {
   if (loading) {
-    return (
-      <div className="py-12 text-center">
-        <Loader2 className="mx-auto size-5 animate-spin" />
-      </div>
-    )
+    return <CardGridSkeleton count={2} />
   }
   // Filter pending yg butuh action: WAITING_CONFIRMATION (ada bukti) atau PENDING.
   const actionable = subs.filter((s) =>
@@ -371,8 +368,11 @@ function PendingTable({
   if (actionable.length === 0) {
     return (
       <Card>
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">
-          Tidak ada pembayaran yg menunggu konfirmasi.
+        <CardContent>
+          <EmptyState
+            title="Tidak ada pembayaran yang menunggu konfirmasi"
+            description="Pembayaran subscription manual yang masuk bakal tampil di sini."
+          />
         </CardContent>
       </Card>
     )

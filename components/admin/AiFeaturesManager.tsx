@@ -12,6 +12,10 @@ import { AlertTriangle, Loader2, Plus, RefreshCw, Save, Sparkles } from 'lucide-
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -54,6 +58,7 @@ export function AiFeaturesManager() {
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
   const [syncingAll, setSyncingAll] = useState(false)
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -76,12 +81,7 @@ export function AiFeaturesManager() {
   }, [refresh])
 
   async function syncAllFromPresets() {
-    if (
-      !confirm(
-        'Sync semua feature config dari AiModelPreset (database harga)? Harga input/output yg drift akan di-update. Margin/floor/cap tidak ikut di-update.',
-      )
-    )
-      return
+    setSyncConfirmOpen(false)
     setSyncingAll(true)
     try {
       const res = await fetch('/api/admin/ai-features/sync-from-presets', {
@@ -166,47 +166,39 @@ export function AiFeaturesManager() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <Sparkles className="size-5 text-primary-500" />
-            <h1 className="font-display text-2xl font-extrabold text-warm-900">
-              AI Feature Pricing
-            </h1>
-          </div>
-          <p className="text-sm text-warm-500">
-            Atur pricing per AI feature (Content Studio, future LP Lab). Update
-            margin/rate/cap di sini = effect max 60 detik (cache TTL).
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={syncAllFromPresets}
-            disabled={syncingAll || loading}
-          >
-            {syncingAll ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 size-4" />
+      <PageHeader
+        title="AI Feature Pricing"
+        description="Atur pricing per AI feature (Content Studio, future LP Lab). Update margin/rate/cap di sini = effect max 60 detik (cache TTL)."
+        actions={
+          <div className="flex flex-col items-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSyncConfirmOpen(true)}
+              disabled={syncingAll || loading}
+            >
+              {syncingAll ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 size-4" />
+              )}
+              Sync dari preset
+            </Button>
+            {driftCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                <AlertTriangle className="size-3" />
+                {driftCount} feature beda harga dari preset
+              </span>
             )}
-            Sync dari preset
-          </Button>
-          {driftCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-              <AlertTriangle className="size-3" />
-              {driftCount} feature beda harga dari preset
-            </span>
-          )}
-          {missingCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800">
-              <AlertTriangle className="size-3" />
-              {missingCount} model tidak ada di preset
-            </span>
-          )}
-        </div>
-      </header>
+            {missingCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800">
+                <AlertTriangle className="size-3" />
+                {missingCount} model tidak ada di preset
+              </span>
+            )}
+          </div>
+        }
+      />
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
         <strong>Cara hitung token charge per call (skema fair-pricing):</strong>
@@ -226,21 +218,20 @@ export function AiFeaturesManager() {
         untuk force-sync semua sekaligus.
       </div>
 
-      {loading && (
-        <div className="flex items-center gap-2 py-8 text-sm text-warm-500">
-          <Loader2 className="size-4 animate-spin" /> Memuat...
-        </div>
-      )}
+      {loading && <CardGridSkeleton count={3} />}
 
       {!loading && features.length === 0 && !creating && (
         <Card>
-          <CardContent className="py-8 text-center text-sm text-warm-500">
-            Belum ada feature config. Migration belum jalan? Atau klik tambah.
-            <div className="mt-3">
-              <Button onClick={() => setCreating(true)}>
-                <Plus className="mr-1 size-4" /> Tambah feature
-              </Button>
-            </div>
+          <CardContent>
+            <EmptyState
+              title="Belum ada feature config"
+              description="Migration belum jalan? Atau tambah manual di sini."
+              action={
+                <Button onClick={() => setCreating(true)}>
+                  <Plus className="mr-1 size-4" /> Tambah feature
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       )}
@@ -384,6 +375,16 @@ export function AiFeaturesManager() {
           <Plus className="mr-1 size-4" /> Tambah feature baru
         </Button>
       )}
+
+      <ConfirmDialog
+        open={syncConfirmOpen}
+        onOpenChange={setSyncConfirmOpen}
+        title="Sync semua feature config dari preset?"
+        description="Harga input/output yang drift di-update dari AiModelPreset (database harga). Margin/floor/cap tidak ikut di-update."
+        confirmLabel="Ya, Sync"
+        variant="default"
+        onConfirm={syncAllFromPresets}
+      />
     </div>
   )
 }

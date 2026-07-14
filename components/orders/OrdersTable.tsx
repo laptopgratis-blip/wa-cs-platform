@@ -11,9 +11,12 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
+  CheckCircle2,
   ChevronRight,
   Loader2,
+  MapPin,
   MessageCircle,
+  Package,
   Tag,
   Warehouse,
   X,
@@ -21,7 +24,9 @@ import {
 import Link from 'next/link'
 import { useState } from 'react'
 
+import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -34,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { formatShippingArea } from '@/lib/format'
 import { formatRelativeTime } from '@/lib/format-time'
 import { deliveryStatusMeta, paymentStatusMeta, statusMeta } from '@/lib/status'
 import {
@@ -137,18 +143,15 @@ export function OrdersTable({
           </TableHeader>
           <TableBody>
             {loading && orders.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={totalColCount} className="py-8 text-center">
-                  <Loader2 className="inline size-5 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={Math.min(totalColCount, 8)} />
             ) : orders.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={totalColCount}
-                  className="py-12 text-center text-muted-foreground"
-                >
-                  Tidak ada pesanan dengan filter ini.
+                <TableCell colSpan={totalColCount}>
+                  <EmptyState
+                    icon={Package}
+                    title="Tidak ada pesanan dengan filter ini"
+                    description="Coba longgarkan filter atau ganti periode tanggal."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -290,7 +293,7 @@ function OrderRow({
               onClick={() => onQuickAction(order, 'mark_shipped')}
               title="Tandai Dikirim"
             >
-              📦
+              <Package className="size-3" />
             </Button>
           )}
           {isShipped && (
@@ -301,7 +304,7 @@ function OrderRow({
               onClick={() => onQuickAction(order, 'mark_delivered')}
               title="Tandai Selesai"
             >
-              ✅
+              <CheckCircle2 className="size-3" />
             </Button>
           )}
           {isUnpaid && (
@@ -527,8 +530,11 @@ function CustomerCell({ order }: { order: OrderListItem }) {
         {order.customerPhone}
       </p>
       {(order.shippingCityName || order.customerAddress) && (
-        <p className="line-clamp-1 text-[11px] text-muted-foreground">
-          📍 {order.shippingCityName ?? order.customerAddress}
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <MapPin className="size-3 shrink-0" aria-hidden />
+          <span className="line-clamp-1">
+            {formatShippingArea(order) ?? order.customerAddress}
+          </span>
         </p>
       )}
     </div>
@@ -538,14 +544,13 @@ function CustomerCell({ order }: { order: OrderListItem }) {
 function AddressCell({ order }: { order: OrderListItem }) {
   const addr = order.shippingAddress ?? order.customerAddress
   if (!addr) return <DashCell />
+  const area = formatShippingArea(order)
   return (
     <div className="text-xs">
       <p className="line-clamp-2">{addr}</p>
-      {(order.shippingCityName || order.shippingProvinceName) && (
+      {(area || order.shippingProvinceName) && (
         <p className="text-[10px] text-warm-500">
-          {[order.shippingCityName, order.shippingProvinceName]
-            .filter(Boolean)
-            .join(', ')}
+          {[area, order.shippingProvinceName].filter(Boolean).join(', ')}
         </p>
       )}
     </div>
@@ -586,9 +591,9 @@ function TagsCell({
 function AutoConfirmCell({ order }: { order: OrderListItem }) {
   if (!order.autoConfirmedBy) return <DashCell />
   const map: Record<string, string> = {
-    BCA_AUTO: '🤖 BCA Auto',
-    MOOTA: '🤖 Moota',
-    MANUAL: '👤 Manual',
+    BCA_AUTO: 'BCA Auto',
+    MOOTA: 'Moota',
+    MANUAL: 'Manual',
   }
   return (
     <Badge variant="outline" className="text-[10px]">
@@ -603,8 +608,16 @@ function PixelStatusCell({ order }: { order: OrderListItem }) {
   if (!lead && !purchase) return <DashCell />
   return (
     <div className="space-y-0.5 text-[10px]">
-      {lead && <div className="text-emerald-700">✓ Lead</div>}
-      {purchase && <div className="text-emerald-700">✓ Purchase</div>}
+      {lead && (
+        <div className="flex items-center gap-0.5 text-emerald-700">
+          <Check className="size-2.5" aria-hidden /> Lead
+        </div>
+      )}
+      {purchase && (
+        <div className="flex items-center gap-0.5 text-emerald-700">
+          <Check className="size-2.5" aria-hidden /> Purchase
+        </div>
+      )}
     </div>
   )
 }

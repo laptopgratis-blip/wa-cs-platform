@@ -5,6 +5,7 @@
 // kirim pesan manual ke customer.
 import { BellRing, Loader2, Send } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -207,7 +208,7 @@ function ManualSendDialog({
       })
       const json = await res.json()
       if (!json.success) {
-        alert(json.error)
+        toast.error(json.error ?? 'Gagal kirim pesan')
       } else {
         onSent()
       }

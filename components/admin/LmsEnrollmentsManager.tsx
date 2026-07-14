@@ -15,7 +15,10 @@ import {
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -140,30 +143,22 @@ export function LmsEnrollmentsManager() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="mb-1 flex items-center gap-2">
-            <GraduationCap className="size-5 text-primary-500" />
-            <h1 className="font-display text-2xl font-extrabold tracking-tight">
-              Enrollment LMS
-            </h1>
-          </div>
-          <p className="text-sm text-warm-500">
-            Akses student per course. Hook auto-enroll saat order PAID; manual
-            add untuk kasus refund/courtesy.
-          </p>
-        </div>
-        <Button
-          onClick={() => {
-            void loadCourses()
-            setAddOpen(true)
-          }}
-          className="bg-primary-500 text-white hover:bg-primary-600"
-        >
-          <Plus className="mr-2 size-4" />
-          Manual Add
-        </Button>
-      </header>
+      <PageHeader
+        title="Enrollment LMS"
+        description="Akses student per course. Hook auto-enroll saat order PAID; manual add untuk kasus refund/courtesy."
+        actions={
+          <Button
+            onClick={() => {
+              void loadCourses()
+              setAddOpen(true)
+            }}
+            className="bg-primary-500 text-white hover:bg-primary-600"
+          >
+            <Plus className="mr-2 size-4" />
+            Manual Add
+          </Button>
+        }
+      />
 
       <Card>
         <CardContent className="p-4">
@@ -222,9 +217,17 @@ export function LmsEnrollmentsManager() {
       <Card>
         <CardContent className="p-0">
           {enrollments.length === 0 ? (
-            <div className="py-12 text-center text-sm text-warm-500">
-              {loading ? 'Loading...' : 'Tidak ada enrollment yang cocok.'}
-            </div>
+            loading ? (
+              <div className="p-4">
+                <CardGridSkeleton count={2} />
+              </div>
+            ) : (
+              <EmptyState
+                icon={GraduationCap}
+                title="Tidak ada enrollment yang cocok"
+                description="Coba ubah filter phone, invoice, atau status."
+              />
+            )
           ) : (
             <div className="divide-y divide-warm-100">
               {enrollments.map((e) => (

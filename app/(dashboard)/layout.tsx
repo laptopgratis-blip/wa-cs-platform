@@ -66,7 +66,9 @@ export default async function DashboardLayout({
   const showWelcomeWizard = !userMeta?.welcomeWizardDismissedAt
 
   return (
-    <div className="flex min-h-svh w-full">
+    // App-shell fixed-height: dokumen tidak pernah scroll — sidebar & topbar
+    // diam, hanya <main> (konten halaman) yang scroll.
+    <div className="flex h-dvh w-full overflow-hidden">
       {/* Desktop sidebar */}
       <Sidebar
         className="hidden md:flex"
@@ -74,7 +76,7 @@ export default async function DashboardLayout({
         hasOrderSystemAccess={hasOrderSystemAccess}
         onboardingGoal={onboardingGoal}
       />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           name={session.user.name}
           email={session.user.email}
@@ -84,7 +86,7 @@ export default async function DashboardLayout({
             full-bleed (split panel) tanpa di-pad parent. Padding-bottom
             untuk mobile = tinggi BottomNav + safe-area-inset-bottom (iPhone
             home indicator) supaya konten paling bawah tidak ketutup nav. */}
-        <main className="flex-1 overflow-hidden pb-mobile-nav md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-mobile-nav md:pb-0">
           {children}
         </main>
       </div>

@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -76,6 +77,7 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
   const [loading, setLoading] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [applyingId, setApplyingId] = useState<string | null>(null)
+  const [pendingApplyId, setPendingApplyId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -99,9 +101,7 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleApply(optId: string) {
-    if (!confirm('Apply saran ini ke LP? HTML akan di-replace + versi sebelumnya di-snapshot.')) {
-      return
-    }
+    setPendingApplyId(null)
     setApplyingId(optId)
     try {
       const res = await fetch(
@@ -267,7 +267,7 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                           </div>
                           <Button
                             size="sm"
-                            onClick={() => void handleApply(r.id)}
+                            onClick={() => setPendingApplyId(r.id)}
                             disabled={applyingId === r.id}
                             className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
                           >
@@ -294,6 +294,20 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
           </ul>
         )}
       </DialogContent>
+
+      <ConfirmDialog
+        open={pendingApplyId !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingApplyId(null)
+        }}
+        title="Apply saran ini ke LP?"
+        description="HTML akan di-replace + versi sebelumnya di-snapshot (bisa rollback)."
+        confirmLabel="Ya, Apply"
+        variant="default"
+        onConfirm={() => {
+          if (pendingApplyId) void handleApply(pendingApplyId)
+        }}
+      />
     </Dialog>
   )
 }

@@ -9,6 +9,7 @@ import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesC
 import { NotificationSettingsCard } from '@/components/dashboard/NotificationSettingsCard'
 import { EmbeddedOnboardingGuide } from '@/components/onboarding/EmbeddedOnboardingGuide'
 import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
+import { PageHeader } from '@/components/shared/PageHeader'
 import {
   Card,
   CardContent,
@@ -132,12 +133,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-7 overflow-y-auto p-4 md:p-6">
       <div className="opacity-0 animate-fade-slide-up">
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Selamat datang, {firstName(session.user.name)} 👋
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Berikut ringkasan akunmu hari ini — saldo, koneksi WA, dan aktivitas pesan.
-        </p>
+        <PageHeader
+          title={`Selamat datang, ${firstName(session.user.name)}`}
+          description="Berikut ringkasan akunmu hari ini — saldo, koneksi WA, dan aktivitas pesan."
+        />
       </div>
 
       <BalanceBanner balance={stats.balance} />

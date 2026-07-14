@@ -4,7 +4,7 @@
 // Create flow pakai OrchestratedHostWizard (Claude generate prompts dari
 // opsi terstruktur). Komponen ini handle list + status polling + tombol
 // video + delete.
-import { Loader2, Plus, Trash2, Image as ImageIcon, AlertTriangle, ChevronRight } from 'lucide-react'
+import { Bot, Loader2, Plus, Trash2, Image as ImageIcon, AlertTriangle, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -12,9 +12,14 @@ import { toast } from 'sonner'
 import { HostModePicker, type HostMode } from './HostModePicker'
 import { OrchestratedHostWizard } from './OrchestratedHostWizard'
 
-import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { hostTemplateStatusMeta, statusMeta } from '@/lib/status'
 
 interface HostTemplate {
   id: string
@@ -38,16 +43,6 @@ interface HostTemplate {
   errorMessage: string | null
   createdAt: string
   updatedAt: string
-}
-
-const STATUS_BADGE: Record<HostTemplate['status'], { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: 'bg-warm-100 text-warm-700' },
-  GENERATING_IMAGE: { label: 'Generate gambar…', cls: 'bg-amber-100 text-amber-700' },
-  IMAGE_READY: { label: 'Gambar siap', cls: 'bg-sky-100 text-sky-700' },
-  GENERATING_VIDEO: { label: 'Generate video…', cls: 'bg-amber-100 text-amber-700' },
-  READY: { label: 'Siap pakai', cls: 'bg-emerald-100 text-emerald-700' },
-  FAILED: { label: 'Gagal', cls: 'bg-red-100 text-red-700' },
-  REJECTED: { label: 'Ditolak', cls: 'bg-red-100 text-red-700' },
 }
 
 const POLL_MS = 3_000
@@ -81,6 +76,8 @@ export function HostTemplatesManager({
   const [showModePicker, setShowModePicker] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [selectedMode, setSelectedMode] = useState<HostMode>('TTS_GENERATIVE')
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchRows = useCallback(async () => {
@@ -118,39 +115,51 @@ export function HostTemplatesManager({
     }
   }, [rows, fetchRows])
 
-  async function deleteTemplate(id: string) {
-    if (!confirm('Hapus template ini? Hanya record DB; file MP4/PNG tetap di disk.')) return
-    const res = await fetch(`${apiItemBase}/${id}`, { method: 'DELETE' })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (json.success) {
-      toast.success('Template dihapus')
-      void fetchRows()
-    } else {
-      toast.error(json.error ?? 'Gagal hapus')
+  async function deleteTemplate() {
+    if (!deleteId) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`${apiItemBase}/${deleteId}`, { method: 'DELETE' })
+      const json = (await res.json()) as { success: boolean; error?: string }
+      if (json.success) {
+        toast.success('Template dihapus')
+        setDeleteId(null)
+        void fetchRows()
+      } else {
+        toast.error(json.error ?? 'Gagal hapus')
+      }
+    } finally {
+      setIsDeleting(false)
     }
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
-        </div>
-        <Button onClick={() => setShowModePicker(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Bikin Host Baru
-        </Button>
-      </div>
+      <PageHeader
+        title={title}
+        description={subtitle}
+        actions={
+          <Button onClick={() => setShowModePicker(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Bikin Host Baru
+          </Button>
+        }
+      />
 
       {rows === null ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Memuat…
-        </div>
+        <CardGridSkeleton count={5} />
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada host template. Klik <strong>Bikin Host Baru</strong> untuk
-            mulai.
+          <CardContent>
+            <EmptyState
+              icon={Bot}
+              title="Belum ada host template"
+              description="Host avatar dipakai untuk live shopping AI. Bikin yang pertama sekarang."
+              action={
+                <Button onClick={() => setShowModePicker(true)}>
+                  <Plus className="mr-2 h-4 w-4" /> Bikin Host Baru
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -160,7 +169,7 @@ export function HostTemplatesManager({
               key={row.id}
               row={row}
               detailHref={`${detailHrefBase}/${row.id}`}
-              onDelete={deleteTemplate}
+              onDelete={setDeleteId}
             />
           ))}
         </div>
@@ -196,6 +205,17 @@ export function HostTemplatesManager({
           }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteId(null)
+        }}
+        title="Hapus host template ini?"
+        description="Hanya record DB yang dihapus; file MP4/PNG tetap di disk."
+        isLoading={isDeleting}
+        onConfirm={deleteTemplate}
+      />
     </div>
   )
 }
@@ -209,7 +229,7 @@ function HostCard({
   detailHref: string
   onDelete: (id: string) => void
 }) {
-  const badge = STATUS_BADGE[row.status]
+  const badge = statusMeta(hostTemplateStatusMeta, row.status)
   const clickable =
     row.status === 'IMAGE_READY' || row.status === 'READY' || row.sourceImageUrl
   return (
@@ -242,7 +262,11 @@ function HostCard({
           ) : (
             <ImageIcon className="h-10 w-10 text-warm-300" />
           )}
-          <Badge className={`absolute top-2 right-2 ${badge.cls}`}>{badge.label}</Badge>
+          <StatusBadge
+            tone={badge.tone}
+            label={badge.label}
+            className="absolute top-2 right-2"
+          />
         </div>
       </Link>
       <CardContent className="space-y-2 p-4">
@@ -251,7 +275,7 @@ function HostCard({
             href={detailHref}
             className="min-w-0 flex-1 group block"
           >
-            <div className="flex items-center gap-1 truncate text-sm font-medium group-hover:text-orange-600">
+            <div className="flex items-center gap-1 truncate text-sm font-medium group-hover:text-primary-600">
               {row.name}
               <ChevronRight className="h-3 w-3 opacity-50" />
             </div>
@@ -262,6 +286,8 @@ function HostCard({
           <Button
             size="icon"
             variant="ghost"
+            aria-label={`Hapus template ${row.name}`}
+            className="text-destructive hover:text-destructive"
             onClick={() => onDelete(row.id)}
             title="Hapus"
           >

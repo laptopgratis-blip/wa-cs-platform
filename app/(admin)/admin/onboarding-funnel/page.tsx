@@ -11,6 +11,7 @@ import { Compass, TrendingDown, Users } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import {
   Card,
   CardContent,
@@ -125,15 +126,16 @@ export default async function AdminOnboardingFunnelPage() {
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Onboarding Funnel
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Analytics wizard intent + checklist progress, window {PERIOD_DAYS} hari
-          terakhir. Sumber data: tabel <code className="font-mono">OnboardingEvent</code>.
-        </p>
-      </div>
+      <PageHeader
+        title="Onboarding Funnel"
+        description={
+          <>
+            Analytics wizard intent + checklist progress, window {PERIOD_DAYS}{' '}
+            hari terakhir. Sumber data: tabel{' '}
+            <code className="font-mono">OnboardingEvent</code>.
+          </>
+        }
+      />
 
       {/* Top-line metric */}
       <div className="grid gap-4 sm:grid-cols-3">

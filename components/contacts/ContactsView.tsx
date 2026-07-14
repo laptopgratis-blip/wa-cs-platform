@@ -2,13 +2,15 @@
 
 // Halaman /contacts: tabel + filter + search + slide-over detail.
 import type { PipelineStage } from '@prisma/client'
-import { Loader2, Search, Trash2 } from 'lucide-react'
+import { Loader2, Search, Trash2, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ContactDetailSheet } from '@/components/contacts/ContactDetailSheet'
 import { PipelineBadge } from '@/components/contacts/PipelineBadge'
 import type { ContactRow } from '@/components/contacts/types'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
 import {
   AlertDialog,
@@ -145,14 +147,10 @@ export function ContactsView({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Contacts
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Kelola customer — ubah pipeline stage, tag, catatan, dan lihat history.
-        </p>
-      </div>
+      <PageHeader
+        title="Kontak"
+        description="Kelola customer — ubah pipeline stage, tag, catatan, dan lihat history."
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[240px] flex-1">
@@ -214,8 +212,12 @@ export function ContactsView({
 
       {contacts.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center text-sm text-muted-foreground">
-            Belum ada kontak yang cocok dengan filter.
+          <CardContent>
+            <EmptyState
+              icon={Users}
+              title="Belum ada kontak yang cocok"
+              description="Coba ubah kata kunci atau filter — kontak baru otomatis masuk saat ada chat."
+            />
           </CardContent>
         </Card>
       ) : (

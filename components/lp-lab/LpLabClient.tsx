@@ -18,6 +18,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -181,27 +183,27 @@ export function LpLabClient({ lp, tier }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <Link
-            href={`/landing-pages/${lp.id}/edit`}
-            className="inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700"
-          >
-            <ArrowLeft className="size-3.5" /> Kembali ke editor
-          </Link>
-          <h1 className="mt-1 font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            LP Lab
-          </h1>
-          <p className="mt-0.5 truncate text-sm text-warm-500">
-            {lp.title}
-            {!lp.isPublished && (
-              <Badge variant="outline" className="ml-2">
-                Draft
-              </Badge>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+      <div>
+        <Link
+          href={`/landing-pages/${lp.id}/edit`}
+          className="mb-1 inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700"
+        >
+          <ArrowLeft className="size-3.5" /> Kembali ke editor
+        </Link>
+        <PageHeader
+          title="LP Lab"
+          description={
+            <span className="flex min-w-0 items-center">
+              <span className="truncate">{lp.title}</span>
+              {!lp.isPublished && (
+                <Badge variant="outline" className="ml-2 shrink-0">
+                  Draft
+                </Badge>
+              )}
+            </span>
+          }
+          actions={
+            <>
           <PeriodSelector value={period} onChange={setPeriod} />
           <Button
             variant="outline"
@@ -237,14 +239,12 @@ export function LpLabClient({ lp, tier }: Props) {
               setScoreRefreshKey((k) => k + 1)
             }}
           />
-        </div>
+            </>
+          }
+        />
       </div>
 
-      {loading && (
-        <div className="flex items-center justify-center py-12 text-warm-500">
-          <Loader2 className="mr-2 size-5 animate-spin" /> Memuat data…
-        </div>
-      )}
+      {loading && <CardGridSkeleton count={4} />}
 
       {!loading && data && data.kpi.visits === 0 && (
         <EmptyState lp={lp} />

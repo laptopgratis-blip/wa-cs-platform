@@ -5,6 +5,8 @@
 // disembunyikan (rahasia perusahaan, hanya admin yang bisa lihat).
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2, Trash2 } from 'lucide-react'
+
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -67,6 +69,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
   const isEdit = Boolean(initial?.id)
   const [isSubmitting, setSubmitting] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [personalities, setPersonalities] = useState<SoulOption[]>([])
   const [styles, setStyles] = useState<SoulOption[]>([])
 
@@ -141,7 +144,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
 
   async function handleDelete() {
     if (!initial?.id) return
-    if (!confirm('Yakin hapus soul ini? WA session yang pakai soul ini akan dilepas.')) return
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     try {
       const res = await fetch(`/api/soul/${initial.id}`, { method: 'DELETE' })
@@ -347,7 +350,7 @@ Pengiriman J&T/SiCepat dari Bandung.`}
             <Button
               type="button"
               variant="outline"
-              onClick={handleDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={isDeleting || isSubmitting}
               className="text-destructive hover:text-destructive"
             >
@@ -370,6 +373,15 @@ Pengiriman J&T/SiCepat dari Bandung.`}
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Yakin hapus soul ini?"
+        description="WA session yang pakai soul ini akan dilepas."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </form>
   )
 }

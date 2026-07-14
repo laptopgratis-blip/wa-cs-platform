@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -131,24 +132,19 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-6 md:py-8">
+    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
       {/* Header */}
-      <div className="mb-4 flex items-center gap-3">
-        <Button variant="ghost" size="sm" asChild>
+      <div className="mb-4">
+        <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
           <Link href="/integrations/pixels">
             <ArrowLeft className="mr-1 size-4" />
             Kembali
           </Link>
         </Button>
-        <div>
-          <h1 className="font-display text-xl font-bold text-warm-900 md:text-2xl">
-            Pixel Event Logs
-          </h1>
-          <p className="text-sm text-warm-600">
-            Audit trail semua event yang di-fire (browser & server). Total{' '}
-            {total.toLocaleString('id-ID')} event.
-          </p>
-        </div>
+        <PageHeader
+          title="Pixel Event Logs"
+          description={`Audit trail semua event yang di-fire (browser & server). Total ${total.toLocaleString('id-ID')} event.`}
+        />
       </div>
 
       {/* Filter bar */}

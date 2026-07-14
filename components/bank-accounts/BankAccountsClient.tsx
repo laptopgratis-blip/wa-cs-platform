@@ -21,6 +21,9 @@ import {
   DestinationPicker,
   type PickedDestination,
 } from '@/components/order-system/DestinationPicker'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -87,6 +90,11 @@ export function BankAccountsClient({
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    label: string
+  } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [form, setForm] = useState({
     bankName: 'BCA',
     accountNumber: '',
@@ -184,10 +192,13 @@ export function BankAccountsClient({
     }
   }
 
-  async function handleDelete(id: string, label: string) {
-    if (!confirm(`Hapus rekening ${label}?`)) return
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
     try {
-      const res = await fetch(`/api/bank-accounts/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/bank-accounts/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const data = await res.json()
       if (!res.ok || !data.success) {
         toast.error(data.error ?? 'Gagal menghapus')
@@ -195,9 +206,12 @@ export function BankAccountsClient({
       }
       const refreshed = await fetch('/api/bank-accounts').then((r) => r.json())
       if (refreshed.success) setAccounts(refreshed.data.items)
+      setDeleteTarget(null)
       toast.success('Rekening dihapus')
     } catch {
       toast.error('Terjadi kesalahan jaringan')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -314,35 +328,41 @@ export function BankAccountsClient({
   }
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-6 md:py-8">
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Rekening Bank
-          </h1>
-          <p className="mt-1 text-sm text-warm-600">
+    <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        className="mb-6"
+        title="Rekening Bank"
+        description={
+          <>
             Customer akan transfer ke rekening yang kamu set di sini.
             <span className="ml-1 text-warm-500">
               ({accounts.length}/{limit})
             </span>
-          </p>
-        </div>
-        <Button onClick={openCreateDialog} disabled={accounts.length >= limit}>
-          <Plus className="mr-2 size-4" />
-          Tambah Rekening
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={openCreateDialog} disabled={accounts.length >= limit}>
+            <Plus className="mr-2 size-4" />
+            Tambah Rekening
+          </Button>
+        }
+      />
 
       {/* List rekening */}
       {accounts.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <Building2 className="mb-3 size-10 text-warm-400" />
-            <p className="font-medium text-warm-700">Belum ada rekening</p>
-            <p className="mt-1 text-sm text-warm-500">
-              Tambahkan minimal 1 rekening supaya customer bisa transfer.
-            </p>
+          <CardContent>
+            <EmptyState
+              icon={Building2}
+              title="Belum ada rekening"
+              description="Tambahkan minimal 1 rekening supaya customer bisa transfer."
+              action={
+                <Button onClick={openCreateDialog}>
+                  <Plus className="mr-2 size-4" />
+                  Tambah Rekening Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -396,12 +416,13 @@ export function BankAccountsClient({
                   <Button
                     size="sm"
                     variant="outline"
+                    aria-label={`Hapus rekening ${acc.bankName} ${acc.accountNumber}`}
                     className="text-destructive hover:bg-destructive/10"
                     onClick={() =>
-                      handleDelete(
-                        acc.id,
-                        `${acc.bankName} ${acc.accountNumber}`,
-                      )
+                      setDeleteTarget({
+                        id: acc.id,
+                        label: `${acc.bankName} ${acc.accountNumber}`,
+                      })
                     }
                   >
                     <Trash2 className="size-3.5" />
@@ -663,6 +684,17 @@ export function BankAccountsClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus rekening ${deleteTarget?.label ?? ''}?`}
+        description="Rekening ini tidak akan ditawarkan lagi ke customer saat transfer."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

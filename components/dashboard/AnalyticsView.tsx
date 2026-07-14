@@ -33,6 +33,9 @@ import {
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -200,17 +203,14 @@ export function AnalyticsView() {
   }, [load])
 
   if (isLoading) {
-    return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      </div>
-    )
+    return <CardGridSkeleton count={5} />
   }
   if (!data) {
     return (
-      <div className="flex h-96 items-center justify-center text-sm text-muted-foreground">
-        Tidak ada data analytics.
-      </div>
+      <EmptyState
+        title="Tidak ada data analytics"
+        description="Data terkumpul otomatis begitu ada aktivitas chat di WhatsApp kamu."
+      />
     )
   }
 
@@ -218,29 +218,25 @@ export function AnalyticsView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Analytics
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Ringkasan {data.range.days} hari terakhir untuk semua WhatsApp kamu.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => void load(false)}
-          disabled={isRefreshing}
-        >
-          {isRefreshing ? (
-            <Loader2 className="mr-2 size-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 size-3.5" />
-          )}
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Analytics"
+        description={`Ringkasan ${data.range.days} hari terakhir untuk semua WhatsApp kamu.`}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void load(false)}
+            disabled={isRefreshing}
+          >
+            {isRefreshing ? (
+              <Loader2 className="mr-2 size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 size-3.5" />
+            )}
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Stats cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -393,9 +389,10 @@ export function AnalyticsView() {
         </CardHeader>
         <CardContent>
           {totalPipeline === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Belum ada kontak.
-            </p>
+            <EmptyState
+              title="Belum ada kontak"
+              description="Kontak masuk otomatis begitu ada customer yang chat."
+            />
           ) : (
             <div className="space-y-3">
               {(Object.keys(PIPELINE_LABEL) as PipelineStage[]).map((stage) => {
@@ -452,8 +449,11 @@ export function AnalyticsView() {
             <TableBody>
               {data.sessions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    Belum ada WhatsApp session.
+                  <TableCell colSpan={6}>
+                    <EmptyState
+                      title="Belum ada WhatsApp session"
+                      description="Hubungkan WA dulu di menu WhatsApp."
+                    />
                   </TableCell>
                 </TableRow>
               ) : (
@@ -518,8 +518,11 @@ export function AnalyticsView() {
             <TableBody>
               {data.recentContacts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                    Belum ada percakapan.
+                  <TableCell colSpan={4}>
+                    <EmptyState
+                      title="Belum ada percakapan"
+                      description="Chat customer terbaru bakal muncul di sini."
+                    />
                   </TableCell>
                 </TableRow>
               ) : (

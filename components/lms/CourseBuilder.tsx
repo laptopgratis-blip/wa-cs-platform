@@ -21,6 +21,8 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -103,6 +105,12 @@ export function CourseBuilder({
   const [course, setCourse] = useState<Course>(initial)
   const [savingMeta, setSavingMeta] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  // Konfirmasi hapus module/lesson — pengganti window.confirm().
+  const [pendingDelete, setPendingDelete] = useState<
+    | { kind: 'module'; moduleId: string }
+    | { kind: 'lesson'; moduleId: string; lessonId: string }
+    | null
+  >(null)
 
   // Dialog state untuk edit lesson
   const [lessonDialog, setLessonDialog] = useState<{
@@ -196,8 +204,6 @@ export function CourseBuilder({
   }
 
   async function deleteModule(moduleId: string) {
-    if (!confirm('Hapus module ini? Semua lesson di dalamnya ikut terhapus.'))
-      return
     const res = await fetch(`/api/lms/modules/${moduleId}`, {
       method: 'DELETE',
     })
@@ -213,7 +219,6 @@ export function CourseBuilder({
   }
 
   async function deleteLesson(moduleId: string, lessonId: string) {
-    if (!confirm('Hapus lesson ini?')) return
     const res = await fetch(`/api/lms/lessons/${lessonId}`, {
       method: 'DELETE',
     })
@@ -381,9 +386,11 @@ export function CourseBuilder({
 
         {course.modules.length === 0 ? (
           <Card>
-            <CardContent className="py-12 text-center text-sm text-warm-500">
-              Belum ada module. Klik <strong>Tambah Module</strong> untuk
-              mulai.
+            <CardContent>
+              <EmptyState
+                title="Belum ada module"
+                description="Klik Tambah Module untuk mulai menyusun materi course."
+              />
             </CardContent>
           </Card>
         ) : (
@@ -392,14 +399,16 @@ export function CourseBuilder({
               key={m.id}
               mod={m}
               onRename={() => renameModule(m.id, m.title)}
-              onDelete={() => deleteModule(m.id)}
+              onDelete={() => setPendingDelete({ kind: 'module', moduleId: m.id })}
               onAddLesson={() =>
                 setLessonDialog({ moduleId: m.id, lesson: null })
               }
               onEditLesson={(l) =>
                 setLessonDialog({ moduleId: m.id, lesson: l })
               }
-              onDeleteLesson={(lId) => deleteLesson(m.id, lId)}
+              onDeleteLesson={(lId) =>
+                setPendingDelete({ kind: 'lesson', moduleId: m.id, lessonId: lId })
+              }
             />
           ))
         )}
@@ -414,6 +423,30 @@ export function CourseBuilder({
           onSaved={(l) => lessonSaved(lessonDialog.moduleId, l)}
         />
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null)
+        }}
+        title={
+          pendingDelete?.kind === 'module'
+            ? 'Hapus module ini?'
+            : 'Hapus lesson ini?'
+        }
+        description={
+          pendingDelete?.kind === 'module'
+            ? 'Semua lesson di dalamnya ikut terhapus.'
+            : 'Lesson dihapus dari course dan tidak bisa dikembalikan.'
+        }
+        onConfirm={() => {
+          if (!pendingDelete) return
+          const target = pendingDelete
+          setPendingDelete(null)
+          if (target.kind === 'module') void deleteModule(target.moduleId)
+          else void deleteLesson(target.moduleId, target.lessonId)
+        }}
+      />
     </div>
   )
 }

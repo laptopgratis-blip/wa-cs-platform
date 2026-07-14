@@ -1,11 +1,15 @@
 'use client'
 
-import { BarChart3, Copy, ExternalLink, Loader2, Pencil, Plus, Radio, Sparkles, Trash2, Users } from 'lucide-react'
+import { BarChart3, Copy, ExternalLink, Pencil, Plus, Sparkles, Trash2, Users, Video } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -20,6 +24,8 @@ interface LiveRoomRow {
 
 export function LiveRoomsList() {
   const [rows, setRows] = useState<LiveRoomRow[] | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LiveRoomRow | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchRows = useCallback(async () => {
     const res = await fetch('/api/live-rooms')
@@ -31,15 +37,23 @@ export function LiveRoomsList() {
     void fetchRows()
   }, [fetchRows])
 
-  async function deleteRoom(id: string, name: string) {
-    if (!confirm(`Hapus live room "${name}"?`)) return
-    const res = await fetch(`/api/live-rooms/${id}`, { method: 'DELETE' })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (json.success) {
-      toast.success('Room dihapus')
-      void fetchRows()
-    } else {
-      toast.error(json.error ?? 'Gagal hapus')
+  async function deleteRoom() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
+    try {
+      const res = await fetch(`/api/live-rooms/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
+      const json = (await res.json()) as { success: boolean; error?: string }
+      if (json.success) {
+        toast.success('Room dihapus')
+        setDeleteTarget(null)
+        void fetchRows()
+      } else {
+        toast.error(json.error ?? 'Gagal hapus')
+      }
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -51,31 +65,35 @@ export function LiveRoomsList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Live Rooms</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Live shopping AI dengan host avatar. Customer akses URL publik —
-            chat dengan AI host yang ngobrol soal produk Anda + suara TTS.
-          </p>
-        </div>
-        <Link href="/live-rooms/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" /> Bikin Live Room
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="Live Rooms"
+        description="Live shopping AI dengan host avatar. Customer akses URL publik — chat dengan AI host yang ngobrol soal produk Anda + suara TTS."
+        actions={
+          <Link href="/live-rooms/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> Bikin Live Room
+            </Button>
+          </Link>
+        }
+      />
 
       {rows === null ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Memuat…
-        </div>
+        <CardGridSkeleton count={4} />
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada live room. Pastikan ada minimal 1 host template (siap
-            di-pakai dari library admin atau yang Anda generate sendiri) sebelum
-            bikin room.
+          <CardContent>
+            <EmptyState
+              icon={Video}
+              title="Belum ada live room"
+              description="Pastikan ada minimal 1 host template (dari library admin atau yang Anda generate sendiri) sebelum bikin room."
+              action={
+                <Link href="/live-rooms/new">
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" /> Bikin Live Room
+                  </Button>
+                </Link>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -88,17 +106,15 @@ export function LiveRoomsList() {
                     <div className="flex items-center gap-2">
                       <h3 className="truncate text-base font-medium">{row.name}</h3>
                       {row.isActive ? (
-                        <Badge className="bg-emerald-100 text-emerald-700">
-                          <Radio className="mr-1 h-3 w-3" /> LIVE
-                        </Badge>
+                        <StatusBadge tone="success" label="LIVE" pulse />
                       ) : (
-                        <Badge className="bg-warm-100 text-warm-700">Off</Badge>
+                        <StatusBadge tone="neutral" label="Off" />
                       )}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       Host: {row.hostTemplate.name}
                     </div>
-                    <div className="mt-1 font-mono text-xs text-orange-600">
+                    <div className="mt-1 font-mono text-xs text-primary-600">
                       /live/{row.slug}
                     </div>
                   </div>
@@ -136,7 +152,9 @@ export function LiveRoomsList() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => deleteRoom(row.id, row.name)}
+                    aria-label={`Hapus room ${row.name}`}
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setDeleteTarget(row)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -146,6 +164,17 @@ export function LiveRoomsList() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus live room "${deleteTarget?.name ?? ''}"?`}
+        description="Room dan link publiknya tidak bisa diakses lagi setelah dihapus."
+        isLoading={isDeleting}
+        onConfirm={deleteRoom}
+      />
     </div>
   )
 }

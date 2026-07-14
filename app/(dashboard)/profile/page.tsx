@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { PasswordCard } from '@/components/profile/PasswordCard'
 import { ProfileInfoCard } from '@/components/profile/ProfileInfoCard'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -36,13 +37,11 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 overflow-y-auto p-4 md:p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Profil Saya</h1>
-        <p className="text-sm text-muted-foreground">
-          Kelola informasi akun dan keamanan login kamu.
-        </p>
-      </div>
+    <div className="mx-auto h-full max-w-2xl space-y-6 overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        title="Profil Saya"
+        description="Kelola informasi akun dan keamanan login kamu."
+      />
       <ProfileInfoCard
         initialName={user.name ?? ''}
         email={user.email}

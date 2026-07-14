@@ -5,7 +5,7 @@
 // Inside: gallery swipe, deskripsi, variants chip, stok/flash quota indicator,
 // social proof bar (viewers + sold), sticky bottom CTA Tanya host + Beli.
 
-import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Flame, ShoppingBag, X } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, Flame, Package, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { FlashSaleCountdown } from './FlashSaleCountdown'
@@ -336,7 +336,9 @@ export function ProductDetailSheet({
 
           {/* ===== Shipping info (placeholder, static text — opt) ===== */}
           <div className="mx-4 mt-3 rounded-xl border border-warm-200 px-3 py-2 text-xs text-warm-700">
-            <div className="font-semibold text-warm-800">📦 Pengiriman</div>
+            <div className="flex items-center gap-1 font-semibold text-warm-800">
+              <Package className="size-3.5" aria-hidden /> Pengiriman
+            </div>
             <div className="mt-0.5">
               Berat {(selectedVariant?.weightGrams ?? product.weightGrams).toLocaleString('id-ID')}g •
               Estimasi 1-3 hari (JNE/J&T)

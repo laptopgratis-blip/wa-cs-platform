@@ -6,6 +6,9 @@
 // D simulasi paket, E section "AI Features" (Content Studio dst) dengan
 // breakdown margin & tombol "Set margin global" untuk apply ke semua sekaligus.
 import { AlertTriangle, Check, Loader2, Wand2 } from 'lucide-react'
+
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -130,6 +133,7 @@ export function PricingCalculator({
   const [globalMargin, setGlobalMargin] = useState(1.3)
   const [marginScope, setMarginScope] = useState<'all' | 'active'>('active')
   const [applyingMargin, setApplyingMargin] = useState(false)
+  const [marginConfirmOpen, setMarginConfirmOpen] = useState(false)
 
   // Hydrate dari localStorage di effect supaya tidak SSR-mismatch.
   useEffect(() => {
@@ -279,12 +283,7 @@ export function PricingCalculator({
 
   // Apply margin global ke semua / hanya active features.
   async function applyGlobalMargin() {
-    if (
-      !confirm(
-        `Set platformMargin ${globalMargin}× ke ${marginScope === 'all' ? 'SEMUA' : 'feature aktif saja'}? Ini override margin per-feature yang sudah ada.`,
-      )
-    )
-      return
+    setMarginConfirmOpen(false)
     setApplyingMargin(true)
     try {
       const res = await fetch('/api/admin/ai-features/bulk-margin', {
@@ -319,15 +318,15 @@ export function PricingCalculator({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Pricing Calculator
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Hitung margin per AI model berdasarkan asumsi token & kurs. Apply
-          rekomendasi langsung ke <code>costPerMessage</code> tiap model.
-        </p>
-      </div>
+      <PageHeader
+        title="Pricing Calculator"
+        description={
+          <>
+            Hitung margin per AI model berdasarkan asumsi token & kurs. Apply
+            rekomendasi langsung ke <code>costPerMessage</code> tiap model.
+          </>
+        }
+      />
 
       {/* Section C — warning banner (gabung AiModel + AiFeature losers) */}
       {(losers.length > 0 || featureLosers.length > 0) && (
@@ -662,7 +661,7 @@ export function PricingCalculator({
                 </Select>
               </div>
               <Button
-                onClick={applyGlobalMargin}
+                onClick={() => setMarginConfirmOpen(true)}
                 disabled={applyingMargin || features.length === 0}
                 className="bg-primary-500 hover:bg-primary-600"
               >
@@ -781,6 +780,15 @@ export function PricingCalculator({
           </p>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={marginConfirmOpen}
+        onOpenChange={setMarginConfirmOpen}
+        title={`Set platformMargin ${globalMargin}× ke ${marginScope === 'all' ? 'SEMUA feature' : 'feature aktif saja'}?`}
+        description="Ini override margin per-feature yang sudah ada."
+        confirmLabel="Ya, Terapkan"
+        onConfirm={applyGlobalMargin}
+      />
     </div>
   )
 }

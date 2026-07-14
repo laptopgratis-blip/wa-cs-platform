@@ -8,6 +8,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { BroadcastCard } from './BroadcastCard'
 import { BroadcastForm } from './BroadcastForm'
 import type { BroadcastListItem, SessionOption } from './types'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 
 interface BroadcastViewProps {
@@ -44,14 +46,10 @@ export function BroadcastView({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Broadcast
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Kirim pesan massal ke segmen kontak — pilih by tag atau pipeline stage.
-        </p>
-      </div>
+      <PageHeader
+        title="Broadcast"
+        description="Kirim pesan massal ke segmen kontak — pilih by tag atau pipeline stage."
+      />
 
       <BroadcastForm
         sessions={sessions}
@@ -65,11 +63,12 @@ export function BroadcastView({
         </h2>
         {broadcasts.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-              <Megaphone className="size-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Belum ada broadcast. Bikin yang pertama di form di atas.
-              </p>
+            <CardContent>
+              <EmptyState
+                icon={Megaphone}
+                title="Belum ada broadcast"
+                description="Bikin yang pertama lewat form di atas — pilih segmen, tulis pesan, kirim."
+              />
             </CardContent>
           </Card>
         ) : (

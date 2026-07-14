@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "next-dev",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": [
+        "-c",
+        "export PATH=\"$HOME/.nvm/versions/node/v22.22.3/bin:$PATH\" && exec node node_modules/next/dist/bin/next dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

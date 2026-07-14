@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { CourseCreateForm } from '@/components/lms/CourseCreateForm'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -35,13 +36,10 @@ export default async function NewCoursePage() {
             Kembali ke Course Saya
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Buat Course Baru
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Course bisa di-link ke produk yang sudah ada — saat customer beli
-          produk itu, akses course otomatis aktif.
-        </p>
+        <PageHeader
+          title="Buat Course Baru"
+          description="Course bisa di-link ke produk yang sudah ada — saat customer beli produk itu, akses course otomatis aktif."
+        />
       </div>
 
       <CourseCreateForm availableProducts={products} />

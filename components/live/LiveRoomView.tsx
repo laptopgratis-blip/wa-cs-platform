@@ -12,6 +12,7 @@
 // tetap loop (no lip-sync per kata — di handphone aman, di mobile UX live shop).
 import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { safeLocal, safeSession } from '@/lib/safe-storage'
 
@@ -1067,7 +1068,7 @@ export function LiveRoomView({
         setLeadStatus(json.data.status)
       } else {
         setLeadStatus('error')
-        alert(json.error ?? 'Gagal kirim lead')
+        toast.error(json.error ?? 'Gagal kirim lead')
       }
     } catch {
       setLeadStatus('error')

@@ -20,6 +20,8 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -88,11 +90,13 @@ interface OrderFormsClientProps {
   limit: number
 }
 
-const PIXEL_PLATFORM_EMOJI: Record<string, string> = {
-  META: '📘',
-  GOOGLE_ADS: '🎯',
-  GA4: '📊',
-  TIKTOK: '🎵',
+// Label platform pixel — teks polos, ikon platform tidak tersedia di lucide
+// jadi cukup nama singkat (konsisten dengan PixelsClient).
+const PIXEL_PLATFORM_LABEL: Record<string, string> = {
+  META: 'Meta',
+  GOOGLE_ADS: 'Google Ads',
+  GA4: 'GA4',
+  TIKTOK: 'TikTok',
 }
 
 const EMPTY_FORM = {
@@ -278,31 +282,32 @@ export function OrderFormsClient({
   }
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-6 md:py-8">
-      <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Form Order
-          </h1>
-          <p className="mt-1 text-sm text-warm-600">
+    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        className="mb-6"
+        title="Form Order"
+        description={
+          <>
             Buat form publik untuk customer order — share link, mereka isi,
             kamu dapat invoice otomatis.
             <span className="ml-1 text-warm-500">
               ({forms.length}/{limit})
             </span>
-          </p>
-        </div>
-        <Button
-          onClick={openCreate}
-          disabled={forms.length >= limit || products.length === 0}
-        >
-          <Plus className="mr-2 size-4" />
-          Buat Form Order
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button
+            onClick={openCreate}
+            disabled={forms.length >= limit || products.length === 0}
+          >
+            <Plus className="mr-2 size-4" />
+            Buat Form Order
+          </Button>
+        }
+      />
 
       {products.length === 0 && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
           Kamu belum punya produk aktif. Tambahkan produk dulu di{' '}
           <a href="/products" className="font-semibold underline">
             /products
@@ -313,12 +318,12 @@ export function OrderFormsClient({
 
       {forms.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <FileText className="mb-3 size-10 text-warm-400" />
-            <p className="font-medium text-warm-700">Belum ada form order</p>
-            <p className="mt-1 text-sm text-warm-500">
-              Buat form pertama untuk dijual via link share ke customer.
-            </p>
+          <CardContent>
+            <EmptyState
+              icon={FileText}
+              title="Belum ada form order"
+              description="Buat form pertama untuk dijual via link share ke customer."
+            />
           </CardContent>
         </Card>
       ) : (
@@ -862,8 +867,10 @@ export function OrderFormsClient({
                           onCheckedChange={() => togglePixel(p.id)}
                         />
                         <span className="text-sm">
-                          {PIXEL_PLATFORM_EMOJI[p.platform] ?? '📊'}{' '}
-                          <span className="font-medium">{p.displayName}</span>
+                          <span className="text-warm-500">
+                            {PIXEL_PLATFORM_LABEL[p.platform] ?? p.platform}
+                          </span>{' '}
+                          · <span className="font-medium">{p.displayName}</span>
                           {p.serverSideEnabled && (
                             <Badge className="ml-1 bg-emerald-100 text-emerald-800 text-[10px] hover:bg-emerald-100">
                               CAPI

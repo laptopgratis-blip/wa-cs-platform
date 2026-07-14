@@ -5,6 +5,10 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -50,6 +54,11 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
   const [data, setData] = useState<Response | null>(null)
   const [generating, setGenerating] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
+  // Konfirmasi keputusan proposal — pengganti window.confirm().
+  const [pendingDecision, setPendingDecision] = useState<{
+    propId: string
+    action: 'approve' | 'reject' | 'rollback'
+  } | null>(null)
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/live-rooms/${roomId}/proposals`)
@@ -88,14 +97,6 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
   }
 
   async function decide(propId: string, action: 'approve' | 'reject' | 'rollback') {
-    const confirmMsg =
-      action === 'approve'
-        ? 'Apply proposal ini sekarang? Field LiveRoom akan langsung diganti (snapshot before disimpan untuk rollback).'
-        : action === 'reject'
-          ? 'Tolak proposal ini?'
-          : 'Rollback ke nilai sebelumnya? Field akan dikembalikan.'
-    if (!confirm(confirmMsg)) return
-
     setActing(propId)
     try {
       const res = await fetch(
@@ -121,11 +122,7 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
   }
 
   if (!data) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-      </div>
-    )
+    return <CardGridSkeleton count={4} />
   }
 
   const pending = data.proposals.filter((p) => p.status === 'PENDING')
@@ -136,31 +133,27 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Link
-            href={`/live-rooms/${roomId}/leads`}
-            className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
-          </Link>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
-            <Sparkles className="h-6 w-6" /> Optimasi AI — {data.room.name}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            AI analisa pattern win/lost + objection → usulkan perbaikan persona /
-            greeting. Anda approve atau tolak. Snapshot before disimpan supaya
-            bisa rollback kalau hasil tidak bagus.
-          </p>
-        </div>
-        <Button onClick={generate} disabled={generating}>
-          {generating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="mr-2 h-4 w-4" />
-          )}
-          Minta Usul Baru
-        </Button>
+      <div>
+        <Link
+          href={`/live-rooms/${roomId}/leads`}
+          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
+        </Link>
+        <PageHeader
+          title={`Optimasi AI — ${data.room.name}`}
+          description="AI analisa pattern win/lost + objection → usulkan perbaikan persona / greeting. Anda approve atau tolak. Snapshot before disimpan supaya bisa rollback kalau hasil tidak bagus."
+          actions={
+            <Button onClick={generate} disabled={generating}>
+              {generating ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="mr-2 h-4 w-4" />
+              )}
+              Minta Usul Baru
+            </Button>
+          }
+        />
       </div>
 
       {/* PENDING */}
@@ -181,8 +174,12 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
                     : null
               }
               acting={acting === p.id}
-              onApprove={() => decide(p.id, 'approve')}
-              onReject={() => decide(p.id, 'reject')}
+              onApprove={() =>
+                setPendingDecision({ propId: p.id, action: 'approve' })
+              }
+              onReject={() =>
+                setPendingDecision({ propId: p.id, action: 'reject' })
+              }
             />
           ))}
         </section>
@@ -208,7 +205,7 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
               acting={acting === p.id}
               onRollback={
                 p.targetAsset !== 'REBUTTAL_NOTE'
-                  ? () => decide(p.id, 'rollback')
+                  ? () => setPendingDecision({ propId: p.id, action: 'rollback' })
                   : undefined
               }
             />
@@ -230,12 +227,50 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
 
       {data.proposals.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Belum ada proposal. Klik <strong>Minta Usul Baru</strong> — AI akan analisa session
-            dengan outcome WIN/LOST/OPEN dan usulkan 1-3 perbaikan.
+          <CardContent>
+            <EmptyState
+              icon={Sparkles}
+              title="Belum ada proposal"
+              description="Klik Minta Usul Baru — AI akan analisa session dengan outcome WIN/LOST/OPEN dan usulkan 1-3 perbaikan."
+            />
           </CardContent>
         </Card>
       ) : null}
+
+      <ConfirmDialog
+        open={pendingDecision !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingDecision(null)
+        }}
+        title={
+          pendingDecision?.action === 'approve'
+            ? 'Apply proposal ini sekarang?'
+            : pendingDecision?.action === 'reject'
+              ? 'Tolak proposal ini?'
+              : 'Rollback ke nilai sebelumnya?'
+        }
+        description={
+          pendingDecision?.action === 'approve'
+            ? 'Field LiveRoom akan langsung diganti (snapshot before disimpan untuk rollback).'
+            : pendingDecision?.action === 'reject'
+              ? 'Proposal ditandai ditolak dan tidak diterapkan.'
+              : 'Field akan dikembalikan ke snapshot sebelum proposal diterapkan.'
+        }
+        confirmLabel={
+          pendingDecision?.action === 'approve'
+            ? 'Ya, Apply'
+            : pendingDecision?.action === 'reject'
+              ? 'Ya, Tolak'
+              : 'Ya, Rollback'
+        }
+        variant={pendingDecision?.action === 'approve' ? 'default' : 'destructive'}
+        onConfirm={() => {
+          if (!pendingDecision) return
+          const { propId, action } = pendingDecision
+          setPendingDecision(null)
+          void decide(propId, action)
+        }}
+      />
     </div>
   )
 }

@@ -7,6 +7,9 @@ import { Edit3, MapPin, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -96,6 +99,11 @@ export function ShippingZonesClient({
   const [form, setForm] = useState(EMPTY_FORM)
   const [picker, setPicker] = useState<PickedDestination | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   function openCreate() {
     setEditingId(null)
@@ -240,10 +248,11 @@ export function ShippingZonesClient({
     }
   }
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Hapus zona "${name}"?`)) return
+  async function handleDelete() {
+    if (!deleteTarget) return
+    setIsDeleting(true)
     try {
-      const res = await fetch(`/api/shipping-zones/${id}`, {
+      const res = await fetch(`/api/shipping-zones/${deleteTarget.id}`, {
         method: 'DELETE',
       })
       const data = await res.json()
@@ -251,10 +260,13 @@ export function ShippingZonesClient({
         toast.error(data.error ?? 'Gagal menghapus')
         return
       }
+      setDeleteTarget(null)
       await refreshList()
       toast.success('Zona dihapus')
     } catch {
       toast.error('Terjadi kesalahan jaringan')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -277,27 +289,28 @@ export function ShippingZonesClient({
   }
 
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-6 md:py-8">
-      <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Zona Ongkir
-          </h1>
-          <p className="mt-1 text-sm text-warm-600">
+    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+      <PageHeader
+        className="mb-6"
+        title="Zona Ongkir"
+        description={
+          <>
             Aturan subsidi ongkir per zona — Bandung, Jawa, Luar Jawa, atau
             gratis ongkir penuh.
             <span className="ml-1 text-warm-500">
               ({zones.length}/{limit})
             </span>
-          </p>
-        </div>
-        <Button onClick={openCreate} disabled={zones.length >= limit}>
-          <Plus className="mr-2 size-4" />
-          Tambah Aturan
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={openCreate} disabled={zones.length >= limit}>
+            <Plus className="mr-2 size-4" />
+            Tambah Aturan
+          </Button>
+        }
+      />
 
-      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
         <strong>Cara kerja:</strong> Saat customer pilih alamat, sistem cek
         zona dengan priority tertinggi yang match dulu. Mis. zona &ldquo;Bandung&rdquo; (priority 10) lebih spesifik daripada &ldquo;Jawa Barat&rdquo; (priority
         5), jadi yang menang Bandung kalau alamat customer di Bandung.
@@ -305,12 +318,18 @@ export function ShippingZonesClient({
 
       {zones.length === 0 ? (
         <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <MapPin className="mb-3 size-10 text-warm-400" />
-            <p className="font-medium text-warm-700">Belum ada zona ongkir</p>
-            <p className="mt-1 text-sm text-warm-500">
-              Buat aturan pertama untuk subsidi ongkir customer di kota tertentu.
-            </p>
+          <CardContent>
+            <EmptyState
+              icon={MapPin}
+              title="Belum ada zona ongkir"
+              description="Buat aturan pertama untuk subsidi ongkir customer di kota tertentu."
+              action={
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 size-4" />
+                  Tambah Aturan Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (
@@ -353,7 +372,7 @@ export function ShippingZonesClient({
                     size="sm"
                     variant="outline"
                     className="text-destructive hover:bg-destructive/10"
-                    onClick={() => handleDelete(z.id, z.name)}
+                    onClick={() => setDeleteTarget({ id: z.id, name: z.name })}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -566,6 +585,17 @@ export function ShippingZonesClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(o) => {
+          if (!o) setDeleteTarget(null)
+        }}
+        title={`Hapus zona "${deleteTarget?.name ?? ''}"?`}
+        description="Aturan subsidi ongkir untuk zona ini akan berhenti berlaku."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

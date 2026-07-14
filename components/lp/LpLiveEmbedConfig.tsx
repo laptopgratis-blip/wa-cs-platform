@@ -4,6 +4,11 @@
 // Endpoint: GET/PUT/DELETE /api/lp/[lpId]/live-embed
 import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -65,6 +70,7 @@ export function LpLiveEmbedConfig({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedAt, setSavedAt] = useState<string | null>(null)
   const [hasConfig, setHasConfig] = useState(false)
@@ -132,9 +138,7 @@ export function LpLiveEmbedConfig({
   }
 
   const handleDelete = async () => {
-    if (!confirm('Hapus konfigurasi Live AI Embed dari LP ini? Widget tidak akan muncul lagi.')) {
-      return
-    }
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     setError(null)
     try {
@@ -164,37 +168,47 @@ export function LpLiveEmbedConfig({
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+      <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-6">
+        <CardGridSkeleton count={2} />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <Link
-            href={`/landing-pages/${lpId}/edit`}
-            className="inline-flex items-center text-sm text-zinc-500 hover:text-zinc-700"
-          >
-            <ArrowLeft className="mr-1 h-4 w-4" /> Kembali ke editor LP
-          </Link>
-          <h1 className="mt-2 text-2xl font-semibold">Live AI Embed</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            Hubungkan LP <strong>{lpTitle}</strong> dengan satu Live Room. Widget muncul
-            otomatis di <code className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs">/p/{lpSlug}</code>.
-          </p>
-        </div>
-        {hasConfig && (
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="inline-flex items-center rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
-          >
-            <Trash2 className="mr-1 h-4 w-4" /> {deleting ? 'Menghapus…' : 'Hapus'}
-          </button>
-        )}
+    <div className="mx-auto h-full max-w-4xl space-y-6 overflow-y-auto p-4 md:p-6">
+      <div>
+        <Link
+          href={`/landing-pages/${lpId}/edit`}
+          className="mb-2 inline-flex items-center text-sm text-warm-500 hover:text-warm-700"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" /> Kembali ke editor LP
+        </Link>
+        <PageHeader
+          title="Live AI Embed"
+          description={
+            <>
+              Hubungkan LP <strong>{lpTitle}</strong> dengan satu Live Room.
+              Widget muncul otomatis di{' '}
+              <code className="rounded bg-warm-100 px-1.5 py-0.5 text-xs">
+                /p/{lpSlug}
+              </code>
+              .
+            </>
+          }
+          actions={
+            hasConfig ? (
+              <Button
+                variant="outline"
+                onClick={() => setConfirmDeleteOpen(true)}
+                disabled={deleting}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 className="mr-1 h-4 w-4" />
+                {deleting ? 'Menghapus…' : 'Hapus'}
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
 
       {rooms.length === 0 && (
@@ -207,7 +221,7 @@ export function LpLiveEmbedConfig({
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-6">
+      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
         <h2 className="text-base font-medium">1. Pilih Live Room</h2>
         <div className="grid gap-2">
           {rooms.map((r) => (
@@ -215,8 +229,8 @@ export function LpLiveEmbedConfig({
               key={r.id}
               className={`flex cursor-pointer items-center justify-between rounded-lg border p-3 transition ${
                 config.liveRoomId === r.id
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-zinc-200 hover:border-zinc-300'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-warm-200 hover:border-warm-300'
               }`}
             >
               <div className="flex items-center">
@@ -228,8 +242,8 @@ export function LpLiveEmbedConfig({
                   className="mr-3"
                 />
                 <div>
-                  <div className="font-medium text-zinc-900">{r.name}</div>
-                  <div className="text-xs text-zinc-500">
+                  <div className="font-medium text-warm-900">{r.name}</div>
+                  <div className="text-xs text-warm-500">
                     /live/{r.slug} · {r.hostTemplate.mode === 'NATIVE_LIBRARY' ? 'Klip Live' : 'TTS'}
                     {!r.isActive && ' · ⚠️ tidak aktif'}
                   </div>
@@ -240,7 +254,7 @@ export function LpLiveEmbedConfig({
         </div>
       </section>
 
-      <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-6">
+      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
         <h2 className="text-base font-medium">2. Mode Gate (wajib isi nama+WA)</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {(
@@ -255,8 +269,8 @@ export function LpLiveEmbedConfig({
               key={opt.v}
               className={`flex cursor-pointer rounded-lg border p-3 transition ${
                 config.gateMode === opt.v
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-zinc-200 hover:border-zinc-300'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-warm-200 hover:border-warm-300'
               }`}
             >
               <input
@@ -267,26 +281,26 @@ export function LpLiveEmbedConfig({
                 className="mr-3 mt-1"
               />
               <div>
-                <div className="font-medium text-zinc-900">{opt.label}</div>
-                <div className="text-xs text-zinc-500">{opt.desc}</div>
+                <div className="font-medium text-warm-900">{opt.label}</div>
+                <div className="text-xs text-warm-500">{opt.desc}</div>
               </div>
             </label>
           ))}
         </div>
 
         {config.gateMode === 'HYBRID' && (
-          <div className="space-y-3 rounded-lg bg-zinc-50 p-4">
+          <div className="space-y-3 rounded-lg bg-warm-50 p-4">
             <label className="block">
-              <span className="text-xs font-medium text-zinc-700">Gate trigger setelah (detik)</span>
+              <span className="text-xs font-medium text-warm-700">Gate trigger setelah (detik)</span>
               <input
                 type="number"
                 min={0}
                 max={600}
                 value={config.gateTriggerSec}
                 onChange={(e) => setConfig((p) => ({ ...p, gateTriggerSec: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-32 rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+                className="mt-1 w-32 rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
               />
-              <span className="ml-2 text-xs text-zinc-500">0 = tidak pakai timer, tunggu klik chat</span>
+              <span className="ml-2 text-xs text-warm-500">0 = tidak pakai timer, tunggu klik chat</span>
             </label>
             <label className="flex items-center">
               <input
@@ -295,22 +309,22 @@ export function LpLiveEmbedConfig({
                 onChange={(e) => setConfig((p) => ({ ...p, gateTriggerOnChat: e.target.checked }))}
                 className="mr-2"
               />
-              <span className="text-xs text-zinc-700">Trigger juga saat viewer klik area chat</span>
+              <span className="text-xs text-warm-700">Trigger juga saat viewer klik area chat</span>
             </label>
           </div>
         )}
 
         {config.gateMode !== 'OFF' && (
           <div>
-            <div className="text-xs font-medium text-zinc-700">Field yang dikumpulkan:</div>
+            <div className="text-xs font-medium text-warm-700">Field yang dikumpulkan:</div>
             <div className="mt-2 flex flex-wrap gap-2">
               {(['name', 'phone', 'email', 'city', 'productInterest'] as const).map((f) => (
                 <label
                   key={f}
                   className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
                     config.gateFields.includes(f)
-                      ? 'border-orange-500 bg-orange-100 text-orange-700'
-                      : 'border-zinc-300 text-zinc-600'
+                      ? 'border-primary-500 bg-primary-100 text-primary-700'
+                      : 'border-warm-300 text-warm-600'
                   }`}
                 >
                   <input
@@ -327,10 +341,10 @@ export function LpLiveEmbedConfig({
         )}
       </section>
 
-      <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-6">
+      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
         <h2 className="text-base font-medium">3. Posisi & tampilan</h2>
         <div>
-          <span className="text-xs font-medium text-zinc-700">Posisi widget:</span>
+          <span className="text-xs font-medium text-warm-700">Posisi widget:</span>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
             {(['inline', 'floating-br', 'floating-bl', 'floating-tr', 'floating-tl'] as const).map((p) => (
               <button
@@ -339,8 +353,8 @@ export function LpLiveEmbedConfig({
                 onClick={() => setConfig((c) => ({ ...c, position: p }))}
                 className={`rounded-lg border p-2 text-xs ${
                   config.position === p
-                    ? 'border-orange-500 bg-orange-50 text-orange-700'
-                    : 'border-zinc-200 text-zinc-600'
+                    ? 'border-primary-500 bg-primary-50 text-primary-700'
+                    : 'border-warm-200 text-warm-600'
                 }`}
               >
                 {p === 'inline' ? '📐 Inline' : `🪟 ${p.replace('floating-', '').toUpperCase()}`}
@@ -348,8 +362,8 @@ export function LpLiveEmbedConfig({
             ))}
           </div>
           {config.position === 'inline' && (
-            <p className="mt-2 text-xs text-zinc-500">
-              Owner paste <code className="rounded bg-zinc-100 px-1.5 py-0.5">{`<div data-hulao-live-embed></div>`}</code> di HTML LP
+            <p className="mt-2 text-xs text-warm-500">
+              Owner paste <code className="rounded bg-warm-100 px-1.5 py-0.5">{`<div data-hulao-live-embed></div>`}</code> di HTML LP
               untuk pilih posisi. Tanpa marker, widget muncul di akhir halaman.
             </p>
           )}
@@ -358,37 +372,37 @@ export function LpLiveEmbedConfig({
         {config.position === 'inline' && (
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs font-medium text-zinc-700">Width (px)</span>
+              <span className="text-xs font-medium text-warm-700">Width (px)</span>
               <input
                 type="number"
                 min={280}
                 max={1200}
                 value={config.widthPx}
                 onChange={(e) => setConfig((p) => ({ ...p, widthPx: parseInt(e.target.value) || 420 }))}
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+                className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-zinc-700">Height (px)</span>
+              <span className="text-xs font-medium text-warm-700">Height (px)</span>
               <input
                 type="number"
                 min={400}
                 max={1600}
                 value={config.heightPx}
                 onChange={(e) => setConfig((p) => ({ ...p, heightPx: parseInt(e.target.value) || 720 }))}
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+                className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
               />
             </label>
           </div>
         )}
 
         <label className="block">
-          <span className="text-xs font-medium text-zinc-700">CTA label (untuk tombol floating)</span>
+          <span className="text-xs font-medium text-warm-700">CTA label (untuk tombol floating)</span>
           <input
             type="text"
             value={config.ctaLabel}
             onChange={(e) => setConfig((p) => ({ ...p, ctaLabel: e.target.value }))}
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-1.5 text-sm"
+            className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
           />
         </label>
 
@@ -399,7 +413,7 @@ export function LpLiveEmbedConfig({
             onChange={(e) => setConfig((p) => ({ ...p, autoplay: e.target.checked }))}
             className="mr-2"
           />
-          <span className="text-xs text-zinc-700">Auto-play saat halaman load</span>
+          <span className="text-xs text-warm-700">Auto-play saat halaman load</span>
         </label>
         <label className="flex items-center">
           <input
@@ -408,11 +422,11 @@ export function LpLiveEmbedConfig({
             onChange={(e) => setConfig((p) => ({ ...p, mutedDefault: e.target.checked }))}
             className="mr-2"
           />
-          <span className="text-xs text-zinc-700">Mute by default (rekomendasi — Chrome block autoplay+audio)</span>
+          <span className="text-xs text-warm-700">Mute by default (rekomendasi — Chrome block autoplay+audio)</span>
         </label>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-6">
+      <section className="rounded-xl border border-warm-200 bg-card p-6">
         <label className="flex items-center">
           <input
             type="checkbox"
@@ -420,9 +434,9 @@ export function LpLiveEmbedConfig({
             onChange={(e) => setConfig((p) => ({ ...p, isActive: e.target.checked }))}
             className="mr-2"
           />
-          <span className="text-sm font-medium text-zinc-900">Aktifkan embed</span>
+          <span className="text-sm font-medium text-warm-900">Aktifkan embed</span>
         </label>
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-warm-500">
           Matikan tanpa hapus kalau lagi maintenance / iklan dipause.
         </p>
       </section>
@@ -431,24 +445,33 @@ export function LpLiveEmbedConfig({
         <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
 
-      <div className="sticky bottom-4 flex items-center justify-end gap-3 rounded-xl border border-zinc-200 bg-white/80 p-4 backdrop-blur">
+      <div className="sticky bottom-4 flex items-center justify-end gap-3 rounded-xl border border-warm-200 bg-card/80 p-4 backdrop-blur">
         {savedAt && <span className="text-xs text-green-600">Tersimpan {savedAt}</span>}
         <Link
           href={`/p/${lpSlug}`}
           target="_blank"
-          className="text-sm text-zinc-600 hover:text-zinc-900"
+          className="text-sm text-warm-600 hover:text-warm-900"
         >
           Preview LP →
         </Link>
         <button
           onClick={handleSave}
           disabled={saving || !config.liveRoomId}
-          className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+          className="inline-flex items-center rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
         >
           {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
           {saving ? 'Menyimpan…' : 'Simpan konfigurasi'}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Hapus konfigurasi Live AI Embed dari LP ini?"
+        description="Widget live tidak akan muncul lagi di halaman publik LP."
+        isLoading={deleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

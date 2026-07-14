@@ -26,15 +26,17 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   })
 
   return (
-    <div className="flex min-h-svh w-full">
+    // App-shell fixed-height (sama dengan layout dashboard): sidebar & topbar
+    // diam, hanya <main> yang scroll.
+    <div className="flex h-dvh w-full overflow-hidden">
       <AdminSidebar className="hidden md:flex" role={role} />
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
           name={session.user.name}
           email={session.user.email}
           image={session.user.image}
         />
-        <main className="flex-1 overflow-hidden pb-16 md:pb-0">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
       </div>
       <MobileNav
         user={{

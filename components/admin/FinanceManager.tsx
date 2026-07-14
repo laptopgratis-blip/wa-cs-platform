@@ -15,8 +15,11 @@ import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { TableSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -170,15 +173,10 @@ export function FinanceManager() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Verifikasi Pembayaran Manual
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Cocokkan bukti transfer dengan total + kode unik, lalu konfirmasi atau
-          tolak.
-        </p>
-      </div>
+      <PageHeader
+        title="Verifikasi Pembayaran Manual"
+        description="Cocokkan bukti transfer dengan total + kode unik, lalu konfirmasi atau tolak."
+      />
 
       <Tabs
         value={filter}
@@ -216,15 +214,15 @@ export function FinanceManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                  <Loader2 className="mx-auto size-4 animate-spin" />
-                </TableCell>
-              </TableRow>
+              <TableSkeleton rows={5} cols={7} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                  Tidak ada data.
+                <TableCell colSpan={7}>
+                  <EmptyState
+                    icon={Clock}
+                    title="Tidak ada data"
+                    description="Pembayaran manual yang masuk bakal tampil di tab ini."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

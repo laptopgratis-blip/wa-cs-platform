@@ -7,6 +7,8 @@
 // UI sengaja "form linear" (bukan multi-step) supaya gampang dibandingkan +
 // di-scroll sekaligus saat user awam pertama kali nyoba template.
 import { Loader2, Plus, Trash2, X } from 'lucide-react'
+
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -102,6 +104,7 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
 
   const [isSubmitting, setSubmitting] = useState(false)
   const [isDeleting, setDeleting] = useState(false)
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   const showBankInfo = seed.template === 'TRANSFER'
 
@@ -217,7 +220,7 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
 
   async function handleDelete() {
     if (source.kind !== 'edit') return
-    if (!confirm('Yakin hapus flow ini? Sesi pesanan yang sedang berjalan ikut terhapus.')) return
+    setConfirmDeleteOpen(false)
     setDeleting(true)
     try {
       const res = await fetch(`/api/sales-flows/${source.flow.id}`, {
@@ -541,7 +544,7 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={handleDelete}
+              onClick={() => setConfirmDeleteOpen(true)}
               disabled={isDeleting || isSubmitting}
               className="text-destructive hover:text-destructive"
             >
@@ -564,6 +567,15 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="Yakin hapus flow ini?"
+        description="Sesi pesanan yang sedang berjalan ikut terhapus."
+        isLoading={isDeleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

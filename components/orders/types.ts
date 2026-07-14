@@ -49,6 +49,8 @@ export interface OrderListItem {
   shippingCourier?: string | null
   shippingService?: string | null
   shippingCityName?: string | null
+  shippingDistrictName?: string | null
+  shippingSubdistrictName?: string | null
   shippingProvinceName?: string | null
   // Multi-gudang: gudang asal terpilih saat order dibuat (untuk fulfillment).
   originSnapshot?: { name?: string; cityName?: string } | null

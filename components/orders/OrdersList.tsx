@@ -14,7 +14,10 @@ import { Columns, Download, Loader2, Printer } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 import { ColumnPickerModal } from './ColumnPickerModal'
 import { OrderCardView } from './OrderCardView'
@@ -43,6 +46,14 @@ export type { OrderListItem, OrdersCounts } from './types'
 
 const VIEW_KEY = 'hulao.orders.view'
 const PAGE_LIMIT = 50
+
+// Label aksi bulk untuk judul dialog konfirmasi.
+const BULK_LABEL: Record<QuickAction, string> = {
+  mark_paid: 'lunas',
+  mark_shipped: 'dikirim',
+  mark_delivered: 'selesai',
+  reject: 'tolak',
+}
 
 const ZERO_COUNTS: OrdersCounts = {
   all: 0,
@@ -97,6 +108,9 @@ export function OrdersList() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [bulkBusy, setBulkBusy] = useState(false)
+  // Konfirmasi bulk action — pengganti window.confirm() + prompt().
+  const [pendingBulk, setPendingBulk] = useState<QuickAction | null>(null)
+  const [bulkRejectReason, setBulkRejectReason] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
   const reload = useCallback(() => setReloadKey((k) => k + 1), [])
 
@@ -322,24 +336,8 @@ export function OrdersList() {
   async function bulkAction(action: QuickAction) {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
-    const labelMap: Record<QuickAction, string> = {
-      mark_paid: 'lunas',
-      mark_shipped: 'dikirim',
-      mark_delivered: 'selesai',
-      reject: 'tolak',
-    }
-    if (
-      !confirm(
-        `Tandai ${ids.length} pesanan sebagai ${labelMap[action]}?`,
-      )
-    ) {
-      return
-    }
-    let cancelledReason: string | undefined
-    if (action === 'reject') {
-      cancelledReason =
-        window.prompt('Alasan penolakan (opsional):')?.trim() || undefined
-    }
+    const cancelledReason =
+      action === 'reject' ? bulkRejectReason.trim() || undefined : undefined
 
     setBulkBusy(true)
     try {
@@ -463,46 +461,42 @@ export function OrdersList() {
 
   return (
     <>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Pesanan Masuk
-          </h1>
-          <p className="mt-0.5 text-sm text-warm-500">
-            Kelola order COD & Transfer dari semua channel.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setColumnPickerOpen(true)}
-            title="Atur kolom yang tampil di tabel"
-          >
-            <Columns className="mr-2 size-4" />
-            Kolom
-            <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
-              {viewPref.visibleColumns.length}
-            </span>
-          </Button>
-          <Button variant="outline" onClick={exportCsv}>
-            <Download className="mr-2 size-4" />
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              const p = new URLSearchParams()
-              if (warehouseId) p.set('warehouseId', warehouseId)
-              const qs = p.toString()
-              window.open(`/packing${qs ? `?${qs}` : ''}`, '_blank')
-            }}
-            title="Cetak daftar paket siap kemas (per gudang bila difilter)"
-          >
-            <Printer className="mr-2 size-4" />
-            Cetak Packing
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Pesanan Masuk"
+        description="Kelola order COD & Transfer dari semua channel."
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setColumnPickerOpen(true)}
+              title="Atur kolom yang tampil di tabel"
+            >
+              <Columns className="mr-2 size-4" />
+              Kolom
+              <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
+                {viewPref.visibleColumns.length}
+              </span>
+            </Button>
+            <Button variant="outline" onClick={exportCsv}>
+              <Download className="mr-2 size-4" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const p = new URLSearchParams()
+                if (warehouseId) p.set('warehouseId', warehouseId)
+                const qs = p.toString()
+                window.open(`/packing${qs ? `?${qs}` : ''}`, '_blank')
+              }}
+              title="Cetak daftar paket siap kemas (per gudang bila difilter)"
+            >
+              <Printer className="mr-2 size-4" />
+              Cetak Packing
+            </Button>
+          </>
+        }
+      />
 
       <OrdersStatsStrip
         todayCount={totals.todayCount}
@@ -596,10 +590,48 @@ export function OrdersList() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={pendingBulk !== null}
+        onOpenChange={(o) => {
+          if (!o) setPendingBulk(null)
+        }}
+        title={`Tandai ${selectedIds.size} pesanan sebagai ${
+          pendingBulk ? BULK_LABEL[pendingBulk] : ''
+        }?`}
+        description={
+          pendingBulk === 'reject' ? (
+            <span className="block space-y-2">
+              <span className="block">
+                Pesanan yang ditolak akan berstatus batal.
+              </span>
+              <Textarea
+                rows={2}
+                value={bulkRejectReason}
+                onChange={(e) => setBulkRejectReason(e.target.value)}
+                placeholder="Alasan penolakan (opsional)"
+              />
+            </span>
+          ) : (
+            'Status pembayaran/pengiriman pesanan terpilih akan di-update sekaligus.'
+          )
+        }
+        confirmLabel="Ya, Lanjutkan"
+        variant={pendingBulk === 'reject' ? 'destructive' : 'default'}
+        isLoading={bulkBusy}
+        onConfirm={async () => {
+          if (!pendingBulk) return
+          await bulkAction(pendingBulk)
+          setPendingBulk(null)
+        }}
+      />
+
       <OrdersBulkActionBar
         selectedCount={selectedIds.size}
         busy={bulkBusy}
-        onAction={bulkAction}
+        onAction={(a) => {
+          setBulkRejectReason('')
+          setPendingBulk(a)
+        }}
         onClear={() => setSelectedIds(new Set())}
       />
 

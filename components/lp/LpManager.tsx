@@ -23,6 +23,9 @@ import { toast } from 'sonner'
 import { CreateLpModal } from '@/components/lp/CreateLpModal'
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -163,12 +166,10 @@ export function LpManager() {
         matchCta={{ label: 'Bikin LP dengan AI', href: '/landing-pages?action=create' }}
         mismatchMessage="Landing Page jadi pintu masuk customer dari iklan/sosmed. Kalau jualan langsung di WA tanpa funnel, fitur ini opsional."
       />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            Landing Page Saya
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
+      <PageHeader
+        title="Landing Page Saya"
+        description={
+          <>
             Buat halaman promosi sendiri dengan editor visual.
             {quota && (
               <span className="ml-1 text-warm-400">
@@ -177,25 +178,27 @@ export function LpManager() {
                 storage
               </span>
             )}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link href="/pricing">
-              <Sparkles className="mr-2 size-4 text-primary-500" />
-              Upgrade Paket
-            </Link>
-          </Button>
-          <Button
-            onClick={() => setCreateOpen(true)}
-            disabled={lpFull}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
-            <Plus className="mr-2 size-4" />
-            Buat LP Baru
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <Link href="/pricing">
+                <Sparkles className="mr-2 size-4 text-primary-500" />
+                Upgrade Paket
+              </Link>
+            </Button>
+            <Button
+              onClick={() => setCreateOpen(true)}
+              disabled={lpFull}
+              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+            >
+              <Plus className="mr-2 size-4" />
+              Buat LP Baru
+            </Button>
+          </>
+        }
+      />
 
       {/* Banner upgrade — muncul saat user FREE atau quota sudah penuh */}
       {quota && (quota.tier === 'FREE' || lpFull) && (
@@ -357,31 +360,25 @@ export function LpManager() {
 
       {/* Daftar LP */}
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        </div>
+        <CardGridSkeleton count={3} />
       ) : pages.length === 0 ? (
         <Card>
-          <CardContent className="space-y-3 py-16 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary-50 text-primary-600">
-              <Globe className="size-5" />
-            </div>
-            <div>
-              <p className="font-display text-base font-bold text-warm-900 dark:text-warm-50">
-                Belum ada landing page
-              </p>
-              <p className="mt-1 text-sm text-warm-500">
-                Buat halaman pertamamu untuk promosi atau funnel.
-              </p>
-            </div>
-            <Button
-              onClick={() => setCreateOpen(true)}
-              disabled={lpFull}
-              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-            >
-              <Plus className="mr-2 size-4" />
-              Buat LP Pertama
-            </Button>
+          <CardContent>
+            <EmptyState
+              icon={Globe}
+              title="Belum ada landing page"
+              description="Buat halaman pertamamu untuk promosi atau funnel."
+              action={
+                <Button
+                  onClick={() => setCreateOpen(true)}
+                  disabled={lpFull}
+                  className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+                >
+                  <Plus className="mr-2 size-4" />
+                  Buat LP Pertama
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

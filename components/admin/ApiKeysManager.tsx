@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,12 +55,13 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   ELEVENLABS: 'ElevenLabs (Audio Klip Live)',
 }
 
-const PROVIDER_EMOJI: Record<Provider, string> = {
-  ANTHROPIC: '🟠',
-  OPENAI: '🟢',
-  GOOGLE: '🔵',
-  KLING: '🟣',
-  ELEVENLABS: '🎙️',
+// Dot warna per provider — pengganti emoji lingkaran (konsisten & theme-able).
+const PROVIDER_DOT: Record<Provider, string> = {
+  ANTHROPIC: 'bg-primary-500',
+  OPENAI: 'bg-emerald-500',
+  GOOGLE: 'bg-blue-500',
+  KLING: 'bg-violet-500',
+  ELEVENLABS: 'bg-warm-500',
 }
 
 const ONE_HOUR_MS = 60 * 60 * 1_000
@@ -235,29 +237,24 @@ export function ApiKeysManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-            API Keys
-          </h1>
-          <p className="mt-1 text-sm text-warm-500">
-            Kelola API key provider AI. Disimpan terenkripsi (AES-256-GCM) di DB.
-            Tidak pernah dikembalikan plaintext lewat API.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => refreshAll()}
-          disabled={refreshingAll}
-        >
-          {refreshingAll ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <RefreshCw className="mr-2 size-4" />
-          )}
-          Refresh All
-        </Button>
-      </div>
+      <PageHeader
+        title="API Keys"
+        description="Kelola API key provider AI. Disimpan terenkripsi (AES-256-GCM) di DB. Tidak pernah dikembalikan plaintext lewat API."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => refreshAll()}
+            disabled={refreshingAll}
+          >
+            {refreshingAll ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 size-4" />
+            )}
+            Refresh All
+          </Button>
+        }
+      />
 
       <div className="grid gap-4 md:grid-cols-3">
         {PROVIDERS.map((p) => {
@@ -271,7 +268,10 @@ export function ApiKeysManager() {
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
-                    <span aria-hidden>{PROVIDER_EMOJI[p]}</span>
+                    <span
+                      aria-hidden
+                      className={cn('size-2.5 rounded-full', PROVIDER_DOT[p])}
+                    />
                     {PROVIDER_LABEL[p]}
                   </span>
                   <Badge
