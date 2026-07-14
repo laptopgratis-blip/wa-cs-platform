@@ -6,7 +6,7 @@ import { PricingView } from '@/components/subscription/PricingView'
 import { authOptions } from '@/lib/auth'
 import { TIER_VISITOR_CAP } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
-import { computeUpgradeCredit } from '@/lib/services/subscription'
+import { TIER_RANK, computeUpgradeCredit } from '@/lib/services/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,17 +45,35 @@ export default async function PricingPage() {
   // sama dengan preview & checkout.
   const upgradeCredits: Record<string, number> = {}
   if (session) {
-    const [quota, balance] = await Promise.all([
-      prisma.userQuota.findUnique({
-        where: { userId: session.user.id },
-        select: { tier: true },
+    // "Plan saat ini" HARUS dari subscription aktif (sumber yang sama dengan
+    // PlanBadge topbar, preview, dan checkout) — BUKAN UserQuota.tier.
+    // UserQuota.tier bisa lebih tinggi dari plan karena naik otomatis dari
+    // akumulasi top-up token (lib/lp-quota.ts) — kasus 2026-07-14: quota
+    // POWER dari top-up 750K token, sub aktif POPULAR → tombol Power terkunci
+    // "Plan Saat Ini" padahal user justru mau upgrade ke Power.
+    const [activeSubs, balance] = await Promise.all([
+      prisma.subscription.findMany({
+        where: {
+          userId: session.user.id,
+          // CANCELLED tetap punya akses sampai endDate (mirror /api/subscription/current).
+          status: { in: ['ACTIVE', 'CANCELLED'] },
+          OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+        },
+        select: { lpPackage: { select: { tier: true } } },
       }),
       prisma.tokenBalance.findUnique({
         where: { userId: session.user.id },
         select: { balance: true },
       }),
     ])
-    currentTier = quota?.tier ?? 'FREE'
+    // Bisa ada >1 sub aktif (data era pra-REPLACED) — pakai tier tertinggi.
+    currentTier = activeSubs.reduce<string>(
+      (top, sub) =>
+        (TIER_RANK[sub.lpPackage.tier] ?? 0) > (TIER_RANK[top] ?? 0)
+          ? sub.lpPackage.tier
+          : top,
+      'FREE',
+    )
     currentBalance = balance?.balance ?? 0
 
     const tiers = Array.from(new Set(packages.map((p) => p.tier)))

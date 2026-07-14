@@ -23,7 +23,7 @@ type Db = Prisma.TransactionClient | typeof prisma
 
 // Urutan tier untuk menentukan "upgrade" (rank target > rank sumber).
 // FREE tidak pernah punya subscription row, tapi masuk map untuk kelengkapan.
-const TIER_RANK: Record<string, number> = {
+export const TIER_RANK: Record<string, number> = {
   FREE: 0,
   STARTER: 1,
   POPULAR: 2,
