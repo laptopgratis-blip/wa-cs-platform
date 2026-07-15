@@ -129,7 +129,7 @@ export default async function PurchaseHistoryPage() {
   const isEmpty = !hasPayments && !hasManual
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/billing">

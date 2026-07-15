@@ -24,7 +24,7 @@ export default async function PieceDetailPage({ params }: Params) {
   if (!piece) notFound()
 
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 overflow-y-auto p-4 md:p-6">
       <Button asChild variant="ghost" size="sm" className="-ml-2 self-start">
         <Link href="/content?tab=library">
           <ArrowLeft className="mr-2 size-4" />

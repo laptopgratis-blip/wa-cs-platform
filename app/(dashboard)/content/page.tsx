@@ -52,7 +52,7 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
     : []
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <PageHeader
         title="Content Studio"
         description="Bikin ide & konten siap posting dari LP kamu — 15 ide dalam 1 klik, tinggal pilih yg mau di-bikin."

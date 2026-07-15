@@ -215,7 +215,7 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
   )
 
   return (
-    <div className="mx-auto flex h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       {/* Header hero */}
       <Card className="overflow-hidden rounded-2xl border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
         <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">

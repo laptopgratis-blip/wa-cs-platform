@@ -59,7 +59,7 @@ export default async function WhatsappPage() {
   const models: AiModelOption[] = modelRows
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <OnboardingHint
         hintId="whatsapp"
         relevantFor={['CS_AI', 'SELL_LP', 'SELL_WA', 'LMS']}

@@ -125,7 +125,7 @@ export default async function AdminOnboardingFunnelPage() {
   const noAction = Math.max(0, totalSignups - totalAnswered - wizardSkipped)
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <PageHeader
         title="Onboarding Funnel"
         description={
