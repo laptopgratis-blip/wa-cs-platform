@@ -36,6 +36,7 @@ import {
   type PickedDestination,
   DestinationPicker,
 } from '@/components/order-system/DestinationPicker'
+import { ProvincePicker } from '@/components/order-system/ProvincePicker'
 
 interface ShippingZone {
   id: string
@@ -45,6 +46,7 @@ interface ShippingZone {
   provinceIds: string[]
   cityNames: string[]
   provinceNames: string[]
+  excludedProvinceNames: string[]
   subsidyType: string
   subsidyValue: number
   minimumOrder: number | null
@@ -67,6 +69,7 @@ const EMPTY_FORM = {
   cityNames: [] as string[],
   provinceIds: [] as string[],
   provinceNames: [] as string[],
+  excludedProvinceNames: [] as string[],
   subsidyType: 'FLAT_AMOUNT' as 'NONE' | 'FLAT_AMOUNT' | 'PERCENT' | 'FREE',
   subsidyValue: 0,
   minimumOrder: '' as string | number,
@@ -83,10 +86,17 @@ function describeSubsidy(z: ShippingZone) {
 }
 
 function describeMatch(z: ShippingZone) {
-  if (z.matchType === 'ALL') return 'Semua wilayah'
-  if (z.matchType === 'CITY')
-    return `${z.cityNames.length} kota: ${z.cityNames.slice(0, 3).join(', ')}${z.cityNames.length > 3 ? '…' : ''}`
-  return `${z.provinceNames.length} provinsi: ${z.provinceNames.slice(0, 3).join(', ')}${z.provinceNames.length > 3 ? '…' : ''}`
+  let base: string
+  if (z.matchType === 'ALL') base = 'Semua wilayah'
+  else if (z.matchType === 'CITY')
+    base = `${z.cityNames.length} kota: ${z.cityNames.slice(0, 3).join(', ')}${z.cityNames.length > 3 ? '…' : ''}`
+  else
+    base = `${z.provinceNames.length} provinsi: ${z.provinceNames.slice(0, 3).join(', ')}${z.provinceNames.length > 3 ? '…' : ''}`
+  const excl = z.excludedProvinceNames ?? []
+  if (excl.length > 0) {
+    base += ` · kecuali ${excl.slice(0, 3).join(', ')}${excl.length > 3 ? '…' : ''}`
+  }
+  return base
 }
 
 export function ShippingZonesClient({
@@ -121,6 +131,7 @@ export function ShippingZonesClient({
       cityNames: z.cityNames,
       provinceIds: z.provinceIds,
       provinceNames: z.provinceNames,
+      excludedProvinceNames: z.excludedProvinceNames ?? [],
       subsidyType: z.subsidyType as 'NONE' | 'FLAT_AMOUNT' | 'PERCENT' | 'FREE',
       subsidyValue: z.subsidyValue,
       minimumOrder: z.minimumOrder ?? '',
@@ -131,8 +142,10 @@ export function ShippingZonesClient({
     setDialogOpen(true)
   }
 
-  // Saat user pilih destination dari picker → tambah ke list city/province
-  // berdasarkan matchType. Reset picker agar bisa pilih lagi.
+  // Saat user pilih destination dari picker (mode CITY) → tambah ke list
+  // kota. Mode PROVINCE tidak lewat sini lagi — pakai ProvincePicker yang
+  // memang menampilkan PROVINSI (dulu hasil pencariannya kota/kecamatan,
+  // membingungkan).
   useEffect(() => {
     if (!picker) return
     if (form.matchType === 'CITY') {
@@ -146,21 +159,33 @@ export function ShippingZonesClient({
       } else {
         toast.info('Kota sudah ada di list')
       }
-    } else if (form.matchType === 'PROVINCE') {
-      const provName = picker.province_name
-      if (!form.provinceNames.includes(provName)) {
-        setForm((f) => ({
-          ...f,
-          provinceIds: [...f.provinceIds, String(picker.id)],
-          provinceNames: [...f.provinceNames, provName],
-        }))
-      } else {
-        toast.info('Provinsi sudah ada di list')
-      }
     }
     setPicker(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker])
+
+  function addProvince(name: string) {
+    if (form.provinceNames.includes(name)) {
+      toast.info('Provinsi sudah ada di list')
+      return
+    }
+    setForm((f) => ({ ...f, provinceNames: [...f.provinceNames, name] }))
+  }
+
+  function addExcludedProvince(name: string) {
+    if (form.excludedProvinceNames.includes(name)) {
+      toast.info('Provinsi sudah ada di daftar pengecualian')
+      return
+    }
+    if (form.matchType === 'PROVINCE' && form.provinceNames.includes(name)) {
+      toast.error('Provinsi ini ada di daftar include — hapus dulu dari sana')
+      return
+    }
+    setForm((f) => ({
+      ...f,
+      excludedProvinceNames: [...f.excludedProvinceNames, name],
+    }))
+  }
 
   function removeCity(idx: number) {
     setForm((f) => ({
@@ -175,6 +200,13 @@ export function ShippingZonesClient({
       ...f,
       provinceIds: f.provinceIds.filter((_, i) => i !== idx),
       provinceNames: f.provinceNames.filter((_, i) => i !== idx),
+    }))
+  }
+
+  function removeExcludedProvince(idx: number) {
+    setForm((f) => ({
+      ...f,
+      excludedProvinceNames: f.excludedProvinceNames.filter((_, i) => i !== idx),
     }))
   }
 
@@ -218,6 +250,7 @@ export function ShippingZonesClient({
         cityNames: form.cityNames,
         provinceIds: form.provinceIds,
         provinceNames: form.provinceNames,
+        excludedProvinceNames: form.excludedProvinceNames,
         subsidyType: form.subsidyType,
         subsidyValue: Number(form.subsidyValue) || 0,
         minimumOrder:
@@ -429,24 +462,16 @@ export function ShippingZonesClient({
               </Select>
             </div>
 
-            {(form.matchType === 'CITY' || form.matchType === 'PROVINCE') && (
+            {form.matchType === 'CITY' && (
               <div className="space-y-1.5">
-                <Label>
-                  {form.matchType === 'CITY'
-                    ? 'Pilih Kota'
-                    : 'Pilih Provinsi'}
-                </Label>
+                <Label>Pilih Kota</Label>
                 <DestinationPicker value={picker} onChange={setPicker} />
                 <p className="text-xs text-warm-500">
-                  Cari nama daerah, sistem ambil{' '}
-                  {form.matchType === 'CITY' ? 'kota' : 'provinsi'} dari hasil.
+                  Cari nama daerah, sistem ambil kotanya dari hasil.
                 </p>
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {(form.matchType === 'CITY'
-                    ? form.cityNames
-                    : form.provinceNames
-                  ).map((name, idx) => (
+                  {form.cityNames.map((name, idx) => (
                     <Badge
                       key={`${name}-${idx}`}
                       variant="secondary"
@@ -455,11 +480,71 @@ export function ShippingZonesClient({
                       {name}
                       <button
                         type="button"
-                        onClick={() =>
-                          form.matchType === 'CITY'
-                            ? removeCity(idx)
-                            : removeProvince(idx)
-                        }
+                        onClick={() => removeCity(idx)}
+                        className="rounded hover:bg-destructive/10"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {form.matchType === 'PROVINCE' && (
+              <div className="space-y-1.5">
+                <Label>Pilih Provinsi</Label>
+                <ProvincePicker onPick={addProvince} />
+                <p className="text-xs text-warm-500">
+                  Daftar berisi provinsi saja — klik untuk menambah, bisa
+                  lebih dari satu.
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {form.provinceNames.map((name, idx) => (
+                    <Badge
+                      key={`${name}-${idx}`}
+                      variant="secondary"
+                      className="gap-1 pr-1"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => removeProvince(idx)}
+                        className="rounded hover:bg-destructive/10"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(form.matchType === 'ALL' || form.matchType === 'PROVINCE') && (
+              <div className="space-y-1.5 rounded-lg border border-warm-200 bg-warm-50/60 p-3">
+                <Label>Kecualikan Provinsi (opsional)</Label>
+                <ProvincePicker
+                  onPick={addExcludedProvince}
+                  placeholder="Cari provinsi yang mau dikecualikan…"
+                />
+                <p className="text-xs text-warm-500">
+                  Alamat customer di provinsi ini TIDAK kena aturan zona ini.
+                  Contoh: pilih &ldquo;Semua wilayah&rdquo; lalu kecualikan
+                  provinsi-provinsi Papua.
+                </p>
+
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {form.excludedProvinceNames.map((name, idx) => (
+                    <Badge
+                      key={`${name}-${idx}`}
+                      variant="secondary"
+                      className="gap-1 bg-rose-100 pr-1 text-rose-800 hover:bg-rose-100"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={() => removeExcludedProvince(idx)}
                         className="rounded hover:bg-destructive/10"
                       >
                         <X className="size-3" />

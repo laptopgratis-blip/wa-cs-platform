@@ -2032,6 +2032,9 @@ model ShippingZone {
   // Snapshot nama untuk display tanpa fetch RajaOngkir lagi.
   cityNames     String[] @default([])
   provinceNames String[] @default([])
+  // Provinsi yang DIKECUALIKAN dari zona ini (mis. "Semua wilayah kecuali
+  // Papua"). Dicek findMatchingZone SEBELUM match include — case-insensitive.
+  excludedProvinceNames String[] @default([])
 
   // NONE = tidak ada subsidi. FLAT_AMOUNT = potong nominal tetap.
   // PERCENT = potong % dari ongkir. FREE = gratis ongkir penuh.

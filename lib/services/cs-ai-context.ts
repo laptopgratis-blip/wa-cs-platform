@@ -252,6 +252,7 @@ export async function formatShippingInstructionForPrompt(
             matchType: true,
             cityNames: true,
             provinceNames: true,
+            excludedProvinceNames: true,
             subsidyType: true,
             subsidyValue: true,
             minimumOrder: true,
@@ -285,7 +286,11 @@ export async function formatShippingInstructionForPrompt(
       const minOrder = z.minimumOrder
         ? ` (min order ${formatRupiah(z.minimumOrder)})`
         : ''
-      lines.push(`- ${z.name}: ${subsidy} untuk ${target}${minOrder}`)
+      const excluded =
+        z.excludedProvinceNames.length > 0
+          ? ` KECUALI ${z.excludedProvinceNames.join(', ')}`
+          : ''
+      lines.push(`- ${z.name}: ${subsidy} untuk ${target}${excluded}${minOrder}`)
     }
   }
 

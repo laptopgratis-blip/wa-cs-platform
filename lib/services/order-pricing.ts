@@ -141,6 +141,17 @@ export async function findMatchingZone(input: MatchZoneInput) {
   for (const z of zones) {
     if (z.startsAt && z.startsAt > now) continue
     if (z.endsAt && z.endsAt < now) continue
+    // Pengecualian provinsi dicek SEBELUM include — zona "Semua wilayah
+    // kecuali Papua" tidak boleh match alamat Papua (lanjut ke zona lain
+    // ber-priority lebih rendah kalau ada).
+    if (
+      input.provinceName &&
+      z.excludedProvinceNames.some(
+        (n) => n.toLowerCase() === input.provinceName!.toLowerCase(),
+      )
+    ) {
+      continue
+    }
     if (z.matchType === 'ALL') return z
     if (
       z.matchType === 'CITY' &&

@@ -41,6 +41,9 @@ export async function PATCH(
         ...(data.provinceNames !== undefined && {
           provinceNames: data.provinceNames,
         }),
+        ...(data.excludedProvinceNames !== undefined && {
+          excludedProvinceNames: data.excludedProvinceNames,
+        }),
         ...(data.subsidyType !== undefined && { subsidyType: data.subsidyType }),
         ...(data.subsidyValue !== undefined && {
           subsidyValue: data.subsidyValue,

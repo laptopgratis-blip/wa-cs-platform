@@ -71,6 +71,7 @@ export async function POST(req: Request) {
         provinceIds: data.provinceIds,
         cityNames: data.cityNames,
         provinceNames: data.provinceNames,
+        excludedProvinceNames: data.excludedProvinceNames,
         subsidyType: data.subsidyType,
         subsidyValue: data.subsidyValue,
         minimumOrder: data.minimumOrder ?? null,

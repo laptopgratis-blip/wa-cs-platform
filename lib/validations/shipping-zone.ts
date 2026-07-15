@@ -16,6 +16,9 @@ const shippingZoneBaseSchema = z.object({
   provinceIds: z.array(z.string()).default([]),
   cityNames: z.array(z.string()).default([]),
   provinceNames: z.array(z.string()).default([]),
+  // Provinsi yang dikecualikan dari zona (berlaku utk semua matchType;
+  // paling berguna di ALL/PROVINCE — mis. semua Indonesia kecuali Papua).
+  excludedProvinceNames: z.array(z.string().min(1).max(80)).max(40).default([]),
   subsidyType: z.enum(SUBSIDY_TYPES),
   subsidyValue: z.number().min(0).default(0),
   minimumOrder: z.number().min(0).nullable().optional(),
