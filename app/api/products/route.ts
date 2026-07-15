@@ -105,6 +105,7 @@ export async function POST(req: Request) {
                   name: v.name,
                   sku: v.sku ?? null,
                   price: v.price,
+                  flashSalePrice: v.flashSalePrice ?? null,
                   weightGrams: v.weightGrams,
                   stock: v.stock ?? null,
                   imageUrl: v.imageUrl ?? null,

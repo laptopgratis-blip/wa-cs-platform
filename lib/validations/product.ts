@@ -12,20 +12,33 @@ export const PRODUCT_IMAGES_LIMIT = 10
 // /api/products/[id] untuk full-replace varian.
 // `id` opsional: kalau ada → varian existing yang di-update; kalau tidak →
 // varian baru yang akan di-create.
-export const productVariantInputSchema = z.object({
-  id: z.string().min(1).optional(),
-  name: z.string().trim().min(1, 'Nama varian wajib diisi').max(80),
-  sku: z.string().trim().max(80).nullable().optional(),
-  price: z
-    .number()
-    .min(0, 'Harga varian tidak boleh negatif')
-    .max(1_000_000_000),
-  weightGrams: z.number().int().min(1).max(150_000),
-  stock: z.number().int().min(0).max(1_000_000).nullable().optional(),
-  imageUrl: z.string().nullable().optional(),
-  isActive: z.boolean().optional(),
-  sortOrder: z.number().int().min(0).max(9999).optional(),
-})
+export const productVariantInputSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    name: z.string().trim().min(1, 'Nama varian wajib diisi').max(80),
+    sku: z.string().trim().max(80).nullable().optional(),
+    price: z
+      .number()
+      .min(0, 'Harga varian tidak boleh negatif')
+      .max(1_000_000_000),
+    // Harga flash sale PER VARIAN — jadwal/kuota ikut level produk.
+    // null = varian tidak ikut flash sale.
+    flashSalePrice: z.number().min(0).max(1_000_000_000).nullable().optional(),
+    weightGrams: z.number().int().min(1).max(150_000),
+    stock: z.number().int().min(0).max(1_000_000).nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
+    isActive: z.boolean().optional(),
+    sortOrder: z.number().int().min(0).max(9999).optional(),
+  })
+  .refine(
+    (v) =>
+      v.flashSalePrice == null ||
+      (v.flashSalePrice > 0 && v.flashSalePrice < v.price),
+    {
+      message: 'Harga flash varian harus > 0 dan < harga normal varian',
+      path: ['flashSalePrice'],
+    },
+  )
 
 export type ProductVariantInput = z.infer<typeof productVariantInputSchema>
 
@@ -71,17 +84,25 @@ export const productCreateSchema = z
   .refine(
     (v) => {
       if (!v.flashSaleActive) return true
-      // Saat aktif, butuh harga diskon < harga normal + start < end + start dimasa depan/sekarang OK
-      if (v.flashSalePrice == null || v.flashSalePrice <= 0) return false
-      if (v.flashSalePrice >= v.price) return false
+      // Jadwal wajib untuk semua tipe produk.
       if (!v.flashSaleStartAt || !v.flashSaleEndAt) return false
       if (new Date(v.flashSaleStartAt) >= new Date(v.flashSaleEndAt))
         return false
+      const variants = v.variants ?? []
+      if (variants.length > 0) {
+        // Produk BERVARIAN: harga flash diset per varian — minimal satu
+        // varian punya harga flash valid. (Validasi < harga varian sudah
+        // di-refine productVariantInputSchema.)
+        return variants.some((x) => x.flashSalePrice != null)
+      }
+      // Produk single: perilaku lama — harga diskon level produk wajib.
+      if (v.flashSalePrice == null || v.flashSalePrice <= 0) return false
+      if (v.flashSalePrice >= v.price) return false
       return true
     },
     {
       message:
-        'Flash sale aktif butuh: harga diskon < harga normal, tanggal mulai < selesai',
+        'Flash sale aktif butuh: tanggal mulai < selesai + harga diskon (produk single: di level produk; produk bervarian: minimal satu varian)',
       path: ['flashSalePrice'],
     },
   )

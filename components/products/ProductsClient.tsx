@@ -47,6 +47,7 @@ interface ProductVariant {
   name: string
   sku: string | null
   price: number
+  flashSalePrice: number | null
   weightGrams: number
   stock: number | null
   imageUrl: string | null
@@ -87,6 +88,8 @@ interface VariantFormRow {
   name: string
   sku: string
   price: number
+  // Harga flash per varian — null = tidak ikut flash sale.
+  flashSalePrice: number | null
   weightGrams: number
   stock: number | null
   imageUrl: string | null
@@ -192,6 +195,7 @@ export function ProductsClient({
         name: v.name,
         sku: v.sku ?? '',
         price: v.price,
+        flashSalePrice: v.flashSalePrice ?? null,
         weightGrams: v.weightGrams,
         stock: v.stock,
         imageUrl: v.imageUrl,
@@ -216,6 +220,7 @@ export function ProductsClient({
             name: '',
             sku: '',
             price: f.price,
+            flashSalePrice: null,
             weightGrams: f.weightGrams,
             stock: f.stock,
             imageUrl: null,
@@ -381,7 +386,27 @@ export function ProductsClient({
     }
     // Validasi flash sale di client supaya error message kelihatan langsung.
     if (form.flashSaleActive) {
-      if (
+      const hasVariants = form.variants.length > 0
+      if (hasVariants) {
+        // Produk bervarian: harga flash diisi per varian (minimal satu).
+        const withFlash = form.variants.filter(
+          (v) => v.flashSalePrice != null && v.flashSalePrice > 0,
+        )
+        if (withFlash.length === 0) {
+          toast.error(
+            'Isi "Harga Flash" minimal di satu varian (kolom di tiap varian)',
+          )
+          return
+        }
+        for (const v of withFlash) {
+          if ((v.flashSalePrice ?? 0) >= v.price) {
+            toast.error(
+              `Varian "${v.name}": harga flash harus < harga normal varian`,
+            )
+            return
+          }
+        }
+      } else if (
         !form.flashSalePrice ||
         Number(form.flashSalePrice) <= 0 ||
         Number(form.flashSalePrice) >= Number(form.price)
@@ -413,9 +438,12 @@ export function ProductsClient({
         stock: unlimitedStock ? null : Number(form.stock ?? 0),
         isActive: form.isActive,
         flashSaleActive: form.flashSaleActive,
-        flashSalePrice: form.flashSaleActive
-          ? Number(form.flashSalePrice)
-          : null,
+        // Produk bervarian: harga flash per varian — level produk dikirim
+        // null supaya tidak membingungkan pricing engine.
+        flashSalePrice:
+          form.flashSaleActive && form.variants.length === 0
+            ? Number(form.flashSalePrice)
+            : null,
         flashSaleStartAt: form.flashSaleActive
           ? localInputToIso(form.flashSaleStartLocal)
           : null,
@@ -431,6 +459,12 @@ export function ProductsClient({
           name: v.name.trim(),
           sku: v.sku.trim() || null,
           price: Number(v.price),
+          // Kirim null kalau kosong/0 ATAU flash sale produk sedang off —
+          // supaya tidak ada harga flash "nyangkut" saat toggle dimatikan.
+          flashSalePrice:
+            form.flashSaleActive && v.flashSalePrice != null && v.flashSalePrice > 0
+              ? Number(v.flashSalePrice)
+              : null,
           weightGrams: Number(v.weightGrams),
           stock: v.stock == null ? null : Number(v.stock),
           imageUrl: v.imageUrl,
@@ -984,6 +1018,42 @@ export function ProductsClient({
                             </div>
                           </div>
 
+                          {form.flashSaleActive && (
+                            <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2">
+                              <Label className="flex items-center gap-1 text-xs font-semibold text-amber-900">
+                                <Zap className="size-3" />
+                                Harga Flash (Rp)
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={500}
+                                value={v.flashSalePrice ?? ''}
+                                placeholder="Kosongkan = tidak ikut flash"
+                                onChange={(e) =>
+                                  updateVariant(v.tempKey, {
+                                    flashSalePrice:
+                                      e.target.value === ''
+                                        ? null
+                                        : Number(e.target.value) || 0,
+                                  })
+                                }
+                              />
+                              {v.flashSalePrice != null &&
+                                v.flashSalePrice > 0 &&
+                                v.flashSalePrice < v.price && (
+                                  <p className="text-[11px] text-amber-800">
+                                    Hemat Rp{' '}
+                                    {formatNumber(v.price - v.flashSalePrice)} (
+                                    {Math.round(
+                                      (1 - v.flashSalePrice / v.price) * 100,
+                                    )}
+                                    %)
+                                  </p>
+                                )}
+                            </div>
+                          )}
+
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                             <div className="flex items-center gap-2">
                               <Label className="cursor-pointer text-xs text-blue-900">
@@ -1070,36 +1140,48 @@ export function ProductsClient({
 
               {form.flashSaleActive && (
                 <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="fs-price" className="text-amber-900">
-                      Harga Diskon (Rp)
-                    </Label>
-                    <Input
-                      id="fs-price"
-                      type="number"
-                      min={0}
-                      step={500}
-                      value={form.flashSalePrice}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          flashSalePrice: Number(e.target.value) || 0,
-                        }))
-                      }
-                    />
-                    {form.flashSalePrice > 0 &&
-                      form.flashSalePrice < form.price && (
-                        <p className="text-xs text-amber-800">
-                          Hemat Rp{' '}
-                          {formatNumber(form.price - Number(form.flashSalePrice))}{' '}
-                          (
-                          {Math.round(
-                            (1 - Number(form.flashSalePrice) / form.price) * 100,
-                          )}
-                          %)
-                        </p>
-                      )}
-                  </div>
+                  {form.variants.length > 0 ? (
+                    <p className="rounded-md border border-amber-300 bg-white/70 px-3 py-2 text-xs text-amber-900">
+                      Produk ini punya varian — isi <strong>Harga Flash</strong>{' '}
+                      di masing-masing varian (kolom kuning di tiap varian di
+                      atas). Varian yang dikosongkan tetap pakai harga normal.
+                      Jadwal & kuota di bawah berlaku untuk semua varian.
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="fs-price" className="text-amber-900">
+                        Harga Diskon (Rp)
+                      </Label>
+                      <Input
+                        id="fs-price"
+                        type="number"
+                        min={0}
+                        step={500}
+                        value={form.flashSalePrice}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            flashSalePrice: Number(e.target.value) || 0,
+                          }))
+                        }
+                      />
+                      {form.flashSalePrice > 0 &&
+                        form.flashSalePrice < form.price && (
+                          <p className="text-xs text-amber-800">
+                            Hemat Rp{' '}
+                            {formatNumber(
+                              form.price - Number(form.flashSalePrice),
+                            )}{' '}
+                            (
+                            {Math.round(
+                              (1 - Number(form.flashSalePrice) / form.price) *
+                                100,
+                            )}
+                            %)
+                          </p>
+                        )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="space-y-1.5">

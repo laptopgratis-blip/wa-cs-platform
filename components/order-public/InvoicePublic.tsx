@@ -34,6 +34,8 @@ import { formatNumber } from '@/lib/format'
 
 interface OrderItem {
   productId: string
+  // Ada di snapshot items untuk order bervarian (null utk produk single).
+  variantId?: string | null
   name: string
   price: number
   originalPrice: number
@@ -260,7 +262,12 @@ export function InvoicePublic({
 
           <div className="space-y-1.5 text-sm">
             {order.items.map((it) => (
-              <div key={it.productId} className="flex justify-between">
+              // Key gabungan produk+varian — order bisa berisi 2 varian dari
+              // produk yang sama (productId saja = duplicate key).
+              <div
+                key={`${it.productId}:${it.variantId ?? ''}`}
+                className="flex justify-between"
+              >
                 <span className="truncate">
                   {it.name} × {it.qty}
                   {it.isFlashSale && (

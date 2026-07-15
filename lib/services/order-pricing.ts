@@ -102,15 +102,12 @@ interface CalculateInput {
   flatCodCost?: number | null
 }
 
-export function isFlashSaleActive(product: Product): boolean {
+// Window flash sale terbuka: toggle + jadwal + kuota — TANPA syarat harga.
+// Harga dicek per konteks: produk single pakai product.flashSalePrice,
+// produk bervarian pakai variant.flashSalePrice (per varian, 2026-07-15).
+export function isFlashSaleWindowOpen(product: Product): boolean {
   if (!product.flashSaleActive) return false
-  if (
-    product.flashSalePrice == null ||
-    !product.flashSaleStartAt ||
-    !product.flashSaleEndAt
-  ) {
-    return false
-  }
+  if (!product.flashSaleStartAt || !product.flashSaleEndAt) return false
   const now = new Date()
   if (now < product.flashSaleStartAt || now > product.flashSaleEndAt)
     return false
@@ -121,6 +118,11 @@ export function isFlashSaleActive(product: Product): boolean {
     return false
   }
   return true
+}
+
+// Flash aktif untuk PRODUK SINGLE (window + harga level produk terisi).
+export function isFlashSaleActive(product: Product): boolean {
+  return isFlashSaleWindowOpen(product) && product.flashSalePrice != null
 }
 
 interface MatchZoneInput {
@@ -229,20 +231,24 @@ export async function calculateOrderTotal(
       if (!variant) continue
     }
 
-    // Flash sale dihitung relative ke harga PRODUK (bukan varian) supaya
-    // discount berlaku global per produk. Untuk varian: pakai harga varian
-    // langsung (flash sale tidak di-apply per-varian dulu di Phase 5).
-    const flash = !variant && isFlashSaleActive(product)
+    // Flash sale (2026-07-15): jadwal/kuota level produk, harga per konteks.
+    // Produk single → product.flashSalePrice; produk bervarian → harga flash
+    // PER VARIAN (variant.flashSalePrice; null = varian tidak ikut flash).
+    const windowOpen = isFlashSaleWindowOpen(product)
     const basePrice = variant ? variant.price : product.price
+    const flashPrice = variant
+      ? variant.flashSalePrice
+      : product.flashSalePrice
     const effective =
-      flash && product.flashSalePrice != null
-        ? product.flashSalePrice
+      windowOpen && flashPrice != null && flashPrice < basePrice
+        ? flashPrice
         : basePrice
+    const flash = effective < basePrice
     const weight = variant ? variant.weightGrams : product.weightGrams
 
     subtotal += effective * item.qty
-    if (flash && product.flashSalePrice != null) {
-      flashSaleDiscount += (product.price - product.flashSalePrice) * item.qty
+    if (flash) {
+      flashSaleDiscount += (basePrice - effective) * item.qty
     }
     totalWeight += weight * item.qty
 

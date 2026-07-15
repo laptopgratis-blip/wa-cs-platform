@@ -48,6 +48,7 @@ export default async function ProductsPage() {
             name: v.name,
             sku: v.sku,
             price: v.price,
+            flashSalePrice: v.flashSalePrice,
             weightGrams: v.weightGrams,
             stock: v.stock,
             imageUrl: v.imageUrl,

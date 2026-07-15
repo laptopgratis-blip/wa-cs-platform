@@ -15,6 +15,7 @@ import { prisma } from '@/lib/prisma'
 import {
   findMatchingZone,
   isFlashSaleActive,
+  isFlashSaleWindowOpen,
 } from '@/lib/services/order-pricing'
 import {
   searchDestinations,
@@ -108,7 +109,15 @@ export async function formatProductCatalogForPrompt(
   let hasFlash = false
   for (const p of products) {
     const flash = options.applyFlashSale && isFlashSaleActive(p)
-    if (flash) hasFlash = true
+    // Flash per varian (2026-07-15): window level produk terbuka + varian
+    // punya harga flash sendiri.
+    const windowOpen = options.applyFlashSale && isFlashSaleWindowOpen(p)
+    const flashVariants = windowOpen
+      ? p.variants.filter(
+          (v) => v.flashSalePrice != null && v.flashSalePrice < v.price,
+        )
+      : []
+    if (flash || flashVariants.length > 0) hasFlash = true
     const effectivePrice =
       flash && p.flashSalePrice != null ? p.flashSalePrice : p.price
     const priceStr = formatRupiah(effectivePrice)
@@ -117,14 +126,15 @@ export async function formatProductCatalogForPrompt(
     // Sisa waktu dihitung server-side supaya AI tidak perlu berhitung
     // tanggal sendiri (model tidak punya jam internal — pernah salah
     // menyimpulkan promo berakhir padahal masih berlaku sampai besok).
+    const flashEndStr = p.flashSaleEndAt
+      ? ` s.d. ${formatWib(p.flashSaleEndAt)} (sisa ${formatRemaining(p.flashSaleEndAt)})`
+      : ''
     const flashStr =
       flash && p.flashSalePrice != null
-        ? ` ~~${formatRupiah(p.price)}~~ 🔥 FLASH SALE${
-            p.flashSaleEndAt
-              ? ` s.d. ${formatWib(p.flashSaleEndAt)} (sisa ${formatRemaining(p.flashSaleEndAt)})`
-              : ''
-          }`
-        : ''
+        ? ` ~~${formatRupiah(p.price)}~~ 🔥 FLASH SALE${flashEndStr}`
+        : flashVariants.length > 0
+          ? ` 🔥 FLASH SALE varian tertentu${flashEndStr}`
+          : ''
     const stockStr = formatStock(p.stock)
     const weightStr = p.weightGrams > 0 ? ` (${p.weightGrams}g)` : ''
 
@@ -134,7 +144,14 @@ export async function formatProductCatalogForPrompt(
     }
     if (p.variants.length > 0) {
       const variantStr = p.variants
-        .map((v) => `${v.name} ${formatRupiah(v.price)}${v.stock != null ? ` [stok ${v.stock}]` : ''}`)
+        .map((v) => {
+          const vFlash =
+            windowOpen && v.flashSalePrice != null && v.flashSalePrice < v.price
+          const priceLabel = vFlash
+            ? `~~${formatRupiah(v.price)}~~ 🔥 ${formatRupiah(v.flashSalePrice as number)}`
+            : formatRupiah(v.price)
+          return `${v.name} ${priceLabel}${v.stock != null ? ` [stok ${v.stock}]` : ''}`
+        })
         .join(' · ')
       lines.push(`  Varian: ${variantStr}`)
     }

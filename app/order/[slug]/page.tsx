@@ -127,6 +127,7 @@ export default async function PublicOrderPage({ params }: PageProps) {
           id: v.id,
           name: v.name,
           price: v.price,
+          flashSalePrice: v.flashSalePrice,
           weightGrams: v.weightGrams,
           stock: v.stock,
           imageUrl: v.imageUrl,

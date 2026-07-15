@@ -46,6 +46,8 @@ interface PublicVariant {
   id: string
   name: string
   price: number
+  // Harga flash per varian — aktif hanya saat window flash produk terbuka.
+  flashSalePrice: number | null
   weightGrams: number
   stock: number | null
   imageUrl: string | null
@@ -123,26 +125,43 @@ interface ShippingZonePreview {
   minimumOrder: number | null
 }
 
+// Window flash sale terbuka (toggle + jadwal + kuota) — tanpa syarat harga.
+// Mirror isFlashSaleWindowOpen di lib/services/order-pricing.ts.
+function flashWindowOpen(p: PublicProduct): { open: boolean; ends?: Date } {
+  if (!p.flashSaleActive) return { open: false }
+  const start = p.flashSaleStartAt ? new Date(p.flashSaleStartAt) : null
+  const end = p.flashSaleEndAt ? new Date(p.flashSaleEndAt) : null
+  const now = new Date()
+  if (start && now < start) return { open: false }
+  if (end && now > end) return { open: false }
+  if (p.flashSaleQuota != null && p.flashSaleSold >= p.flashSaleQuota) {
+    return { open: false }
+  }
+  return { open: true, ends: end ?? undefined }
+}
+
+// Flash untuk produk SINGLE (window + harga level produk).
 function computeFlashSale(p: PublicProduct): {
   active: boolean
   price: number
   ends?: Date
 } {
-  if (!p.flashSaleActive || p.flashSalePrice == null) {
+  const w = flashWindowOpen(p)
+  if (!w.open || p.flashSalePrice == null) {
     return { active: false, price: p.price }
   }
-  const start = p.flashSaleStartAt ? new Date(p.flashSaleStartAt) : null
-  const end = p.flashSaleEndAt ? new Date(p.flashSaleEndAt) : null
-  const now = new Date()
-  if (start && now < start) return { active: false, price: p.price }
-  if (end && now > end) return { active: false, price: p.price }
-  if (
-    p.flashSaleQuota != null &&
-    p.flashSaleSold >= p.flashSaleQuota
-  ) {
-    return { active: false, price: p.price }
-  }
-  return { active: true, price: p.flashSalePrice, ends: end ?? undefined }
+  return { active: true, price: p.flashSalePrice, ends: w.ends }
+}
+
+// Harga flash varian yang benar-benar berlaku (window terbuka + < harga
+// normal varian). null = varian tampil harga normal.
+function variantFlashPrice(
+  windowOpen: boolean,
+  v: PublicVariant,
+): number | null {
+  if (!windowOpen) return null
+  if (v.flashSalePrice == null || v.flashSalePrice >= v.price) return null
+  return v.flashSalePrice
 }
 
 // Mini-carousel untuk thumbnail produk di list. Dibuat inline supaya tidak
@@ -435,21 +454,23 @@ export function OrderFormPublic({
   const items = useMemo(() => {
     return products.flatMap((p) => {
       // Phase 5: produk dengan varian → satu line per varian (key composite),
-      // produk single → satu line dengan key = productId. Flash sale hanya
-      // di-apply untuk produk single (tidak ada di varian-level).
+      // produk single → satu line dengan key = productId. Flash sale varian
+      // (2026-07-15): harga flash per varian, jadwal ikut level produk.
       if (p.variants && p.variants.length > 0) {
+        const w = flashWindowOpen(p)
         return p.variants.flatMap((v) => {
           const q = qty[lineKey(p.id, v.id)] ?? 0
           if (q <= 0) return []
+          const fsp = variantFlashPrice(w.open, v)
           return [
             {
               productId: p.id,
               variantId: v.id,
               name: `${p.name} – ${v.name}`,
               qty: q,
-              price: v.price,
+              price: fsp ?? v.price,
               originalPrice: v.price,
-              isFlashSale: false,
+              isFlashSale: fsp != null,
               weight: v.weightGrams,
             },
           ]
@@ -484,14 +505,22 @@ export function OrderFormPublic({
     0,
   )
 
-  // Earliest flash sale end across products → tampil counter.
+  // Earliest flash sale end across products → tampil counter. Produk
+  // bervarian ikut dihitung kalau ada varian ber-harga-flash.
   const flashEndsAt = useMemo(() => {
     let earliest: Date | null = null
     for (const p of products) {
       const fs = computeFlashSale(p)
+      let ends: Date | undefined
       if (fs.active && fs.ends) {
-        if (!earliest || fs.ends < earliest) earliest = fs.ends
+        ends = fs.ends
+      } else if (p.variants && p.variants.length > 0) {
+        const w = flashWindowOpen(p)
+        if (w.open && w.ends && p.variants.some((v) => variantFlashPrice(true, v) != null)) {
+          ends = w.ends
+        }
       }
+      if (ends && (!earliest || ends < earliest)) earliest = ends
     }
     return earliest
   }, [products])
@@ -811,6 +840,9 @@ export function OrderFormPublic({
               {products.map((p) => {
                 const fs = computeFlashSale(p)
                 const hasVariants = (p.variants?.length ?? 0) > 0
+                // Window flash utk varian — harga flash per varian hanya
+                // berlaku saat window produk terbuka.
+                const vWindow = hasVariants && flashWindowOpen(p).open
                 const cur = qty[p.id] ?? 0
                 return (
                   <li
@@ -851,6 +883,14 @@ export function OrderFormPublic({
                         {hasVariants ? (
                           <p className="mt-1 text-xs text-warm-500">
                             Pilih varian di bawah
+                            {vWindow &&
+                              p.variants!.some(
+                                (v) => variantFlashPrice(true, v) != null,
+                              ) && (
+                                <span className="ml-1.5 rounded bg-red-100 px-1 py-0.5 text-[10px] font-bold text-red-600">
+                                  FLASH SALE
+                                </span>
+                              )}
                           </p>
                         ) : (
                           <>
@@ -930,15 +970,30 @@ export function OrderFormPublic({
                                 <p className="text-sm font-medium text-warm-900">
                                   {v.name}
                                 </p>
-                                <div className="flex items-baseline gap-2">
-                                  <span className="text-sm font-bold text-primary-600">
-                                    Rp {formatNumber(v.price)}
-                                  </span>
-                                  <span className="text-xs text-warm-500">
-                                    {v.weightGrams} g
-                                    {v.stock != null && ` · Stok: ${v.stock}`}
-                                  </span>
-                                </div>
+                                {(() => {
+                                  const fsp = variantFlashPrice(vWindow, v)
+                                  return (
+                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                      <span className="text-sm font-bold text-primary-600">
+                                        Rp {formatNumber(fsp ?? v.price)}
+                                      </span>
+                                      {fsp != null && (
+                                        <>
+                                          <span className="text-xs text-warm-500 line-through">
+                                            Rp {formatNumber(v.price)}
+                                          </span>
+                                          <span className="rounded bg-red-100 px-1 py-0.5 text-[10px] font-bold text-red-600">
+                                            FLASH
+                                          </span>
+                                        </>
+                                      )}
+                                      <span className="text-xs text-warm-500">
+                                        {v.weightGrams} g
+                                        {v.stock != null && ` · Stok: ${v.stock}`}
+                                      </span>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                               <div className="flex items-center gap-1.5">
                                 <Button
@@ -1187,7 +1242,7 @@ export function OrderFormPublic({
             <>
               {items.map((i) => (
                 <div
-                  key={i.productId}
+                  key={lineKey(i.productId, i.variantId)}
                   className="flex justify-between text-sm"
                 >
                   <span className="truncate">
