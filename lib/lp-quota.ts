@@ -1,7 +1,10 @@
 // Helper kuota Landing Page Builder.
 //
-// Tier kuota dipetakan dari total token yang user beli (akumulasi seumur hidup).
-// Hanya naik — tidak pernah turun, walaupun saldo token sudah habis.
+// Sejak 2026-07-14 tier kuota adalah TURUNAN dari subscription hidup
+// (lib/services/subscription.ts: resolveLpEntitlement + syncQuotaFromSubscriptions).
+// Mekanisme lama "tier naik dari akumulasi top-up token" sudah DIMATIKAN —
+// akun era lama di-grandfather lewat kolom UserQuota.legacyTier.
+// File ini menyimpan konstanta entitlement per tier + helper cek kuota.
 import type { LpTier, Prisma, UserQuota } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
@@ -18,16 +21,18 @@ interface TierConfig {
   // FREE (1000) supaya LP yang ramai tidak kena placeholder "tidak tersedia".
   // POWER praktis unlimited (5jt).
   maxVisitorMonth: number
-  // Threshold token (akumulasi total purchased) untuk naik ke tier ini.
-  threshold: number
+  // Cap ukuran per-gambar (MB) saat upload di LP builder — beda dengan
+  // maxStorageMB (total). Angka ini juga dipakai backfill migration
+  // 20260714_subscription_quota_sync; kalau diubah, sinkronkan.
+  maxImageSizeMB: number
 }
 
-// Urutan dari kecil ke besar — penting untuk scan saat upgrade.
+// Urutan dari kecil ke besar — dipakai sebagai default entitlement per tier.
 const TIERS: TierConfig[] = [
-  { tier: 'FREE', maxLp: 1, maxStorageMB: 5, maxVisitorMonth: 1_000, threshold: 0 },
-  { tier: 'STARTER', maxLp: 3, maxStorageMB: 20, maxVisitorMonth: 20_000, threshold: 10_000 },
-  { tier: 'POPULAR', maxLp: 10, maxStorageMB: 100, maxVisitorMonth: 100_000, threshold: 50_000 },
-  { tier: 'POWER', maxLp: 999, maxStorageMB: 500, maxVisitorMonth: 5_000_000, threshold: 200_000 },
+  { tier: 'FREE', maxLp: 1, maxStorageMB: 5, maxVisitorMonth: 1_000, maxImageSizeMB: 1 },
+  { tier: 'STARTER', maxLp: 3, maxStorageMB: 20, maxVisitorMonth: 20_000, maxImageSizeMB: 3 },
+  { tier: 'POPULAR', maxLp: 10, maxStorageMB: 100, maxVisitorMonth: 100_000, maxImageSizeMB: 5 },
+  { tier: 'POWER', maxLp: 999, maxStorageMB: 500, maxVisitorMonth: 5_000_000, maxImageSizeMB: 10 },
 ]
 
 // Cap visitor per tier — sumber tunggal untuk UI /pricing supaya angka yang
@@ -36,20 +41,39 @@ export const TIER_VISITOR_CAP = Object.fromEntries(
   TIERS.map((t) => [t.tier, t.maxVisitorMonth]),
 ) as Record<LpTier, number>
 
+// Cap ukuran per-gambar (MB) per tier — mirror TIER_VISITOR_CAP.
+export const TIER_IMAGE_CAP = Object.fromEntries(
+  TIERS.map((t) => [t.tier, t.maxImageSizeMB]),
+) as Record<LpTier, number>
+
+// Entitlement lengkap per tier — dipakai syncQuotaFromSubscriptions sebagai
+// nilai default saat tier menang tanpa paket (mis. legacyTier) dan untuk
+// kolom yang tidak ada di LpUpgradePackage (visitor & image cap).
+export const TIER_ENTITLEMENTS = Object.fromEntries(
+  TIERS.map((t) => [
+    t.tier,
+    {
+      maxLp: t.maxLp,
+      maxStorageMB: t.maxStorageMB,
+      maxVisitorMonth: t.maxVisitorMonth,
+      maxImageSizeMB: t.maxImageSizeMB,
+    },
+  ]),
+) as Record<
+  LpTier,
+  {
+    maxLp: number
+    maxStorageMB: number
+    maxVisitorMonth: number
+    maxImageSizeMB: number
+  }
+>
+
 const RANK: Record<LpTier, number> = {
   FREE: 0,
   STARTER: 1,
   POPULAR: 2,
   POWER: 3,
-}
-
-// Pilih tier tertinggi yang threshold-nya <= totalTokenPurchased.
-function tierForTotal(total: number): TierConfig {
-  let chosen = TIERS[0]
-  for (const t of TIERS) {
-    if (total >= t.threshold) chosen = t
-  }
-  return chosen
 }
 
 // Ambil quota user; auto-create dengan default FREE kalau belum ada.
@@ -63,38 +87,6 @@ export async function getUserQuota(
   if (existing) return existing
   return db.userQuota.create({
     data: { userId, tier: 'FREE', maxLp: 1, maxStorageMB: 5 },
-  })
-}
-
-// Setelah user beli token (lewat Tripay atau transfer manual yang dikonfirmasi),
-// hitung total cumulative purchased dan upgrade tier kalau memenuhi threshold.
-// Idempotent — aman dipanggil berkali-kali, hanya menulis kalau ada perubahan.
-//
-// `db` opsional: lewatkan `tx` supaya update tier ikut dalam transaksi yang
-// kredit token (mencegah token committed tapi tier gagal upgrade).
-export async function upgradeTierFromPurchase(
-  userId: string,
-  _tokenAmount: number,
-  db: Db = prisma,
-): Promise<UserQuota> {
-  // Pakai snapshot totalPurchased dari TokenBalance (sudah update setelah kredit).
-  const balance = await db.tokenBalance.findUnique({ where: { userId } })
-  const totalPurchased = balance?.totalPurchased ?? 0
-
-  const target = tierForTotal(totalPurchased)
-  const current = await getUserQuota(userId, db)
-
-  // Hanya naik. Storage juga hanya naik (kalau quota baru lebih kecil, biarkan).
-  if (RANK[target.tier] <= RANK[current.tier]) return current
-
-  return db.userQuota.update({
-    where: { userId },
-    data: {
-      tier: target.tier,
-      maxLp: Math.max(current.maxLp, target.maxLp),
-      maxStorageMB: Math.max(current.maxStorageMB, target.maxStorageMB),
-      maxVisitorMonth: Math.max(current.maxVisitorMonth, target.maxVisitorMonth),
-    },
   })
 }
 
@@ -154,6 +146,12 @@ export async function updateStorageUsed(
 // Apply tier dari paket LP yang dibeli user (Payment LP_UPGRADE konfirm /
 // ManualPayment LP_UPGRADE konfirm). Hanya naik — kalau user sudah di tier
 // lebih tinggi, biarkan (tetap return quota current).
+//
+// LEGACY (era pra-subscription): jalur pembelian one-time ini sudah tidak
+// punya UI (tidak ada yang memanggil /api/lp/upgrade/create dari frontend) —
+// dipertahankan hanya untuk payment lama yang masih pending. Tier yang
+// ditulis di sini bisa ditimpa syncQuotaFromSubscriptions pada event
+// subscription berikutnya kecuali akun tsb punya legacyTier.
 export async function applyLpUpgradeFromPackage(
   userId: string,
   pkg: { tier: LpTier; maxLp: number; maxStorageMB: number },

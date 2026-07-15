@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "tsx lib/host-gen-gate.test.ts && tsx lib/services/host-gen/kling-retry.test.ts && tsx lib/services/subscription-entitlement.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -10,8 +10,15 @@
 //     nomor user (kalau user punya WA session connected).
 //
 // Tidak ada eksplisit refund logic — prepaid no refund.
-import type { LpUpgradePackage, Prisma, Subscription } from '@prisma/client'
+import type {
+  LpTier,
+  LpUpgradePackage,
+  Prisma,
+  Subscription,
+  UserQuota,
+} from '@prisma/client'
 
+import { TIER_ENTITLEMENTS } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { waService } from '@/lib/wa-service'
 
@@ -28,6 +35,165 @@ export const TIER_RANK: Record<string, number> = {
   STARTER: 1,
   POPULAR: 2,
   POWER: 3,
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ENTITLEMENT RESOLVER — kuota LP adalah TURUNAN state subscription.
+//
+// "Sub hidup" = status ACTIVE atau CANCELLED (cancel tetap punya akses
+// sampai endDate — janji di cancelSubscription) yang isLifetime atau
+// endDate-nya masih di depan. Tier efektif = rank tertinggi antara semua
+// sub hidup dan legacyTier (grandfather era pra-subscription).
+//
+// Satu-satunya penulis kolom entitlement UserQuota adalah
+// syncQuotaFromSubscriptions — dipanggil di checkout, aktivasi, dan expire.
+// Fungsi resolve-nya pure supaya bisa dites tanpa DB (pola hostTierAllowed).
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface LiveSubInput {
+  status: string
+  isLifetime: boolean
+  endDate: Date
+  tier: string
+  maxLp: number
+  maxStorageMB: number
+}
+
+export function isSubscriptionLive(
+  sub: { status: string; isLifetime: boolean; endDate: Date },
+  now: Date,
+): boolean {
+  if (sub.status !== 'ACTIVE' && sub.status !== 'CANCELLED') return false
+  return sub.isLifetime || sub.endDate.getTime() > now.getTime()
+}
+
+export interface LpEntitlement {
+  tier: LpTier
+  maxLp: number
+  maxStorageMB: number
+  maxVisitorMonth: number
+  maxImageSizeMB: number
+}
+
+export function resolveLpEntitlement(
+  subs: LiveSubInput[],
+  now: Date,
+  legacyTier?: LpTier | null,
+): LpEntitlement {
+  const live = subs.filter((s) => isSubscriptionLive(s, now))
+
+  // Tier pemenang = rank tertinggi antara sub hidup dan legacyTier (floor).
+  // Tier tak dikenal dianggap rank 0 (jatuh ke FREE).
+  let tier: LpTier = 'FREE'
+  for (const s of live) {
+    if ((TIER_RANK[s.tier] ?? 0) > TIER_RANK[tier]) tier = s.tier as LpTier
+  }
+  if (legacyTier && (TIER_RANK[legacyTier] ?? 0) > TIER_RANK[tier]) {
+    tier = legacyTier
+  }
+
+  // maxLp/maxStorage: default entitlement tier, di-MAX dengan paket sub
+  // hidup ber-rank pemenang (admin bisa set paket lebih besar dari default).
+  const base = TIER_ENTITLEMENTS[tier] ?? TIER_ENTITLEMENTS.FREE
+  let maxLp = base.maxLp
+  let maxStorageMB = base.maxStorageMB
+  for (const s of live) {
+    if ((TIER_RANK[s.tier] ?? 0) !== TIER_RANK[tier]) continue
+    maxLp = Math.max(maxLp, s.maxLp)
+    maxStorageMB = Math.max(maxStorageMB, s.maxStorageMB)
+  }
+
+  return {
+    tier,
+    maxLp,
+    maxStorageMB,
+    maxVisitorMonth: base.maxVisitorMonth,
+    maxImageSizeMB: base.maxImageSizeMB,
+  }
+}
+
+export interface DowngradeCheck {
+  blocked: boolean
+  blockingPackageName?: string
+  blockingEndDate?: Date
+}
+
+// Blokir pembelian tier LEBIH RENDAH dari sub hidup tertinggi — kuota tidak
+// akan naik (resolver ambil rank tertinggi) jadi user cuma buang token.
+// Same-tier (extend) dan upgrade tetap lolos.
+export function isDowngradePurchase(
+  targetTier: string,
+  liveSubs: Array<{ tier: string; packageName: string; endDate: Date }>,
+): DowngradeCheck {
+  let top: (typeof liveSubs)[number] | null = null
+  for (const s of liveSubs) {
+    if (!top || (TIER_RANK[s.tier] ?? 0) > (TIER_RANK[top.tier] ?? 0)) top = s
+  }
+  if (!top) return { blocked: false }
+  if ((TIER_RANK[targetTier] ?? 0) >= (TIER_RANK[top.tier] ?? 0)) {
+    return { blocked: false }
+  }
+  return {
+    blocked: true,
+    blockingPackageName: top.packageName,
+    blockingEndDate: top.endDate,
+  }
+}
+
+// Tulis ulang SEMUA kolom entitlement UserQuota dari state subscription saat
+// ini. Idempotent & konvergen — aman dipanggil dari jalur mana pun (checkout,
+// aktivasi manual, cron expire); storageUsedMB sengaja tidak disentuh.
+export async function syncQuotaFromSubscriptions(
+  userId: string,
+  db: Db = prisma,
+): Promise<UserQuota> {
+  const now = new Date()
+  const [subs, quota] = await Promise.all([
+    db.subscription.findMany({
+      where: {
+        userId,
+        status: { in: ['ACTIVE', 'CANCELLED'] },
+        OR: [{ isLifetime: true }, { endDate: { gt: now } }],
+      },
+      select: {
+        status: true,
+        isLifetime: true,
+        endDate: true,
+        lpPackage: { select: { tier: true, maxLp: true, maxStorageMB: true } },
+      },
+    }),
+    db.userQuota.findUnique({
+      where: { userId },
+      select: { legacyTier: true },
+    }),
+  ])
+
+  const ent = resolveLpEntitlement(
+    subs.map((s) => ({
+      status: s.status,
+      isLifetime: s.isLifetime,
+      endDate: s.endDate,
+      tier: s.lpPackage.tier,
+      maxLp: s.lpPackage.maxLp,
+      maxStorageMB: s.lpPackage.maxStorageMB,
+    })),
+    now,
+    quota?.legacyTier ?? null,
+  )
+
+  const data = {
+    tier: ent.tier,
+    maxLp: ent.maxLp,
+    maxStorageMB: ent.maxStorageMB,
+    maxVisitorMonth: ent.maxVisitorMonth,
+    maxImageSizeMB: ent.maxImageSizeMB,
+    canAiGenerate: ent.tier !== 'FREE',
+  }
+  return db.userQuota.upsert({
+    where: { userId },
+    create: { userId, ...data },
+    update: data,
+  })
 }
 
 // Format tanggal Indonesia "5 Mei 2026" — dipakai banyak di message body.

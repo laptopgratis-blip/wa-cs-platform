@@ -936,6 +936,12 @@ model UserQuota {
   // Apakah user boleh pakai AI generate. Free user OFF — harus upgrade.
   // Selain itu ada token threshold check di /api/lp/generate.
   canAiGenerate   Boolean  @default(false)
+  // Grandfather tier era pra-subscription (top-up threshold / LP_UPGRADE
+  // one-time). Dipakai resolveLpEntitlement sebagai FLOOR: tier efektif =
+  // max(tier subscription hidup, legacyTier). NULL = murni subscription.
+  // Diisi sekali oleh migration 20260714_subscription_quota_sync; admin bisa
+  // cabut per akun kalau perlu.
+  legacyTier      LpTier?
   updatedAt       DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

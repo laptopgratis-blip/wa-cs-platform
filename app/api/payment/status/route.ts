@@ -5,7 +5,6 @@ import { Prisma } from '@prisma/client'
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
-import { upgradeTierFromPurchase } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { getTransactionDetail } from '@/lib/tripay'
 
@@ -97,7 +96,7 @@ export async function GET(req: Request) {
                 reference: orderId,
               },
             })
-            await upgradeTierFromPurchase(payment.userId, payment.tokenAmount, tx)
+            // Catatan 2026-07-14: top-up tidak lagi menaikkan tier kuota LP.
           }
         })
       } catch (txErr) {

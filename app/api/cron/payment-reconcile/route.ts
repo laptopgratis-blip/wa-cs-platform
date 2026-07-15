@@ -15,7 +15,6 @@ import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
-import { upgradeTierFromPurchase } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { getTransactionDetail } from '@/lib/tripay'
 
@@ -103,7 +102,7 @@ async function reconcileOne(payment: {
             reference: payment.orderId,
           },
         })
-        await upgradeTierFromPurchase(payment.userId, payment.tokenAmount, tx)
+        // Catatan 2026-07-14: top-up tidak lagi menaikkan tier kuota LP.
       }
     })
   } catch (txErr) {

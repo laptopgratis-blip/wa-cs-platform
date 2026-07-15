@@ -5,7 +5,6 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireFinanceOrAdmin } from '@/lib/api'
 import { sendManualPaymentConfirmedEmail } from '@/lib/email'
-import { upgradeTierFromPurchase } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 
 interface Params {
@@ -81,16 +80,8 @@ export async function POST(_req: Request, { params }: Params) {
       })
     })
 
-    // Upgrade tier kuota LP. Di luar transaksi DB & dibungkus try/catch karena
-    // failure di sini tidak boleh batalkan kredit token yang sudah berhasil.
-    try {
-      await upgradeTierFromPurchase(payment.userId, payment.tokenAmount)
-    } catch (quotaErr) {
-      console.error(
-        '[POST /api/admin/finance/:id/confirm] gagal upgrade tier:',
-        quotaErr,
-      )
-    }
+    // Catatan 2026-07-14: top-up token TIDAK lagi menaikkan tier kuota LP —
+    // tier murni dari subscription (lib/services/subscription.ts).
 
     // Kirim email notifikasi — failure email tidak boleh fail-kan transaksi.
     try {

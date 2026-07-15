@@ -8,7 +8,6 @@
 import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
-import { upgradeTierFromPurchase } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
 import { verifySignature } from '@/lib/tripay'
 
@@ -131,10 +130,8 @@ export async function POST(req: Request) {
               reference: merchantRef,
             },
           })
-          // Upgrade tier dalam transaksi yang sama supaya kalau gagal,
-          // kredit token + status payment ikut rollback (tidak bisa
-          // ada saldo masuk tapi tier tidak naik).
-          await upgradeTierFromPurchase(payment.userId, payment.tokenAmount, tx)
+          // Catatan 2026-07-14: top-up token TIDAK lagi menaikkan tier kuota
+          // LP — tier murni dari subscription (lib/services/subscription.ts).
         }
       })
     } catch (txErr) {
