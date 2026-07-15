@@ -791,8 +791,10 @@ export async function checkoutSubscriptionWithTokens(input: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// expireSubscription — endDate lewat → status EXPIRED, downgrade ke FREE.
-// Dipanggil cron daily /api/cron/subscription-expire.
+// expireSubscription — endDate lewat → status EXPIRED, kuota di-sync ulang
+// dari sub yang tersisa (turun ke FREE kalau tidak ada). Menerima ACTIVE
+// dan CANCELLED (cancel = akses jalan sampai endDate, lalu diturunkan di
+// sini). Dipanggil cron daily /api/cron/subscription-expire.
 // ─────────────────────────────────────────────────────────────────────────
 
 export async function expireSubscription(subscriptionId: string): Promise<void> {
@@ -801,73 +803,71 @@ export async function expireSubscription(subscriptionId: string): Promise<void> 
     include: { user: true, lpPackage: true },
   })
   if (!sub) return
-  if (sub.status !== 'ACTIVE') return // already expired/cancelled
+  if (sub.status !== 'ACTIVE' && sub.status !== 'CANCELLED') return // sudah EXPIRED/REPLACED
   if (sub.isLifetime) return // lifetime grandfathered tidak boleh expire
 
-  // Guard: kalau user masih punya subscription ACTIVE LAIN yang belum
-  // berakhir (mis. sudah upgrade tier — sub lama tertinggal ACTIVE di era
-  // sebelum status REPLACED), expire baris ini SAJA tanpa downgrade quota.
-  // Tanpa guard ini, user Power bisa mendadak turun ke FREE cuma karena
-  // endDate sub lamanya lewat.
-  const otherActive = await prisma.subscription.findFirst({
-    where: {
-      userId: sub.userId,
-      id: { not: subscriptionId },
-      status: 'ACTIVE',
-      endDate: { gt: new Date() },
-    },
-    select: { id: true },
-  })
-  if (otherActive) {
-    await prisma.subscription.update({
+  // Satu transaksi: flip status → repoint pointer → sync kuota dari state
+  // final. Menggantikan guard "otherActive" lama yang meng-expire tanpa
+  // resync (kuota bisa nyangkut di tier tinggi saat sub tersisa lebih
+  // rendah, dan sebaliknya pointer jadi basi).
+  const quotaAfter = await prisma.$transaction(async (tx) => {
+    await tx.subscription.update({
       where: { id: subscriptionId },
       data: { status: 'EXPIRED' },
     })
-    return // jangan downgrade & jangan kirim notif "turun ke FREE"
+
+    // Pointer currentSubscriptionId: kalau masih menunjuk sub ini, arahkan
+    // ke sub hidup ber-endDate terjauh (atau null). updateMany supaya no-op
+    // kalau pointer sudah menunjuk sub lain.
+    const nextSub = await tx.subscription.findFirst({
+      where: {
+        userId: sub.userId,
+        id: { not: subscriptionId },
+        status: { in: ['ACTIVE', 'CANCELLED'] },
+        OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+      },
+      orderBy: { endDate: 'desc' },
+      select: { id: true, endDate: true },
+    })
+    await tx.user.updateMany({
+      where: { id: sub.userId, currentSubscriptionId: subscriptionId },
+      data: {
+        currentSubscriptionId: nextSub?.id ?? null,
+        currentPlanExpiresAt: nextSub?.endDate ?? null,
+      },
+    })
+
+    return syncQuotaFromSubscriptions(sub.userId, tx)
+  })
+
+  if (quotaAfter.tier === 'FREE') {
+    await createNotification({
+      userId: sub.userId,
+      subscriptionId,
+      type: 'EXPIRED',
+      channel: 'IN_APP',
+      title: '⏰ Subscription Berakhir',
+      message: `Plan ${sub.lpPackage.name} kamu sudah berakhir. Akun otomatis turun ke FREE plan. Perpanjang untuk akses fitur premium kembali.`,
+      link: '/pricing',
+    })
+    void sendWaNotificationToUser(sub.userId, {
+      title: 'Subscription Berakhir',
+      message: `Plan ${sub.lpPackage.name} sudah berakhir, akun turun ke FREE. Perpanjang di hulao.id/pricing untuk akses fitur premium lagi.`,
+      subscriptionId,
+    })
+  } else {
+    // Masih ada plan lain yang hidup (atau legacyTier) — informasikan tanpa
+    // menakut-nakuti "turun ke FREE". WA notif sengaja tidak dikirim.
+    await createNotification({
+      userId: sub.userId,
+      subscriptionId,
+      type: 'EXPIRED',
+      channel: 'IN_APP',
+      title: '⏰ Satu Plan Berakhir',
+      message: `Plan ${sub.lpPackage.name} kamu sudah berakhir. Akun sekarang mengikuti plan ${quotaAfter.tier} yang masih aktif.`,
+      link: '/billing/subscription',
+    })
   }
-
-  await prisma.$transaction([
-    prisma.subscription.update({
-      where: { id: subscriptionId },
-      data: { status: 'EXPIRED' },
-    }),
-    prisma.user.update({
-      where: { id: sub.userId },
-      data: {
-        currentSubscriptionId: null,
-        currentPlanExpiresAt: null,
-      },
-    }),
-    // Auto-downgrade UserQuota ke FREE.
-    prisma.userQuota.update({
-      where: { userId: sub.userId },
-      data: {
-        tier: 'FREE',
-        maxLp: 1,
-        maxStorageMB: 5,
-        // canAiGenerate dan field plan-specific lain reset ke default FREE.
-        canAiGenerate: false,
-        maxImageSizeMB: 1,
-        maxVisitorMonth: 1000,
-      },
-    }),
-  ])
-
-  await createNotification({
-    userId: sub.userId,
-    subscriptionId,
-    type: 'EXPIRED',
-    channel: 'IN_APP',
-    title: '⏰ Subscription Berakhir',
-    message: `Plan ${sub.lpPackage.name} kamu sudah berakhir. Akun otomatis turun ke FREE plan. Perpanjang untuk akses fitur premium kembali.`,
-    link: '/pricing',
-  })
-
-  void sendWaNotificationToUser(sub.userId, {
-    title: 'Subscription Berakhir',
-    message: `Plan ${sub.lpPackage.name} sudah berakhir, akun turun ke FREE. Perpanjang di hulao.id/pricing untuk akses fitur premium lagi.`,
-    subscriptionId,
-  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────

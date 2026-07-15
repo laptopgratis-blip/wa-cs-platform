@@ -1,6 +1,7 @@
 // Plan gating untuk Host AI (Live Shopping) — fitur berbayar, aktif mulai
-// paket Popular. Basisnya subscription AKTIF (sama pola dgn order-system-gate),
-// BUKAN UserQuota lifetime — supaya benar-benar butuh langganan berjalan.
+// paket Popular. Basisnya subscription HIDUP (ACTIVE, atau CANCELLED yang
+// belum lewat endDate — sama pola dgn order-system-gate), BUKAN UserQuota
+// lifetime — supaya benar-benar butuh langganan berjalan.
 //
 // Guard dipasang di choke point service (orchestrateHostPrompt +
 // generateHostImage). Karena video Kling selalu butuh baseline image dulu,
@@ -19,17 +20,22 @@ export function hostTierAllowed(tier: string): boolean {
 export async function hasHostGenAccess(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, currentSubscriptionId: true },
+    select: { role: true },
   })
   if (user?.role === 'ADMIN') return true
-  if (!user?.currentSubscriptionId) return false
 
-  const sub = await prisma.subscription.findUnique({
-    where: { id: user.currentSubscriptionId },
-    select: { status: true, lpPackage: { select: { tier: true } } },
+  // Cek langsung ke subscription HIDUP — bukan pointer currentSubscriptionId
+  // (bisa basi saat sub dobel/expire parsial). CANCELLED ikut dihitung:
+  // janji cancel = akses tetap jalan sampai endDate.
+  const liveSubs = await prisma.subscription.findMany({
+    where: {
+      userId,
+      status: { in: ['ACTIVE', 'CANCELLED'] },
+      OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+    },
+    select: { lpPackage: { select: { tier: true } } },
   })
-  if (!sub || sub.status !== 'ACTIVE') return false
-  return hostTierAllowed(sub.lpPackage.tier)
+  return liveSubs.some((s) => hostTierAllowed(s.lpPackage.tier))
 }
 
 // Throw versi — dipanggil di service generate. Pesan langsung dipakai sebagai

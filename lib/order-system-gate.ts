@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/api'
+import { TIER_RANK } from '@/lib/services/subscription'
 
 export interface OrderSystemAccess {
   hasAccess: boolean
@@ -18,6 +19,11 @@ export interface OrderSystemAccess {
 // Cek apakah user boleh akses Order System. Tidak throw — caller boleh
 // render UpgradeModal kalau hasAccess=false.
 //
+// Basis: subscription HIDUP (ACTIVE, atau CANCELLED yang belum lewat
+// endDate — janji cancel = akses jalan sampai endDate). Tidak lagi membaca
+// pointer User.currentSubscriptionId yang bisa basi saat sub dobel/expire
+// parsial.
+//
 // ADMIN bypass: role=ADMIN selalu hasAccess=true (untuk testing + ops),
 // supaya admin Hulao bisa lihat & test semua fitur Order System tanpa harus
 // subscribe ke paket POWER duluan.
@@ -26,11 +32,7 @@ export async function checkOrderSystemAccess(
 ): Promise<OrderSystemAccess> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      role: true,
-      currentSubscriptionId: true,
-      currentPlanExpiresAt: true,
-    },
+    select: { role: true },
   })
 
   if (user?.role === 'ADMIN') {
@@ -42,14 +44,13 @@ export async function checkOrderSystemAccess(
     }
   }
 
-  if (!user?.currentSubscriptionId) {
-    return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POPULAR' }
-  }
-
-  const sub = await prisma.subscription.findUnique({
-    where: { id: user.currentSubscriptionId },
+  const liveSubs = await prisma.subscription.findMany({
+    where: {
+      userId,
+      status: { in: ['ACTIVE', 'CANCELLED'] },
+      OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+    },
     select: {
-      status: true,
       endDate: true,
       lpPackage: {
         select: {
@@ -61,16 +62,37 @@ export async function checkOrderSystemAccess(
     },
   })
 
-  if (!sub || sub.status !== 'ACTIVE') {
+  if (liveSubs.length === 0) {
     return { hasAccess: false, currentTier: 'FREE', requiredTier: 'POPULAR' }
   }
 
+  // currentTier = rank tertinggi lintas sub hidup (untuk pesan UpgradeModal).
+  const top = liveSubs.reduce((a, b) =>
+    (TIER_RANK[b.lpPackage.tier] ?? 0) > (TIER_RANK[a.lpPackage.tier] ?? 0)
+      ? b
+      : a,
+  )
+  // Akses diberikan kalau ADA paket hidup ber-flag canUseOrderSystem;
+  // expiresAt = endDate terjauh dari sub yang meng-grant akses tsb.
+  const granting = liveSubs
+    .filter((s) => s.lpPackage.canUseOrderSystem)
+    .sort((a, b) => b.endDate.getTime() - a.endDate.getTime())
+
+  if (granting.length === 0) {
+    return {
+      hasAccess: false,
+      currentTier: top.lpPackage.tier,
+      requiredTier: 'POPULAR',
+      packageName: top.lpPackage.name,
+    }
+  }
+
   return {
-    hasAccess: sub.lpPackage.canUseOrderSystem,
-    currentTier: sub.lpPackage.tier,
+    hasAccess: true,
+    currentTier: top.lpPackage.tier,
     requiredTier: 'POPULAR',
-    packageName: sub.lpPackage.name,
-    expiresAt: sub.endDate,
+    packageName: granting[0].lpPackage.name,
+    expiresAt: granting[0].endDate,
   }
 }
 

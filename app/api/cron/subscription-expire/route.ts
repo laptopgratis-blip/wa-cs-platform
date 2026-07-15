@@ -13,9 +13,12 @@ export async function POST(req: Request) {
   if (authErr) return authErr
 
   const now = new Date()
+  // CANCELLED ikut disapu: cancel = akses jalan sampai endDate, setelah itu
+  // WAJIB diturunkan juga (dulu hanya ACTIVE → user cancel pegang tier
+  // selamanya).
   const expired = await prisma.subscription.findMany({
     where: {
-      status: 'ACTIVE',
+      status: { in: ['ACTIVE', 'CANCELLED'] },
       isLifetime: false,
       endDate: { lt: now },
     },
