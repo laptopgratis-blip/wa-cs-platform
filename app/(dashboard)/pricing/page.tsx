@@ -1,4 +1,5 @@
-// /pricing — public-accessible (logged in user juga bisa lihat).
+// /pricing — butuh login (layout (dashboard) redirect anonim ke /login;
+// PricingView sendiri sudah isLoggedIn-aware kalau nanti mau dibuat publik).
 // Server component fetch packages dari DB, sisanya di-handle PricingView (client).
 import { getServerSession } from 'next-auth'
 

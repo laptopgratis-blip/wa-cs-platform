@@ -47,6 +47,8 @@ interface LpPackageRow {
   maxLp: number
   maxStorageMB: number
   price: number
+  priceMonthly: number
+  canUseOrderSystem: boolean
   isPopular: boolean
   isActive: boolean
   sortOrder: number
@@ -69,6 +71,8 @@ export function LpPackagesManager() {
   const [maxLp, setMaxLp] = useState('')
   const [maxStorageMB, setMaxStorageMB] = useState('')
   const [price, setPrice] = useState('')
+  const [priceMonthly, setPriceMonthly] = useState('0')
+  const [canUseOrderSystem, setCanUseOrderSystem] = useState(false)
   const [sortOrder, setSortOrder] = useState('0')
   const [isPopular, setIsPopular] = useState(false)
   const [isActive, setIsActive] = useState(true)
@@ -98,6 +102,8 @@ export function LpPackagesManager() {
     setMaxLp('3')
     setMaxStorageMB('20')
     setPrice('')
+    setPriceMonthly('0')
+    setCanUseOrderSystem(false)
     setSortOrder(String(rows.length))
     setIsPopular(false)
     setIsActive(true)
@@ -111,6 +117,8 @@ export function LpPackagesManager() {
     setMaxLp(String(p.maxLp))
     setMaxStorageMB(String(p.maxStorageMB))
     setPrice(String(p.price))
+    setPriceMonthly(String(p.priceMonthly ?? 0))
+    setCanUseOrderSystem(p.canUseOrderSystem ?? false)
     setSortOrder(String(p.sortOrder))
     setIsPopular(p.isPopular)
     setIsActive(p.isActive)
@@ -127,6 +135,8 @@ export function LpPackagesManager() {
         maxLp: Number(maxLp),
         maxStorageMB: Number(maxStorageMB),
         price: Number(price),
+        priceMonthly: Number(priceMonthly) || 0,
+        canUseOrderSystem,
         sortOrder: Number(sortOrder),
         isPopular,
         isActive,
@@ -209,6 +219,8 @@ export function LpPackagesManager() {
               <TableHead className="text-right">Max LP</TableHead>
               <TableHead className="text-right">Storage</TableHead>
               <TableHead className="text-right">Harga</TableHead>
+              <TableHead className="text-right">Subs/bln</TableHead>
+              <TableHead>Order System</TableHead>
               <TableHead className="text-right">Order</TableHead>
               <TableHead>Populer</TableHead>
               <TableHead>Aktif</TableHead>
@@ -217,10 +229,10 @@ export function LpPackagesManager() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableSkeleton rows={5} cols={9} />
+              <TableSkeleton rows={5} cols={11} />
             ) : rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9}>
+                <TableCell colSpan={11}>
                   <EmptyState
                     icon={Globe}
                     title="Belum ada paket"
@@ -248,6 +260,28 @@ export function LpPackagesManager() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatRupiah(p.price)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {p.priceMonthly > 0 ? (
+                      formatRupiah(p.priceMonthly)
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={p.canUseOrderSystem}
+                      onCheckedChange={async () => {
+                        await fetch(`/api/admin/lp-packages/${p.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            canUseOrderSystem: !p.canUseOrderSystem,
+                          }),
+                        })
+                        void load()
+                      }}
+                    />
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {p.sortOrder}
@@ -380,6 +414,34 @@ export function LpPackagesManager() {
                   onChange={(e) => setSortOrder(e.target.value)}
                 />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="lpp-price-monthly">
+                Harga Subscription / bulan (Rp)
+              </Label>
+              <Input
+                id="lpp-price-monthly"
+                type="number"
+                min={0}
+                value={priceMonthly}
+                onChange={(e) => setPriceMonthly(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Basis harga di /pricing (dibayar token). 0 = paket tidak bisa
+                di-subscribe.
+              </p>
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <Label>Order System</Label>
+                <p className="text-xs text-muted-foreground">
+                  Akses Produk, Form Order, Zona Ongkir, Rekening.
+                </p>
+              </div>
+              <Switch
+                checked={canUseOrderSystem}
+                onCheckedChange={setCanUseOrderSystem}
+              />
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <Label>Populer (badge "Paling Populer")</Label>

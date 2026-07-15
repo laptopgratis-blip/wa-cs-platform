@@ -236,7 +236,11 @@ export function SubscriptionDashboard() {
               )}
 
               <div className="flex flex-wrap gap-2">
-                {!current.isLifetime && current.status === 'ACTIVE' && (
+                {/* CANCELLED belum lewat endDate tetap boleh perpanjang/
+                    upgrade — checkout chain dari endDate (sisa hari aman). */}
+                {!current.isLifetime &&
+                  (current.status === 'ACTIVE' ||
+                    current.status === 'CANCELLED') && (
                   <>
                     <Button asChild>
                       <Link href={`/upgrade?plan=${current.plan.id}&duration=12`}>

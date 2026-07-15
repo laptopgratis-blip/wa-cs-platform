@@ -31,9 +31,11 @@ export async function POST(req: Request) {
     const endOfTarget = new Date(startOfTarget)
     endOfTarget.setHours(23, 59, 59, 999)
 
+    // CANCELLED ikut diingatkan — akses mereka juga berakhir di endDate
+    // (copy "perpanjang" tetap relevan: re-subscribe chain dari endDate).
     const expiringSubs = await prisma.subscription.findMany({
       where: {
-        status: 'ACTIVE',
+        status: { in: ['ACTIVE', 'CANCELLED'] },
         isLifetime: false,
         endDate: { gte: startOfTarget, lte: endOfTarget },
       },

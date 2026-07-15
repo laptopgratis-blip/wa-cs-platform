@@ -98,6 +98,12 @@ export const lpUpgradePackageCreateSchema = z.object({
   maxLp: z.number().int().positive().max(9999),
   maxStorageMB: z.number().int().positive().max(100_000),
   price: z.number().int().positive().max(100_000_000),
+  // Harga subscription per bulan (Rp) — basis /pricing & checkout token.
+  // 0 = paket belum bisa di-subscribe (tidak muncul di /pricing).
+  priceMonthly: z.number().int().min(0).max(100_000_000).optional(),
+  // Akses fitur Order System (Produk, Form Order, Zona Ongkir, Rekening)
+  // untuk pemegang paket — dicek lib/order-system-gate.ts.
+  canUseOrderSystem: z.boolean().optional(),
   isPopular: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(1000).optional(),
