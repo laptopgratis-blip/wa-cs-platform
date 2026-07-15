@@ -82,6 +82,16 @@ const TIER_ICON: Record<string, typeof Sparkles> = {
   POWER: Crown,
 }
 
+// Urutan tier untuk menandai kartu downgrade — duplikat kecil dari
+// TIER_RANK di lib/services/subscription.ts (file itu server-only karena
+// import prisma; jangan di-import ke client component).
+const TIER_ORDER: Record<string, number> = {
+  FREE: 0,
+  STARTER: 1,
+  POPULAR: 2,
+  POWER: 3,
+}
+
 const FAQ = [
   {
     q: 'Bagaimana cara berlangganan?',
@@ -222,6 +232,11 @@ export function PricingView({
           const monthly = Math.round(calc.priceFinal / duration)
           const monthlyTokens = convertIdrToTokens(monthly, pricePerToken)
           const isCurrent = currentTier === pkg.tier
+          // Downgrade diblokir backend (409 DOWNGRADE_BLOCKED) — kuota tidak
+          // akan naik, jadi kartunya di-disable sekalian di sini.
+          const isLower =
+            currentTier != null &&
+            (TIER_ORDER[pkg.tier] ?? 0) < (TIER_ORDER[currentTier] ?? 0)
           // Kredit proration (sisa subscription aktif tier lebih rendah) —
           // yang benar-benar dipotong = harga − kredit. Mirror preview API.
           const creditTokens = Math.min(
@@ -279,11 +294,13 @@ export function PricingView({
               ctaLabel={
                 isCurrent
                   ? 'Plan Saat Ini'
-                  : balanceStatus === 'insufficient'
-                    ? 'Top-up dulu'
-                    : `Pilih ${pkg.name}`
+                  : isLower
+                    ? 'Plan Saat Ini Lebih Tinggi'
+                    : balanceStatus === 'insufficient'
+                      ? 'Top-up dulu'
+                      : `Pilih ${pkg.name}`
               }
-              ctaDisabled={isCurrent}
+              ctaDisabled={isCurrent || isLower}
               onClick={() => {
                 if (balanceStatus === 'insufficient') {
                   // Jangan diam-diam lempar ke /billing — jelaskan dulu

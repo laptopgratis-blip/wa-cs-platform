@@ -13,7 +13,10 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { computeUpgradeCredit } from '@/lib/services/subscription'
+import {
+  computeUpgradeCredit,
+  isDowngradePurchase,
+} from '@/lib/services/subscription'
 import {
   VALID_DURATIONS,
   calculateSubscriptionPriceFull,
@@ -90,7 +93,32 @@ export async function GET(req: Request) {
   const appliedCredit = Math.min(credit.creditTokens, calc.priceFinalTokens)
   const tokensDue = calc.priceFinalTokens - appliedCredit
 
+  // Blok downgrade — mirror checkout supaya UI bisa kasih tahu SEBELUM bayar.
+  const liveSubs = await prisma.subscription.findMany({
+    where: {
+      userId: session.user.id,
+      status: { in: ['ACTIVE', 'CANCELLED'] },
+      OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+    },
+    select: { endDate: true, lpPackage: { select: { tier: true, name: true } } },
+  })
+  const downgrade = isDowngradePurchase(
+    pkg.tier,
+    liveSubs.map((s) => ({
+      tier: s.lpPackage.tier,
+      packageName: s.lpPackage.name,
+      endDate: s.endDate,
+    })),
+  )
+
   return jsonOk({
+    // null kalau boleh dibeli; berisi plan penghalang kalau downgrade.
+    downgradeBlocked: downgrade.blocked
+      ? {
+          packageName: downgrade.blockingPackageName,
+          endDate: downgrade.blockingEndDate?.toISOString(),
+        }
+      : null,
     package: {
       id: pkg.id,
       name: pkg.name,

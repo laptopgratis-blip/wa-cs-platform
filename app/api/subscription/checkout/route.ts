@@ -80,6 +80,18 @@ export async function POST(req: Request) {
         { status: 402 },
       )
     }
+    if (code === 'DOWNGRADE_BLOCKED') {
+      // Beli tier lebih rendah saat masih ada plan hidup ber-tier lebih
+      // tinggi — kuota tidak akan naik, jadi tolak dengan penjelasan.
+      return Response.json(
+        {
+          success: false,
+          error: 'DOWNGRADE_BLOCKED',
+          message: err instanceof Error ? err.message : 'Downgrade diblokir',
+        },
+        { status: 409 },
+      )
+    }
     const msg = err instanceof Error ? err.message : 'Terjadi kesalahan server'
     console.error('[POST /api/subscription/checkout] gagal:', err)
     return jsonError(msg, 400)

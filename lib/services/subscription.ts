@@ -331,12 +331,14 @@ async function activateSubscriptionCore(
     return { ok: false }
   }
 
-  // Cek subscription ACTIVE existing user. Kalau sama plan (extend)
+  // Cek subscription hidup existing user. Kalau sama plan (extend)
   // → startDate baru = endDate existing supaya benar-benar perpanjang.
+  // CANCELLED ikut dihitung: aksesnya masih jalan sampai endDate, jadi
+  // re-subscribe pasca-cancel tidak boleh menghanguskan sisa hari.
   const existingActive = await db.subscription.findFirst({
     where: {
       userId: sub.userId,
-      status: 'ACTIVE',
+      status: { in: ['ACTIVE', 'CANCELLED'] },
       endDate: { gt: new Date() },
     },
     orderBy: { endDate: 'desc' },
@@ -363,20 +365,10 @@ async function activateSubscriptionCore(
       currentPlanExpiresAt: endDate,
     },
   })
-  await db.userQuota.upsert({
-    where: { userId: sub.userId },
-    create: {
-      userId: sub.userId,
-      tier: sub.lpPackage.tier,
-      maxLp: sub.lpPackage.maxLp,
-      maxStorageMB: sub.lpPackage.maxStorageMB,
-    },
-    update: {
-      tier: sub.lpPackage.tier,
-      maxLp: sub.lpPackage.maxLp,
-      maxStorageMB: sub.lpPackage.maxStorageMB,
-    },
-  })
+  // Sync SEMUA kolom entitlement dari state subscription final. Aktivasi
+  // paket ber-tier lebih rendah tidak akan menurunkan kuota (resolver ambil
+  // rank tertinggi dari semua sub hidup).
+  await syncQuotaFromSubscriptions(sub.userId, db)
 
   return {
     ok: true,
@@ -586,13 +578,15 @@ export async function checkoutSubscriptionWithTokens(input: {
   )
   const tokenCost = calc.priceFinalTokens
 
-  // Resolve startDate — kalau user punya subscription ACTIVE dgn plan sama,
+  // Resolve startDate — kalau user punya subscription hidup dgn plan sama,
   // extend dari endDate existing. Kalau plan beda (upgrade) atau belum ada,
   // mulai dari sekarang. Logic mirror activateSubscription supaya konsisten.
+  // CANCELLED ikut: re-subscribe pasca-cancel chain dari endDate (sisa hari
+  // tidak hangus — sesuai janji cancel "akses sampai endDate").
   const existingActive = await prisma.subscription.findFirst({
     where: {
       userId: input.userId,
-      status: 'ACTIVE',
+      status: { in: ['ACTIVE', 'CANCELLED'] },
       endDate: { gt: new Date() },
     },
     orderBy: { endDate: 'desc' },
@@ -608,6 +602,36 @@ export async function checkoutSubscriptionWithTokens(input: {
   // Atomic — saldo cek + deduct + create subscription + invoice + activate quota.
   // Pakai $transaction supaya kalau salah satu step gagal, semuanya rollback.
   const result = await prisma.$transaction(async (tx) => {
+    // 0a. Blok pembelian DOWNGRADE — beli tier lebih rendah dari sub hidup
+    //     tertinggi tidak menaikkan kuota apa pun (resolver ambil rank
+    //     tertinggi), user cuma buang token. Same-tier (extend) & upgrade lolos.
+    const liveSubs = await tx.subscription.findMany({
+      where: {
+        userId: input.userId,
+        status: { in: ['ACTIVE', 'CANCELLED'] },
+        OR: [{ isLifetime: true }, { endDate: { gt: new Date() } }],
+      },
+      select: {
+        endDate: true,
+        lpPackage: { select: { tier: true, name: true } },
+      },
+    })
+    const downgrade = isDowngradePurchase(
+      pkg.tier,
+      liveSubs.map((s) => ({
+        tier: s.lpPackage.tier,
+        packageName: s.lpPackage.name,
+        endDate: s.endDate,
+      })),
+    )
+    if (downgrade.blocked) {
+      const err = new Error(
+        `Plan ${downgrade.blockingPackageName} kamu masih aktif sampai ${formatDateId(downgrade.blockingEndDate ?? new Date())}. Paket yang lebih rendah baru bisa dibeli setelah plan itu berakhir — atau pilih perpanjang/upgrade.`,
+      )
+      ;(err as Error & { code?: string }).code = 'DOWNGRADE_BLOCKED'
+      throw err
+    }
+
     // 0. Kredit proration untuk upgrade tier — hitung DI DALAM transaksi
     //    supaya konsisten (sub lama tidak bisa dikredit dua kali oleh race).
     const credit = await computeUpgradeCredit({
@@ -714,21 +738,9 @@ export async function checkoutSubscriptionWithTokens(input: {
       },
     })
 
-    // 6. Upgrade UserQuota tier+maxLp+maxStorageMB.
-    await tx.userQuota.upsert({
-      where: { userId: input.userId },
-      create: {
-        userId: input.userId,
-        tier: pkg.tier,
-        maxLp: pkg.maxLp,
-        maxStorageMB: pkg.maxStorageMB,
-      },
-      update: {
-        tier: pkg.tier,
-        maxLp: pkg.maxLp,
-        maxStorageMB: pkg.maxStorageMB,
-      },
-    })
+    // 6. Sync SEMUA kolom entitlement UserQuota dari state subscription
+    //    final (setelah create + supersede REPLACED di atas).
+    await syncQuotaFromSubscriptions(input.userId, tx)
 
     // Read remaining balance untuk return ke caller.
     const balanceRow = await tx.tokenBalance.findUnique({
