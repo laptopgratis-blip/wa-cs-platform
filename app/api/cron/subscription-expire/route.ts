@@ -1,10 +1,14 @@
 // POST /api/cron/subscription-expire — daily 00:30 WIB.
-// Set status EXPIRED untuk subscription yg endDate sudah lewat,
-// auto-downgrade user ke FREE (lihat lib/services/subscription.expireSubscription).
+// Set status EXPIRED untuk subscription yg endDate sudah lewat, kuota
+// di-sync ulang dari sub tersisa (lihat lib/services/subscription.
+// expireSubscription). Sejak 2026-07-14 endpoint yang sama juga menyapu
+// LmsSubscription (lib/services/lms/lifecycle.ts) — sengaja numpang di
+// endpoint ini supaya tidak perlu daftar jadwal cron eksternal baru.
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
+import { expireLmsSubscription } from '@/lib/services/lms/lifecycle'
 import { expireSubscription } from '@/lib/services/subscription'
 
 export async function POST(req: Request) {
@@ -37,8 +41,27 @@ export async function POST(req: Request) {
     }
   }
 
+  // Sweep LMS — pola sama (per item try/catch, idempotent via status flip).
+  const lmsExpiredRows = await prisma.lmsSubscription.findMany({
+    where: {
+      status: { in: ['ACTIVE', 'CANCELLED'] },
+      endDate: { lt: now },
+    },
+    select: { id: true },
+  })
+  let lmsCount = 0
+  for (const s of lmsExpiredRows) {
+    try {
+      await expireLmsSubscription(s.id)
+      lmsCount++
+    } catch (err) {
+      errors.push(`lms:${s.id}: ${(err as Error).message}`)
+      console.error('[cron expire] gagal expire LMS', s.id, err)
+    }
+  }
+
   return NextResponse.json({
     success: true,
-    data: { expired: count, errors },
+    data: { expired: count, lmsExpired: lmsCount, errors },
   })
 }

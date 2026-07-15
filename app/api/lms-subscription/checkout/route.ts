@@ -59,6 +59,16 @@ export async function POST(req: Request) {
         { status: 402 },
       )
     }
+    if (code === 'DOWNGRADE_BLOCKED') {
+      return Response.json(
+        {
+          success: false,
+          error: 'DOWNGRADE_BLOCKED',
+          message: err instanceof Error ? err.message : 'Downgrade diblokir',
+        },
+        { status: 409 },
+      )
+    }
     const msg = err instanceof Error ? err.message : 'Terjadi kesalahan server'
     console.error('[POST /api/lms-subscription/checkout]', err)
     return jsonError(msg, 400)

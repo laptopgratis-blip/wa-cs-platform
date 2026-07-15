@@ -87,15 +87,8 @@ export async function applyQuotaFromPackage(input: {
   })
 }
 
-// Downgrade ke FREE — dipanggil cron saat LmsSubscription EXPIRED + user
-// tidak punya subscription ACTIVE lain.
-export async function downgradeToFree(userId: string): Promise<void> {
-  await prisma.lmsQuota.upsert({
-    where: { userId },
-    create: { userId, tier: 'FREE', ...FREE_DEFAULT },
-    update: { tier: 'FREE', ...FREE_DEFAULT },
-  })
-}
+// Catatan 2026-07-14: downgradeToFree dihapus — expiry kini lewat
+// lifecycle.ts (expireLmsSubscription → syncLmsQuotaFromSubscriptions).
 
 // -1 = unlimited. Helper supaya service tidak duplicate logic.
 export function isUnlimited(limit: number): boolean {

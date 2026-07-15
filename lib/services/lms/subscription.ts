@@ -21,7 +21,10 @@ import {
   generateInvoiceNumber,
 } from '@/lib/subscription-pricing'
 
-import { applyQuotaFromPackage } from './quota'
+import {
+  isLmsDowngradePurchase,
+  syncLmsQuotaFromSubscriptions,
+} from './lifecycle'
 
 const DEFAULT_PRICE_PER_TOKEN_RP = 2
 
@@ -77,12 +80,13 @@ export async function checkoutLmsSubscriptionWithTokens(input: {
   )
   const tokenCost = calc.priceFinalTokens
 
-  // Resolve startDate — extend dari ACTIVE existing kalau tier sama, else
-  // mulai sekarang (upgrade replace).
+  // Resolve startDate — extend dari sub hidup existing kalau paket sama,
+  // else mulai sekarang (upgrade replace). CANCELLED ikut: re-subscribe
+  // pasca-cancel chain dari endDate, sisa hari tidak hangus.
   const existingActive = await prisma.lmsSubscription.findFirst({
     where: {
       userId: input.userId,
-      status: 'ACTIVE',
+      status: { in: ['ACTIVE', 'CANCELLED'] },
       endDate: { gt: new Date() },
     },
     orderBy: { endDate: 'desc' },
@@ -97,6 +101,35 @@ export async function checkoutLmsSubscriptionWithTokens(input: {
   const description = `Subscription LMS ${pkg.name} (${input.durationMonths} bulan)`
 
   const result = await prisma.$transaction(async (tx) => {
+    // 0. Blok pembelian DOWNGRADE — beli tier lebih rendah dari sub hidup
+    //    tertinggi tidak menaikkan kuota (resolver ambil rank tertinggi).
+    const liveSubs = await tx.lmsSubscription.findMany({
+      where: {
+        userId: input.userId,
+        status: { in: ['ACTIVE', 'CANCELLED'] },
+        endDate: { gt: new Date() },
+      },
+      select: {
+        endDate: true,
+        lmsPackage: { select: { tier: true, name: true } },
+      },
+    })
+    const downgrade = isLmsDowngradePurchase(
+      pkg.tier,
+      liveSubs.map((s) => ({
+        tier: s.lmsPackage.tier,
+        packageName: s.lmsPackage.name,
+        endDate: s.endDate,
+      })),
+    )
+    if (downgrade.blocked) {
+      const err = new Error(
+        `Plan LMS ${downgrade.blockingPackageName} kamu masih aktif. Paket yang lebih rendah baru bisa dibeli setelah plan itu berakhir — atau pilih perpanjang/upgrade.`,
+      )
+      ;(err as Error & { code?: string }).code = 'DOWNGRADE_BLOCKED'
+      throw err
+    }
+
     // 1. Atomic deduct via WHERE balance >= cost.
     const deduct = await tx.tokenBalance.updateMany({
       where: {
@@ -155,29 +188,9 @@ export async function checkoutLmsSubscriptionWithTokens(input: {
       },
     })
 
-    // 5. Upsert LmsQuota — apply tier+limits. Pakai helper supaya consistent.
-    await tx.lmsQuota.upsert({
-      where: { userId: input.userId },
-      create: {
-        userId: input.userId,
-        tier: pkg.tier,
-        maxCourses: pkg.maxCourses,
-        maxLessonsPerCourse: pkg.maxLessonsPerCourse,
-        maxStudentsPerCourse: pkg.maxStudentsPerCourse,
-        maxFileStorageMB: pkg.maxFileStorageMB,
-        canUseDripSchedule: pkg.canUseDripSchedule,
-        canIssueCertificate: pkg.canIssueCertificate,
-      },
-      update: {
-        tier: pkg.tier,
-        maxCourses: pkg.maxCourses,
-        maxLessonsPerCourse: pkg.maxLessonsPerCourse,
-        maxStudentsPerCourse: pkg.maxStudentsPerCourse,
-        maxFileStorageMB: pkg.maxFileStorageMB,
-        canUseDripSchedule: pkg.canUseDripSchedule,
-        canIssueCertificate: pkg.canIssueCertificate,
-      },
-    })
+    // 5. Sync LmsQuota dari state subscription final (aktivasi paket lebih
+    //    rendah tidak akan menurunkan kuota — resolver ambil rank tertinggi).
+    await syncLmsQuotaFromSubscriptions(input.userId, tx)
 
     const balanceRow = await tx.tokenBalance.findUnique({
       where: { userId: input.userId },
