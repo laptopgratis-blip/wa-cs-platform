@@ -19,11 +19,15 @@ import {
   HANDOFF_RETRY_CLAIM,
   retryLeadHandoff,
 } from '@/lib/services/live/handoff'
+import { notifyNewOrder } from '@/lib/services/order-notif'
 import { waService } from '@/lib/wa-service'
 
 const BATCH_SIZE = 50
 const MAX_SEND_RETRY = 3 // failure transmisi WA
-const MAX_WA_RETRY = 5 // WA session tidak CONNECTED (delay 30 menit per retry)
+// WA session tidak CONNECTED → tunda 30 menit per retry. 12× ≈ window 6 jam
+// (dulu 5× ≈ 2,5 jam — kasus prod 2026-07-16: owner reconnect lebih lambat
+// dari window, konfirmasi order customer ikut hangus).
+const MAX_WA_RETRY = 12
 const RETRY_BACKOFF_MS = 15 * 60 * 1000
 const WA_RECONNECT_BACKOFF_MS = 30 * 60 * 1000
 
@@ -162,10 +166,21 @@ async function handle(req: Request) {
         continue
       }
 
-      // Kirim via WA service.
+      // Kirim via WA service. PENTING: sendMessage TIDAK melempar saat gagal
+      // — ia me-return { success:false, error } (wa-service down / session
+      // zombie / Baileys error). Wajib cek success; dulu semua resolve
+      // dibungkus ok:true sehingga kegagalan ditandai SENT palsu dan tidak
+      // pernah diretry (kasus prod 2026-07-16: konfirmasi order tak sampai).
       const sendResult = await waService
         .sendMessage(session.id, item.customerPhone, item.resolvedMessage)
-        .then((data) => ({ ok: true as const, data }))
+        .then((data) =>
+          data.success
+            ? { ok: true as const }
+            : {
+                ok: false as const,
+                error: data.error ?? 'wa-service gagal kirim',
+              },
+        )
         .catch((err: unknown) => ({
           ok: false as const,
           error: err instanceof Error ? err.message : String(err),
@@ -260,6 +275,35 @@ async function handle(req: Request) {
     }
   }
 
+  // ── Retry notif WA "Order Baru" ke owner (< 24 jam) ─────────────────
+  // notifyNewOrder idempotent (klaim via ownerNotifiedAt) — di sini cukup
+  // panggil ulang untuk order yang belum ter-stamp DAN ownernya memang
+  // mengaktifkan WA konfirmasi.
+  let ownerNotifRetried = 0
+  const unnotified = await prisma.userOrder.findMany({
+    where: {
+      ownerNotifiedAt: null,
+      createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      user: {
+        shippingProfile: {
+          waConfirmActive: true,
+          waConfirmNumber: { not: null },
+        },
+      },
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: 20,
+  })
+  for (const o of unnotified) {
+    try {
+      await notifyNewOrder(o.id)
+      ownerNotifRetried++
+    } catch (err) {
+      console.error('[cron followup-send] retry notif owner gagal', o.id, err)
+    }
+  }
+
   return NextResponse.json({
     success: true,
     data: {
@@ -270,6 +314,7 @@ async function handle(req: Request) {
       retried,
       handoffSent,
       handoffFailed,
+      ownerNotifRetried,
     },
   })
 }

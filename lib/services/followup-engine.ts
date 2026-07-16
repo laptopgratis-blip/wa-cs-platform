@@ -70,13 +70,11 @@ export async function generateQueueForOrder(
     await ensureReviewTemplates(order.userId)
   }
 
-  const waSession = await prisma.whatsappSession.findFirst({
-    where: { userId: order.userId, status: 'CONNECTED' },
-    select: { id: true },
-  })
-  if (!waSession) {
-    return { generated: 0, reason: 'No active WA session' }
-  }
+  // Catatan 2026-07-16: dulu ada guard "skip kalau tidak ada WA session
+  // CONNECTED" di sini — itu membuat queue TIDAK PERNAH dibuat saat WA owner
+  // kebetulan putus sesaat ketika order masuk (konfirmasi customer hilang
+  // permanen; kasus prod INV-20260716-HR6W46/LB54Y6). Queue kini selalu
+  // dibuat — cron followup-send sudah punya retry "WA disconnected".
 
   // Customer di blacklist → skip semua queue untuk customer ini.
   const blacklisted = await prisma.followUpBlacklist.findUnique({
@@ -208,11 +206,8 @@ export async function generateQueueForLead(
   // Top-up template lead nurture untuk user lama (idempotent).
   await ensureLeadNurtureTemplates(lead.userId)
 
-  const waSession = await prisma.whatsappSession.findFirst({
-    where: { userId: lead.userId, status: 'CONNECTED' },
-    select: { id: true },
-  })
-  if (!waSession) return { generated: 0, reason: 'No active WA session' }
+  // Tanpa guard WA CONNECTED — mirror generateQueueForOrder (2026-07-16):
+  // queue selalu dibuat, retry pengiriman urusan cron followup-send.
 
   // Simpan customerPhone tanpa '+' supaya konsisten dgn UserOrder & WA send.
   const phone = lead.customerPhone.replace(/^\+/, '')

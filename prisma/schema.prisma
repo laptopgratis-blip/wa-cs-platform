@@ -1588,6 +1588,12 @@ model UserOrder {
   deliveryStatus String  @default("PENDING")
   trackingNumber String?
 
+  // Kapan notif WA "Order Baru" ke owner (waConfirmNumber) terkirim. NULL =
+  // belum — disweep ulang cron followup-send s.d. 24 jam (2026-07-16: dulu
+  // fire-and-forget, hilang kalau WA owner pas putus). Juga jadi klaim
+  // anti dobel-kirim (set-first, reset kalau gagal).
+  ownerNotifiedAt DateTime?
+
   // Snapshot nama flow (mis. "Pengiriman COD") supaya tampil di UI tanpa join.
   flowName String?
 

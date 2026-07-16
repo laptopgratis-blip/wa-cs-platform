@@ -40,8 +40,17 @@ async function getNotifTarget(userId: string) {
   return profile.waConfirmNumber
 }
 
-// Notif saat order baru masuk (dari /api/orders/submit).
+// Notif saat order baru masuk. Dipanggil dari /api/orders/submit DAN sweep
+// retry di cron followup-send (2026-07-16: dulu fire-and-forget — kalau WA
+// owner pas putus/zombie saat order masuk, notif hilang permanen).
+//
+// Idempotent & race-safe via UserOrder.ownerNotifiedAt:
+//   - klaim dulu (set timestamp WHERE ownerNotifiedAt IS NULL) sebelum kirim
+//   - kirim gagal → reset NULL supaya disweep ulang run berikutnya
+//   - prasyarat belum siap (toggle off / tidak ada session CONNECTED) →
+//     return tanpa klaim, biar dicoba lagi nanti
 export async function notifyNewOrder(orderId: string): Promise<void> {
+  let claimedByUs = false
   try {
     const order = await prisma.userOrder.findUnique({
       where: { id: orderId },
@@ -54,14 +63,24 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
         paymentMethod: true,
         shippingCityName: true,
         items: true,
+        ownerNotifiedAt: true,
       },
     })
     if (!order || !order.invoiceNumber) return
+    if (order.ownerNotifiedAt) return // sudah terkirim
 
     const target = await getNotifTarget(order.userId)
     if (!target) return
     const session = await getActiveSession(order.userId)
     if (!session) return
+
+    // Klaim atomik anti dobel-kirim (submit-path & cron bisa overlap).
+    const claimed = await prisma.userOrder.updateMany({
+      where: { id: orderId, ownerNotifiedAt: null },
+      data: { ownerNotifiedAt: new Date() },
+    })
+    if (claimed.count === 0) return
+    claimedByUs = true
 
     const items = (order.items as Array<{ name: string; qty: number }>) ?? []
     const itemsSummary =
@@ -98,8 +117,25 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
       .filter(Boolean)
       .join('\n')
 
-    await waService.sendMessage(session.id, target, message)
+    const sendResult = await waService.sendMessage(session.id, target, message)
+    if (!sendResult.success) {
+      // Lepas klaim supaya disweep ulang cron followup-send.
+      await prisma.userOrder.updateMany({
+        where: { id: orderId },
+        data: { ownerNotifiedAt: null },
+      })
+      console.error(
+        '[notifyNewOrder] kirim WA gagal (akan diretry cron):',
+        sendResult.error,
+      )
+    }
   } catch (err) {
+    // Lepas klaim juga di error tak terduga — hanya klaim milik run ini.
+    if (claimedByUs) {
+      await prisma.userOrder
+        .updateMany({ where: { id: orderId }, data: { ownerNotifiedAt: null } })
+        .catch(() => {})
+    }
     console.error('[notifyNewOrder] gagal kirim WA:', err)
   }
 }
