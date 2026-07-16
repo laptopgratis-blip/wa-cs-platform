@@ -14,6 +14,11 @@ import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
+import {
+  HANDOFF_CLAIM_STALE_MS,
+  HANDOFF_RETRY_CLAIM,
+  retryLeadHandoff,
+} from '@/lib/services/live/handoff'
 import { waService } from '@/lib/wa-service'
 
 const BATCH_SIZE = 50
@@ -222,9 +227,50 @@ async function handle(req: Request) {
     }
   }
 
+  // ── Auto-retry handoff LiveLead yang gagal (< 24 jam) ────────────────
+  // Kasus riil 2026-07-16: WA owner sempat disconnect saat live → customer
+  // klik "Order WA", lead tercatat HANDOFF_FAILED dan tidak pernah menerima
+  // WA. Sapu di cron ini (sudah terjadwal rapat) supaya begitu WA owner
+  // connect lagi, handoff terkirim otomatis. Klaim anti-dobel di
+  // retryLeadHandoff (marker [retrying] + stale takeover).
+  let handoffSent = 0
+  let handoffFailed = 0
+  const staleBefore = new Date(now.getTime() - HANDOFF_CLAIM_STALE_MS)
+  const failedLeads = await prisma.liveLead.findMany({
+    where: {
+      status: 'HANDOFF_FAILED',
+      createdAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      OR: [
+        { NOT: { handoffError: HANDOFF_RETRY_CLAIM } },
+        { handoffError: HANDOFF_RETRY_CLAIM, updatedAt: { lt: staleBefore } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+    take: 20,
+  })
+  for (const l of failedLeads) {
+    try {
+      const result = await retryLeadHandoff(l.id)
+      if (result === 'SENT') handoffSent++
+      else if (result === 'FAILED') handoffFailed++
+    } catch (err) {
+      handoffFailed++
+      console.error('[cron followup-send] retry handoff gagal', l.id, err)
+    }
+  }
+
   return NextResponse.json({
     success: true,
-    data: { total: due.length, sent, failed, skipped, retried },
+    data: {
+      total: due.length,
+      sent,
+      failed,
+      skipped,
+      retried,
+      handoffSent,
+      handoffFailed,
+    },
   })
 }
 

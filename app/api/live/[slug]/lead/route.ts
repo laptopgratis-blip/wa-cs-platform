@@ -16,6 +16,10 @@ import { getClientIp } from '@/lib/client-ip'
 import { normalizePhone, toWaNumber } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
+import {
+  buildHandoffMessage,
+  buildWaMeFallback,
+} from '@/lib/services/live/handoff'
 import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
 import { buildTranscript, logLiveEvent } from '@/lib/services/live/tangkap'
 import { waService } from '@/lib/wa-service'
@@ -26,25 +30,6 @@ const leadSchema = z.object({
   phone: z.string().trim().min(8).max(20),
   productId: z.string().trim().optional(),
 })
-
-function buildHandoffMessage(input: {
-  customerName: string
-  roomName: string
-  productInterest: string | null
-  transcript: string
-}): string {
-  const lines = [
-    `Halo ${input.customerName}! 👋`,
-    '',
-    `Terima kasih sudah ngobrol di live *${input.roomName}*. Saya tim CS yang bantu lanjutin order.`,
-  ]
-  if (input.productInterest) {
-    lines.push('', `Saya lihat tadi minat *${input.productInterest}* — siap bantu detail / kirim invoice.`)
-  } else {
-    lines.push('', 'Boleh dibantu ke order yang mana ya?')
-  }
-  return lines.join('\n')
-}
 
 export async function POST(
   req: Request,
@@ -96,13 +81,24 @@ export async function POST(
   // Idempotency — kalau sudah ada lead untuk session ini, return existing.
   const existingLead = await prisma.liveLead.findUnique({
     where: { liveSessionId: session.id },
-    select: { id: true, status: true, customerPhone: true },
+    select: { id: true, status: true, customerPhone: true, productInterest: true },
   })
   if (existingLead) {
     return jsonOk({
       leadId: existingLead.id,
       status: existingLead.status,
       duplicate: true,
+      // Fallback wa.me untuk status FAILED (lead embed juga lewat sini saat
+      // klik Order WA) — customer bisa memulai chat sendiri tanpa nunggu.
+      waMeUrl:
+        existingLead.status === 'HANDOFF_FAILED'
+          ? await buildWaMeFallback({
+              userId: room.userId,
+              customerName: data.name,
+              roomName: room.name,
+              productInterest: existingLead.productInterest,
+            })
+          : null,
     })
   }
 
@@ -176,7 +172,18 @@ export async function POST(
       where: { id: lead.id },
       data: { status: 'HANDOFF_FAILED', handoffError: 'No connected WA session' },
     })
-    return jsonOk({ leadId: lead.id, status: 'HANDOFF_FAILED' as const })
+    // Cron followup-send akan auto-retry saat WA owner connect lagi; sambil
+    // menunggu, beri customer jalur wa.me untuk memulai chat sendiri.
+    return jsonOk({
+      leadId: lead.id,
+      status: 'HANDOFF_FAILED' as const,
+      waMeUrl: await buildWaMeFallback({
+        userId: room.userId,
+        customerName: data.name,
+        roomName: room.name,
+        productInterest: productName,
+      }),
+    })
   }
 
   // Upsert Contact di CRM.
@@ -212,7 +219,6 @@ export async function POST(
     customerName: data.name,
     roomName: room.name,
     productInterest: productName,
-    transcript,
   })
   const sendResult = await waService.sendMessage(waSession.id, waNumber, waMessage)
 
@@ -252,5 +258,14 @@ export async function POST(
       contactId: contact.id,
     },
   })
-  return jsonOk({ leadId: lead.id, status: 'HANDOFF_FAILED' as const })
+  return jsonOk({
+    leadId: lead.id,
+    status: 'HANDOFF_FAILED' as const,
+    waMeUrl: await buildWaMeFallback({
+      userId: room.userId,
+      customerName: data.name,
+      roomName: room.name,
+      productInterest: productName,
+    }),
+  })
 }

@@ -262,6 +262,8 @@ export function LiveRoomView({
   const [leadStatus, setLeadStatus] = useState<
     'idle' | 'submitting' | 'HANDOFF_SENT' | 'HANDOFF_FAILED' | 'error'
   >('idle')
+  // Fallback wa.me saat handoff gagal — dirender sebagai tombol "Chat CS".
+  const [leadWaMeUrl, setLeadWaMeUrl] = useState<string | null>(null)
 
   // State machine — gerakan host disesuaikan dengan kondisi chat.
   const [liveState, setLiveState] = useState<LiveState>('idle')
@@ -1061,11 +1063,17 @@ export function LiveRoomView({
       })
       const json = (await res.json()) as {
         success: boolean
-        data?: { leadId: string; status: 'HANDOFF_SENT' | 'HANDOFF_FAILED' }
+        data?: {
+          leadId: string
+          status: 'HANDOFF_SENT' | 'HANDOFF_FAILED'
+          // Fallback wa.me saat handoff gagal — customer bisa chat duluan.
+          waMeUrl?: string | null
+        }
         error?: string
       }
       if (json.success && json.data) {
         setLeadStatus(json.data.status)
+        setLeadWaMeUrl(json.data.waMeUrl ?? null)
       } else {
         setLeadStatus('error')
         toast.error(json.error ?? 'Gagal kirim lead')
@@ -1407,11 +1415,27 @@ export function LiveRoomView({
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /> Cek WhatsApp
           </div>
         ) : leadStatus === 'HANDOFF_FAILED' ? (
-            <div
-              className="rounded-full bg-amber-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
-              role="status"
-            >
-              Tim CS sebentar lagi
+            <div className="flex flex-col items-end gap-1.5">
+              <div
+                className="rounded-full bg-amber-500/95 px-3 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm"
+                role="status"
+              >
+                Tim CS sebentar lagi
+              </div>
+              {/* Fallback: WA owner lagi offline dari sistem — kasih customer
+                  jalur chat langsung supaya order tidak hilang. Handoff tetap
+                  di-retry otomatis oleh cron begitu WA owner connect. */}
+              {leadWaMeUrl ? (
+                <a
+                  href={leadWaMeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_4px_14px_rgba(16,185,129,0.55)] ring-1 ring-white/20 transition active:scale-95 hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                  Chat CS via WA
+                </a>
+              ) : null}
             </div>
           ) : (
             <button
