@@ -145,14 +145,24 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
       'Generate gambar host (avatar) untuk CS Live AI. 1 call = 1 image. Cost ≈ $0.045/image (Nano Banana 2, 1K res).',
   },
   // Kling video generation — biaya per detik.
-  // inputPricePer1M = USD per 1 detik × 1_000_000 (Kling v2.1 master ≈ $0.10/sec via Fal.ai).
+  // inputPricePer1M = USD per 1 detik × 1_000_000.
+  //
+  // Rekalibrasi 2026-07-21 (hitungan Adnan): biaya riil Fal.ai Kling v2.1
+  // master ≈ Rp 56rb per video 10 dtk ($0,34/dtk @ kurs 16.500) — harga lama
+  // $0,10/dtk membuat potongan cuma 16.500 token (Rp 33rb) = RUGI per video.
+  // Target owner: potongan ±32rb token (Rp 64rb) per video 10 dtk:
+  //   apiCostRp  = 10 × 0,34 × 16.500        = Rp 56.100 (tercatat riil)
+  //   tokens     = ceil(56.100 × 1,15 / 2)   = 32.258 token (≈ Rp 64,5rb)
+  // Margin fitur ini 1,15 (bukan 2,0) supaya harga jual sesuai target owner
+  // sambil biaya di dashboard profitability tetap angka sebenarnya.
   HOST_VIDEO_KLING_V3: {
     ...COMMON_DEFAULTS,
     featureKey: 'HOST_VIDEO_KLING_V3',
     displayName: 'CS Live AI — Host Video (Kling)',
     modelName: 'fal-ai/kling-video/v2.1/master/image-to-video',
-    inputPricePer1M: 100_000, // $0.10/sec × 1M
+    inputPricePer1M: 340_000, // $0.34/sec × 1M (riil Fal.ai, 2026-07-21)
     outputPricePer1M: 0,
+    platformMargin: 1.15,
     floorTokens: 500,
     unitType: 'VIDEO_SECOND' as const,
     unitLabel: 'detik',
