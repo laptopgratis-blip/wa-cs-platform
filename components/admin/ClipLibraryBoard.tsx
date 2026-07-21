@@ -54,6 +54,9 @@ interface Clip {
   audioUrl: string | null
   videoUrl: string | null
   durationMs: number | null
+  // Snapshot suara saat generate — null utk klip lama / hasil upload.
+  voiceId?: string | null
+  voiceName?: string | null
   source: string
   status: string
   errorMessage: string | null
@@ -1242,10 +1245,18 @@ export function ClipLibraryBoard({
                           <span>{c.errorMessage.slice(0, 200)}</span>
                         </div>
                       ) : null}
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-warm-500">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-warm-500">
                         <span>{c.useCount} dipakai</span>
                         {c.durationMs ? <span>· {(c.durationMs / 1000).toFixed(1)}s</span> : null}
                         {c.audioUrl ? <span>· audio: <a href={c.audioUrl} className="underline">MP3</a></span> : null}
+                        {/* Snapshot suara saat generate — klip lama (pra-fitur)
+                            tidak punya datanya, jadi tidak ditampilkan. */}
+                        {c.voiceName || c.voiceId ? (
+                          <span className="inline-flex items-center gap-0.5">
+                            · <Mic className="h-3 w-3" aria-hidden="true" />{' '}
+                            {c.voiceName ?? c.voiceId}
+                          </span>
+                        ) : null}
                       </div>
                       <div className="mt-2 flex gap-1.5">
                         <Button

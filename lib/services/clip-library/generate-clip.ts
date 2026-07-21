@@ -23,6 +23,8 @@ import path from 'node:path'
 
 import type { ClipCategory, LiveClipStatus, ClipSource } from '@prisma/client'
 
+import type { AudioGenResult } from '@/lib/services/host-gen/clip-types'
+
 import { prisma } from '@/lib/prisma'
 import { getAdaptivePromptForHost } from '@/lib/services/host-gen/adaptive-kling-prompt'
 import {
@@ -33,7 +35,11 @@ import { isTransientKlingTaskFailure } from '@/lib/services/host-gen/kling-retry
 import { computeMediaCharge, executeMediaSync } from '@/lib/services/media-charge'
 import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
-import { generateClipAudio, maxSafeCharsForDuration } from './audio-gen'
+import {
+  generateClipAudio,
+  listElevenLabsVoices,
+  maxSafeCharsForDuration,
+} from './audio-gen'
 import { EMBED_MODEL, embedText } from './embed'
 
 const CLIPS_DIR = path.join(process.cwd(), 'public', 'uploads', 'clips')
@@ -175,7 +181,7 @@ export async function generateClip(
   }
 
   // Step 2: TTS audio — billed via KLIP_LIVE_TTS_ELEVENLABS per character.
-  let audioResult
+  let audioResult: AudioGenResult
   try {
     await prisma.liveClip.update({
       where: { id: clipId },
@@ -199,11 +205,24 @@ export async function generateClip(
       },
     })
     audioResult = ttsResult.result
+    // Snapshot suara yang benar-benar dipakai — nama di-resolve best-effort
+    // (kalau lookup ElevenLabs gagal, id tetap tersimpan; jangan gagalkan
+    // pipeline hanya karena label display).
+    let voiceName: string | null = null
+    try {
+      const voices = await listElevenLabsVoices()
+      voiceName =
+        voices.find((v) => v.voice_id === audioResult.voiceId)?.name ?? null
+    } catch {
+      /* label saja — abaikan */
+    }
     await prisma.liveClip.update({
       where: { id: clipId },
       data: {
         audioUrl: audioResult.audioUrl,
         durationMs: audioResult.durationMs,
+        voiceId: audioResult.voiceId,
+        voiceName,
       },
     })
   } catch (e) {

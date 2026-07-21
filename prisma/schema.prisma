@@ -3306,6 +3306,11 @@ model LiveClip {
   videoUrl        String? // final MP4 dgn audio bonded (Kling lipsync output)
   thumbnailUrl    String? // poster frame 0:02
   durationMs      Int?
+  // Snapshot suara ElevenLabs yang DIPAKAI saat generate (2026-07-21) —
+  // HostTemplate.voiceId bisa diganti kapan saja, tanpa snapshot user lupa
+  // klip lama pakai suara siapa. null = klip lama pra-fitur / UPLOADED.
+  voiceId         String?
+  voiceName       String?
 
   // Matching
   embedding       Json? // float[1536] sementara — migrasi pgvector di Sprint 4 kalau perlu

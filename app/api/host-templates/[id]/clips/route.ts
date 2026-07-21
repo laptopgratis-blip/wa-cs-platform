@@ -82,6 +82,8 @@ export async function GET(
       videoUrl: true,
       thumbnailUrl: true,
       durationMs: true,
+      voiceId: true,
+      voiceName: true,
       source: true,
       status: true,
       errorMessage: true,

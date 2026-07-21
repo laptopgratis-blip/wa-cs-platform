@@ -165,6 +165,7 @@ export async function generateClipAudio(
     audioUrl: `${CLIPS_AUDIO_URL_PREFIX}/${filename}`,
     durationMs: estimateDurationMs(text),
     characterCount: text.length,
+    voiceId,
   }
 }
 

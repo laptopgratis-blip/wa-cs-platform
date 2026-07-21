@@ -92,6 +92,9 @@ export interface AudioGenResult {
   audioUrl: string // path lokal /uploads/clips-audio/<clip-id>.mp3
   durationMs: number
   characterCount: number // untuk billing
+  // Voice ElevenLabs yang BENAR-BENAR dipakai (setelah fallback default) —
+  // disnapshot ke LiveClip supaya user tahu klip pakai suara siapa.
+  voiceId: string
 }
 
 // ─────────────────────────────────────────
