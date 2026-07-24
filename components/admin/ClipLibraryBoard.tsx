@@ -34,6 +34,7 @@ import { HostTitleEditable } from './HostTitleEditable'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 
 interface Voice {
   voice_id: string
@@ -280,6 +281,40 @@ export function ClipLibraryBoard({
       }
     } catch (e) {
       toast.error((e as Error).message)
+    }
+  }
+
+  // Toggle tayang/off per klip — klip off tidak akan dipilih matcher maupun
+  // idle loop di live rooms (matchClip & findIdleClips filter isActive=true).
+  // Optimistic update supaya kartu langsung meredup tanpa nunggu server.
+  async function handleToggleActive(c: Clip) {
+    const next = !c.isActive
+    setClips((prev) =>
+      prev
+        ? prev.map((x) => (x.id === c.id ? { ...x, isActive: next } : x))
+        : prev,
+    )
+    try {
+      const res = await fetch(`/api/host-templates/${hostId}/clips/${c.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isActive: next }),
+      })
+      const j = (await res.json()) as { success: boolean; error?: string }
+      if (!res.ok || !j.success) throw new Error(j.error ?? 'Gagal mengubah status tayang')
+      toast.success(
+        next
+          ? 'Klip tayang lagi di live'
+          : 'Klip dimatikan — tidak akan muncul di live',
+      )
+    } catch (err) {
+      // Rollback optimistic update.
+      setClips((prev) =>
+        prev
+          ? prev.map((x) => (x.id === c.id ? { ...x, isActive: c.isActive } : x))
+          : prev,
+      )
+      toast.error(err instanceof Error ? err.message : 'Gagal mengubah status tayang')
     }
   }
 
@@ -1190,7 +1225,11 @@ export function ClipLibraryBoard({
                 return (
                   <div
                     key={c.id}
-                    className="flex flex-col gap-3 rounded-lg border border-warm-200 bg-white p-3 sm:flex-row sm:items-start"
+                    className={`flex flex-col gap-3 rounded-lg border bg-white p-3 sm:flex-row sm:items-start ${
+                      c.isActive
+                        ? 'border-warm-200'
+                        : 'border-warm-200 opacity-55 grayscale-[35%]'
+                    }`}
                   >
                     {/* Video preview kiri — full 9:16 aspect ratio */}
                     {c.videoUrl ? (
@@ -1212,6 +1251,11 @@ export function ClipLibraryBoard({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <Badge className={badge.cls}>{badge.label}</Badge>
+                        {!c.isActive ? (
+                          <Badge className="bg-warm-200 text-warm-700 hover:bg-warm-200">
+                            Off — tidak tayang
+                          </Badge>
+                        ) : null}
                         <span className="rounded-full bg-warm-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-warm-700">
                           {c.category}
                         </span>
@@ -1258,7 +1302,7 @@ export function ClipLibraryBoard({
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-2 flex gap-1.5">
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <Button
                           size="sm"
                           variant="outline"
@@ -1309,6 +1353,22 @@ export function ClipLibraryBoard({
                           <Trash2 className="mr-1 h-3 w-3" />
                           Hapus
                         </Button>
+                        {/* Toggle tayang — cara cepat mematikan klip yang salah
+                            tanpa menghapus (bisa dinyalakan lagi kapan pun). */}
+                        <label className="ml-auto flex cursor-pointer items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-warm-600">
+                            {c.isActive ? 'Tayang di live' : 'Off'}
+                          </span>
+                          <Switch
+                            checked={c.isActive}
+                            onCheckedChange={() => void handleToggleActive(c)}
+                            aria-label={
+                              c.isActive
+                                ? 'Matikan klip dari live'
+                                : 'Tayangkan klip di live'
+                            }
+                          />
+                        </label>
                       </div>
                     </div>
                   </div>
