@@ -256,6 +256,7 @@ export default async function BillingPage({
                           year: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
+                          timeZone: 'Asia/Jakarta',
                         })}
                       </div>
                       {mp.status === 'REJECTED' && mp.rejectionReason && (
@@ -310,12 +311,16 @@ export default async function BillingPage({
                 {transactions.map((t) => (
                   <TableRow key={t.id}>
                     <TableCell className="text-sm text-muted-foreground">
+                      {/* timeZone eksplisit — server jalan di UTC; tanpa ini
+                          jam tampil selisih -7 dan transaksi 00:00-06:59 WIB
+                          tampak bertanggal kemarin (keluhan user 2026-07-24). */}
                       {t.createdAt.toLocaleString('id-ID', {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit',
+                        timeZone: 'Asia/Jakarta',
                       })}
                     </TableCell>
                     <TableCell>
