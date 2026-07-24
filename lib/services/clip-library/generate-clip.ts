@@ -346,12 +346,21 @@ export async function generateClip(
         featureKey: 'KLIP_LIVE_LIPSYNC',
         units: seconds,
       })
-      const { deductTokenAtomic } = await import('@/lib/services/ai-generation-log')
+      const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
       await deductTokenAtomic({
         userId: input.userId,
         tokensCharged: charge.tokensCharged,
         description: `Klip Live Kling lipsync — ${seconds}dtk`,
         reference: `klip_lipsync:${clipId}`,
+      })
+      // Catat juga ke AiGenerationLog — tanpa ini biaya lipsync tidak
+      // terlihat di analitik profitabilitas admin (hanya ada TokenTransaction).
+      await logGeneration({
+        featureKey: 'KLIP_LIVE_LIPSYNC',
+        userId: input.userId,
+        subjectType: 'LIVE_CLIP',
+        subjectId: clipId,
+        charge,
       })
     } catch (e) {
       console.warn(`[generate-clip ${clipId}] billing lipsync gagal (klip tetap save):`, (e as Error).message)
@@ -391,12 +400,20 @@ export async function generateClip(
         featureKey: 'KLIP_LIVE_EMBED',
         units: estimatedTokens,
       })
-      const { deductTokenAtomic: deduct2 } = await import('@/lib/services/ai-generation-log')
+      const { deductTokenAtomic: deduct2, logGeneration: log2 } = await import('@/lib/services/ai-generation-log')
       await deduct2({
         userId: input.userId,
         tokensCharged: charge.tokensCharged,
         description: `Klip Live embed transcript`,
         reference: `klip_embed:${clipId}`,
+      })
+      // Catat ke AiGenerationLog — konsisten dengan lipsync di atas.
+      await log2({
+        featureKey: 'KLIP_LIVE_EMBED',
+        userId: input.userId,
+        subjectType: 'LIVE_CLIP',
+        subjectId: clipId,
+        charge,
       })
     } catch (be) {
       console.warn(`[generate-clip ${clipId}] embed billing skip:`, (be as Error).message)
