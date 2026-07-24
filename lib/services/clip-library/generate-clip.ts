@@ -232,6 +232,9 @@ export async function generateClip(
   // Step 3: build adaptive Kling prompt + rakit input lipsync (sekali saja —
   // input yang sama dipakai ulang kalau submit di-retry di Step 4).
   let submitInput: Parameters<typeof submitKlingLipsync>[0]
+  // Fallback source kalau sourceVideoId ditolak Kling code 1201 — Kling
+  // menghapus video image2video lama (±30 hari), template lama pasti kena.
+  let fallbackVideoUrl: string | null = null
   try {
     await prisma.liveClip.update({
       where: { id: clipId },
@@ -263,18 +266,31 @@ export async function generateClip(
     // Lipsync source: prioritas sourceVideoId (Kling-internal videos[0].id,
     // BUKAN task_id) → sourceVideoUrl (https Kling CDN 30-day valid URL).
     // Audio: URL kalau public base ada, base64 fallback untuk dev localhost.
+    const toAbsoluteUrl = (u: string) =>
+      u.startsWith('http') ? u : `${publicBase.replace(/\/$/, '')}${u}`
     submitInput = {
       prompt: motionPrompt,
     }
     if (input.sourceVideoId) {
       submitInput.sourceVideoId = input.sourceVideoId
     } else if (input.sourceVideoUrl) {
-      submitInput.sourceVideoUrl = input.sourceVideoUrl.startsWith('http')
-        ? input.sourceVideoUrl
-        : `${publicBase.replace(/\/$/, '')}${input.sourceVideoUrl}`
+      submitInput.sourceVideoUrl = toAbsoluteUrl(input.sourceVideoUrl)
     } else {
       throw new Error('Generate-clip: butuh sourceVideoId atau sourceVideoUrl (resolve dari baseline)')
     }
+
+    // Siapkan fallback URL: input.sourceVideoUrl atau salinan lokal baseline
+    // (HostTemplate.videoLoopUrl). Relative path butuh public base yang bisa
+    // di-fetch Kling — di dev localhost fallback dimatikan.
+    const hostRow = await prisma.hostTemplate.findUnique({
+      where: { id: input.hostTemplateId },
+      select: { videoLoopUrl: true },
+    })
+    const rawFallback = input.sourceVideoUrl ?? hostRow?.videoLoopUrl ?? null
+    fallbackVideoUrl =
+      rawFallback && (rawFallback.startsWith('http') || !isLocalBase)
+        ? toAbsoluteUrl(rawFallback)
+        : null
 
     if (isLocalBase) {
       // Audio base64 — read dari disk, encode (MP3 ~100KB)
@@ -300,8 +316,38 @@ export async function generateClip(
   try {
     let polled: { videoUrl: string; durationSeconds: number }
     let attempt = 0
+    let triedUrlFallback = false
     for (;;) {
-      const submitResult = await submitKlingLipsync(submitInput)
+      let submitResult: Awaited<ReturnType<typeof submitKlingLipsync>>
+      try {
+        submitResult = await submitKlingLipsync(submitInput)
+      } catch (submitErr) {
+        const submitMsg = (submitErr as Error).message
+        // Kling code 1201 "From video not found by id" = video image2video
+        // sudah dihapus Kling (±30 hari). Ganti source ke salinan lokal
+        // baseline (public URL) lalu resubmit — sekali saja.
+        const isExpiredVideoId =
+          submitMsg.includes('From video not found') ||
+          submitMsg.includes('"code":1201')
+        if (
+          !triedUrlFallback &&
+          isExpiredVideoId &&
+          submitInput.sourceVideoId &&
+          fallbackVideoUrl
+        ) {
+          triedUrlFallback = true
+          console.warn(
+            `[generate-clip ${clipId}] sourceVideoId kedaluwarsa di Kling — fallback ke baseline lokal ${fallbackVideoUrl}`,
+          )
+          submitInput = {
+            ...submitInput,
+            sourceVideoId: undefined,
+            sourceVideoUrl: fallbackVideoUrl,
+          }
+          continue
+        }
+        throw submitErr
+      }
       // klingJobId di-update tiap attempt supaya DB selalu menunjuk task
       // Kling yang sedang hidup.
       await prisma.liveClip.update({
