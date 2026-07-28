@@ -2,7 +2,7 @@
 // Pipeline: validate type/size → sharp resize+webp → simpan ke
 // /public/uploads/products/<userId>/<random>.webp → return URL.
 import { randomBytes } from 'crypto'
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, open } from 'fs/promises'
 import path from 'path'
 
 import type { NextResponse } from 'next/server'
@@ -60,7 +60,17 @@ export async function POST(req: Request) {
       session.user.id,
     )
     await mkdir(dir, { recursive: true })
-    await writeFile(path.join(dir, filename), webp)
+    // writeFile biasa cuma menulis ke page cache — kalau server reboot
+    // sebelum flush, file jadi 0 byte padahal URL-nya sudah tersimpan di
+    // produk (kejadian 27 Jul: 4 foto produk kosong). fsync memastikan
+    // data benar-benar di disk sebelum URL dikembalikan ke client.
+    const fh = await open(path.join(dir, filename), 'w')
+    try {
+      await fh.writeFile(webp)
+      await fh.sync()
+    } finally {
+      await fh.close()
+    }
 
     const url = `/uploads/products/${session.user.id}/${filename}`
     return jsonOk({ url, size: webp.length })

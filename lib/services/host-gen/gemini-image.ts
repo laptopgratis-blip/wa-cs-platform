@@ -205,6 +205,14 @@ export async function fileToBase64(filePath: string): Promise<{
     : filePath
   const { readFile } = await import('node:fs/promises')
   const buf = await readFile(abs)
+  // File 0-byte = sisa upload yang gagal flush ke disk (mis. server reboot
+  // saat write). Kalau diteruskan, Gemini balas error samar "Unable to
+  // process input image" — gagalkan di sini dengan pesan yang actionable.
+  if (buf.length === 0) {
+    throw new Error(
+      `Foto referensi kosong/rusak (0 byte): ${filePath} — hapus lalu upload ulang gambarnya`,
+    )
+  }
   const ext = path.extname(abs).toLowerCase().slice(1)
   const mimeType =
     ext === 'jpg' || ext === 'jpeg'
