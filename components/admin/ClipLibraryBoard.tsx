@@ -411,6 +411,11 @@ export function ClipLibraryBoard({
         toast.success(category === 'IDLE' ? 'Klip IDLE motion siap!' : 'Klip siap!')
       } else if (status === 'FAILED') {
         toast.error(`Klip gagal: ${json.data.errorMessage ?? '?'}`)
+      } else if (status === 'GENERATING_VIDEO') {
+        // Inline poll timeout — video dilanjutkan cron kling-poll di background.
+        toast(
+          'Kling lagi lambat — video dilanjutkan di background dan otomatis siap saat selesai. Pantau badge statusnya.',
+        )
       } else {
         toast(`Klip status: ${status}`)
       }
@@ -1284,10 +1289,19 @@ export function ClipLibraryBoard({
                         </div>
                       ) : null}
                       {c.errorMessage ? (
-                        <div className="mt-1 flex items-start gap-1 text-xs text-red-700">
-                          <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
-                          <span>{c.errorMessage.slice(0, 200)}</span>
-                        </div>
+                        // Marker "Kling lambat" = info proses background (cron
+                        // kling-poll), bukan error — tampil amber + spinner.
+                        c.errorMessage.startsWith('Kling lambat') ? (
+                          <div className="mt-1 flex items-start gap-1 text-xs text-amber-700">
+                            <Loader2 className="mt-0.5 h-3 w-3 flex-shrink-0 animate-spin" />
+                            <span>{c.errorMessage.slice(0, 200)}</span>
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-start gap-1 text-xs text-red-700">
+                            <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                            <span>{c.errorMessage.slice(0, 200)}</span>
+                          </div>
+                        )
                       ) : null}
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-warm-500">
                         <span>{c.useCount} dipakai</span>

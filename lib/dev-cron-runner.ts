@@ -4,6 +4,7 @@
 //
 // Strategi: singleton interval yang dipanggil sekali di Next.js boot (lewat
 // instrumentation.ts). Idempotent: kalau sudah jalan, skip.
+import { finalizeLateLipsyncClips } from '@/lib/services/clip-library/late-lipsync-finalizer'
 import { pollAndFinalizePendingVideos } from '@/lib/services/host-gen/queue'
 import { runLiveBotTick } from '@/lib/services/live/bot-runner'
 import { batchAnalyzePendingSessions } from '@/lib/services/live/objection-analyzer'
@@ -57,8 +58,8 @@ export function startDevCronRunner(): void {
     `[dev-cron] starting kling-poll (${intervalMs / 1000}s) + objection-analyze (${objIntervalMs / 1000}s) + live-bot (${botIntervalMs / 1000}s) intervals.`,
   )
   timer = setInterval(
-    makeGuardedTick('kling-poll', () =>
-      pollAndFinalizePendingVideos()
+    makeGuardedTick('kling-poll', async () => {
+      await pollAndFinalizePendingVideos()
         .then((r) => {
           if (r.checked > 0) {
             console.log(
@@ -68,8 +69,21 @@ export function startDevCronRunner(): void {
         })
         .catch((err) => {
           console.warn('[dev-cron] kling-poll error:', (err as Error).message)
-        }),
-    ),
+        })
+      // Klip Live: lanjutkan klip yang inline poll lipsync-nya timeout
+      // (marker KLING_LATE_MARKER dari generate-clip).
+      await finalizeLateLipsyncClips()
+        .then((r) => {
+          if (r.checked > 0) {
+            console.log(
+              `[dev-cron] late-lipsync: checked=${r.checked} done=${r.completed} fail=${r.failed} pending=${r.pending}`,
+            )
+          }
+        })
+        .catch((err) => {
+          console.warn('[dev-cron] late-lipsync error:', (err as Error).message)
+        })
+    }),
     intervalMs,
   )
 

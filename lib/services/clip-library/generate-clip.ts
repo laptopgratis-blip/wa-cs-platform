@@ -47,6 +47,15 @@ const CLIPS_URL_PREFIX = '/uploads/clips'
 
 const POLL_INTERVAL_MS = 5_000
 const POLL_TIMEOUT_MS = 300_000 // 5 menit max per lipsync (Kling sering 2-4 menit)
+
+// Marker errorMessage saat inline poll timeout — klip TIDAK di-FAILED-kan,
+// melainkan diserahkan ke cron kling-poll (late-lipsync-finalizer) yang akan
+// melanjutkan poll → download → bill → embed → READY. Teks dipakai sebagai
+// filter query cron sekaligus pesan status yang terbaca user di UI.
+export const KLING_LATE_MARKER =
+  'Kling lambat — video diproses di background, otomatis siap saat selesai.'
+export const KLING_FINALIZING_MARKER =
+  'Kling lambat — mengunduh hasil video dari Kling…'
 // Retry inline dibatasi 1 resubmit (lebih ketat dari MAX global 2) — pipeline
 // ini ditunggu synchronous oleh POST /clips; tiap resubmit bisa menambah wall
 // time sampai ~5 menit poll. 1 resubmit sudah menutup mayoritas transient.
@@ -95,7 +104,7 @@ async function pollUntilDone(
   throw new Error(`Kling lipsync timeout (>${POLL_TIMEOUT_MS / 1000}s)`)
 }
 
-async function downloadClipMp4(
+export async function downloadClipMp4(
   videoUrl: string,
   clipId: string,
 ): Promise<{ videoPath: string; bytes: number }> {
@@ -116,6 +125,102 @@ async function downloadClipMp4(
     /* jangan gagalkan pipeline gara-gara transcode */
   }
   return { videoPath: `${CLIPS_URL_PREFIX}/${filename}`, bytes }
+}
+
+// Bill Kling lipsync — compute & deduct + log. Dipanggil inline (poll sukses)
+// dan oleh cron late-lipsync-finalizer (timeout yang selesai belakangan).
+// Kalau saldo kurang setelah video sudah jadi, tetap charge biar fair; user
+// dapat klip. Non-throwing: kegagalan billing tidak membatalkan klip.
+export async function billClipLipsync(input: {
+  clipId: string
+  userId: string
+  seconds: number
+}): Promise<void> {
+  try {
+    const charge = await computeMediaCharge({
+      featureKey: 'KLIP_LIVE_LIPSYNC',
+      units: input.seconds,
+    })
+    const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
+    await deductTokenAtomic({
+      userId: input.userId,
+      tokensCharged: charge.tokensCharged,
+      description: `Klip Live Kling lipsync — ${input.seconds}dtk`,
+      reference: `klip_lipsync:${input.clipId}`,
+    })
+    // Catat juga ke AiGenerationLog — tanpa ini biaya lipsync tidak
+    // terlihat di analitik profitabilitas admin (hanya ada TokenTransaction).
+    await logGeneration({
+      featureKey: 'KLIP_LIVE_LIPSYNC',
+      userId: input.userId,
+      subjectType: 'LIVE_CLIP',
+      subjectId: input.clipId,
+      charge,
+    })
+  } catch (e) {
+    console.warn(
+      `[generate-clip ${input.clipId}] billing lipsync gagal (klip tetap save):`,
+      (e as Error).message,
+    )
+  }
+}
+
+// Step embedding (dipakai inline & cron late-lipsync-finalizer): embed
+// transcript → READY. Embed gagal bukan blocker untuk READY status; bisa
+// retry via endpoint embed-backfill.
+export async function finishClipEmbedding(input: {
+  clipId: string
+  userId: string
+  script: string
+}): Promise<void> {
+  const { clipId, userId, script } = input
+  await prisma.liveClip.update({
+    where: { id: clipId },
+    data: { status: 'PROCESSING_EMBEDDING' as LiveClipStatus },
+  })
+  try {
+    const vec = await embedText(script)
+    await prisma.liveClip.update({
+      where: { id: clipId },
+      data: {
+        embedding: vec,
+        embeddingModel: EMBED_MODEL,
+        status: 'READY' as LiveClipStatus,
+      },
+    })
+    // Billing embedding — negligible cost tapi tetap tracked.
+    try {
+      // Estimasi token ~script.length / 4 (rough char-to-token ratio Indo).
+      const estimatedTokens = Math.max(10, Math.ceil(script.length / 4))
+      const charge = await computeMediaCharge({
+        featureKey: 'KLIP_LIVE_EMBED',
+        units: estimatedTokens,
+      })
+      const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
+      await deductTokenAtomic({
+        userId,
+        tokensCharged: charge.tokensCharged,
+        description: `Klip Live embed transcript`,
+        reference: `klip_embed:${clipId}`,
+      })
+      // Catat ke AiGenerationLog — konsisten dengan lipsync.
+      await logGeneration({
+        featureKey: 'KLIP_LIVE_EMBED',
+        userId,
+        subjectType: 'LIVE_CLIP',
+        subjectId: clipId,
+        charge,
+      })
+    } catch (be) {
+      console.warn(`[generate-clip ${clipId}] embed billing skip:`, (be as Error).message)
+    }
+  } catch (e) {
+    console.warn(`[generate-clip ${clipId}] embed gagal (lanjut READY tanpa embed):`, (e as Error).message)
+    await prisma.liveClip.update({
+      where: { id: clipId },
+      data: { status: 'READY' as LiveClipStatus },
+    })
+  }
 }
 
 // Main pipeline. Synchronous flow — caller wait until READY atau FAILED.
@@ -359,6 +464,25 @@ export async function generateClip(
         break
       } catch (pollErr) {
         const msg = (pollErr as Error).message
+        // Poll timeout lokal ≠ task gagal — saat antrian Kling padat, lipsync
+        // bisa jauh >5 menit padahal task masih jalan di server mereka.
+        // Jangan FAILED (Retry manual = submit ulang = kredit Kling dobel);
+        // tandai marker lalu serahkan ke cron kling-poll untuk finalize.
+        if (msg.includes('Kling lipsync timeout')) {
+          await prisma.liveClip.update({
+            where: { id: clipId },
+            data: { errorMessage: KLING_LATE_MARKER },
+          })
+          console.warn(
+            `[generate-clip ${clipId}] poll timeout — diserahkan ke cron kling-poll (task ${submitResult.requestId})`,
+          )
+          return {
+            clipId,
+            status: 'GENERATING_VIDEO' as LiveClipStatus,
+            audioUrl: audioResult.audioUrl,
+            durationMs: audioResult.durationMs,
+          }
+        }
         // Retry HANYA untuk task-level failure dari Kling ("Kling lipsync
         // failed: <task_status_msg>") yang transient. Local poll timeout
         // (>300s) TIDAK di-retry — task mungkin masih jalan di server Kling,
@@ -385,32 +509,7 @@ export async function generateClip(
     const downloaded = await downloadClipMp4(polled.videoUrl, clipId)
     videoPath = downloaded.videoPath
     const seconds = Math.max(1, Math.round(polled.durationSeconds || 0))
-    // Bill Kling lipsync — compute & deduct (kalau saldo kurang setelah video
-    // sudah jadi, tetap charge biar fair; user dapat klip).
-    try {
-      const charge = await computeMediaCharge({
-        featureKey: 'KLIP_LIVE_LIPSYNC',
-        units: seconds,
-      })
-      const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
-      await deductTokenAtomic({
-        userId: input.userId,
-        tokensCharged: charge.tokensCharged,
-        description: `Klip Live Kling lipsync — ${seconds}dtk`,
-        reference: `klip_lipsync:${clipId}`,
-      })
-      // Catat juga ke AiGenerationLog — tanpa ini biaya lipsync tidak
-      // terlihat di analitik profitabilitas admin (hanya ada TokenTransaction).
-      await logGeneration({
-        featureKey: 'KLIP_LIVE_LIPSYNC',
-        userId: input.userId,
-        subjectType: 'LIVE_CLIP',
-        subjectId: clipId,
-        charge,
-      })
-    } catch (e) {
-      console.warn(`[generate-clip ${clipId}] billing lipsync gagal (klip tetap save):`, (e as Error).message)
-    }
+    await billClipLipsync({ clipId, userId: input.userId, seconds })
     await prisma.liveClip.update({
       where: { id: clipId },
       data: {
@@ -423,54 +522,7 @@ export async function generateClip(
   }
 
   // Step 5: embedding (Sprint 4) — embed transcript untuk matching layer.
-  // Embed gagal bukan blocker untuk READY status; bisa retry via endpoint.
-  await prisma.liveClip.update({
-    where: { id: clipId },
-    data: { status: 'PROCESSING_EMBEDDING' as LiveClipStatus },
-  })
-  try {
-    const vec = await embedText(script)
-    await prisma.liveClip.update({
-      where: { id: clipId },
-      data: {
-        embedding: vec,
-        embeddingModel: EMBED_MODEL,
-        status: 'READY' as LiveClipStatus,
-      },
-    })
-    // Billing embedding — negligible cost tapi tetap tracked.
-    try {
-      // Estimasi token ~script.length / 4 (rough char-to-token ratio Indo).
-      const estimatedTokens = Math.max(10, Math.ceil(script.length / 4))
-      const charge = await computeMediaCharge({
-        featureKey: 'KLIP_LIVE_EMBED',
-        units: estimatedTokens,
-      })
-      const { deductTokenAtomic: deduct2, logGeneration: log2 } = await import('@/lib/services/ai-generation-log')
-      await deduct2({
-        userId: input.userId,
-        tokensCharged: charge.tokensCharged,
-        description: `Klip Live embed transcript`,
-        reference: `klip_embed:${clipId}`,
-      })
-      // Catat ke AiGenerationLog — konsisten dengan lipsync di atas.
-      await log2({
-        featureKey: 'KLIP_LIVE_EMBED',
-        userId: input.userId,
-        subjectType: 'LIVE_CLIP',
-        subjectId: clipId,
-        charge,
-      })
-    } catch (be) {
-      console.warn(`[generate-clip ${clipId}] embed billing skip:`, (be as Error).message)
-    }
-  } catch (e) {
-    console.warn(`[generate-clip ${clipId}] embed gagal (lanjut READY tanpa embed):`, (e as Error).message)
-    await prisma.liveClip.update({
-      where: { id: clipId },
-      data: { status: 'READY' as LiveClipStatus },
-    })
-  }
+  await finishClipEmbedding({ clipId, userId: input.userId, script })
 
   return {
     clipId,

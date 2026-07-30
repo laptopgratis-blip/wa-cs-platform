@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
+import { finalizeLateLipsyncClips } from '@/lib/services/clip-library/late-lipsync-finalizer'
 import { pollAndFinalizePendingVideos } from '@/lib/services/host-gen/queue'
 
 export async function GET(req: Request) {
@@ -22,10 +23,19 @@ export async function GET(req: Request) {
   const startedAt = Date.now()
   try {
     const result = await pollAndFinalizePendingVideos()
+    // Klip Live: lanjutkan klip yang inline poll lipsync-nya timeout —
+    // gagal di sini tidak boleh mengganggu poll video host di atas.
+    let lateClips = null
+    try {
+      lateClips = await finalizeLateLipsyncClips()
+    } catch (lateErr) {
+      console.error('[kling-poll] late-lipsync error:', lateErr)
+    }
     return NextResponse.json({
       success: true,
       data: {
         ...result,
+        lateClips,
         durationMs: Date.now() - startedAt,
       },
     })
