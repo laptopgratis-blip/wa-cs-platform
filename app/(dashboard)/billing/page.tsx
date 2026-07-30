@@ -40,6 +40,7 @@ import { computeValueUnits } from '@/lib/billing/value-units'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { getPricingSettings } from '@/lib/pricing-settings'
 import { prisma } from '@/lib/prisma'
+import { friendlyTokenDescription } from '@/lib/token-usage-label'
 import { cn } from '@/lib/utils'
 
 const MANUAL_STATUS_LABEL: Record<ManualPaymentStatus, string> = {
@@ -328,8 +329,10 @@ export default async function BillingPage({
                         {TX_TYPE_LABEL[t.type]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {t.description ?? '—'}
+                    {/* Label ramah user; deskripsi teknis asli tetap bisa
+                        dilihat via hover (title) untuk kebutuhan support. */}
+                    <TableCell className="text-sm" title={t.description ?? undefined}>
+                      {friendlyTokenDescription(t.description)}
                     </TableCell>
                     <TableCell
                       className={cn(
