@@ -5,12 +5,9 @@ import { randomBytes } from 'crypto'
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
-import { requireOrderSystemAccess } from '@/lib/order-system-gate'
+import { getOrderFormLimit, requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
-import {
-  ORDER_FORM_LIMIT_PER_USER,
-  orderFormCreateSchema,
-} from '@/lib/validations/order-form'
+import { orderFormCreateSchema } from '@/lib/validations/order-form'
 
 function slugify(name: string): string {
   return name
@@ -36,8 +33,9 @@ async function generateUniqueSlug(name: string): Promise<string> {
 
 export async function GET() {
   let session
+  let access
   try {
-    ;({ session } = await requireOrderSystemAccess())
+    ;({ session, access } = await requireOrderSystemAccess())
   } catch (res) {
     return res as NextResponse
   }
@@ -52,7 +50,8 @@ export async function GET() {
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
       })),
-      limit: ORDER_FORM_LIMIT_PER_USER,
+      // null = unlimited (tier efektif POWER, termasuk grandfather legacy).
+      limit: await getOrderFormLimit(session.user.id, access.currentTier),
       used: items.length,
     })
   } catch (err) {
@@ -63,8 +62,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   let session
+  let access
   try {
-    ;({ session } = await requireOrderSystemAccess())
+    ;({ session, access } = await requireOrderSystemAccess())
   } catch (res) {
     return res as NextResponse
   }
@@ -74,12 +74,14 @@ export async function POST(req: Request) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Data tidak valid')
   }
   try {
+    // Limit per tier efektif — POWER unlimited (null), sisanya 20.
+    const limit = await getOrderFormLimit(session.user.id, access.currentTier)
     const count = await prisma.orderForm.count({
       where: { userId: session.user.id },
     })
-    if (count >= ORDER_FORM_LIMIT_PER_USER) {
+    if (limit !== null && count >= limit) {
       return jsonError(
-        `Sudah mencapai batas ${ORDER_FORM_LIMIT_PER_USER} form.`,
+        `Sudah mencapai batas ${limit} form. Upgrade ke paket Power untuk form tanpa batas.`,
         409,
       )
     }

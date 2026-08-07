@@ -88,7 +88,8 @@ interface OrderFormsClientProps {
   initialForms: OrderForm[]
   products: ProductLite[]
   pixels: PixelLite[]
-  limit: number
+  // null = unlimited (tier POWER / admin bypass).
+  limit: number | null
 }
 
 // Label platform pixel — teks polos, ikon platform tidak tersedia di lucide
@@ -295,14 +296,14 @@ export function OrderFormsClient({
             Buat form publik untuk customer order — share link, mereka isi,
             kamu dapat invoice otomatis.
             <span className="ml-1 text-warm-500">
-              ({forms.length}/{limit})
+              ({forms.length}/{limit ?? '∞'})
             </span>
           </>
         }
         actions={
           <Button
             onClick={openCreate}
-            disabled={forms.length >= limit || products.length === 0}
+            disabled={(limit !== null && forms.length >= limit) || products.length === 0}
           >
             <Plus className="mr-2 size-4" />
             Buat Form Order

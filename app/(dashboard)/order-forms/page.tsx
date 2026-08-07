@@ -6,7 +6,7 @@ import { UpgradeRequired } from '@/components/order-system/UpgradeRequired'
 import { authOptions } from '@/lib/auth'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
-import { ORDER_FORM_LIMIT_PER_USER } from '@/lib/validations/order-form'
+import { getOrderFormLimit } from '@/lib/order-system-gate'
 
 export const metadata = {
   title: 'Form Order · Hulao',
@@ -54,7 +54,7 @@ export default async function OrderFormsPage() {
       }))}
       products={products}
       pixels={pixels}
-      limit={ORDER_FORM_LIMIT_PER_USER}
+      limit={await getOrderFormLimit(session.user.id, access.currentTier)}
     />
   )
 }

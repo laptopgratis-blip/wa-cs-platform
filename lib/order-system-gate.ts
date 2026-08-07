@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireSession } from '@/lib/api'
 import { TIER_RANK } from '@/lib/services/subscription'
+import { resolveOrderFormLimit } from '@/lib/validations/order-form'
 
 export interface OrderSystemAccess {
   hasAccess: boolean
@@ -94,6 +95,23 @@ export async function checkOrderSystemAccess(
     packageName: granting[0].lpPackage.name,
     expiresAt: granting[0].endDate,
   }
+}
+
+// Limit form order per user. Dihitung dari TIER EFEKTIF (UserQuota.tier —
+// sudah termasuk floor grandfather legacyTier), BUKAN currentTier sub hidup,
+// supaya konsisten dengan tier yang user lihat di billing: user legacy-POWER
+// dengan sub POPULAR hidup tetap dapat unlimited. Akses Order System sendiri
+// tetap berbasis sub hidup (checkOrderSystemAccess di atas).
+export async function getOrderFormLimit(
+  userId: string,
+  currentTier: string,
+): Promise<number | null> {
+  if (currentTier === 'ADMIN') return null
+  const quota = await prisma.userQuota.findUnique({
+    where: { userId },
+    select: { tier: true },
+  })
+  return resolveOrderFormLimit(quota?.tier ?? currentTier)
 }
 
 // Versi strict untuk API routes — throw 403 dengan body yang konsisten kalau

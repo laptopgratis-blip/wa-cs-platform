@@ -1,6 +1,16 @@
 import { z } from 'zod'
 
+// Batas form order untuk tier di bawah POWER. POWER (dan admin bypass)
+// = tanpa batas.
 export const ORDER_FORM_LIMIT_PER_USER = 20
+
+// Resolve limit form order dari tier langganan hidup (currentTier hasil
+// checkOrderSystemAccess). Return null = unlimited — konvensi sama dengan
+// stok produk (lib/validations/product.ts).
+export function resolveOrderFormLimit(currentTier: string): number | null {
+  if (currentTier === 'POWER' || currentTier === 'ADMIN') return null
+  return ORDER_FORM_LIMIT_PER_USER
+}
 
 export const orderFormCreateSchema = z.object({
   name: z.string().min(1, 'Nama form wajib diisi').max(100),
