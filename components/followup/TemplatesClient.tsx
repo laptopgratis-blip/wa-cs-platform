@@ -83,6 +83,8 @@ const VARIABLES = [
   // Link 1-klik testimoni & konfirmasi diterima:
   '{link_review}',
   '{link_terima}',
+  // Link Perpustakaan e-book/course untuk produk digital:
+  '{perpustakaan_url}',
 ]
 
 // Dummy values untuk preview di modal — sinkron dengan
@@ -104,6 +106,7 @@ const DUMMY_PREVIEW: Record<string, string> = {
   '{link_order}': 'https://hulao.id/order/toko-test',
   '{link_review}': 'https://hulao.id/review/ord_test?t=…',
   '{link_terima}': 'https://hulao.id/diterima/ord_test?t=…',
+  '{perpustakaan_url}': 'https://hulao.id/belajar',
 }
 
 function previewMessage(template: string): string {

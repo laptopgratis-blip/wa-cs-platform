@@ -19,6 +19,7 @@ import {
   HANDOFF_RETRY_CLAIM,
   retryLeadHandoff,
 } from '@/lib/services/live/handoff'
+import { notifyEbookAccess } from '@/lib/services/ebook/access-notif'
 import { notifyNewOrder } from '@/lib/services/order-notif'
 import { waService } from '@/lib/wa-service'
 
@@ -304,6 +305,35 @@ async function handle(req: Request) {
     }
   }
 
+  // ── Sweep notif akses e-book yang belum terkirim (< 24 jam) ──────────
+  // notifyEbookAccess idempotent (klaim via accessNotifiedAt, dilepas kalau
+  // WA & email dua-duanya gagal) — panggil ulang untuk entitlement ACTIVE
+  // yang notif aksesnya belum ter-stamp. Link e-book berbayar tidak boleh
+  // hilang cuma karena WA admin pas putus saat PAID.
+  let ebookNotifRetried = 0
+  const unnotifiedEbooks = await prisma.ebookEntitlement.findMany({
+    where: {
+      accessNotifiedAt: null,
+      status: 'ACTIVE',
+      grantedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+    },
+    select: { id: true },
+    orderBy: { grantedAt: 'asc' },
+    take: 50,
+  })
+  for (const e of unnotifiedEbooks) {
+    try {
+      await notifyEbookAccess(e.id)
+      ebookNotifRetried++
+    } catch (err) {
+      console.error(
+        '[cron followup-send] sweep notif e-book gagal',
+        e.id,
+        err,
+      )
+    }
+  }
+
   return NextResponse.json({
     success: true,
     data: {
@@ -315,6 +345,7 @@ async function handle(req: Request) {
       handoffSent,
       handoffFailed,
       ownerNotifRetried,
+      ebookNotifRetried,
     },
   })
 }

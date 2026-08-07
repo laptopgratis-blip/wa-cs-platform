@@ -93,6 +93,16 @@ export function resolveTemplateVariables(
     confirmReceivedLink(order.id),
   )
 
+  // Link Perpustakaan e-book/course (2026-08-06). Statis TANPA magic link —
+  // issue magic link side-effectful (revoke token lama), tidak boleh terjadi
+  // saat resolve template. Link auto-login dikirim terpisah oleh
+  // lib/services/ebook/access-notif.ts.
+  resolved = replaceAll(
+    resolved,
+    '{perpustakaan_url}',
+    'https://hulao.id/belajar',
+  )
+
   return resolved
 }
 
