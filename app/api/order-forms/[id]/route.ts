@@ -40,6 +40,9 @@ export async function PATCH(
         ...(data.acceptTransfer !== undefined && {
           acceptTransfer: data.acceptTransfer,
         }),
+        ...(data.acceptTripay !== undefined && {
+          acceptTripay: data.acceptTripay,
+        }),
         ...(data.shippingFlatCod !== undefined && {
           shippingFlatCod: data.shippingFlatCod,
         }),

@@ -47,6 +47,7 @@ interface OrderForm {
   productIds: string[]
   acceptCod: boolean
   acceptTransfer: boolean
+  acceptTripay: boolean
   shippingFlatCod: number | null
   requireShipping: boolean
   showFlashSaleCounter: boolean
@@ -105,6 +106,7 @@ const EMPTY_FORM = {
   productIds: [] as string[],
   acceptCod: true,
   acceptTransfer: true,
+  acceptTripay: false,
   shippingFlatCod: '' as string | number,
   requireShipping: true,
   showFlashSaleCounter: true,
@@ -151,6 +153,7 @@ export function OrderFormsClient({
       productIds: f.productIds,
       acceptCod: f.acceptCod,
       acceptTransfer: f.acceptTransfer,
+      acceptTripay: f.acceptTripay,
       shippingFlatCod: f.shippingFlatCod ?? '',
       requireShipping: f.requireShipping,
       showFlashSaleCounter: f.showFlashSaleCounter,
@@ -199,7 +202,7 @@ export function OrderFormsClient({
       toast.error('Nama form wajib diisi')
       return
     }
-    if (!form.acceptCod && !form.acceptTransfer) {
+    if (!form.acceptCod && !form.acceptTransfer && !form.acceptTripay) {
       toast.error('Pilih minimal 1 metode pembayaran')
       return
     }
@@ -211,6 +214,7 @@ export function OrderFormsClient({
         productIds: form.productIds,
         acceptCod: form.acceptCod,
         acceptTransfer: form.acceptTransfer,
+        acceptTripay: form.acceptTripay,
         shippingFlatCod:
           form.shippingFlatCod === ''
             ? null
@@ -349,6 +353,11 @@ export function OrderFormsClient({
                         {f.acceptTransfer && (
                           <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
                             Transfer
+                          </Badge>
+                        )}
+                        {f.acceptTripay && (
+                          <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100">
+                            Otomatis
                           </Badge>
                         )}
                       </div>
@@ -535,6 +544,20 @@ export function OrderFormsClient({
                   }
                 />
                 <span className="text-sm font-medium">Terima Transfer</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
+                <Checkbox
+                  checked={form.acceptTripay}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, acceptTripay: !!v }))
+                  }
+                />
+                <span className="text-sm font-medium">
+                  Terima Pembayaran Otomatis (VA/QRIS)
+                  <span className="ml-1 text-xs font-normal text-warm-500">
+                    — konfirmasi instan, biaya channel dibebankan ke pembeli
+                  </span>
+                </span>
               </label>
             </div>
 

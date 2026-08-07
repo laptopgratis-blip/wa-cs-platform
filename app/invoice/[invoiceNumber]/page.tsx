@@ -36,10 +36,28 @@ export default async function InvoicePage({ params }: PageProps) {
           },
         },
       },
+      // Pembayaran Tripay terakhir (retry bisa bikin >1 baris).
+      orderPayments: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
     },
   })
 
   if (!order) notFound()
+
+  // Order mengandung produk e-book? Untuk CTA "Buka Perpustakaan" pasca-PAID.
+  const itemProductIds = Array.isArray(order.items)
+    ? (order.items as Array<{ productId?: string }>)
+        .map((i) => i?.productId)
+        .filter((v): v is string => typeof v === 'string')
+    : []
+  const hasEbook =
+    itemProductIds.length > 0
+      ? (await prisma.product.count({
+          where: { id: { in: itemProductIds }, ebookId: { not: null } },
+        })) > 0
+      : false
 
   // Pixel tracking — load pixel yang aktif untuk OrderForm asal order
   // supaya invoice page bisa fire AddPaymentInfo (Transfer browser-side).
@@ -110,6 +128,22 @@ export default async function InvoicePage({ params }: PageProps) {
       banks={banks}
       ownerName={order.user.name ?? 'Penjual'}
       pixels={pixels}
+      hasEbook={hasEbook}
+      tripay={
+        order.orderPayments[0]
+          ? {
+              status: order.orderPayments[0].status,
+              channelCode: order.orderPayments[0].channelCode,
+              channelName: order.orderPayments[0].channelName,
+              payCode: order.orderPayments[0].payCode,
+              checkoutUrl: order.orderPayments[0].checkoutUrl,
+              amount: order.orderPayments[0].amount,
+              feeCustomer: order.orderPayments[0].feeCustomer,
+              expiredAt:
+                order.orderPayments[0].expiredAt?.toISOString() ?? null,
+            }
+          : null
+      }
       waConfirm={
         order.user.shippingProfile?.waConfirmActive &&
         order.user.shippingProfile.waConfirmNumber

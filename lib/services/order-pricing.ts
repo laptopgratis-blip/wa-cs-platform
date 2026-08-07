@@ -96,7 +96,9 @@ interface CalculateInput {
   shippingCityName?: string | null
   selectedCourier?: string  // 'jne' | 'sicepat' | 'jnt' | 'anteraja'
   selectedService?: string  // 'REG' | 'CTC' | dll — match field `service` di RajaOngkir
-  paymentMethod: 'COD' | 'TRANSFER'
+  // TRIPAY berperilaku sama dgn TRANSFER di pricing (ongkir RajaOngkir,
+  // tanpa flat COD) — hanya cabang COD yang dibedakan di bawah.
+  paymentMethod: 'COD' | 'TRANSFER' | 'TRIPAY'
   // Untuk COD, kalau OrderForm.shippingFlatCod ≠ null kita pakai itu
   // (skip RajaOngkir).
   flatCodCost?: number | null

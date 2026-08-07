@@ -94,6 +94,7 @@ export async function POST(req: Request) {
         productIds: data.productIds,
         acceptCod: data.acceptCod,
         acceptTransfer: data.acceptTransfer,
+        acceptTripay: data.acceptTripay,
         shippingFlatCod: data.shippingFlatCod ?? null,
         requireShipping: data.requireShipping,
         showFlashSaleCounter: data.showFlashSaleCounter,

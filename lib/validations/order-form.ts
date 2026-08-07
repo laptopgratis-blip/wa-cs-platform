@@ -9,6 +9,8 @@ export const orderFormCreateSchema = z.object({
   productIds: z.array(z.string()).default([]),
   acceptCod: z.boolean().default(true),
   acceptTransfer: z.boolean().default(true),
+  // Pembayaran otomatis via Tripay (VA/QRIS) — fee dibebankan ke pembeli.
+  acceptTripay: z.boolean().default(false),
   shippingFlatCod: z.number().min(0).nullable().optional(),
   // false = produk digital — form tidak akan minta alamat, ongkir di-skip.
   requireShipping: z.boolean().default(true),

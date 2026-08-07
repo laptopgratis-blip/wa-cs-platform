@@ -32,6 +32,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatNumber } from '@/lib/format'
 
+import {
+  TripayPaymentBox,
+  type TripayPaymentInfo,
+} from '@/components/order-public/TripayPaymentBox'
+
 interface OrderItem {
   productId: string
   // Ada di snapshot items untuk order bervarian (null utk produk single).
@@ -84,6 +89,10 @@ interface InvoicePublicProps {
   ownerName: string
   waConfirm: { number: string; template: string | null } | null
   pixels?: BrowserPixel[]
+  // Pembayaran Tripay terakhir (paymentMethod=TRIPAY) — null utk metode lain.
+  tripay?: TripayPaymentInfo | null
+  // Order mengandung produk e-book → CTA Perpustakaan saat PAID.
+  hasEbook?: boolean
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -125,6 +134,8 @@ export function InvoicePublic({
   ownerName,
   waConfirm,
   pixels = [],
+  tripay = null,
+  hasEbook = false,
 }: InvoicePublicProps) {
   const [proofUrl, setProofUrl] = useState<string | null>(order.paymentProofUrl)
   const [paymentStatus, setPaymentStatus] = useState(order.paymentStatus)
@@ -133,6 +144,7 @@ export function InvoicePublic({
 
   const isCod = order.paymentMethod === 'COD'
   const isTransfer = order.paymentMethod === 'TRANSFER'
+  const isTripay = order.paymentMethod === 'TRIPAY'
 
   // Fire AddPaymentInfo browser-side untuk Transfer saat halaman load.
   // Sekali per session per invoice — sessionStorage flag mencegah re-fire
@@ -385,6 +397,17 @@ export function InvoicePublic({
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Tripay flow — VA/QRIS dengan konfirmasi otomatis via webhook. */}
+      {isTripay && tripay && (
+        <TripayPaymentBox
+          invoiceNumber={order.invoiceNumber}
+          initial={tripay}
+          paymentStatus={paymentStatus}
+          hasEbook={hasEbook}
+          onPaid={() => setPaymentStatus('PAID')}
+        />
       )}
 
       {/* Transfer flow */}

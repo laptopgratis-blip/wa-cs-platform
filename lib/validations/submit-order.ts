@@ -54,8 +54,10 @@ export const submitOrderSchema = z
         'Alamat lengkap minimal 5 karakter',
       ),
 
-    // Payment
-    paymentMethod: z.enum(['COD', 'TRANSFER']),
+    // Payment. TRIPAY = pembayaran otomatis via gateway (VA/QRIS) — wajib
+    // tripayChannel + customerEmail (dicek server-side setelah load form).
+    paymentMethod: z.enum(['COD', 'TRANSFER', 'TRIPAY']),
+    tripayChannel: z.string().max(20).optional(),
 
     // Shipping (untuk TRANSFER, RajaOngkir-based)
     shippingCourier: z.string().nullable().optional(),

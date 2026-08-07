@@ -88,6 +88,7 @@ export default async function PublicOrderPage({ params }: PageProps) {
         description: form.description,
         acceptCod: form.acceptCod,
         acceptTransfer: form.acceptTransfer,
+        acceptTripay: form.acceptTripay,
         shippingFlatCod: form.shippingFlatCod,
         requireShipping: form.requireShipping,
         showFlashSaleCounter: form.showFlashSaleCounter,
@@ -123,6 +124,8 @@ export default async function PublicOrderPage({ params }: PageProps) {
         flashSaleEndAt: p.flashSaleEndAt?.toISOString() ?? null,
         flashSaleQuota: p.flashSaleQuota,
         flashSaleSold: p.flashSaleSold,
+        // Produk e-book → COD diblokir di form.
+        hasEbook: p.ebookId != null,
         variants: p.variants.map((v) => ({
           id: v.id,
           name: v.name,

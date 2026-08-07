@@ -15,6 +15,7 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { notifyNewOrder } from '@/lib/services/order-notif'
+import { createTripayForOrder } from '@/lib/services/order-payment'
 import {
   OngkirUnavailableError,
   calculateOrderTotal,
@@ -84,6 +85,36 @@ export async function POST(req: Request) {
     if (data.paymentMethod === 'TRANSFER' && !form.acceptTransfer) {
       return jsonError('Form ini tidak menerima pembayaran Transfer', 400)
     }
+    if (data.paymentMethod === 'TRIPAY') {
+      if (!form.acceptTripay) {
+        return jsonError('Form ini tidak menerima pembayaran otomatis', 400)
+      }
+      if (!data.tripayChannel) {
+        return jsonError('Pilih metode pembayaran dulu', 400)
+      }
+      // Tripay mewajibkan customer_email di create transaction.
+      if (!data.customerEmail) {
+        return jsonError('Email wajib diisi untuk pembayaran otomatis', 400)
+      }
+    }
+
+    // 3a-bis. Produk e-book tidak boleh COD — order COD tidak pernah
+    // transisi PAID (langsung diproses kirim), jadi entitlement e-book
+    // tidak akan pernah ter-grant. Blokir di sini, bukan diam-diam lolos.
+    if (data.paymentMethod === 'COD') {
+      const ebookCount = await prisma.product.count({
+        where: {
+          id: { in: data.items.map((i) => i.productId) },
+          ebookId: { not: null },
+        },
+      })
+      if (ebookCount > 0) {
+        return jsonError(
+          'Produk e-book tidak bisa dibayar COD — pilih Transfer atau pembayaran otomatis',
+          400,
+        )
+      }
+    }
 
     // 3b. Form fisik wajib alamat. Form digital (requireShipping=false) skip.
     if (form.requireShipping) {
@@ -91,10 +122,11 @@ export async function POST(req: Request) {
       if (addr.length < 5) {
         return jsonError('Alamat lengkap minimal 5 karakter', 400)
       }
-      // Tujuan & kurir wajib untuk TRANSFER dan juga COD tanpa flat rate —
-      // dua-duanya pakai ongkir RajaOngkir. COD dengan flat rate cukup alamat.
+      // Tujuan & kurir wajib untuk TRANSFER/TRIPAY dan juga COD tanpa flat
+      // rate — semuanya pakai ongkir RajaOngkir. COD flat rate cukup alamat.
       const needsCourier =
         data.paymentMethod === 'TRANSFER' ||
+        data.paymentMethod === 'TRIPAY' ||
         (data.paymentMethod === 'COD' && form.shippingFlatCod == null)
       if (needsCourier) {
         if (
@@ -202,6 +234,35 @@ export async function POST(req: Request) {
     const code = data.paymentMethod === 'TRANSFER' ? uniqueCode() : null
     const finalTotal = code ? pricing.total + code : pricing.total
 
+    // 7b. TRIPAY: buat transaksi gateway DULU, sebelum $transaction DB —
+    // kalau create order gagal (mis. kuota flash sale), transaksi Tripay
+    // yatim expired sendiri dalam 24 jam (harmless). Sebaliknya order tanpa
+    // payment adalah state pincang yang harus dihindari.
+    let tripayData: Awaited<ReturnType<typeof createTripayForOrder>> | null =
+      null
+    if (data.paymentMethod === 'TRIPAY') {
+      const itemsSummary = pricing.items
+        .map((i) => `${i.name} x${i.qty}`)
+        .join(', ')
+      try {
+        tripayData = await createTripayForOrder({
+          invoiceNumber,
+          amount: Math.round(finalTotal),
+          customerName: data.customerName,
+          // Sudah divalidasi wajib di step 3 untuk TRIPAY.
+          customerEmail: data.customerEmail as string,
+          channel: data.tripayChannel as string,
+          itemsSummary,
+        })
+      } catch (err) {
+        console.error('[orders/submit] createTripayForOrder gagal:', err)
+        return jsonError(
+          'Gagal membuat transaksi pembayaran. Coba metode pembayaran lain.',
+          502,
+        )
+      }
+    }
+
     // 8. Create order + increment counters in transaction.
     const created = await prisma.$transaction(async (tx) => {
       const order = await tx.userOrder.create({
@@ -247,6 +308,9 @@ export async function POST(req: Request) {
           paymentMethod: data.paymentMethod,
           paymentStatus: 'PENDING',
           deliveryStatus: 'PENDING',
+          // Form digital (requireShipping=false) → tidak ada barang fisik,
+          // dikecualikan dari packing list (readyToPackWhere).
+          isDigitalOnly: !form.requireShipping,
 
           subtotalRp: pricing.subtotal,
           flashSaleDiscountRp: pricing.flashSaleDiscount,
@@ -285,6 +349,24 @@ export async function POST(req: Request) {
         where: { id: form.id },
         data: { submissions: { increment: 1 } },
       })
+
+      // Simpan record pembayaran Tripay — webhook lookup by merchantRef.
+      if (tripayData) {
+        await tx.orderPayment.create({
+          data: {
+            orderId: order.id,
+            merchantRef: tripayData.merchantRef,
+            reference: tripayData.reference,
+            amount: tripayData.amount,
+            feeCustomer: tripayData.feeCustomer,
+            channelCode: tripayData.channelCode,
+            channelName: tripayData.channelName,
+            payCode: tripayData.payCode,
+            checkoutUrl: tripayData.checkoutUrl,
+            expiredAt: tripayData.expiredAt,
+          },
+        })
+      }
 
       // Klaim kuota flash sale per item secara ATOMIK di dalam transaksi.
       // isFlashSaleActive di pricing engine cuma cek sold < quota TANPA lock,
@@ -343,8 +425,8 @@ export async function POST(req: Request) {
       console.error('[orders/submit] followup generate gagal:', err)
     })
 
-    // Pixel server-side fire — COD: Purchase langsung, TRANSFER: Lead saja
-    // (Purchase nanti saat admin tandai PAID di /pesanan).
+    // Pixel server-side fire — COD: Purchase langsung; TRANSFER/TRIPAY: Lead
+    // saja (Purchase saat PAID — admin tandai / webhook Tripay).
     const pixelEvent = data.paymentMethod === 'COD' ? 'Purchase' : 'Lead'
     firePixelEventForOrder({
       orderId: created.id,
@@ -356,6 +438,17 @@ export async function POST(req: Request) {
         invoiceNumber: created.invoiceNumber,
         total: finalTotal,
         uniqueCode: code,
+        // Info pembayaran Tripay utk halaman invoice (VA/redirect).
+        tripay: tripayData
+          ? {
+              channelCode: tripayData.channelCode,
+              channelName: tripayData.channelName,
+              payCode: tripayData.payCode,
+              checkoutUrl: tripayData.checkoutUrl,
+              feeCustomer: tripayData.feeCustomer,
+              expiredAt: tripayData.expiredAt.toISOString(),
+            }
+          : null,
       },
       201,
     )

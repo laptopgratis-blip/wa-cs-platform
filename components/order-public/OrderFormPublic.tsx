@@ -40,6 +40,7 @@ import {
   DestinationPicker,
 } from '@/components/order-system/DestinationPicker'
 import { SocialProofPopup } from '@/components/order-public/SocialProofPopup'
+import { TripayChannelSelector } from '@/components/dashboard/TripayChannelSelector'
 import { formatNumber } from '@/lib/format'
 
 interface PublicVariant {
@@ -71,6 +72,8 @@ interface PublicProduct {
   flashSaleQuota: number | null
   flashSaleSold: number
   variants?: PublicVariant[]
+  // true = produk e-book digital (Product.ebookId terisi) — COD diblokir.
+  hasEbook?: boolean
 }
 
 // Composite key untuk qty state — kalau produk punya varian, key = "pid:vid"
@@ -85,6 +88,8 @@ interface FormProps {
   description: string | null
   acceptCod: boolean
   acceptTransfer: boolean
+  // Pembayaran otomatis via Tripay (VA/QRIS) — fee dibebankan pembeli.
+  acceptTripay: boolean
   shippingFlatCod: number | null
   // false = produk digital, alamat & ongkir di-hide di form publik.
   requireShipping: boolean
@@ -292,9 +297,15 @@ export function OrderFormPublic({
     null,
   )
   const [shippingAddress, setShippingAddress] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'TRANSFER'>(
-    form.acceptTransfer ? 'TRANSFER' : 'COD',
-  )
+  const [paymentMethod, setPaymentMethod] = useState<
+    'COD' | 'TRANSFER' | 'TRIPAY'
+  >(form.acceptTransfer ? 'TRANSFER' : form.acceptTripay ? 'TRIPAY' : 'COD')
+  // Channel Tripay pilihan customer (BRIVA/QRIS/dll) + estimasi fee-nya.
+  const [tripayChannel, setTripayChannel] = useState<{
+    code: string
+    name: string
+    feeEstimate: number
+  } | null>(null)
   const [notes, setNotes] = useState('')
 
   const [courierOptions, setCourierOptions] = useState<CourierService[]>([])
@@ -495,6 +506,24 @@ export function OrderFormPublic({
   }, [qty, products])
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0)
+
+  // Cart mengandung produk e-book? COD diblokir (order COD tidak pernah
+  // transisi PAID → akses e-book tidak akan pernah ter-grant).
+  const cartHasEbook = useMemo(() => {
+    const ebookIds = new Set(
+      products.filter((p) => p.hasEbook).map((p) => p.id),
+    )
+    return items.some((i) => ebookIds.has(i.productId))
+  }, [items, products])
+
+  // Auto-pindah metode kalau customer keburu pilih COD lalu menambah e-book.
+  useEffect(() => {
+    if (cartHasEbook && paymentMethod === 'COD') {
+      setPaymentMethod(
+        form.acceptTransfer ? 'TRANSFER' : form.acceptTripay ? 'TRIPAY' : 'COD',
+      )
+    }
+  }, [cartHasEbook, paymentMethod, form.acceptTransfer, form.acceptTripay])
   const flashSaleDiscount = items.reduce(
     (sum, i) =>
       sum + (i.isFlashSale ? (i.originalPrice - i.price) * i.qty : 0),
@@ -539,6 +568,7 @@ export function OrderFormPublic({
     const needsCourierFetch =
       form.requireShipping &&
       (paymentMethod === 'TRANSFER' ||
+        paymentMethod === 'TRIPAY' ||
         (paymentMethod === 'COD' && !codUsesFlat))
     if (
       !needsCourierFetch ||
@@ -707,13 +737,26 @@ export function OrderFormPublic({
         toast.error('Alamat lengkap minimal 5 karakter')
         return
       }
-      // Kurir wajib untuk TRANSFER & COD tanpa flat rate (dua-duanya pakai
-      // ongkir RajaOngkir).
+      // Kurir wajib untuk TRANSFER/TRIPAY & COD tanpa flat rate (semuanya
+      // pakai ongkir RajaOngkir).
       if (
-        (paymentMethod === 'TRANSFER' || !codUsesFlat) &&
+        (paymentMethod === 'TRANSFER' ||
+          paymentMethod === 'TRIPAY' ||
+          !codUsesFlat) &&
         !selectedCourier
       ) {
         toast.error('Pilih kurir dulu')
+        return
+      }
+    }
+    if (paymentMethod === 'TRIPAY') {
+      if (!tripayChannel) {
+        toast.error('Pilih metode pembayaran otomatis dulu')
+        return
+      }
+      // Tripay mewajibkan email di create transaction.
+      if (!customerEmail.trim()) {
+        toast.error('Email wajib diisi untuk pembayaran otomatis')
         return
       }
     }
@@ -740,6 +783,8 @@ export function OrderFormPublic({
         shippingPostalCode: form.requireShipping ? destination?.zip_code : null,
         shippingAddress: form.requireShipping ? shippingAddress.trim() : null,
         paymentMethod,
+        tripayChannel:
+          paymentMethod === 'TRIPAY' ? tripayChannel?.code : undefined,
         shippingCourier: form.requireShipping
           ? selectedCourier?.code ?? null
           : null,
@@ -1063,7 +1108,11 @@ export function OrderFormPublic({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cust-email">Email (opsional)</Label>
+            <Label htmlFor="cust-email">
+              {paymentMethod === 'TRIPAY'
+                ? 'Email (wajib untuk pembayaran otomatis)'
+                : 'Email (opsional)'}
+            </Label>
             <Input
               id="cust-email"
               type="email"
@@ -1097,9 +1146,11 @@ export function OrderFormPublic({
         </CardContent>
       </Card>
 
-      {/* Pengiriman (RajaOngkir options — TRANSFER & COD tanpa flat rate) */}
+      {/* Pengiriman (RajaOngkir — TRANSFER/TRIPAY & COD tanpa flat rate) */}
       {form.requireShipping &&
-        (paymentMethod === 'TRANSFER' || !codUsesFlat) && (
+        (paymentMethod === 'TRANSFER' ||
+          paymentMethod === 'TRIPAY' ||
+          !codUsesFlat) && (
         <Card className="mb-4">
           <CardContent className="p-4">
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-warm-900">
@@ -1185,7 +1236,7 @@ export function OrderFormPublic({
             Cara Bayar
           </h2>
           <div className="grid grid-cols-2 gap-2">
-            {form.acceptCod && (
+            {form.acceptCod && !cartHasEbook && (
               <button
                 type="button"
                 onClick={() => setPaymentMethod('COD')}
@@ -1215,7 +1266,55 @@ export function OrderFormPublic({
                 <p className="text-xs text-warm-500">Upload bukti transfer</p>
               </button>
             )}
+            {form.acceptTripay && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('TRIPAY')}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  paymentMethod === 'TRIPAY'
+                    ? 'border-primary-500 bg-primary-50'
+                    : 'hover:bg-warm-50'
+                }`}
+              >
+                <p className="flex items-center gap-1 font-semibold text-warm-900">
+                  <Wallet className="size-3.5" /> Bayar Otomatis
+                </p>
+                <p className="text-xs text-warm-500">
+                  VA / QRIS — konfirmasi instan
+                </p>
+              </button>
+            )}
           </div>
+          {cartHasEbook && form.acceptCod && (
+            <p className="mt-2 text-xs text-warm-500">
+              *Pesanan berisi e-book — COD tidak tersedia.
+            </p>
+          )}
+          {paymentMethod === 'TRIPAY' && (
+            <div className="mt-3">
+              {items.length === 0 ? (
+                <p className="text-sm text-warm-500">
+                  Pilih produk dulu untuk lihat metode pembayaran.
+                </p>
+              ) : (
+                <TripayChannelSelector
+                  amount={Math.round(total)}
+                  selectedCode={tripayChannel?.code ?? null}
+                  onSelect={(ch) =>
+                    setTripayChannel({
+                      code: ch.code,
+                      name: ch.name,
+                      feeEstimate:
+                        ch.fee_customer.flat +
+                        Math.ceil(
+                          (Math.round(total) * ch.fee_customer.percent) / 100,
+                        ),
+                    })
+                  }
+                />
+              )}
+            </div>
+          )}
           <div className="mt-3 space-y-1.5">
             <Label htmlFor="cust-notes">Catatan untuk Penjual (opsional)</Label>
             <Textarea
@@ -1308,17 +1407,36 @@ export function OrderFormPublic({
                     *Subsidi/promo ongkir akan dihitung otomatis saat submit.
                   </p>
                 )}
+              {paymentMethod === 'TRIPAY' &&
+                tripayChannel &&
+                tripayChannel.feeEstimate > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span>Biaya layanan ({tripayChannel.name})</span>
+                    <span>Rp {formatNumber(tripayChannel.feeEstimate)}</span>
+                  </div>
+                )}
               <div className="my-2 border-t" />
               <div className="flex justify-between text-base font-bold">
                 <span>Total</span>
                 <span className="text-primary-600">
-                  Rp {formatNumber(total)}
+                  Rp{' '}
+                  {formatNumber(
+                    paymentMethod === 'TRIPAY'
+                      ? total + (tripayChannel?.feeEstimate ?? 0)
+                      : total,
+                  )}
                 </span>
               </div>
               {paymentMethod === 'TRANSFER' && (
                 <p className="text-xs text-warm-500">
                   *Total final akan ditambahkan kode unik 100-999 supaya
                   pembayaran kamu mudah diverifikasi.
+                </p>
+              )}
+              {paymentMethod === 'TRIPAY' && (
+                <p className="text-xs text-warm-500">
+                  *Biaya layanan adalah perkiraan — nominal final tampil di
+                  halaman pembayaran setelah pesan.
                 </p>
               )}
             </>
