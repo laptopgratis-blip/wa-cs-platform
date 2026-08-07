@@ -122,6 +122,8 @@ interface Template {
   name: string
   trigger: string
   paymentMethod: string | null
+  // null = semua order; PHYSICAL = non-digital; DIGITAL = digital-only.
+  orderType: string | null
   applyOnPaymentStatus: string | null
   applyOnDeliveryStatus: string | null
   delayDays: number
@@ -294,6 +296,13 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
                                   {t.paymentMethod}
                                 </Badge>
                               )}
+                              {t.orderType && (
+                                <Badge variant="outline">
+                                  {t.orderType === 'DIGITAL'
+                                    ? 'DIGITAL'
+                                    : 'FISIK'}
+                                </Badge>
+                              )}
                               {t.scope === 'FORM' && (
                                 <Badge variant="outline">PER-FORM</Badge>
                               )}
@@ -416,6 +425,9 @@ function TemplateModal({
   const [paymentMethod, setPaymentMethod] = useState<string>(
     template?.paymentMethod ?? NULL_VALUE,
   )
+  const [orderType, setOrderType] = useState<string>(
+    template?.orderType ?? NULL_VALUE,
+  )
   const [applyOnPayment, setApplyOnPayment] = useState<string>(
     template?.applyOnPaymentStatus ?? NULL_VALUE,
   )
@@ -447,6 +459,7 @@ function TemplateModal({
         name,
         trigger,
         paymentMethod: paymentMethod === NULL_VALUE ? null : paymentMethod,
+        orderType: orderType === NULL_VALUE ? null : orderType,
         applyOnPaymentStatus:
           applyOnPayment === NULL_VALUE ? null : applyOnPayment,
         applyOnDeliveryStatus:
@@ -536,6 +549,26 @@ function TemplateModal({
                   <SelectItem value={NULL_VALUE}>Semua</SelectItem>
                   <SelectItem value="COD">COD only</SelectItem>
                   <SelectItem value="TRANSFER">Transfer only</SelectItem>
+                  <SelectItem value="TRIPAY">
+                    Bayar Otomatis (VA/QRIS) only
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Untuk Jenis Order</Label>
+              <Select value={orderType} onValueChange={setOrderType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NULL_VALUE}>Semua</SelectItem>
+                  <SelectItem value="PHYSICAL">
+                    Fisik saja (ada pengiriman)
+                  </SelectItem>
+                  <SelectItem value="DIGITAL">
+                    Digital saja (e-book, tanpa kirim)
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

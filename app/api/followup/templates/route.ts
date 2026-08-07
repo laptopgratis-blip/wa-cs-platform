@@ -51,6 +51,7 @@ export async function POST(req: Request) {
         name: data.name,
         trigger: data.trigger,
         paymentMethod: data.paymentMethod,
+        orderType: data.orderType,
         applyOnPaymentStatus: data.applyOnPaymentStatus,
         applyOnDeliveryStatus: data.applyOnDeliveryStatus,
         delayDays: data.delayDays,

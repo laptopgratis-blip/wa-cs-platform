@@ -11,6 +11,7 @@ import { prisma } from '@/lib/prisma'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 
 import {
+  ensureDigitalPaidTemplates,
   ensureLeadNurtureTemplates,
   ensureReviewTemplates,
 } from './followup-defaults'
@@ -70,6 +71,13 @@ export async function generateQueueForOrder(
     await ensureReviewTemplates(order.userId)
   }
 
+  // Order digital-only yang PAID: pastikan user punya template varian DIGITAL
+  // (idempotent) + retarget template default lama ke PHYSICAL — pembeli
+  // e-book jangan dapat pesan "siap dikirim" barang fisik.
+  if (event === 'PAYMENT_PAID' && order.isDigitalOnly) {
+    await ensureDigitalPaidTemplates(order.userId)
+  }
+
   // Catatan 2026-07-16: dulu ada guard "skip kalau tidak ada WA session
   // CONNECTED" di sini — itu membuat queue TIDAK PERNAH dibuat saat WA owner
   // kebetulan putus sesaat ketika order masuk (konfirmasi customer hilang
@@ -106,6 +114,10 @@ export async function generateQueueForOrder(
   // sederhana — jumlah template per user kecil (puluhan).
   const matched = templates.filter((t) => {
     if (t.paymentMethod && t.paymentMethod !== order.paymentMethod) return false
+    // Filter jenis order: DIGITAL hanya utk order digital-only, PHYSICAL
+    // hanya utk order yang punya barang fisik. null = semua.
+    if (t.orderType === 'DIGITAL' && !order.isDigitalOnly) return false
+    if (t.orderType === 'PHYSICAL' && order.isDigitalOnly) return false
     if (
       t.applyOnPaymentStatus &&
       t.applyOnPaymentStatus !== order.paymentStatus

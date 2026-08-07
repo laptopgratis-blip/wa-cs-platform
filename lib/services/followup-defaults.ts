@@ -12,6 +12,8 @@ interface DefaultTemplate {
   name: string
   trigger: string
   paymentMethod: string | null
+  // null = semua order; PHYSICAL = non-digital; DIGITAL = digital-only.
+  orderType: string | null
   applyOnPaymentStatus: string | null
   applyOnDeliveryStatus: string | null
   delayDays: number
@@ -24,6 +26,7 @@ export const DEFAULT_TEMPLATES: DefaultTemplate[] = [
     name: 'Konfirmasi COD - Order Masuk',
     trigger: 'ORDER_CREATED',
     paymentMethod: 'COD',
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 0,
@@ -50,6 +53,7 @@ Pesanan akan kami siapkan setelah konfirmasi. ✨`,
     name: 'Cara Bayar Transfer - Order Masuk',
     trigger: 'ORDER_CREATED',
     paymentMethod: 'TRANSFER',
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 0,
@@ -75,6 +79,7 @@ Lihat invoice lengkap: {invoice_url}`,
     name: 'Reminder Hari 1 - Belum Bayar',
     trigger: 'DAYS_AFTER_ORDER',
     paymentMethod: 'TRANSFER',
+    orderType: null,
     applyOnPaymentStatus: 'PENDING',
     applyOnDeliveryStatus: null,
     delayDays: 1,
@@ -94,6 +99,9 @@ Kalau ada kendala, langsung balas pesan ini.`,
     name: 'Pembayaran Diterima',
     trigger: 'PAYMENT_PAID',
     paymentMethod: null,
+    // PHYSICAL: order digital-only pakai varian di bawah — pesan "kirim"
+    // membingungkan untuk pembeli e-book.
+    orderType: 'PHYSICAL',
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 0,
@@ -107,9 +115,31 @@ Pesanan akan kami proses dan kirim secepatnya. Kami akan update saat sudah dikir
 Terima kasih! 🙏`,
   },
   {
+    name: 'Pembayaran Diterima (Produk Digital)',
+    trigger: 'PAYMENT_PAID',
+    paymentMethod: null,
+    orderType: 'DIGITAL',
+    applyOnPaymentStatus: null,
+    applyOnDeliveryStatus: null,
+    delayDays: 0,
+    order: 4,
+    message: `✅ Pembayaran Diterima!
+
+Halo {nama}, pembayaran untuk pesanan {invoice} sebesar {total} sudah kami terima.
+
+Akses produk digital kamu sudah AKTIF 🎉
+
+Cek WhatsApp/email kamu — link akses & download sudah dikirim otomatis. Atau buka langsung Perpustakaan di:
+{perpustakaan_url}
+(login pakai nomor WA yang dipakai saat order)
+
+Terima kasih! 🙏`,
+  },
+  {
     name: 'Pesanan Dikirim',
     trigger: 'SHIPPED',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 0,
@@ -127,6 +157,7 @@ Kalau sudah sampai, jangan lupa kabari ya 😊`,
     name: 'Konfirmasi Sampai - Hari 3',
     trigger: 'DAYS_AFTER_SHIPPED',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 3,
@@ -144,6 +175,7 @@ Kalau belum sampai / ada kendala, langsung balas pesan ini. Kami siap bantu 🙏
     name: 'Minta Review - Hari 5',
     trigger: 'DAYS_AFTER_SHIPPED',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 5,
@@ -167,6 +199,7 @@ export const REVIEW_TEMPLATES: DefaultTemplate[] = [
     name: 'Testimoni - H+2 Setelah Diterima',
     trigger: 'DAYS_AFTER_DELIVERED',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 2,
@@ -191,6 +224,7 @@ export const LEAD_NURTURE_TEMPLATES: DefaultTemplate[] = [
     name: 'Live H+1 - Belum Order',
     trigger: 'DAYS_AFTER_LIVE_LEAD',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 1,
@@ -208,6 +242,7 @@ Balas pesan ini kalau ada yang mau dibantu 😊`,
     name: 'Live H+3 - Belum Order (Last Call)',
     trigger: 'DAYS_AFTER_LIVE_LEAD',
     paymentMethod: null,
+    orderType: null,
     applyOnPaymentStatus: null,
     applyOnDeliveryStatus: null,
     delayDays: 3,
@@ -263,6 +298,49 @@ export async function ensureLeadNurtureTemplates(
       isActive: true,
       scope: 'GLOBAL',
     })),
+  })
+  return result.count
+}
+
+// Top-up idempotent template PAYMENT_PAID varian DIGITAL untuk user lama yang
+// enable follow-up sebelum fitur e-book ada. Dipanggil lazy dari
+// generateQueueForOrder saat event PAYMENT_PAID pada order digital-only.
+// Sekalian retarget template default "Pembayaran Diterima" lama (orderType
+// null → PHYSICAL) supaya pembeli digital tidak dapat pesan "siap dikirim".
+// Hanya template isDefault=true yang disentuh — template custom user aman.
+export async function ensureDigitalPaidTemplates(
+  userId: string,
+): Promise<number> {
+  const existing = await prisma.followUpTemplate.count({
+    where: { userId, trigger: 'PAYMENT_PAID', orderType: 'DIGITAL' },
+  })
+  if (existing > 0) return 0
+
+  const digitalTemplate = DEFAULT_TEMPLATES.find(
+    (t) => t.trigger === 'PAYMENT_PAID' && t.orderType === 'DIGITAL',
+  )
+  if (!digitalTemplate) return 0
+
+  await prisma.followUpTemplate.updateMany({
+    where: {
+      userId,
+      trigger: 'PAYMENT_PAID',
+      isDefault: true,
+      orderType: null,
+    },
+    data: { orderType: 'PHYSICAL' },
+  })
+
+  const result = await prisma.followUpTemplate.createMany({
+    data: [
+      {
+        ...digitalTemplate,
+        userId,
+        isDefault: true,
+        isActive: true,
+        scope: 'GLOBAL',
+      },
+    ],
   })
   return result.count
 }

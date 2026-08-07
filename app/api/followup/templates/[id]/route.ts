@@ -45,6 +45,9 @@ export async function PATCH(req: Request, { params }: Params) {
       data: {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.trigger !== undefined && { trigger: data.trigger }),
+        ...(data.orderType !== undefined && {
+          orderType: data.orderType,
+        }),
         ...(data.paymentMethod !== undefined && {
           paymentMethod: data.paymentMethod,
         }),

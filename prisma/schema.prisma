@@ -2403,7 +2403,11 @@ model FollowUpTemplate {
   //   DAYS_AFTER_LIVE_LEAD — nurture lead Live yang BELUM order (otomatis
   //   berhenti begitu customer bikin UserOrder). Lihat generateQueueForLead.
   trigger       String
-  paymentMethod String? // null = both, COD, TRANSFER
+  paymentMethod String? // null = both, COD, TRANSFER, TRIPAY
+  // Filter jenis order (2026-08-07): null = semua, PHYSICAL = hanya order
+  // non-digital, DIGITAL = hanya order digital-only (isDigitalOnly=true).
+  // Dipakai supaya order e-book tidak dapat pesan "siap dikirim" barang fisik.
+  orderType     String?
 
   // Codebase real pisah paymentStatus & deliveryStatus jadi 2 field, jadi
   // gating di sini juga 2 field. Salah satu boleh null = tidak filter.

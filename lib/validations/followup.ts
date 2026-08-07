@@ -42,7 +42,13 @@ export const followupTemplateCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   trigger: z.enum(TRIGGER_VALUES),
   paymentMethod: z
-    .enum(['COD', 'TRANSFER'])
+    .enum(['COD', 'TRANSFER', 'TRIPAY'])
+    .nullable()
+    .optional()
+    .transform((v) => v ?? null),
+  // null = semua order; PHYSICAL = non-digital; DIGITAL = digital-only.
+  orderType: z
+    .enum(['PHYSICAL', 'DIGITAL'])
     .nullable()
     .optional()
     .transform((v) => v ?? null),
