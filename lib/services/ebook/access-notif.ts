@@ -23,7 +23,8 @@ export async function notifyEbookAccess(entitlementId: string): Promise<void> {
       buyerEmail: true,
       maxDownloads: true,
       expiresAt: true,
-      ebook: { select: { title: true } },
+      // userId penjual — sesi WA-nya jadi pengirim cadangan kalau admin down.
+      ebook: { select: { title: true, userId: true } },
     },
   })
   if (!ent || !ent.ebook) return
@@ -61,6 +62,7 @@ export async function notifyEbookAccess(entitlementId: string): Promise<void> {
     ebookTitle: ent.ebook.title,
     maxDownloads: ent.maxDownloads,
     expiresAt: ent.expiresAt,
+    sellerUserId: ent.ebook.userId,
   })
 
   let delivered = sendWa.delivered

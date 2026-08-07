@@ -88,6 +88,11 @@ export async function sendMagicLinkViaWa(input: {
 // Varian pesan untuk akses E-BOOK (2026-08-06) — link auto-login yang sama
 // (/belajar/auto), tapi body menyebut judul e-book + info jatah download &
 // masa aktif supaya pembeli tahu batasannya sejak awal.
+//
+// Pengirim (2026-08-07): coba sesi WA ADMIN platform dulu; kalau tidak ada /
+// gagal, FALLBACK ke sesi WA PENJUAL (sellerUserId — pemilik e-book). Kasus
+// nyata INV-20260807-L6Y31R: semua sesi admin ERROR → link tidak sampai,
+// padahal WA penjual hidup (follow-up-nya terkirim).
 export async function sendEbookAccessViaWa(input: {
   buyerPhone: string
   buyerName: string | null
@@ -95,18 +100,9 @@ export async function sendEbookAccessViaWa(input: {
   ebookTitle: string
   maxDownloads: number
   expiresAt: Date | null
+  // Pemilik e-book — sesi WA-nya jadi pengirim cadangan.
+  sellerUserId: string
 }): Promise<SendMagicLinkResult> {
-  const adminSessionId = await findAdminWaSessionId()
-  if (!adminSessionId) {
-    console.warn(
-      `[ebook-magic] WA admin session tidak CONNECTED — link akses untuk ${input.buyerPhone}: ${input.magicUrl}`,
-    )
-    return {
-      delivered: false,
-      channel: 'WA',
-      reason: 'WA admin session tidak aktif',
-    }
-  }
   const greet = input.buyerName ? `Halo ${input.buyerName}!` : 'Halo!'
   const masaAktif = input.expiresAt
     ? `berlaku s.d. ${input.expiresAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
@@ -125,21 +121,52 @@ export async function sendEbookAccessViaWa(input: {
     '',
     `_— ${BRAND}_`,
   ].join('\n')
-  const send = await waService.sendMessage(
-    adminSessionId,
-    input.buyerPhone,
-    text,
-  )
-  if (!send.success) {
+
+  // Kandidat pengirim berurutan: admin platform → penjual. Fallback penjual
+  // selalu disiapkan — dipakai hanya kalau admin tidak ada / gagal kirim.
+  const adminSessionId = await findAdminWaSessionId()
+  const senders: Array<{ label: string; sessionId: string }> = []
+  if (adminSessionId) senders.push({ label: 'admin', sessionId: adminSessionId })
+  const sellerSession = await prisma.whatsappSession.findFirst({
+    where: { userId: input.sellerUserId, status: 'CONNECTED' },
+    select: { id: true },
+    orderBy: { updatedAt: 'desc' },
+  })
+  if (sellerSession && sellerSession.id !== adminSessionId) {
+    senders.push({ label: 'penjual', sessionId: sellerSession.id })
+  }
+
+  if (senders.length === 0) {
     console.warn(
-      `[ebook-magic] gagal kirim WA ke ${input.buyerPhone}:`,
-      send.error,
+      `[ebook-magic] tidak ada sesi WA CONNECTED (admin maupun penjual) — link akses untuk ${input.buyerPhone}: ${input.magicUrl}`,
     )
     return {
       delivered: false,
       channel: 'WA',
-      reason: send.error ?? 'Gagal kirim WA',
+      reason: 'Tidak ada sesi WA aktif (admin/penjual)',
     }
   }
-  return { delivered: true, channel: 'WA' }
+
+  let lastError: string | undefined
+  for (const sender of senders) {
+    const send = await waService.sendMessage(
+      sender.sessionId,
+      input.buyerPhone,
+      text,
+    )
+    if (send.success) {
+      if (sender.label === 'penjual') {
+        console.warn(
+          `[ebook-magic] terkirim via sesi PENJUAL (admin down) ke ${input.buyerPhone}`,
+        )
+      }
+      return { delivered: true, channel: 'WA' }
+    }
+    lastError = send.error ?? 'Gagal kirim WA'
+    console.warn(
+      `[ebook-magic] gagal kirim via sesi ${sender.label} ke ${input.buyerPhone}:`,
+      send.error,
+    )
+  }
+  return { delivered: false, channel: 'WA', reason: lastError }
 }
