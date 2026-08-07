@@ -225,6 +225,51 @@ export async function sendStudentMagicLinkEmail(
   })
 }
 
+interface EbookAccessEmailContext {
+  email: string
+  buyerName: string | null
+  magicUrl: string
+  ebookTitle: string
+}
+
+// Email fallback link akses e-book — dikirim HANYA kalau WA gagal (lihat
+// lib/services/ebook/access-notif.ts). Cermin sendStudentMagicLinkEmail.
+export async function sendEbookAccessEmail(
+  ctx: EbookAccessEmailContext,
+): Promise<void> {
+  const transporter = getTransporter()
+  const greet = ctx.buyerName ? `Halo ${ctx.buyerName},` : 'Halo,'
+  const subject = `Akses e-book: ${ctx.ebookTitle} — Hulao`
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f1f1f;">
+      <h2 style="color: #ea580c; margin-bottom: 16px;">E-Book Kamu Sudah Aktif</h2>
+      <p>${greet}</p>
+      <p>Pembayaran untuk e-book <strong>${ctx.ebookTitle}</strong> sudah dikonfirmasi.</p>
+      <p>Klik tombol di bawah untuk buka Perpustakaan &amp; download — tidak perlu OTP:</p>
+      <p style="margin: 24px 0;">
+        <a href="${ctx.magicUrl}"
+           style="display: inline-block; background: #ea580c; color: #fff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Buka Perpustakaan
+        </a>
+      </p>
+      <p style="font-size: 14px; color: #666;">Atau copy URL ini ke browser:<br/><span style="word-break: break-all;">${ctx.magicUrl}</span></p>
+      <p style="font-size: 14px; color: #666;">Link berlaku 90 hari, simpan supaya bisa dipakai lagi nanti tanpa OTP.</p>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+      <p style="font-size: 12px; color: #999;">Hulao — Email otomatis, jangan dibalas. Kalau bukan kamu yang membeli, abaikan email ini.</p>
+    </div>
+  `
+  await transporter.sendMail({
+    from: defaultFrom(),
+    to: ctx.email,
+    subject,
+    html,
+    text:
+      `${greet}\n\nPembayaran untuk e-book ${ctx.ebookTitle} sudah dikonfirmasi.\n\n` +
+      `Klik link ini untuk buka Perpustakaan & download (berlaku 90 hari):\n${ctx.magicUrl}\n\n` +
+      `Kalau bukan kamu yang membeli, abaikan email ini.`,
+  })
+}
+
 interface ManualPaymentRejectedContext extends ManualPaymentEmailContext {
   reason: string
 }

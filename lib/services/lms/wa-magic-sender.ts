@@ -84,3 +84,62 @@ export async function sendMagicLinkViaWa(input: {
   }
   return { delivered: true, channel: 'WA' }
 }
+
+// Varian pesan untuk akses E-BOOK (2026-08-06) — link auto-login yang sama
+// (/belajar/auto), tapi body menyebut judul e-book + info jatah download &
+// masa aktif supaya pembeli tahu batasannya sejak awal.
+export async function sendEbookAccessViaWa(input: {
+  buyerPhone: string
+  buyerName: string | null
+  magicUrl: string
+  ebookTitle: string
+  maxDownloads: number
+  expiresAt: Date | null
+}): Promise<SendMagicLinkResult> {
+  const adminSessionId = await findAdminWaSessionId()
+  if (!adminSessionId) {
+    console.warn(
+      `[ebook-magic] WA admin session tidak CONNECTED — link akses untuk ${input.buyerPhone}: ${input.magicUrl}`,
+    )
+    return {
+      delivered: false,
+      channel: 'WA',
+      reason: 'WA admin session tidak aktif',
+    }
+  }
+  const greet = input.buyerName ? `Halo ${input.buyerName}!` : 'Halo!'
+  const masaAktif = input.expiresAt
+    ? `berlaku s.d. ${input.expiresAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
+    : 'berlaku selamanya'
+  const text = [
+    `*Akses E-Book Aktif 📚*`,
+    '',
+    greet,
+    `Pembayaran kamu untuk e-book *${input.ebookTitle}* sudah dikonfirmasi.`,
+    '',
+    `Klik link berikut untuk buka Perpustakaan & download (tanpa OTP):`,
+    input.magicUrl,
+    '',
+    `Jatah download: ${input.maxDownloads}x, akses ${masaAktif}.`,
+    `Kalau link bermasalah, login manual di hulao.id/belajar pakai nomor WA ini.`,
+    '',
+    `_— ${BRAND}_`,
+  ].join('\n')
+  const send = await waService.sendMessage(
+    adminSessionId,
+    input.buyerPhone,
+    text,
+  )
+  if (!send.success) {
+    console.warn(
+      `[ebook-magic] gagal kirim WA ke ${input.buyerPhone}:`,
+      send.error,
+    )
+    return {
+      delivered: false,
+      channel: 'WA',
+      reason: send.error ?? 'Gagal kirim WA',
+    }
+  }
+  return { delivered: true, channel: 'WA' }
+}

@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server'
 import { jsonError, jsonOk } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
-import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
+import { triggerEntitlementsForOrderSafe } from '@/lib/services/entitlement-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 
 const SCRAPER_SECRET = process.env.SCRAPER_SECRET || ''
@@ -90,9 +90,9 @@ export async function POST(req: Request) {
       console.error(`[order-auto-paid] followup gagal ${order.id}:`, e)
     })
 
-    // LMS auto-enrollment — upsert Enrollment untuk product yg punya
-    // courseId. Best-effort, tidak block.
-    triggerEnrollmentForOrderSafe(order.id)
+    // Entitlement digital (LMS course + e-book) — dispatcher grant semua
+    // aset digital di order. Best-effort, tidak block.
+    triggerEntitlementsForOrderSafe(order.id)
 
     return jsonOk({ ok: true, orderId: order.id })
   } catch (err) {

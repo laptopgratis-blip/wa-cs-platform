@@ -9,7 +9,10 @@ import {
   generateQueueForOrder,
   type FollowupEvent,
 } from '@/lib/services/followup-engine'
-import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
+import {
+  revokeEntitlementsForOrderSafe,
+  triggerEntitlementsForOrderSafe,
+} from '@/lib/services/entitlement-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { orderUpdateSchema } from '@/lib/validations/order'
@@ -183,13 +186,13 @@ export async function PATCH(req: Request, { params }: Params) {
       }
     }
 
-    // LMS auto-enrollment — saat transisi ke PAID, cek items dan upsert
-    // Enrollment untuk product yg punya courseId. Best-effort, tidak block.
+    // Entitlement digital (LMS course + e-book) — saat transisi ke PAID,
+    // dispatcher grant semua aset digital di order. Best-effort, tidak block.
     if (
       data.paymentStatus === 'PAID' &&
       existing.paymentStatus !== 'PAID'
     ) {
-      triggerEnrollmentForOrderSafe(updated.id)
+      triggerEntitlementsForOrderSafe(updated.id)
     }
 
     // Follow-Up Order System hooks — detect transition & trigger event.
@@ -222,6 +225,12 @@ export async function PATCH(req: Request, { params }: Params) {
       // punya.
       cancelQueueForOrder(updated.id, 'Order cancelled').catch((err) =>
         console.error('[orders PATCH] cancelQueue:', err),
+      )
+      // Cabut akses digital (e-book + course) milik order ini — order PAID
+      // yang dibatalkan/di-refund tidak boleh menyisakan akses hidup.
+      revokeEntitlementsForOrderSafe(
+        updated.id,
+        data.cancelledReason ?? 'Order dibatalkan',
       )
       followupEvents.push('CANCELLED')
     }

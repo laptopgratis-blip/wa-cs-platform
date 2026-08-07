@@ -16,7 +16,10 @@ import {
   generateQueueForOrder,
   type FollowupEvent,
 } from '@/lib/services/followup-engine'
-import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
+import {
+  revokeEntitlementsForOrderSafe,
+  triggerEntitlementsForOrderSafe,
+} from '@/lib/services/entitlement-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 
@@ -127,16 +130,22 @@ export async function POST(req: Request) {
         }).catch(() => {})
       }
 
-      // LMS auto-enrollment — saat bulk transisi PAID, upsert Enrollment
-      // untuk product yg punya courseId. Best-effort, tidak block loop.
+      // Entitlement digital (LMS course + e-book) — saat bulk transisi PAID,
+      // dispatcher grant semua aset digital. Best-effort, tidak block loop.
       if (action === 'mark_paid') {
-        triggerEnrollmentForOrderSafe(order.id)
+        triggerEntitlementsForOrderSafe(order.id)
       }
 
-      // Kalau reject, cancel pending queue dulu sebelum generate event CANCELLED.
+      // Kalau reject, cancel pending queue dulu sebelum generate event
+      // CANCELLED + cabut akses digital milik order (termasuk order yang
+      // sudah PAID — reject tidak boleh menyisakan akses hidup).
       if (action === 'reject') {
         cancelQueueForOrder(order.id, cancelledReason ?? 'Bulk reject').catch(
           (err) => console.error('[bulk-update] cancelQueue:', err),
+        )
+        revokeEntitlementsForOrderSafe(
+          order.id,
+          cancelledReason ?? 'Bulk reject',
         )
       }
 

@@ -7,7 +7,7 @@ import type { NextResponse } from 'next/server'
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
-import { triggerEnrollmentForOrderSafe } from '@/lib/services/lms/order-hook'
+import { triggerEntitlementsForOrderSafe } from '@/lib/services/entitlement-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { manualMatchSchema } from '@/lib/validations/bank-mutation'
 
@@ -98,7 +98,7 @@ export async function POST(req: Request, { params }: Ctx) {
     }
 
     // LMS auto-enrollment — upsert Enrollment untuk product yg punya courseId.
-    triggerEnrollmentForOrderSafe(order.id)
+    triggerEntitlementsForOrderSafe(order.id)
 
     return jsonOk({ mutation: updatedMutation, action: 'MANUAL_RESOLVED' })
   } catch (err) {
