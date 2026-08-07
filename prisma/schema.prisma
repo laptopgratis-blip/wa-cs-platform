@@ -91,6 +91,9 @@ model User {
   // LMS — Phase 3 (2026-05-09). Plan upgrade LMS via token.
   lmsQuota                     LmsQuota?
   lmsSubscriptions             LmsSubscription[]
+  // E-Book (2026-08-06). Aset e-book privat milik seller — dijual via
+  // Product.ebookId, file di storage privat (EBOOK_STORAGE_DIR).
+  ebooks                       Ebook[]
   // Content Studio — Phase 1 (2026-05-10). Idea Generator + AI content gen.
   aiGenerationLogs             AiGenerationLog[]
   contentIdeas                 ContentIdea[]
@@ -1588,6 +1591,10 @@ model UserOrder {
   deliveryStatus String  @default("PENDING")
   trackingNumber String?
 
+  // true = order dari form digital (requireShipping=false): tidak ada barang
+  // fisik, dikecualikan dari packing list (readyToPackWhere). Set saat submit.
+  isDigitalOnly Boolean @default(false)
+
   // Kapan notif WA "Order Baru" ke owner (waConfirmNumber) terkirim. NULL =
   // belum — disweep ulang cron followup-send s.d. 24 jam (2026-07-16: dulu
   // fire-and-forget, hilang kalau WA owner pas putus). Juga jadi klaim
@@ -1686,6 +1693,10 @@ model UserOrder {
   // LMS Phase 1 — kalau item ada productId.courseId, hook on-PAID upsert
   // Enrollment dgn orderId=this.id supaya admin bisa trace order → akses.
   enrollments    Enrollment[]
+  // E-Book (2026-08-06) — analog enrollments utk produk ber-ebookId.
+  ebookEntitlements EbookEntitlement[]
+  // Pembayaran Tripay utk order ini (VA/QRIS). Bisa >1 kalau retry expired.
+  orderPayments     OrderPayment[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, paymentStatus])
@@ -1841,6 +1852,13 @@ model Product {
   courseId String? @unique
   course   Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
 
+  // E-Book (2026-08-06). Kalau set → produk ini = e-book digital. Saat order
+  // PAID, hook (lib/services/ebook/order-hook.ts) upsert EbookEntitlement
+  // per customerPhone — pola sama persis dgn courseId di atas. 1:1 unique
+  // supaya 1 e-book = 1 product; bundle pakai beberapa product di 1 order.
+  ebookId String? @unique
+  ebook   Ebook?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1973,6 +1991,9 @@ model OrderForm {
 
   acceptCod       Boolean @default(true)
   acceptTransfer  Boolean @default(true)
+  // Terima pembayaran otomatis via Tripay (VA/QRIS/e-wallet). Default false —
+  // penjual harus aktifkan sadar karena fee channel dibebankan ke pembeli.
+  acceptTripay    Boolean @default(false)
   // Ongkir flat untuk COD (skip RajaOngkir). null = pakai RajaOngkir juga.
   shippingFlatCod Float?
 
@@ -3897,4 +3918,213 @@ model LpLiveEmbed {
 
   @@index([liveRoomId])
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// E-BOOK (2026-08-06) — Jualan produk digital PDF/EPUB.
+// File disimpan PRIVAT di EBOOK_STORAGE_DIR (default ./storage/ebooks) —
+// SENGAJA di luar public/uploads karena path itu diserve nginx hulao-uploads
+// dgn Cache-Control immutable 1 tahun (docker-compose uploads-server) dan
+// bisa diakses siapa pun yang tahu URL. Download hanya lewat route bertoken
+// /api/ebook/download/[token] (streaming + cek entitlement).
+// Pola entitlement meniru LMS: Product.ebookId ≈ Product.courseId,
+// EbookEntitlement ≈ Enrollment, identitas pembeli = phone E.164.
+// ─────────────────────────────────────────────────────────────────────────
+
+enum EbookFileFormat {
+  PDF
+  EPUB
+}
+
+// Sengaja TIDAK reuse EnrollmentStatus supaya domain e-book decoupled dari
+// LMS (bisa berevolusi sendiri tanpa migrasi silang).
+enum EbookAccessStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+model Ebook {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String? @db.Text
+  // Cover BOLEH publik (bukan aset rahasia) — ikut pola upload gambar biasa
+  // ke public/uploads.
+  coverUrl    String?
+
+  // Nama file asli saat upload — dipakai di Content-Disposition download
+  // supaya pembeli dapat nama file yang bermakna.
+  fileName      String
+  // Path RELATIF terhadap EBOOK_STORAGE_DIR, format <userId>/<hex24>.pdf|epub.
+  // Divalidasi assertSafeEbookRelPath sebelum join path (anti-traversal).
+  filePath      String          @unique
+  fileFormat    EbookFileFormat
+  fileSizeBytes Int
+  // SHA-256 file utk verifikasi integritas (insiden 27 Jul: reboot VPS bikin
+  // file 0-byte — checksum memastikan file di disk = file yang di-upload).
+  fileSha256    String
+
+  // Pengaturan akses default — di-snapshot ke entitlement saat grant supaya
+  // perubahan setting tidak mengubah hak pembeli lama.
+  maxDownloads Int  @default(20)
+  // null = akses seumur hidup. Kalau diisi, entitlement.expiresAt =
+  // grantedAt + accessDays.
+  accessDays   Int?
+
+  isActive Boolean @default(true)
+
+  product      Product?
+  entitlements EbookEntitlement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+// Entitlement = hak akses 1 pembeli (phone) ke 1 e-book. Cermin Enrollment
+// LMS. Di-upsert oleh hook on-order-PAID (lib/services/ebook/order-hook.ts).
+model EbookEntitlement {
+  id      String @id @default(cuid())
+  ebookId String
+  ebook   Ebook  @relation(fields: [ebookId], references: [id], onDelete: Cascade)
+
+  // Identitas pembeli — phone E.164 (sumber: UserOrder.customerPhone,
+  // dinormalisasi normalizeStudentPhone — normalizer yg sama dgn portal
+  // /belajar supaya login = entitlement match).
+  buyerPhone String
+  buyerName  String?
+  buyerEmail String?
+
+  // Order yang men-trigger grant. SetNull supaya entitlement tetap hidup
+  // walau order dihapus. invoiceNumber = snapshot display admin tanpa join.
+  orderId       String?
+  order         UserOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  invoiceNumber String?
+  // Snapshot harga item saat grant — untuk statistik omzet per e-book tanpa
+  // parse JSON items order.
+  pricePaidRp   Float?
+
+  status    EbookAccessStatus @default(ACTIVE)
+  grantedAt DateTime          @default(now())
+  // null = lifetime. Dihitung dari Ebook.accessDays saat grant. TIDAK ada
+  // cron expiry — endpoint download WAJIB cek expiresAt eksplisit (lazy
+  // expire), jangan tiru Enrollment.expiresAt yang tidak pernah di-enforce.
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  revokeReason String?
+
+  // Snapshot dari Ebook.maxDownloads saat grant. downloadCount di-increment
+  // TRANSAKSIONAL di endpoint download (conditional lt maxDownloads).
+  maxDownloads  Int
+  downloadCount Int @default(0)
+
+  // Klaim anti dobel-kirim notif akses (pola ownerNotifiedAt): set-first
+  // WHERE NULL, reset NULL kalau gagal, disweep cron followup-send s.d. 24 jam.
+  accessNotifiedAt DateTime?
+
+  downloadTokens EbookDownloadToken[]
+  downloadLogs   EbookDownloadLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 1 phone tidak bisa punya 2 entitlement utk e-book yg sama — order ulang
+  // = upsert reset ACTIVE (idempotensi hook on-PAID).
+  @@unique([ebookId, buyerPhone])
+  @@index([buyerPhone])
+  @@index([orderId])
+  @@index([ebookId, status])
+  // Sweep cron: cari entitlement yang notif aksesnya belum terkirim.
+  @@index([accessNotifiedAt])
+}
+
+// Token download sekali-hitung TTL 15 menit. Diminta dari portal /belajar
+// (auth cookie belajar-session), lalu GET /api/ebook/download/[token].
+// consumedAt: increment downloadCount HANYA saat transisi null→terisi —
+// request Range/resume berikutnya dlm TTL memakai token yg sama tanpa
+// menghitung dobel (download manager kirim multi-range).
+model EbookDownloadToken {
+  id            String           @id @default(cuid())
+  // randomBytes(32).hex — value di URL.
+  token         String           @unique
+  entitlementId String
+  entitlement   EbookEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  ipAddress  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entitlementId])
+  // Cron/manual cleanup token kedaluwarsa.
+  @@index([expiresAt])
+}
+
+// Audit log tiap percobaan download (sukses maupun ditolak) — kebutuhan MVP
+// "semua download tercatat" + bahan statistik penjual.
+model EbookDownloadLog {
+  id            String           @id @default(cuid())
+  entitlementId String
+  entitlement   EbookEntitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  tokenId       String?
+
+  // SUCCESS | DENIED_LIMIT | DENIED_EXPIRED | DENIED_REVOKED — string
+  // (bukan enum) ikut konvensi paymentStatus supaya gampang nambah kasus.
+  status    String
+  ipAddress String?
+  userAgent String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([entitlementId, createdAt(sort: Desc)])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ORDER PAYMENT (2026-08-06) — Pembayaran Tripay untuk UserOrder (checkout
+// toko publik). SENGAJA tabel terpisah dari Payment: cron payment-reconcile
+// memindai SEMUA Payment PENDING tanpa filter purpose lalu mengkredit token
+// SaaS — reuse tabel itu akan membuat pembayaran order dikredit sebagai
+// token. Payment.userId juga bermakna "user SaaS", sedangkan pembeli order
+// publik bukan User.
+// ─────────────────────────────────────────────────────────────────────────
+model OrderPayment {
+  id      String    @id @default(cuid())
+  orderId String
+  order   UserOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // merchant_ref di Tripay = invoiceNumber order. Retry payment expired
+  // pakai suffix -R2/-R3 supaya tetap unique.
+  merchantRef String  @unique
+  // Reference dari Tripay (T12345...). Null sampai createTransaction sukses
+  // ter-persist. Unique utk lookup webhook.
+  reference   String? @unique
+
+  // amount = nilai order (omzet penjual, = UserOrder.totalRp). feeCustomer =
+  // fee channel yang dibebankan pembeli (customerAmount Tripay - amount).
+  feeCustomer Int    @default(0)
+  amount      Int
+
+  channelCode String
+  channelName String?
+  // Kode bayar VA / info channel. Null utk channel redirect (QRIS/e-wallet).
+  payCode     String?
+  checkoutUrl String?
+
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime?
+  expiredAt DateTime?
+  // Payload callback terakhir dari Tripay — audit/debug.
+  rawCallback Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId, createdAt(sort: Desc)])
+  // Cron order-payment-reconcile: kandidat PENDING dalam window 24 jam.
+  @@index([status, createdAt])
 }

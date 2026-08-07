@@ -47,6 +47,8 @@ wa-service/node_modules/
 .env.production
 wa-service/sessions/
 public/uploads/
+# Storage privat file e-book (jangan pernah masuk git — file berbayar)
+storage/
 wa-service/dist/
 secrets/
 .build.log

@@ -67,6 +67,11 @@ services:
       # Persist gambar bukti transfer & gambar LP supaya tidak hilang saat
       # container di-recreate. Mount langsung ke /app/public/uploads di image.
       - ./public/uploads:/app/public/uploads
+      # Storage PRIVAT file e-book (PDF/EPUB berbayar). SENGAJA di luar
+      # public/uploads — path itu diserve nginx uploads-server tanpa auth +
+      # Cache-Control immutable. Download hanya via route bertoken.
+      # Pra-syarat deploy: mkdir -p storage/ebooks && chown 1001:1001 (USER nextjs).
+      - ./storage/ebooks:/app/storage/ebooks
     ports:
       # Bind ke loopback host SAJA — publish 0.0.0.0 membuka jalur bypass
       # Traefik (X-Forwarded-For bebas dipalsukan + /api/internal terjangkau
