@@ -16,12 +16,25 @@ import {
 
 export const dynamic = 'force-dynamic'
 
+// Base URL redirect dari env publik — JANGAN dari req.url: di balik Traefik,
+// req.url route handler berisi host bind internal (https://0.0.0.0:3000)
+// sehingga Location redirect nyasar keluar domain (kejadian saat deploy
+// pertama fix ini). Fallback origin request hanya untuk dev lokal.
+function baseUrl(req: Request): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.NEXTAUTH_URL ??
+    new URL(req.url).origin
+  )
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
+  const base = baseUrl(req)
 
   const errorRedirect = (message: string) =>
     NextResponse.redirect(
-      new URL(`/belajar?magic_error=${encodeURIComponent(message)}`, url),
+      `${base}/belajar?magic_error=${encodeURIComponent(message)}`,
       { status: 303 },
     )
 
@@ -38,7 +51,7 @@ export async function GET(req: Request) {
         undefined,
     })
 
-    const res = NextResponse.redirect(new URL('/belajar', url), {
+    const res = NextResponse.redirect(`${base}/belajar`, {
       status: 303,
     })
     res.cookies.set({
