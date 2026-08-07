@@ -42,6 +42,15 @@ export async function PATCH(
 
     const data = parsed.data
 
+    // E-Book link — validasi kepemilikan sebelum diikat (null = lepas link).
+    if (data.ebookId) {
+      const ebook = await prisma.ebook.findFirst({
+        where: { id: data.ebookId, userId: session.user.id },
+        select: { id: true },
+      })
+      if (!ebook) return jsonError('E-book tidak ditemukan', 400)
+    }
+
     // Galeri sync — kalau client kirim `images`, itu sumber kebenaran.
     // Cover (imageUrl) di-derive dari images[0]. File yang dikeluarkan dari
     // galeri di-unlink supaya tidak jadi sampah di disk.
@@ -98,6 +107,7 @@ export async function PATCH(
           ...(data.flashSaleQuota !== undefined && {
             flashSaleQuota: data.flashSaleQuota,
           }),
+          ...(data.ebookId !== undefined && { ebookId: data.ebookId }),
         },
       })
 
@@ -166,6 +176,10 @@ export async function PATCH(
       })),
     })
   } catch (err) {
+    // Unique constraint Product.ebookId — e-book sudah diikat produk lain.
+    if ((err as { code?: string })?.code === 'P2002') {
+      return jsonError('E-book sudah terhubung ke produk lain', 409)
+    }
     console.error('[PATCH /api/products/[id]] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)
   }

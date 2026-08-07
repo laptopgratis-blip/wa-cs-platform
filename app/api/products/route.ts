@@ -72,6 +72,16 @@ export async function POST(req: Request) {
       )
     }
     const data = parsed.data
+
+    // E-Book link — pastikan e-book milik user sendiri sebelum diikat.
+    if (data.ebookId) {
+      const ebook = await prisma.ebook.findFirst({
+        where: { id: data.ebookId, userId: session.user.id },
+        select: { id: true },
+      })
+      if (!ebook) return jsonError('E-book tidak ditemukan', 400)
+    }
+
     // Sumber kebenaran galeri = `images` array. Cover (imageUrl) selalu derive
     // dari images[0] supaya consumer lama (invoice, orderCard) tetap dapat
     // foto utama tanpa perlu di-update.
@@ -98,6 +108,7 @@ export async function POST(req: Request) {
           ? new Date(data.flashSaleEndAt)
           : null,
         flashSaleQuota: data.flashSaleQuota ?? null,
+        ebookId: data.ebookId ?? null,
         ...(data.variants && data.variants.length > 0
           ? {
               variants: {
@@ -136,6 +147,10 @@ export async function POST(req: Request) {
       201,
     )
   } catch (err) {
+    // Unique constraint Product.ebookId — e-book sudah diikat produk lain.
+    if ((err as { code?: string })?.code === 'P2002') {
+      return jsonError('E-book sudah terhubung ke produk lain', 409)
+    }
     console.error('[POST /api/products] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)
   }

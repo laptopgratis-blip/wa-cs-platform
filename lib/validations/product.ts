@@ -80,6 +80,10 @@ export const productCreateSchema = z
       .array(productVariantInputSchema)
       .max(VARIANT_LIMIT_PER_PRODUCT, `Maksimal ${VARIANT_LIMIT_PER_PRODUCT} varian per produk`)
       .optional(),
+
+    // E-Book (2026-08-06). Kalau diisi → produk ini = e-book digital;
+    // hook on-PAID grant EbookEntitlement. null = lepas link.
+    ebookId: z.string().min(1).nullable().optional(),
   })
   .refine(
     (v) => {
@@ -132,6 +136,8 @@ const productBaseSchema = z.object({
   variants: z
     .array(productVariantInputSchema)
     .max(VARIANT_LIMIT_PER_PRODUCT),
+  // E-Book — null = lepas link produk↔e-book.
+  ebookId: z.string().min(1).nullable(),
 })
 
 export const productUpdateSchema = productBaseSchema.partial()
