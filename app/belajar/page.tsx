@@ -8,6 +8,7 @@ import { cookies } from 'next/headers'
 
 import { LoginForm } from '@/components/belajar/LoginForm'
 import { StudentDashboard } from '@/components/belajar/StudentDashboard'
+import { getStudentEbooks } from '@/lib/services/ebook/portal'
 import { getStudentCertificates } from '@/lib/services/lms/certificate'
 import {
   STUDENT_COOKIE_NAME,
@@ -30,7 +31,7 @@ export default async function BelajarHomePage() {
             Masuk ke Portal Belajar
           </h1>
           <p className="mt-2 text-sm text-warm-600">
-            Login pakai nomor WhatsApp yg dipakai saat order course.
+            Login pakai nomor WhatsApp yg dipakai saat order.
           </p>
         </div>
         <LoginForm />
@@ -38,9 +39,10 @@ export default async function BelajarHomePage() {
     )
   }
 
-  const [enrollments, certificates] = await Promise.all([
+  const [enrollments, certificates, ebooks] = await Promise.all([
     getStudentEnrollments(ctx.studentPhone),
     getStudentCertificates(ctx.studentPhone),
+    getStudentEbooks(ctx.studentPhone),
   ])
   return (
     <StudentDashboard
@@ -56,6 +58,11 @@ export default async function BelajarHomePage() {
       certificates={certificates.map((c) => ({
         ...c,
         issuedAt: c.issuedAt.toISOString(),
+      }))}
+      ebooks={ebooks.map((b) => ({
+        ...b,
+        grantedAt: b.grantedAt.toISOString(),
+        expiresAt: b.expiresAt?.toISOString() ?? null,
       }))}
     />
   )

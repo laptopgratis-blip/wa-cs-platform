@@ -8,6 +8,10 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  EbookLibrary,
+  type EbookLibraryItem,
+} from '@/components/belajar/EbookLibrary'
 
 interface Enrollment {
   enrollmentId: string
@@ -47,10 +51,12 @@ export function StudentDashboard({
   student,
   enrollments,
   certificates,
+  ebooks = [],
 }: {
   student: { phone: string; name: string | null }
   enrollments: Enrollment[]
   certificates: Certificate[]
+  ebooks?: EbookLibraryItem[]
 }) {
   const router = useRouter()
   const [loggingOut, setLoggingOut] = useState(false)
@@ -89,20 +95,22 @@ export function StudentDashboard({
         </Button>
       </header>
 
-      {enrollments.length === 0 ? (
+      {/* Empty-state hanya kalau course DAN e-book dua-duanya kosong —
+          pembeli ebook-only jangan disambut "Belum ada course aktif". */}
+      {enrollments.length === 0 && ebooks.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <GraduationCap className="mx-auto mb-3 size-10 text-warm-300" />
             <p className="font-semibold text-warm-700">
-              Belum ada course aktif
+              Belum ada course atau e-book aktif
             </p>
             <p className="mt-1 text-sm text-warm-500">
-              Akses course muncul otomatis setelah pembayaran kamu di-konfirmasi.
+              Akses muncul otomatis setelah pembayaran kamu di-konfirmasi.
               Cek WhatsApp untuk konfirmasi atau hubungi penjual.
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : enrollments.length === 0 ? null : (
         <div className="grid gap-4 md:grid-cols-2">
           {enrollments.map((e) => {
             const pct =
@@ -180,6 +188,9 @@ export function StudentDashboard({
           })}
         </div>
       )}
+
+      {/* Perpustakaan E-Book (2026-08-06) — tampil kalau punya entitlement. */}
+      <EbookLibrary items={ebooks} />
 
       {/* Sertifikat — Phase 4. Hanya tampil kalau student punya cert. */}
       {certificates.length > 0 && (

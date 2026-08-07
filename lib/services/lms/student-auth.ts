@@ -186,12 +186,20 @@ export async function verifyOtpAndCreateSession(input: {
     data: { consumedAt: new Date() },
   })
 
-  // Snapshot studentName/email dari Enrollment terbaru (kalau ada).
+  // Snapshot studentName/email dari Enrollment terbaru (kalau ada). Fallback
+  // ke EbookEntitlement untuk pembeli ebook-only (tanpa course).
   const recentEnroll = await prisma.enrollment.findFirst({
     where: { studentPhone: phone },
     orderBy: { enrolledAt: 'desc' },
     select: { studentName: true, studentEmail: true },
   })
+  const recentEbook = recentEnroll
+    ? null
+    : await prisma.ebookEntitlement.findFirst({
+        where: { buyerPhone: phone },
+        orderBy: { grantedAt: 'desc' },
+        select: { buyerName: true, buyerEmail: true },
+      })
 
   const sessionToken = crypto.randomBytes(32).toString('hex')
   const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS)
@@ -199,8 +207,9 @@ export async function verifyOtpAndCreateSession(input: {
     data: {
       studentPhone: phone,
       sessionToken,
-      studentName: recentEnroll?.studentName ?? null,
-      studentEmail: recentEnroll?.studentEmail ?? null,
+      studentName: recentEnroll?.studentName ?? recentEbook?.buyerName ?? null,
+      studentEmail:
+        recentEnroll?.studentEmail ?? recentEbook?.buyerEmail ?? null,
       userAgent: input.userAgent?.slice(0, 500) ?? null,
       ipAddress: input.ipAddress ?? null,
       expiresAt: sessionExpiresAt,

@@ -173,12 +173,20 @@ export async function consumeMagicLink(input: {
   })
 
   // Snapshot studentName/email dari Enrollment terbaru — supaya StudentSession
-  // langsung punya display name (mirror flow OTP verify).
+  // langsung punya display name (mirror flow OTP verify). Fallback ke
+  // EbookEntitlement untuk pembeli ebook-only (tanpa course).
   const recentEnroll = await prisma.enrollment.findFirst({
     where: { studentPhone: link.studentPhone },
     orderBy: { enrolledAt: 'desc' },
     select: { studentName: true, studentEmail: true },
   })
+  const recentEbook = recentEnroll
+    ? null
+    : await prisma.ebookEntitlement.findFirst({
+        where: { buyerPhone: link.studentPhone },
+        orderBy: { grantedAt: 'desc' },
+        select: { buyerName: true, buyerEmail: true },
+      })
 
   const sessionToken = crypto.randomBytes(32).toString('hex')
   const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS)
@@ -186,8 +194,9 @@ export async function consumeMagicLink(input: {
     data: {
       studentPhone: link.studentPhone,
       sessionToken,
-      studentName: recentEnroll?.studentName ?? null,
-      studentEmail: recentEnroll?.studentEmail ?? null,
+      studentName: recentEnroll?.studentName ?? recentEbook?.buyerName ?? null,
+      studentEmail:
+        recentEnroll?.studentEmail ?? recentEbook?.buyerEmail ?? null,
       userAgent: input.userAgent?.slice(0, 500) ?? null,
       ipAddress: input.ipAddress ?? null,
       expiresAt: sessionExpiresAt,

@@ -2,6 +2,7 @@
 // Return student session info + list enrollment ACTIVE.
 // Kalau cookie tidak valid → 401 (UI redirect ke /belajar/login).
 import { jsonError, jsonOk } from '@/lib/api'
+import { getStudentEbooks } from '@/lib/services/ebook/portal'
 import { getStudentCertificates } from '@/lib/services/lms/certificate'
 import {
   STUDENT_COOKIE_NAME,
@@ -22,9 +23,10 @@ export async function GET(req: Request) {
   const ctx = await getStudentFromSessionToken(token)
   if (!ctx) return jsonError('unauthorized', 401)
 
-  const [enrollments, certificates] = await Promise.all([
+  const [enrollments, certificates, ebooks] = await Promise.all([
     getStudentEnrollments(ctx.studentPhone),
     getStudentCertificates(ctx.studentPhone),
+    getStudentEbooks(ctx.studentPhone),
   ])
   return jsonOk({
     student: {
@@ -36,6 +38,13 @@ export async function GET(req: Request) {
     certificates: certificates.map((c) => ({
       ...c,
       issuedAt: c.issuedAt.toISOString(),
+    })),
+    // Perpustakaan e-book (2026-08-06) — perluasan response, konsumen lama
+    // tidak terpengaruh.
+    ebooks: ebooks.map((b) => ({
+      ...b,
+      grantedAt: b.grantedAt.toISOString(),
+      expiresAt: b.expiresAt?.toISOString() ?? null,
     })),
   })
 }
