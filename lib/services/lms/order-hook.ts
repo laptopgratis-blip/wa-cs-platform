@@ -16,18 +16,10 @@ import { waService } from '@/lib/wa-service'
 import { upsertEnrollment } from './enrollment'
 import { issueMagicLink } from './student-magic'
 import { sendMagicLinkViaWa } from './wa-magic-sender'
+import { findStudentWaSenders } from './wa-sender-pool'
 
 const PORTAL_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? 'https://hulao.id'
-
-async function findAdminWaSessionId(): Promise<string | null> {
-  const session = await prisma.whatsappSession.findFirst({
-    where: { status: 'CONNECTED', user: { role: 'ADMIN' } },
-    select: { id: true },
-    orderBy: { updatedAt: 'desc' },
-  })
-  return session?.id ?? null
-}
 
 async function sendCourseAccessNotif(input: {
   studentPhone: string
@@ -35,6 +27,8 @@ async function sendCourseAccessNotif(input: {
   studentEmail: string | null
   courseTitle: string
   courseSlug: string
+  // Pemilik course (= pemilik order) — fallback pengirim WA setelah admin.
+  sellerUserId: string
 }): Promise<void> {
   // Issue magic link sekali — dipakai untuk WA & Email body. skipThrottle
   // karena trigger=ENROLLMENT (sistem-issued, bukan user-driven). Token
@@ -61,30 +55,38 @@ async function sendCourseAccessNotif(input: {
       magicUrl,
       courseTitle: input.courseTitle,
       studentName: input.studentName,
+      sellerUserId: input.sellerUserId,
     })
     waDelivered = sendWa.delivered
   } else {
     // Fallback ke notif lama (no magic link) kalau token gagal di-issue —
-    // student bisa login manual lewat OTP.
-    const adminSessionId = await findAdminWaSessionId()
-    if (adminSessionId) {
-      const greeting = input.studentName ? `Halo ${input.studentName}!` : 'Halo!'
-      const text = [
-        `*Akses Course Aktif 🎓*`,
-        '',
-        greeting,
-        `Pembayaran kamu untuk *${input.courseTitle}* sudah dikonfirmasi.`,
-        '',
-        `Buka akses di ${PORTAL_URL}/belajar — login pakai nomor WA ini lewat OTP.`,
-        '',
-        `_— Hulao Belajar_`,
-      ].join('\n')
+    // student bisa login manual lewat OTP. Pengirim dari pool (admin →
+    // penjual), sama dgn jalur utama.
+    const senders = await findStudentWaSenders({
+      studentPhone: input.studentPhone,
+      sellerUserId: input.sellerUserId,
+    })
+    const greeting = input.studentName ? `Halo ${input.studentName}!` : 'Halo!'
+    const text = [
+      `*Akses Course Aktif 🎓*`,
+      '',
+      greeting,
+      `Pembayaran kamu untuk *${input.courseTitle}* sudah dikonfirmasi.`,
+      '',
+      `Buka akses di ${PORTAL_URL}/belajar — login pakai nomor WA ini lewat OTP.`,
+      '',
+      `_— Hulao Belajar_`,
+    ].join('\n')
+    for (const sender of senders) {
       const send = await waService.sendMessage(
-        adminSessionId,
+        sender.sessionId,
         input.studentPhone,
         text,
       )
-      waDelivered = send.success
+      if (send.success) {
+        waDelivered = true
+        break
+      }
     }
   }
 
@@ -139,6 +141,7 @@ export async function triggerEnrollmentForOrder(
     where: { id: orderId },
     select: {
       id: true,
+      userId: true,
       items: true,
       customerPhone: true,
       customerName: true,
@@ -226,6 +229,7 @@ export async function triggerEnrollmentForOrder(
           studentEmail: order.customerEmail,
           courseTitle: p.course.title,
           courseSlug: p.course.slug,
+          sellerUserId: order.userId,
         }).catch((err) =>
           console.error(`[lms-hook] notif akses gagal:`, err),
         )

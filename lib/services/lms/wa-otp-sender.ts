@@ -1,28 +1,15 @@
 // LMS WA OTP delivery — kirim OTP plaintext ke phone student via WA.
 //
-// Pakai admin WA session (sama dgn pattern subscription notif) — cari
-// session CONNECTED terbaru milik user role=ADMIN. Kalau gagal:
-//   - Phase 2 BETA: log OTP plaintext ke server console (admin lihat
-//     via docker logs supaya bisa test flow tanpa WA active)
-//   - Tidak throw — student tetap dapat respons sukses dari API, dan
-//     admin bisa kasih OTP manual via WA / chat lain
-//
-// Production: pastikan WA admin session selalu CONNECTED. Future Phase 4:
-// dedicated WA bot khusus OTP + monitoring.
-import { prisma } from '@/lib/prisma'
+// Pengirim dicari dari pool (lib/services/lms/wa-sender-pool.ts): sesi ADMIN
+// platform dulu, lalu FALLBACK sesi PENJUAL yang berelasi dgn nomor student
+// (2026-08-07: nomor admin diblokir permanen — tanpa fallback ini OTP mati
+// total). Kalau semua gagal:
+//   - Log OTP plaintext ke server console (admin lihat via docker logs
+//     supaya bisa kasih OTP manual via chat lain)
+//   - Tidak throw — student tetap dapat respons sukses dari API
 import { waService } from '@/lib/wa-service'
 
-async function findAdminWaSessionId(): Promise<string | null> {
-  const session = await prisma.whatsappSession.findFirst({
-    where: {
-      status: 'CONNECTED',
-      user: { role: 'ADMIN' },
-    },
-    select: { id: true },
-    orderBy: { updatedAt: 'desc' },
-  })
-  return session?.id ?? null
-}
+import { findStudentWaSenders } from './wa-sender-pool'
 
 const OTP_BRAND = 'Hulao Belajar'
 
@@ -47,35 +34,50 @@ export async function sendOtpViaWa(input: {
   studentPhone: string
   otpPlaintext: string
 }): Promise<SendOtpResult> {
-  const adminSessionId = await findAdminWaSessionId()
-  if (!adminSessionId) {
-    // Fallback: log plaintext OTP supaya admin bisa kasih manual via chat
-    // lain (mis. WA pribadi). Phase 2 BETA acceptable — Phase 4 ganti dgn
-    // dedicated bot.
+  const senders = await findStudentWaSenders({
+    studentPhone: input.studentPhone,
+  })
+  if (senders.length === 0) {
+    // Fallback terakhir: log plaintext OTP supaya admin bisa kasih manual.
     console.warn(
-      `[lms-otp] WA admin session tidak CONNECTED — OTP untuk ${input.studentPhone}: ${input.otpPlaintext}`,
+      `[lms-otp] tidak ada sesi WA CONNECTED (admin/penjual) — OTP untuk ${input.studentPhone}: ${input.otpPlaintext}`,
     )
     return {
       delivered: false,
       channel: 'CONSOLE_FALLBACK',
-      reason: 'WA admin session tidak aktif',
+      reason: 'Tidak ada sesi WA aktif (admin/penjual)',
     }
   }
+
   const text = buildOtpMessage(input.otpPlaintext)
-  const send = await waService.sendMessage(
-    adminSessionId,
-    input.studentPhone,
-    text,
-  )
-  if (!send.success) {
-    console.warn(
-      `[lms-otp] gagal kirim WA ke ${input.studentPhone}: ${send.error}; OTP: ${input.otpPlaintext}`,
+  let lastError: string | undefined
+  for (const sender of senders) {
+    const send = await waService.sendMessage(
+      sender.sessionId,
+      input.studentPhone,
+      text,
     )
-    return {
-      delivered: false,
-      channel: 'CONSOLE_FALLBACK',
-      reason: send.error ?? 'Gagal kirim WA',
+    if (send.success) {
+      if (sender.label === 'penjual') {
+        console.warn(
+          `[lms-otp] OTP terkirim via sesi PENJUAL (admin down) ke ${input.studentPhone}`,
+        )
+      }
+      return { delivered: true, channel: 'WA' }
     }
+    lastError = send.error ?? 'Gagal kirim WA'
+    console.warn(
+      `[lms-otp] gagal kirim via sesi ${sender.label} ke ${input.studentPhone}:`,
+      send.error,
+    )
   }
-  return { delivered: true, channel: 'WA' }
+
+  console.warn(
+    `[lms-otp] semua sesi gagal — OTP untuk ${input.studentPhone}: ${input.otpPlaintext}`,
+  )
+  return {
+    delivered: false,
+    channel: 'CONSOLE_FALLBACK',
+    reason: lastError ?? 'Gagal kirim WA',
+  }
 }
