@@ -18,7 +18,14 @@ import { getStudentEnrollments } from '@/lib/services/lms/student-portal'
 
 export const dynamic = 'force-dynamic'
 
-export default async function BelajarHomePage() {
+interface PageProps {
+  // magic_error diisi redirect dari /belajar/auto saat magic link gagal
+  // (kedaluwarsa/dicabut/error) — tampil sebagai banner di atas form login.
+  searchParams: Promise<{ magic_error?: string }>
+}
+
+export default async function BelajarHomePage({ searchParams }: PageProps) {
+  const { magic_error: magicError } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get(STUDENT_COOKIE_NAME)?.value
   const ctx = await getStudentFromSessionToken(token)
@@ -34,6 +41,16 @@ export default async function BelajarHomePage() {
             Login pakai nomor WhatsApp yg dipakai saat order.
           </p>
         </div>
+        {magicError && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            <p className="font-semibold">Tidak bisa login otomatis</p>
+            <p className="mt-0.5">{magicError}</p>
+            <p className="mt-1 text-xs text-rose-700">
+              Silakan login manual di bawah, atau minta penjual kirim ulang
+              link akses.
+            </p>
+          </div>
+        )}
         <LoginForm />
       </div>
     )
