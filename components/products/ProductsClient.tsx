@@ -55,6 +55,8 @@ interface ProductVariant {
   sortOrder: number
 }
 
+import { EbookSection } from '@/components/products/EbookSection'
+
 interface Product {
   id: string
   name: string
@@ -75,6 +77,8 @@ interface Product {
   flashSaleQuota: number | null
   flashSaleSold: number
   variants?: ProductVariant[]
+  // E-Book (2026-08-06) — id aset e-book yang terhubung (null = produk biasa).
+  ebookId?: string | null
 }
 
 const MAX_IMAGES = 10
@@ -138,6 +142,8 @@ const EMPTY_FORM = {
   // harga/stok di field utama). Kalau ada ≥1 varian = customer wajib pilih
   // varian di form order, harga utama produk diabaikan.
   variants: [] as VariantFormRow[],
+  // E-Book (2026-08-06) — link ke aset e-book digital.
+  ebookId: null as string | null,
 }
 
 const VARIANT_LIMIT = 50
@@ -201,6 +207,7 @@ export function ProductsClient({
         imageUrl: v.imageUrl,
         isActive: v.isActive,
       })),
+      ebookId: p.ebookId ?? null,
     })
     setUnlimitedStock(p.stock === null)
     setDialogOpen(true)
@@ -471,6 +478,7 @@ export function ProductsClient({
           isActive: v.isActive,
           sortOrder: idx,
         })),
+        ebookId: form.ebookId,
       }
       const url = editingId
         ? `/api/products/${editingId}`
@@ -871,6 +879,13 @@ export function ProductsClient({
                 }
               />
             </div>
+
+            {/* E-Book section (2026-08-06) */}
+            <EbookSection
+              productId={editingId}
+              ebookId={form.ebookId}
+              onChange={(id) => setForm((f) => ({ ...f, ebookId: id }))}
+            />
 
             {/* Varian section (Phase 5) */}
             <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-blue-50 p-3">

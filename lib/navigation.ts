@@ -177,6 +177,8 @@ export const USER_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Pesanan', href: '/pesanan', icon: Package },
       { label: 'Produk', href: '/products', icon: ShoppingCart },
+      // E-Book (2026-08-06) — aset digital PDF/EPUB yang dijual via produk.
+      { label: 'E-Book', href: '/ebooks', icon: BookOpen },
       { label: 'Form Order', href: '/order-forms', icon: FileText },
       { label: 'Zona Ongkir', href: '/shipping-zones', icon: MapPin },
       // Multi-gudang (2026-07-13) — setup >1 gudang; sistem auto pilih gudang
