@@ -138,8 +138,16 @@ export async function triggerEbookEntitlementsForOrder(
           ebookId: p.ebookId,
           buyerPhone: phone,
           ...grantData,
+          purchaseCount: 1,
+          totalPaidRp: pricePaidRp ?? 0,
         },
-        update: grantData,
+        // Akumulator TIDAK di-reset: beli ulang menambah terjual & omzet
+        // (guard no-op di atas mencegah double-invoke order sama).
+        update: {
+          ...grantData,
+          purchaseCount: { increment: 1 },
+          totalPaidRp: { increment: pricePaidRp ?? 0 },
+        },
         select: { id: true },
       })
       count += 1

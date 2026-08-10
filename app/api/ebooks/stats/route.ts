@@ -35,23 +35,30 @@ export async function GET() {
     }
 
     const ebookIds = ebooks.map((e) => e.id)
-    // Satu groupBy untuk semua e-book — hindari N query per baris.
+    // Satu groupBy untuk semua e-book — hindari N query per baris. Statistik
+    // dari AKUMULATOR (purchaseCount/totalPaidRp/totalDownloadCount) yang
+    // tidak di-reset saat re-order — pembeli sama beli 5x = terjual 5.
     const grouped = await prisma.ebookEntitlement.groupBy({
       by: ['ebookId', 'status'],
       where: { ebookId: { in: ebookIds } },
       _count: { _all: true },
-      _sum: { pricePaidRp: true, downloadCount: true },
+      _sum: {
+        purchaseCount: true,
+        totalPaidRp: true,
+        totalDownloadCount: true,
+      },
     })
 
     const items = ebooks.map((e) => {
       const rows = grouped.filter((g) => g.ebookId === e.id)
-      const sold = rows.reduce((s, g) => s + g._count._all, 0)
+      const sold = rows.reduce((s, g) => s + (g._sum.purchaseCount ?? 0), 0)
+      const buyers = rows.reduce((s, g) => s + g._count._all, 0)
       const revenueRp = rows.reduce(
-        (s, g) => s + (g._sum.pricePaidRp ?? 0),
+        (s, g) => s + (g._sum.totalPaidRp ?? 0),
         0,
       )
       const downloads = rows.reduce(
-        (s, g) => s + (g._sum.downloadCount ?? 0),
+        (s, g) => s + (g._sum.totalDownloadCount ?? 0),
         0,
       )
       const byStatus = Object.fromEntries(
@@ -61,6 +68,7 @@ export async function GET() {
         ...e,
         stats: {
           sold,
+          buyers,
           revenueRp,
           downloads,
           active: byStatus.ACTIVE ?? 0,

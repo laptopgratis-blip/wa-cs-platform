@@ -223,7 +223,11 @@ export async function consumeDownloadToken(
             status: 'ACTIVE',
             downloadCount: { lt: ent.maxDownloads },
           },
-          data: { downloadCount: { increment: 1 } },
+          data: {
+            downloadCount: { increment: 1 },
+            // Akumulator lifetime utk statistik — tidak di-reset re-order.
+            totalDownloadCount: { increment: 1 },
+          },
         })
         // Limit keburu habis oleh download paralel → rollback klaim token.
         if (inc.count === 0) throw new DownloadLimitError()

@@ -4026,6 +4026,14 @@ model EbookEntitlement {
   maxDownloads  Int
   downloadCount Int @default(0)
 
+  // ── Akumulator statistik (2026-08-08) — TIDAK PERNAH di-reset ──────────
+  // Re-order me-reset downloadCount/orderId/pricePaidRp (jatah baru), tapi
+  // statistik penjual harus akumulatif: 5x beli = terjual 5 & omzet 5x harga,
+  // bukan snapshot order terakhir.
+  purchaseCount      Int   @default(1)
+  totalPaidRp        Float @default(0)
+  totalDownloadCount Int   @default(0)
+
   // Klaim anti dobel-kirim notif akses (pola ownerNotifiedAt): set-first
   // WHERE NULL, reset NULL kalau gagal, disweep cron followup-send s.d. 24 jam.
   accessNotifiedAt DateTime?

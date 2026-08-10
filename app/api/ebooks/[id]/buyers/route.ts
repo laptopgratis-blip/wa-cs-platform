@@ -38,6 +38,8 @@ export async function GET(
         buyerEmail: true,
         invoiceNumber: true,
         pricePaidRp: true,
+        purchaseCount: true,
+        totalPaidRp: true,
         status: true,
         grantedAt: true,
         expiresAt: true,

@@ -41,6 +41,7 @@ interface EbookStatsItem {
   product: { id: string; name: string; price: number } | null
   stats: {
     sold: number
+    buyers: number
     revenueRp: number
     downloads: number
     active: number
@@ -56,6 +57,8 @@ interface BuyerItem {
   buyerEmail: string | null
   invoiceNumber: string | null
   pricePaidRp: number | null
+  purchaseCount: number
+  totalPaidRp: number
   status: 'ACTIVE' | 'REVOKED' | 'EXPIRED'
   grantedAt: string
   expiresAt: string | null
@@ -284,7 +287,7 @@ export function EbookSalesClient() {
                   onClick={() => void openBuyers(e)}
                 >
                   <Users className="mr-1.5 size-3.5" />
-                  Pembeli ({e.stats.sold})
+                  Pembeli ({e.stats.buyers})
                 </Button>
               </CardContent>
             </Card>
@@ -334,8 +337,11 @@ export function EbookSalesClient() {
                     <p className="mt-0.5 text-xs text-warm-500">
                       <span className="font-mono">{b.buyerPhone}</span>
                       {b.invoiceNumber && ` · ${b.invoiceNumber}`}
-                      {b.pricePaidRp != null &&
-                        ` · Rp ${formatNumber(b.pricePaidRp)}`}
+                      {b.purchaseCount > 1
+                        ? ` · beli ${b.purchaseCount}× (total Rp ${formatNumber(b.totalPaidRp)})`
+                        : b.pricePaidRp != null
+                          ? ` · Rp ${formatNumber(b.pricePaidRp)}`
+                          : ''}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1 text-xs text-warm-500">
                       <Download className="size-3" />
