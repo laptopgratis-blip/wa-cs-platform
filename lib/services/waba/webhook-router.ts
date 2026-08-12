@@ -2,6 +2,8 @@
 // phone_number_id (value.metadata) ke handler pesan masuk / status.
 // Dipanggil dari app/api/webhooks/meta/route.ts SETELAH signature valid.
 
+import { handleInboundMessages } from './inbound'
+import { handleStatuses } from './statuses'
 import type { WabaChangeValue, WabaWebhookPayload } from './types'
 
 /**
@@ -27,18 +29,10 @@ async function processChangeValue(value: WabaChangeValue): Promise<void> {
   if (!phoneNumberId) return
 
   if (value.messages && value.messages.length > 0) {
-    // TODO(Fase 5): lib/services/waba/inbound — simpan + pipeline AI.
-    console.log(
-      `[waba/webhook-router] ${value.messages.length} pesan masuk untuk phone_number_id=${phoneNumberId}:`,
-      value.messages.map((m) => ({ id: m.id, from: m.from, type: m.type })),
-    )
+    await handleInboundMessages(phoneNumberId, value)
   }
 
   if (value.statuses && value.statuses.length > 0) {
-    // TODO(Fase 5): lib/services/waba/statuses — update Message.status by wamid.
-    console.log(
-      `[waba/webhook-router] ${value.statuses.length} status update untuk phone_number_id=${phoneNumberId}:`,
-      value.statuses.map((s) => ({ id: s.id, status: s.status })),
-    )
+    await handleStatuses(phoneNumberId, value)
   }
 }

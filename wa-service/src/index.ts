@@ -264,6 +264,32 @@ app.post('/sessions/disconnect', requireSecret, async (req, res) => {
   }
 })
 
+// Relay event realtime dari Next.js (webhook Cloud API) ke room Socket.io.
+// Sesi CLOUD_API tidak hidup di proses ini, tapi Socket.io server-nya tetap
+// di sini — Next meneruskan event inbox lewat endpoint ini supaya frontend
+// (InboxView/ChatView) tidak perlu kanal baru.
+const RELAY_EVENTS = new Set(['inbox:message', 'inbox:status'])
+app.post('/emit', requireSecret, (req, res) => {
+  const body = req.body as {
+    sessionId?: unknown
+    event?: unknown
+    payload?: unknown
+  }
+  if (
+    typeof body?.sessionId !== 'string' ||
+    !body.sessionId ||
+    typeof body.event !== 'string' ||
+    !RELAY_EVENTS.has(body.event) ||
+    typeof body.payload !== 'object' ||
+    body.payload === null
+  ) {
+    res.status(400).json({ success: false, error: 'sessionId/event/payload tidak valid' })
+    return
+  }
+  io.to(`session:${body.sessionId}`).emit(body.event, body.payload)
+  res.json({ success: true, data: { relayed: true } })
+})
+
 // ── Socket.io: client join room sesi spesifik untuk dapat event QR/status ──
 
 // Verifikasi token subscribe yang di-mint Next.js (lib/wa-socket-token.ts).
