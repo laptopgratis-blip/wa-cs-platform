@@ -23,12 +23,33 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const wa = await prisma.whatsappSession.findFirst({
       where: { id: sessionId, userId: session.user.id },
-      select: { id: true },
+      select: { id: true, provider: true },
     })
     if (!wa) return jsonError('Session tidak ditemukan', 404)
 
     const body = (await req.json().catch(() => ({}))) as { wipe?: boolean }
     const wipe = Boolean(body.wipe)
+
+    if (wa.provider === 'CLOUD_API') {
+      // Sesi Cloud API tidak punya state di wa-service — cukup update DB.
+      // wipe = lepas kredensial + kosongkan phoneNumberId (unique) supaya
+      // nomor yang sama bisa di-onboard ulang nanti.
+      await prisma.whatsappSession.update({
+        where: { id: sessionId },
+        data: wipe
+          ? {
+              status: 'DISCONNECTED',
+              isActive: false,
+              wabaTokenEnc: null,
+              wabaTokenExpiresAt: null,
+              phoneNumberId: null,
+              wabaId: null,
+              lastError: null,
+            }
+          : { status: 'DISCONNECTED' },
+      })
+      return jsonOk({ id: sessionId, wiped: wipe })
+    }
 
     const svc = await waService.disconnect(sessionId, wipe)
     if (!svc.success) {

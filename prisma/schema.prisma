@@ -287,6 +287,14 @@ enum WaStatus {
   ERROR
 }
 
+// Transport sesi WA: BAILEYS (unofficial, QR pairing via wa-service) atau
+// CLOUD_API (WhatsApp Cloud API resmi Meta, onboard via Embedded Signup).
+// Dual-run: satu nomor hanya boleh hidup di SATU provider.
+enum WaProvider {
+  BAILEYS
+  CLOUD_API
+}
+
 model WhatsappSession {
   id          String   @id @default(cuid())
   userId      String
@@ -297,6 +305,21 @@ model WhatsappSession {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // ── WhatsApp Cloud API (provider = CLOUD_API) ──
+  provider           WaProvider @default(BAILEYS)
+  wabaId             String? // WhatsApp Business Account ID milik user
+  // phone_number_id Meta — kunci routing webhook (value.metadata.phone_number_id).
+  // Unique: onboard ulang nomor yang sama meng-update row lama sehingga relasi
+  // Contact/Message tetap utuh; row Baileys bernilai NULL (multi-NULL aman).
+  phoneNumberId      String?    @unique
+  // Access token Meta terenkripsi via lib/crypto.ts (AES-256-GCM, iv:tag:ct).
+  // JANGAN pernah masuk `select` yang mengalir ke client/admin UI.
+  wabaTokenEnc       String?    @db.Text
+  wabaTokenExpiresAt DateTime?
+  // Error terakhir yang membuat sesi ERROR/PAUSED (Baileys menyimpan ini
+  // in-memory di wa-service; sesi Cloud API butuh persist untuk UI).
+  lastError          String?
 
   // Soul & model yang dipakai sesi ini
   soulId  String?
@@ -470,6 +493,12 @@ model Contact {
   lastMessageAt DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  // ── Customer service window 24 jam Meta (hanya diisi sesi CLOUD_API) ──
+  // Pesan free-form ke customer hanya boleh selama window aktif; di luar itu
+  // wajib template ter-approve. Di-refresh tiap pesan masuk dari customer.
+  lastInboundAt   DateTime?
+  windowExpiresAt DateTime? // lastInboundAt + 24 jam
 
   // Data tambahan (flexible)
   customFields Json?

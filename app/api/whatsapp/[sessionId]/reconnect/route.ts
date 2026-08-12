@@ -24,9 +24,12 @@ export async function POST(_req: Request, { params }: Params) {
   try {
     const wa = await prisma.whatsappSession.findFirst({
       where: { id: sessionId, userId: session.user.id },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, provider: true },
     })
     if (!wa) return jsonError('Session tidak ditemukan', 404)
+    if (wa.provider === 'CLOUD_API') {
+      return jsonError('Sesi Cloud API tidak memakai QR — hubungkan ulang via Embedded Signup', 400)
+    }
 
     // 1. Wipe credentials lama (kalau ada) — abaikan error karena mungkin
     //    session sudah tidak in-memory di wa-service.

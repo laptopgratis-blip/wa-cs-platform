@@ -33,6 +33,19 @@ export async function POST(_req: Request, { params }: Params) {
       )
     }
 
+    // Broadcast free-text hanya untuk sesi Baileys — Cloud API mewajibkan
+    // template ter-approve Meta (increment berikutnya).
+    const waSession = await prisma.whatsappSession.findUnique({
+      where: { id: broadcast.waSessionId },
+      select: { provider: true },
+    })
+    if (waSession?.provider === 'CLOUD_API') {
+      return jsonError(
+        'Broadcast belum didukung untuk sesi Cloud API — butuh template ter-approve Meta',
+        400,
+      )
+    }
+
     // Bangun list target sebenarnya saat ini (mungkin berubah sejak create).
     const contacts = await prisma.contact.findMany({
       where: buildTargetWhere({
