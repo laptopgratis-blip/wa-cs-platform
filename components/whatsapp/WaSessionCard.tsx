@@ -3,6 +3,7 @@
 // Card untuk satu WA session — tampilkan nomor, nama, status, dan aksi,
 // plus form pilihan Soul + Model AI.
 import {
+  BadgeCheck,
   Loader2,
   MoreVertical,
   Phone,
@@ -53,6 +54,8 @@ export interface WaSessionData {
   createdAt: string
   soulId: string | null
   modelId: string | null
+  // BAILEYS (QR, unofficial) atau CLOUD_API (WhatsApp Business API resmi).
+  provider: 'BAILEYS' | 'CLOUD_API'
 }
 
 export interface SoulOption {
@@ -100,7 +103,13 @@ export function WaSessionCard({
     [soulId, modelId, session.soulId, session.modelId],
   )
 
+  const isCloud = session.provider === 'CLOUD_API'
+
   useEffect(() => {
+    // Sesi Cloud API tidak punya state realtime di wa-service (status hidup
+    // di DB) — skip subscribe supaya tidak spam token request.
+    if (isCloud) return
+
     const socket = getSocket()
     let cancelled = false
 
@@ -154,7 +163,7 @@ export function WaSessionCard({
       socket.off('subscribe-error', handleSubscribeError)
       socket.emit('unsubscribe', session.id)
     }
-  }, [session.id])
+  }, [session.id, isCloud])
 
   async function disconnect(wipe: boolean) {
     setBusy(true)
@@ -219,7 +228,9 @@ export function WaSessionCard({
                 ? displayName
                   ? `+${phoneNumber}`
                   : 'Nama belum terdeteksi'
-                : 'Belum pair — scan QR dulu'}
+                : isCloud
+                  ? 'Menunggu data nomor dari Meta'
+                  : 'Belum pair — scan QR dulu'}
             </p>
           </div>
         </div>
@@ -237,8 +248,9 @@ export function WaSessionCard({
           <DropdownMenuContent align="end">
             {/* Selalu tampilkan supaya user bisa repair kapan saja, termasuk
                 kalau status CONNECTED tapi sebenarnya broken (mis. WA kick
-                device tanpa update status di sini). */}
-            {onRepair && (
+                device tanpa update status di sini). Sesi Cloud API tidak
+                memakai QR — repair-nya lewat Embedded Signup ulang. */}
+            {onRepair && !isCloud && (
               <DropdownMenuItem onClick={() => onRepair(session.id)}>
                 <QrCode className="mr-2 size-4" />
                 Pair Ulang (scan QR baru)
@@ -264,7 +276,15 @@ export function WaSessionCard({
 
       <CardContent className="space-y-4 border-t pt-4">
         <div className="flex items-center justify-between">
-          <StatusBadge status={status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={status} />
+            {isCloud && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                <BadgeCheck className="size-3" />
+                Cloud API
+              </span>
+            )}
+          </div>
           <span className="text-xs text-muted-foreground">
             Ditambahkan {formatDate(session.createdAt)}
           </span>

@@ -31,6 +31,7 @@ export default async function WhatsappPage() {
         createdAt: true,
         soulId: true,
         modelId: true,
+        provider: true,
       },
     }),
     prisma.soul.findMany({
@@ -53,6 +54,7 @@ export default async function WhatsappPage() {
     createdAt: r.createdAt.toISOString(),
     soulId: r.soulId,
     modelId: r.modelId,
+    provider: r.provider,
   }))
 
   const souls: SoulOption[] = soulRows

@@ -1,12 +1,13 @@
 'use client'
 
 // Wrapper client untuk halaman /whatsapp — menampung daftar session,
-// modal tambah, dan refresh data setelah ada perubahan.
-import { MessageCircle, Plus, RefreshCw } from 'lucide-react'
+// modal tambah (QR Baileys / Cloud API resmi), dan refresh data.
+import { BadgeCheck, MessageCircle, Plus, QrCode, RefreshCw } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState, useTransition } from 'react'
 
 import { AddWaModal } from '@/components/whatsapp/AddWaModal'
+import { AddWabaModal } from '@/components/whatsapp/AddWabaModal'
 import {
   WaSessionCard,
   type AiModelOption,
@@ -17,6 +18,12 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface WhatsappListProps {
   sessions: WaSessionData[]
@@ -27,6 +34,7 @@ interface WhatsappListProps {
 export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [wabaOpen, setWabaOpen] = useState(false)
   // Kalau diisi: modal dibuka dalam mode "Pair Ulang" untuk session existing.
   // Kalau null saat modal open: mode "Tambah" (bikin session baru).
   const [repairId, setRepairId] = useState<string | null>(null)
@@ -58,13 +66,24 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
             <Button variant="outline" size="icon" aria-label="Segarkan daftar" onClick={refresh} disabled={isPending}>
               <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
             </Button>
-            <Button
-              onClick={openAdd}
-              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-            >
-              <Plus className="mr-2 size-4" />
-              Tambah WhatsApp
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-primary-500 text-white shadow-orange hover:bg-primary-600">
+                  <Plus className="mr-2 size-4" />
+                  Tambah WhatsApp
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openAdd}>
+                  <QrCode className="mr-2 size-4" />
+                  Scan QR (nomor WhatsApp biasa)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setWabaOpen(true)}>
+                  <BadgeCheck className="mr-2 size-4" />
+                  WhatsApp Business API (resmi Meta)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
@@ -77,10 +96,16 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
               title="Belum ada WhatsApp tertaut"
               description="Pindai QR sekali, AI langsung siaga membalas chat masuk."
               action={
-                <Button onClick={openAdd}>
-                  <Plus className="mr-2 size-4" />
-                  Tambah WhatsApp
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={openAdd}>
+                    <QrCode className="mr-2 size-4" />
+                    Scan QR (nomor biasa)
+                  </Button>
+                  <Button variant="outline" onClick={() => setWabaOpen(true)}>
+                    <BadgeCheck className="mr-2 size-4" />
+                    Business API (resmi)
+                  </Button>
+                </div>
               }
             />
           </CardContent>
@@ -106,6 +131,7 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
         onConnected={refresh}
         existingSessionId={repairId}
       />
+      <AddWabaModal open={wabaOpen} onOpenChange={setWabaOpen} onConnected={refresh} />
     </>
   )
 }
