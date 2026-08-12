@@ -1,0 +1,167 @@
+# Hulao — STAGING stack (develop.hulao.id) — jalan berdampingan dengan
+# produksi di server yang sama. Semua nama container/router/volume diberi
+# suffix "staging" supaya tidak bentrok dengan stack produksi
+# (/var/www/wa-cs-platform).
+#
+# Deploy dari /var/www/wa-cs-platform-staging (clone branch `develop`):
+#   docker compose -f docker-compose.staging.yml run --build --rm migrate
+#   docker compose -f docker-compose.staging.yml build
+#   docker compose -f docker-compose.staging.yml up -d
+#
+# Catatan:
+#   - TLS memakai cert statis Cloudflare Origin (*.hulao.id) yang sudah
+#     terpasang di Traefik (hulao-tls.yml) — tidak perlu certresolver.
+#   - .env.production di folder staging BERISI NILAI STAGING (DB staging,
+#     URL develop.hulao.id). Nama file sengaja disamakan supaya Dockerfile
+#     dan alur deploy tidak bercabang dari produksi.
+#   - NEXT_PUBLIC_* di-inline saat build → dioverride via build args di sini
+#     (build TIDAK membaca .env.production karena masuk .dockerignore).
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hulao-staging-postgres
+    restart: unless-stopped
+    # Tanpa tuning memori ala produksi — beban staging kecil, host padat.
+    environment:
+      POSTGRES_USER: hulao
+      POSTGRES_DB: hulao
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - hulao-staging-postgres-data:/var/lib/postgresql/data
+    secrets:
+      - postgres_password
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hulao -d hulao"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SOCKET_URL: https://develop.hulao.id
+        NEXT_PUBLIC_APP_URL: https://develop.hulao.id
+    container_name: hulao-staging-nextjs
+    restart: unless-stopped
+    # Batas memori lebih kecil dari produksi — host shared & padat.
+    mem_limit: 768m
+    memswap_limit: 1024m
+    env_file:
+      - .env.production
+    environment:
+      # container_name unik, BUKAN alias service — network traefik-public
+      # di-share antar-project (lihat insiden 2026-07-05 di compose produksi).
+      - WA_SERVICE_URL=http://hulao-staging-wa-service:3001
+    volumes:
+      - ./public/uploads:/app/public/uploads
+      - ./storage/ebooks:/app/storage/ebooks
+    ports:
+      # Loopback saja — jangan buka jalur bypass Traefik. 3100 (3000 dipakai prod).
+      - "127.0.0.1:3100:3000"
+    networks:
+      - traefik-public
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wa-service:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hulao-staging.rule=Host(`develop.hulao.id`)"
+      - "traefik.http.routers.hulao-staging.entrypoints=websecure"
+      - "traefik.http.routers.hulao-staging.tls=true"
+      - "traefik.http.services.hulao-staging.loadbalancer.server.port=3000"
+      # Hanya terima traffic dari Cloudflare (develop.hulao.id proxied).
+      - "traefik.http.middlewares.hulao-staging-cfonly.ipallowlist.sourcerange=173.245.48.0/20,103.21.244.0/22,103.22.200.0/22,103.31.4.0/22,141.101.64.0/18,108.162.192.0/18,190.93.240.0/20,188.114.96.0/20,197.234.240.0/22,198.41.128.0/17,162.158.0.0/15,104.16.0.0/13,104.24.0.0/14,172.64.0.0/13,131.0.72.0/22,2400:cb00::/32,2606:4700::/32,2803:f800::/32,2405:b500::/32,2405:8100::/32,2a06:98c0::/29,2c0f:f248::/32"
+      # Staging jangan diindex mesin pencari.
+      - "traefik.http.middlewares.hulao-staging-noindex.headers.customResponseHeaders.X-Robots-Tag=noindex, nofollow"
+      - "traefik.http.routers.hulao-staging.middlewares=hulao-staging-cfonly@docker,hulao-staging-noindex@docker"
+      - "traefik.docker.network=traefik-public"
+
+  # One-off: `prisma migrate deploy` — pola sama dengan produksi
+  # (target deps yang punya prisma CLI). Jalan via:
+  #   docker compose -f docker-compose.staging.yml run --build --rm migrate
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: deps
+    profiles: ["tools"]
+    env_file:
+      - .env.production
+    command: ["npx", "prisma", "migrate", "deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  wa-service:
+    build:
+      context: ./wa-service
+      dockerfile: Dockerfile
+    container_name: hulao-staging-wa-service
+    restart: unless-stopped
+    # Staging hampir tanpa sesi Baileys — 768m cukup.
+    mem_limit: 768m
+    memswap_limit: 1024m
+    env_file:
+      - .env.production
+    environment:
+      - NEXTJS_URL=http://hulao-staging-nextjs:3000
+    volumes:
+      # Sessions staging SENDIRI (kosong) — JANGAN pernah mount folder
+      # sessions produksi: satu nomor WA tidak boleh hidup di dua socket.
+      - ./wa-service/sessions:/app/sessions
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - traefik-public
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hulao-staging-wa-socket.rule=Host(`develop.hulao.id`) && PathPrefix(`/socket.io`)"
+      - "traefik.http.routers.hulao-staging-wa-socket.entrypoints=websecure"
+      - "traefik.http.routers.hulao-staging-wa-socket.tls=true"
+      - "traefik.http.services.hulao-staging-wa-socket.loadbalancer.server.port=3001"
+      - "traefik.docker.network=traefik-public"
+
+  uploads-server:
+    image: nginx:alpine
+    container_name: hulao-staging-uploads
+    volumes:
+      - ./public/uploads:/usr/share/nginx/html/uploads:ro
+      - ./nginx-uploads.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - traefik-public
+      - internal
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hulao-staging-uploads.rule=Host(`develop.hulao.id`) && PathPrefix(`/uploads`)"
+      - "traefik.http.routers.hulao-staging-uploads.entrypoints=websecure"
+      - "traefik.http.routers.hulao-staging-uploads.tls=true"
+      - "traefik.http.routers.hulao-staging-uploads.priority=200"
+      - "traefik.http.services.hulao-staging-uploads.loadbalancer.server.port=80"
+      - "traefik.docker.network=traefik-public"
+
+volumes:
+  hulao-staging-postgres-data:
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+
+networks:
+  traefik-public:
+    external: true
+  internal:
+    driver: bridge
