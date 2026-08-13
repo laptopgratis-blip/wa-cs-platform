@@ -30,7 +30,9 @@ export async function handleInboundMessages(
     )
     return
   }
-  if (session.status !== 'CONNECTED') {
+  // PAUSED (token habis) tetap menerima pesan ke inbox — paritas Baileys;
+  // AI reply digate oleh pre-flight token di pipeline, bukan di sini.
+  if (session.status !== 'CONNECTED' && session.status !== 'PAUSED') {
     console.log(
       `[waba/inbound] sesi ${session.id} berstatus ${session.status} — pesan diabaikan`,
     )
