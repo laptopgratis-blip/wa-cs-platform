@@ -47,11 +47,19 @@ function WabaCallbackInner() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code, state }),
         })
-        const json = (await res.json().catch(() => null)) as {
+        // Baca text dulu supaya body non-JSON (mis. halaman error proxy)
+        // tetap bisa didiagnosis dari console browser.
+        const raw = await res.text()
+        let json: {
           success?: boolean
           data?: { sessionId?: string; warning?: string }
           error?: string
-        } | null
+        } | null = null
+        try {
+          json = JSON.parse(raw)
+        } catch {
+          console.error('[waba-callback] respons bukan JSON:', res.status, raw.slice(0, 300))
+        }
 
         if (json?.success) {
           setPhase('success')
@@ -63,7 +71,7 @@ function WabaCallbackInner() {
           notifyOpener({ type: 'waba:connected', sessionId: json.data?.sessionId })
           if (!json.data?.warning) setTimeout(() => window.close(), 1_500)
         } else {
-          const err = json?.error || 'Gagal menghubungkan nomor'
+          const err = json?.error || `Gagal menghubungkan nomor (HTTP ${res.status})`
           setPhase('error')
           setMessage(err)
           notifyOpener({ type: 'waba:error', error: err })

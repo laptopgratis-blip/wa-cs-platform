@@ -39,12 +39,16 @@ export async function POST(req: Request) {
     // dengan yang sedang login sekarang.
     const state = validateSignupState(parsed.data.state)
     if (!state || state.userId !== session.user.id) {
+      console.error('[waba/exchange] state invalid/kedaluwarsa untuk user', session.user.id)
       return jsonError('State tidak valid atau kedaluwarsa — ulangi proses hubungkan', 400)
     }
 
     const exchange = await exchangeCodeForToken(parsed.data.code)
     if (!exchange.ok || !exchange.accessToken) {
-      return jsonError(`Gagal menukar kode Meta: ${exchange.error}`, 502)
+      console.error('[waba/exchange] exchange code gagal:', exchange.error)
+      // Status 4xx disengaja — Cloudflare mengganti body 502/504 dari origin
+      // dengan halaman HTML-nya sehingga pesan error tidak sampai ke user.
+      return jsonError(`Gagal menukar kode Meta: ${exchange.error}`, 400)
     }
 
     // WABA yang sudah terhubung user ini — untuk dukungan WABA kedua.
@@ -62,7 +66,10 @@ export async function POST(req: Request) {
       providedWabaId: parsed.data.wabaId,
       excludeWabaIds: existingWabaIds,
     })
-    if (!discovery.ok) return jsonError(discovery.error, 502)
+    if (!discovery.ok) {
+      console.error('[waba/exchange] discovery gagal:', discovery.error)
+      return jsonError(discovery.error, 400)
+    }
 
     // Increment 1: ambil nomor pertama WABA. Multi-nomor per WABA menyusul.
     const phone = discovery.waba.phoneNumbers[0]

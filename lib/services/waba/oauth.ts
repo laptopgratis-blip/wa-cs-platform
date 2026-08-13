@@ -63,8 +63,10 @@ export interface TokenExchangeResult {
 }
 
 /**
- * Tukar authorization code → access token. Khas Embedded Signup: TANPA
- * parameter redirect_uri. Retry 3× untuk error jaringan.
+ * Tukar authorization code → access token. Code kita berasal dari REDIRECT
+ * dialog OAuth (bukan FB JS SDK), jadi Meta MEWAJIBKAN redirect_uri yang
+ * identik dengan yang dipakai saat membuka dialog. Retry 3× untuk error
+ * jaringan.
  */
 export async function exchangeCodeForToken(code: string): Promise<TokenExchangeResult> {
   const cfg = getMetaConfig()
@@ -73,6 +75,7 @@ export async function exchangeCodeForToken(code: string): Promise<TokenExchangeR
     new URLSearchParams({
       client_id: cfg.appId,
       client_secret: cfg.appSecret,
+      redirect_uri: cfg.redirectUri,
       code,
     }).toString()
 
