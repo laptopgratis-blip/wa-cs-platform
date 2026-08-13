@@ -23,8 +23,13 @@ export async function handleInboundMessages(
     select: { id: true, status: true, isActive: true, provider: true },
   })
   // Sesi tidak dikenal / sudah diputus lokal → abaikan (Meta tetap mengirim
-  // webhook sampai unsubscribe).
-  if (!session || session.provider !== 'CLOUD_API' || !session.isActive) return
+  // webhook sampai unsubscribe). Tetap log supaya salah-routing terlihat.
+  if (!session || session.provider !== 'CLOUD_API' || !session.isActive) {
+    console.log(
+      `[waba/inbound] event untuk phone_number_id=${phoneNumberId} diabaikan (sesi tidak dikenal/nonaktif)`,
+    )
+    return
+  }
   if (session.status !== 'CONNECTED') {
     console.log(
       `[waba/inbound] sesi ${session.id} berstatus ${session.status} — pesan diabaikan`,

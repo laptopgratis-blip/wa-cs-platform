@@ -1,6 +1,7 @@
 // Resource discovery pasca Embedded Signup: temukan WABA ID dari token user,
 // tarik detail WABA + daftar nomor, dan subscribe app ke WABA (webhook).
 
+import { getMetaConfig } from './config'
 import { appAccessToken, graphRequest } from './graph'
 
 export interface WabaPhoneNumber {
@@ -86,14 +87,25 @@ export async function discoverWaba(input: {
 /**
  * Subscribe aplikasi ke WABA — tanpa ini webhook pesan tidak akan dikirim
  * Meta ke server kita. Idempoten (subscribe ulang aman).
+ *
+ * PENTING: pakai override_callback_uri per-WABA. Callback level-aplikasi di
+ * Meta App bisa menunjuk ke sistem lain (satu Meta App dipakai beberapa
+ * platform) — override memastikan event WABA yang di-onboard lewat hulao
+ * selalu dikirim ke webhook hulao. Meta memverifikasi URL override (GET
+ * hub.challenge) saat call ini, jadi endpoint webhook harus sudah live.
  */
 export async function subscribeAppToWaba(
   wabaId: string,
   userToken: string,
 ): Promise<{ ok: boolean; error?: string }> {
+  const cfg = getMetaConfig()
   const res = await graphRequest<{ success?: boolean }>(`/${wabaId}/subscribed_apps`, {
     method: 'POST',
     token: userToken,
+    body: {
+      override_callback_uri: cfg.webhookUrl,
+      verify_token: cfg.verifyToken,
+    },
   })
   if (!res.ok) return { ok: false, error: res.error.message }
   return { ok: true }

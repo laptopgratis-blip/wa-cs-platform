@@ -17,6 +17,8 @@ export interface MetaConfig {
   graphBaseUrl: string
   /** Redirect OAuth Embedded Signup — halaman frontend, bukan API route. */
   redirectUri: string
+  /** Endpoint webhook publik instance ini (dipakai override per-WABA). */
+  webhookUrl: string
 }
 
 /**
@@ -51,5 +53,6 @@ export function getMetaConfig(): MetaConfig {
     graphVersion,
     graphBaseUrl: `https://graph.facebook.com/${graphVersion}`,
     redirectUri: `${appUrl.replace(/\/$/, '')}/whatsapp/waba-callback`,
+    webhookUrl: `${appUrl.replace(/\/$/, '')}/api/webhooks/meta`,
   }
 }
