@@ -19,6 +19,8 @@ export interface MetaConfig {
   redirectUri: string
   /** Endpoint webhook publik instance ini (dipakai override per-WABA). */
   webhookUrl: string
+  /** PIN two-step untuk register nomor ke Cloud API. */
+  registerPin: string
 }
 
 /**
@@ -54,5 +56,8 @@ export function getMetaConfig(): MetaConfig {
     graphBaseUrl: `https://graph.facebook.com/${graphVersion}`,
     redirectUri: `${appUrl.replace(/\/$/, '')}/whatsapp/waba-callback`,
     webhookUrl: `${appUrl.replace(/\/$/, '')}/api/webhooks/meta`,
+    // PIN two-step saat register nomor ke Cloud API. Nomor baru: PIN ini
+    // DISET sebagai PIN 2FA nomor tersebut. Ganti via env di produksi.
+    registerPin: process.env.META_REGISTER_PIN || '135246',
   }
 }

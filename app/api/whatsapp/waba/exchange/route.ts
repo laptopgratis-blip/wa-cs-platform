@@ -9,7 +9,11 @@ import { z } from 'zod'
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { exchangeCodeForToken, validateSignupState } from '@/lib/services/waba/oauth'
-import { discoverWaba, subscribeAppToWaba } from '@/lib/services/waba/resources'
+import {
+  discoverWaba,
+  registerPhoneNumber,
+  subscribeAppToWaba,
+} from '@/lib/services/waba/resources'
 import { upsertCloudSession } from '@/lib/services/waba/session-store'
 
 const bodySchema = z.object({
@@ -82,6 +86,25 @@ export async function POST(req: Request) {
       accessToken: exchange.accessToken,
       expiresInSeconds: exchange.expiresIn,
     })
+
+    // Register nomor ke Cloud API — tanpa ini status nomor PENDING dan Meta
+    // membuang semua pesan masuk. Kasus paling umum gagal: nomor masih
+    // terpasang di aplikasi WA di HP → beri instruksi jelas, sesi ERROR,
+    // user hubungkan ulang setelah melepas nomor.
+    const reg = await registerPhoneNumber(phone.id, exchange.accessToken)
+    if (!reg.ok) {
+      console.error('[waba/exchange] register nomor gagal:', reg.error)
+      await prisma.whatsappSession.update({
+        where: { id: created.id },
+        data: { status: 'ERROR', lastError: reg.error ?? 'Register nomor gagal' },
+      })
+      return jsonOk({
+        sessionId: created.id,
+        phoneNumber: created.phoneNumber,
+        displayName: created.displayName,
+        warning: reg.error,
+      })
+    }
 
     // Tanpa subscribe, Meta tidak mengirim webhook — tapi kegagalan di sini
     // bisa di-retry, jadi jangan gagalkan koneksi: tandai ERROR + lastError.

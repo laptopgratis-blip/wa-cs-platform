@@ -110,3 +110,38 @@ export async function subscribeAppToWaba(
   if (!res.ok) return { ok: false, error: res.error.message }
   return { ok: true }
 }
+
+// Nomor masih terpasang di akun WhatsApp lain (aplikasi WA di HP).
+const NUMBER_STILL_ATTACHED_SUBCODE = 2388001
+
+/**
+ * Register nomor ke infrastruktur Cloud API — WAJIB setelah Embedded Signup.
+ * Tanpa ini status nomor tetap PENDING dan Meta membuang semua pesan masuk
+ * (ES hanya menambahkan nomor ke WABA, TIDAK meregistrasinya — pelajaran
+ * dari kasus nyata; asumsi kirimchat bahwa ES otomatis register itu salah).
+ * Untuk nomor tanpa 2FA sebelumnya, PIN ini DISET sebagai PIN barunya.
+ */
+export async function registerPhoneNumber(
+  phoneNumberId: string,
+  userToken: string,
+): Promise<{ ok: boolean; numberStillAttached?: boolean; error?: string }> {
+  const cfg = getMetaConfig()
+  const res = await graphRequest<{ success?: boolean }>(`/${phoneNumberId}/register`, {
+    method: 'POST',
+    token: userToken,
+    body: { messaging_product: 'whatsapp', pin: cfg.registerPin },
+  })
+  if (!res.ok) {
+    if (res.error.subcode === NUMBER_STILL_ATTACHED_SUBCODE) {
+      return {
+        ok: false,
+        numberStillAttached: true,
+        error:
+          'Nomor masih terpasang di aplikasi WhatsApp. Hapus akun WA di HP ' +
+          '(Pengaturan → Akun → Hapus akun), tunggu ±3 menit, lalu hubungkan ulang.',
+      }
+    }
+    return { ok: false, error: `Register nomor gagal: ${res.error.message}` }
+  }
+  return { ok: true }
+}
