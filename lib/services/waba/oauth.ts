@@ -37,7 +37,16 @@ export function validateSignupState(rawState: string): { userId: string } | null
   }
 }
 
-/** URL dialog OAuth Embedded Signup (dibuka di popup dari halaman WhatsApp). */
+/**
+ * URL dialog OAuth Embedded Signup (dibuka di popup dari halaman WhatsApp).
+ *
+ * `extras.featureType = whatsapp_business_app_onboarding` mengaktifkan mode
+ * COEXISTENCE: wizard Meta menawarkan opsi "Hubungkan Aplikasi WhatsApp
+ * Business" — nomor yang masih hidup di aplikasi WA Business di HP bisa
+ * terhubung ke Cloud API TANPA register/hapus akun (nomor tetap dipakai di
+ * HP, CS bisa balas dari HP). Tanpa flag ini wizard hanya menawarkan jalur
+ * standar yang mewajibkan nomor benar-benar bebas dari aplikasi WA.
+ */
 export function buildSignupUrl(state: string): string {
   const cfg = getMetaConfig()
   if (!cfg.configId) {
@@ -50,6 +59,10 @@ export function buildSignupUrl(state: string): string {
     config_id: cfg.configId,
     response_type: 'code',
     scope: 'whatsapp_business_management,whatsapp_business_messaging',
+    extras: JSON.stringify({
+      featureType: 'whatsapp_business_app_onboarding',
+      sessionInfoVersion: '3',
+    }),
   })
   return `https://www.facebook.com/${cfg.graphVersion}/dialog/oauth?${params.toString()}`
 }

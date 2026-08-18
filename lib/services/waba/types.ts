@@ -26,6 +26,22 @@ export interface WabaChangeValue {
   messages?: WabaInboundMessage[]
   statuses?: WabaStatusUpdate[]
   errors?: WabaError[]
+  /** Coexistence (smb_message_echoes): pesan yang dikirim owner dari WA Business App. */
+  message_echoes?: WabaMessageEcho[]
+}
+
+export interface WabaMessageEcho {
+  id: string // wamid
+  to?: string // wa_id customer tujuan (digit murni)
+  from?: string // nomor bisnis
+  timestamp?: string
+  type?: string
+  text?: { body?: string }
+  image?: WabaMedia
+  video?: WabaMedia
+  document?: WabaMedia & { filename?: string }
+  audio?: WabaMedia & { voice?: boolean }
+  sticker?: WabaMedia
 }
 
 export interface WabaContact {

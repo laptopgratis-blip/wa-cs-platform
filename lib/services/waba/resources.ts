@@ -137,8 +137,9 @@ export async function registerPhoneNumber(
         ok: false,
         numberStillAttached: true,
         error:
-          'Nomor masih terpasang di aplikasi WhatsApp. Hapus akun WA di HP ' +
-          '(Pengaturan → Akun → Hapus akun), tunggu ±3 menit, lalu hubungkan ulang.',
+          'Nomor masih aktif di aplikasi WhatsApp Business di HP. Hubungkan ulang dan ' +
+          'pilih "Hubungkan Aplikasi WhatsApp Business" (nomor tetap bisa dipakai di HP), ' +
+          'atau hapus akun WA di HP dulu (Pengaturan → Akun → Hapus akun) lalu ulangi.',
       }
     }
     return { ok: false, error: `Register nomor gagal: ${res.error.message}` }

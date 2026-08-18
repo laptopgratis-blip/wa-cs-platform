@@ -87,23 +87,26 @@ export async function POST(req: Request) {
       expiresInSeconds: exchange.expiresIn,
     })
 
-    // Register nomor ke Cloud API — tanpa ini status nomor PENDING dan Meta
-    // membuang semua pesan masuk. Kasus paling umum gagal: nomor masih
-    // terpasang di aplikasi WA di HP → beri instruksi jelas, sesi ERROR,
-    // user hubungkan ulang setelah melepas nomor.
-    const reg = await registerPhoneNumber(phone.id, exchange.accessToken)
-    if (!reg.ok) {
-      console.error('[waba/exchange] register nomor gagal:', reg.error)
-      await prisma.whatsappSession.update({
-        where: { id: created.id },
-        data: { status: 'ERROR', lastError: reg.error ?? 'Register nomor gagal' },
-      })
-      return jsonOk({
-        sessionId: created.id,
-        phoneNumber: created.phoneNumber,
-        displayName: created.displayName,
-        warning: reg.error,
-      })
+    // Register nomor ke Cloud API HANYA kalau belum aktif. Nomor hasil
+    // coexistence (Hubungkan Aplikasi WhatsApp Business) atau yang sudah
+    // dipakai platform lain di WABA yang sama sudah CONNECTED — register
+    // ulang justru ditolak (2388001) padahal nomor sehat. Nomor PENDING
+    // (jalur standar) wajib register, kalau tidak Meta membuang pesan masuk.
+    if (phone.status !== 'CONNECTED') {
+      const reg = await registerPhoneNumber(phone.id, exchange.accessToken)
+      if (!reg.ok) {
+        console.error('[waba/exchange] register nomor gagal:', reg.error)
+        await prisma.whatsappSession.update({
+          where: { id: created.id },
+          data: { status: 'ERROR', lastError: reg.error ?? 'Register nomor gagal' },
+        })
+        return jsonOk({
+          sessionId: created.id,
+          phoneNumber: created.phoneNumber,
+          displayName: created.displayName,
+          warning: reg.error,
+        })
+      }
     }
 
     // Tanpa subscribe, Meta tidak mengirim webhook — tapi kegagalan di sini
