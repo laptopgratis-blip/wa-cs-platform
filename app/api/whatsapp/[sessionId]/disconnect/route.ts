@@ -5,6 +5,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { unsubscribeAppFromWaba } from '@/lib/services/waba/resources'
 import { waService } from '@/lib/wa-service'
 
 interface Params {
@@ -33,7 +34,15 @@ export async function POST(req: Request, { params }: Params) {
     if (wa.provider === 'CLOUD_API') {
       // Sesi Cloud API tidak punya state di wa-service — cukup update DB.
       // wipe = lepas kredensial + kosongkan phoneNumberId (unique) supaya
-      // nomor yang sama bisa di-onboard ulang nanti.
+      // nomor yang sama bisa di-onboard ulang nanti. Sebelum kredensial
+      // dibuang, lepas subscription webhook (best-effort) supaya WABA tidak
+      // terus mengirim event ke hulao (dibuang) dan platform lain di Meta App
+      // yang sama bisa menerimanya kembali.
+      if (wipe) {
+        await unsubscribeAppFromWaba(sessionId).catch((err) =>
+          console.warn('[disconnect] unsubscribe webhook gagal (diabaikan):', err),
+        )
+      }
       await prisma.whatsappSession.update({
         where: { id: sessionId },
         data: wipe

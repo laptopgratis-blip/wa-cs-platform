@@ -55,10 +55,14 @@ export async function POST(req: Request) {
       return jsonError(`Gagal menukar kode Meta: ${exchange.error}`, 400)
     }
 
-    // WABA yang sudah terhubung user ini — untuk dukungan WABA kedua.
+    // WABA yang SUDAH BENAR-BENAR terhubung user ini (untuk dukungan WABA
+    // kedua). Hanya status CONNECTED — sesi ERROR dari percobaan gagal
+    // TIDAK boleh mengecualikan WABA yang sedang di-retry (kalau ikut
+    // dikecualikan, retry memilih WABA lain milik user → nomor salah, atau
+    // lebih buruk: membelokkan webhook WABA platform lain ke hulao).
     const existingWabaIds = (
       await prisma.whatsappSession.findMany({
-        where: { userId: session.user.id, wabaId: { not: null } },
+        where: { userId: session.user.id, wabaId: { not: null }, status: 'CONNECTED' },
         select: { wabaId: true },
       })
     )
@@ -90,7 +94,7 @@ export async function POST(req: Request) {
       displayPhoneNumber: phone.display_phone_number ?? null,
       verifiedName: phone.verified_name ?? null,
       accessToken: exchange.accessToken,
-      expiresInSeconds: exchange.expiresIn,
+      tokenExpiresAt: discovery.waba.tokenExpiresAt,
     })
 
     // Register nomor ke Cloud API HANYA untuk jalur standar yang belum aktif.

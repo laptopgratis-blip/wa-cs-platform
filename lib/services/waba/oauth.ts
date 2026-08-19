@@ -141,8 +141,9 @@ export async function refreshLongLivedToken(currentToken: string): Promise<Token
       error?: { message?: string }
     } | null
     if (json?.access_token) {
-      // Meta kadang tidak mengirim expires_in — fallback 60 hari.
-      return { ok: true, accessToken: json.access_token, expiresIn: json.expires_in ?? 5_184_000 }
+      // expires_in absen = token never-expire → biarkan undefined (jangan
+      // dipaksa 60 hari; itu memicu refresh sia-sia + false ERROR di cron).
+      return { ok: true, accessToken: json.access_token, expiresIn: json.expires_in }
     }
     return { ok: false, error: json?.error?.message ?? `refresh gagal (HTTP ${res.status})` }
   } catch (err) {

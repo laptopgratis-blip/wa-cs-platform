@@ -3,13 +3,20 @@
 // Dipanggil dari app/api/webhooks/meta/route.ts SETELAH signature valid.
 
 import { handleInboundMessages } from './inbound'
+import { handleAccountUpdate } from './account-update'
 import { handleMessageEchoes } from './echoes'
 import { handleStatuses } from './statuses'
 import type { WabaChangeValue, WabaWebhookPayload } from './types'
 
 // Field coexistence yang sengaja diabaikan (sync kontak/riwayat = increment
 // berikutnya). Dicatat supaya tidak dianggap event tak dikenal.
-const IGNORED_FIELDS = new Set(['history', 'smb_app_state_sync', 'account_update'])
+const IGNORED_FIELDS = new Set(['history', 'smb_app_state_sync'])
+
+// CATATAN ARSITEKTUR (dok Meta "Webhooks Overrides"): account_update,
+// account_review_update, account_alerts, dan semua template webhook TIDAK
+// mendukung override_callback_uri — selalu dikirim ke callback level-App.
+// Selama Meta App dipakai bersama platform lain, event ini tidak sampai ke
+// hulao. Handler tetap ada supaya langsung berguna begitu App-nya terpisah.
 
 /**
  * Proses satu payload webhook. Error per-change diisolasi — satu change
@@ -27,6 +34,8 @@ export async function processMetaWebhook(payload: WabaWebhookPayload): Promise<v
           // Coexistence: pesan yang DIKIRIM owner dari aplikasi WA Business di
           // HP — dicatat sebagai balasan CS supaya inbox web utuh.
           await handleMessageEchoes(change.value)
+        } else if (change.field === 'account_update') {
+          await handleAccountUpdate(entry.id, change.value)
         } else if (!IGNORED_FIELDS.has(change.field)) {
           console.log(`[waba/webhook-router] field ${change.field} tidak ditangani — dilewati`)
         }

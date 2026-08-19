@@ -1,6 +1,8 @@
 // Resource discovery pasca Embedded Signup: temukan WABA ID dari token user,
 // tarik detail WABA + daftar nomor, dan subscribe app ke WABA (webhook).
 
+import { decrypt } from '@/lib/crypto'
+import { prisma } from '@/lib/prisma'
 import { getMetaConfig } from './config'
 import { appAccessToken, graphRequest } from './graph'
 
@@ -20,11 +22,20 @@ export interface DiscoveredWaba {
   wabaId: string
   name?: string
   phoneNumbers: WabaPhoneNumber[]
+  /**
+   * Kedaluwarsa token per debug_token (SUMBER KEBENARAN). null = never-expire
+   * (token ES sering begitu; jangan dipaksa 60 hari — cron akan mencoba
+   * refresh yang tak perlu lalu meng-ERROR-kan sesi sehat).
+   */
+  tokenExpiresAt: Date | null
 }
 
 interface DebugTokenResponse {
   data?: {
     granular_scopes?: { scope: string; target_ids?: string[] }[]
+    /** unix detik; 0 = token tidak kedaluwarsa (never-expire). */
+    expires_at?: number
+    is_valid?: boolean
   }
 }
 
@@ -48,17 +59,35 @@ export async function discoverWaba(input: {
   const scopes = debug.data.data?.granular_scopes ?? []
   const managementScope = scopes.find((s) => s.scope === 'whatsapp_business_management')
   const targetIds = managementScope?.target_ids ?? []
-  if (targetIds.length === 0) {
-    return { ok: false, error: 'Token tidak punya akses WABA mana pun (granular_scopes kosong)' }
-  }
 
-  const exclude = new Set(input.excludeWabaIds ?? [])
-  const wabaId =
-    (input.providedWabaId && targetIds.includes(input.providedWabaId)
-      ? input.providedWabaId
-      : undefined) ??
-    targetIds.find((id) => !exclude.has(id)) ??
-    targetIds[0]
+  let wabaId: string
+  if (input.providedWabaId) {
+    // WABA ID dari session-info wizard = pilihan eksplisit user. Pakai
+    // langsung — Graph API yang menegakkan akses (phone_numbers akan gagal
+    // jelas kalau token tak berhak). Jangan diam-diam ganti ke heuristik.
+    wabaId = input.providedWabaId
+    if (!targetIds.includes(wabaId)) {
+      console.warn(
+        `[waba/discovery] providedWabaId ${wabaId} tidak ada di granular_scopes ${JSON.stringify(targetIds)} — tetap dipakai`,
+      )
+    }
+  } else {
+    if (targetIds.length === 0) {
+      return { ok: false, error: 'Token tidak punya akses WABA mana pun (granular_scopes kosong)' }
+    }
+    // Heuristik: permission FB Login for Business terakumulasi per (user,app),
+    // jadi target_ids bisa berisi WABA dari percobaan/platform lain. Urutan
+    // TIDAK dijamin Meta. Pilih yang belum terhubung; log kalau ambigu supaya
+    // salah pilih terlihat di server, bukan senyap.
+    const exclude = new Set(input.excludeWabaIds ?? [])
+    const candidates = targetIds.filter((id) => !exclude.has(id))
+    wabaId = candidates[0] ?? targetIds[0]
+    if (targetIds.length > 1) {
+      console.warn(
+        `[waba/discovery] tanpa providedWabaId, target_ids=${JSON.stringify(targetIds)} exclude=${JSON.stringify([...exclude])} → dipilih ${wabaId}`,
+      )
+    }
+  }
 
   const [details, phones] = await Promise.all([
     graphRequest<{ id: string; name?: string }>(`/${wabaId}?fields=id,name`, {
@@ -78,12 +107,17 @@ export async function discoverWaba(input: {
     return { ok: false, error: 'WABA tidak punya nomor telepon — selesaikan penambahan nomor di Embedded Signup' }
   }
 
+  const expiresAt = debug.data.data?.expires_at
+  const tokenExpiresAt =
+    typeof expiresAt === 'number' && expiresAt > 0 ? new Date(expiresAt * 1000) : null
+
   return {
     ok: true,
     waba: {
       wabaId,
       name: details.ok ? details.data.name : undefined,
       phoneNumbers,
+      tokenExpiresAt,
     },
   }
 }
@@ -172,4 +206,29 @@ export async function ensureWebhookOverride(
   if (mine) return { ok: true, repaired: false }
   const sub = await subscribeAppToWaba(wabaId, userToken)
   return { ok: sub.ok, repaired: sub.ok, error: sub.error }
+}
+
+/**
+ * Lepas subscription app dari WABA milik sesi (DELETE /{waba}/subscribed_apps).
+ * Dipanggil saat user "Hapus & logout" sesi Cloud API. Best-effort: kalau
+ * token sudah tidak valid, biarkan — sesi tetap di-wipe di DB.
+ */
+export async function unsubscribeAppFromWaba(sessionId: string): Promise<void> {
+  const s = await prisma.whatsappSession.findUnique({
+    where: { id: sessionId },
+    select: { wabaId: true, wabaTokenEnc: true },
+  })
+  if (!s?.wabaId || !s.wabaTokenEnc) return
+  // Kalau WABA yang sama masih dipakai sesi cloud lain milik user (multi
+  // nomor), JANGAN unsubscribe — sesi lain masih butuh webhook-nya.
+  const others = await prisma.whatsappSession.count({
+    where: { wabaId: s.wabaId, provider: 'CLOUD_API', isActive: true, id: { not: sessionId } },
+  })
+  if (others > 0) return
+  const token = decrypt(s.wabaTokenEnc)
+  const res = await graphRequest<{ success?: boolean }>(`/${s.wabaId}/subscribed_apps`, {
+    method: 'DELETE',
+    token,
+  })
+  if (!res.ok) console.warn(`[waba] unsubscribe WABA ${s.wabaId} gagal: ${res.error.message}`)
 }

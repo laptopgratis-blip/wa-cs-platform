@@ -12,13 +12,13 @@ export interface UpsertCloudSessionInput {
   displayPhoneNumber: string | null
   verifiedName: string | null
   accessToken: string
-  /** Detik sampai token kedaluwarsa (dari exchange); default 60 hari. */
-  expiresInSeconds?: number
+  /** Kedaluwarsa token per debug_token; null = never-expire. */
+  tokenExpiresAt: Date | null
 }
 
 export async function upsertCloudSession(input: UpsertCloudSessionInput) {
   const tokenEnc = encrypt(input.accessToken)
-  const expiresAt = new Date(Date.now() + (input.expiresInSeconds ?? 5_184_000) * 1000)
+  const expiresAt = input.tokenExpiresAt
   // Digit murni — format kanonik phoneNumber di seluruh platform.
   const phoneNumber = input.displayPhoneNumber?.replace(/\D/g, '') || null
 

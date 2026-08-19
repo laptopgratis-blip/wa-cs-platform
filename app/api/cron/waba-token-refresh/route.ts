@@ -68,7 +68,8 @@ async function handle(req: Request) {
         provider: 'CLOUD_API',
         isActive: true,
         wabaTokenEnc: { not: null },
-        wabaTokenExpiresAt: { lte: threshold },
+        // NULL = never-expire → tidak pernah jadi kandidat refresh.
+        wabaTokenExpiresAt: { not: null, lte: threshold },
       },
       select: { id: true, wabaTokenEnc: true, wabaTokenExpiresAt: true },
       take: 50,
@@ -100,9 +101,9 @@ async function handle(req: Request) {
           where: { id: session.id },
           data: {
             wabaTokenEnc: encrypt(result.accessToken),
-            wabaTokenExpiresAt: new Date(
-              Date.now() + (result.expiresIn ?? 5_184_000) * 1000,
-            ),
+            wabaTokenExpiresAt: result.expiresIn
+              ? new Date(Date.now() + result.expiresIn * 1000)
+              : null, // never-expire
           },
         })
       } else {
