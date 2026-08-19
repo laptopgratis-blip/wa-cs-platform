@@ -12,6 +12,7 @@ import {
   FileArchive,
   FileText,
   Hand,
+  LayoutTemplate,
   Loader2,
   RotateCcw,
   Send,
@@ -41,6 +42,7 @@ import {
 } from '@/lib/socket-client'
 import { cn } from '@/lib/utils'
 
+import { SendTemplateDialog } from './SendTemplateDialog'
 import type { ChatContact, ChatMessage } from './types'
 
 interface ChatViewProps {
@@ -59,6 +61,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   const [isSending, setSending] = useState(false)
   const [isToggling, setToggling] = useState(false)
   const [isDownloading, setDownloading] = useState(false)
+  // Dialog kirim template Meta (sesi Cloud API, window 24 jam tutup).
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch detail tiap kali contactId berubah.
@@ -182,8 +187,17 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
         success: boolean
         data?: ChatMessage
         error?: string
+        code?: string
+        sessionId?: string
       }
       if (!res.ok || !json.success || !json.data) {
+        // Sesi Cloud API di luar window 24 jam → tawarkan kirim template.
+        if (res.status === 409 && json.code === 'WINDOW_CLOSED') {
+          setTemplateSessionId(json.sessionId ?? null)
+          setTemplateOpen(true)
+          toast.info('Window 24 jam Meta sudah tutup — kirim lewat template yang disetujui.')
+          return
+        }
         toast.error(json.error || 'Gagal kirim pesan')
         return
       }
@@ -459,10 +473,50 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <Send className="size-4" />
             )}
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label="Kirim template Meta"
+            title="Kirim template Meta (nomor Cloud API, di luar window 24 jam)"
+            className="shrink-0"
+            disabled={!contact.aiPaused || isSending}
+            onClick={() => {
+              setTemplateSessionId(null)
+              setTemplateOpen(true)
+            }}
+          >
+            <LayoutTemplate className="size-4" />
+          </Button>
         </div>
       </div>
+
+      <SendTemplateDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        contactId={contact.id}
+        contactName={contact.name}
+        contactPhone={contact.phoneNumber}
+        sessionId={templateSessionId}
+        onSent={(m) => {
+          setMessages((prev) => [...prev, m])
+          setDraft('')
+          onChanged()
+        }}
+      />
     </div>
   )
+}
+
+// Label asal untuk pesan AGENT — bantu CS tahu balasan datang dari mana.
+const AGENT_SOURCE_LABEL: Record<string, string> = {
+  WA_DIRECT: 'CS via WA',
+  WA_HISTORY: 'CS via WA (riwayat)',
+  WEB_DASHBOARD: 'CS via Web',
+  TEMPLATE: 'CS via Template',
+  BROADCAST: 'Broadcast',
+  FOLLOWUP: 'Follow-up',
+  SYSTEM: 'Sistem',
 }
 
 function Bubble({
@@ -487,14 +541,7 @@ function Bubble({
       ? 'bg-green-100 text-green-950 border border-green-200'
       : 'bg-primary text-primary-foreground'
   // Label asal untuk pesan AGENT — bantu CS tahu balasan datang dari mana.
-  const agentLabel =
-    message.source === 'WA_DIRECT'
-      ? 'CS via WA'
-      : message.source === 'WA_HISTORY'
-        ? 'CS via WA (riwayat)'
-        : message.source === 'WEB_DASHBOARD'
-          ? 'CS via Web'
-          : 'CS'
+  const agentLabel = AGENT_SOURCE_LABEL[message.source ?? ''] ?? 'CS'
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
       <div

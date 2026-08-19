@@ -4,6 +4,7 @@
 // plus form pilihan Soul + Model AI.
 import {
   BadgeCheck,
+  LayoutTemplate,
   Loader2,
   MoreVertical,
   Phone,
@@ -12,6 +13,7 @@ import {
   Trash2,
   Unplug,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -320,6 +322,15 @@ export function WaSessionCard({
 
         {isCloud && session.isCoexistence && session.coexSync && (
           <CoexSyncStatus sessionId={session.id} initial={session.coexSync} />
+        )}
+
+        {isCloud && (
+          <Link
+            href={`/whatsapp/templates?session=${session.id}`}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:underline"
+          >
+            <LayoutTemplate className="size-3.5" /> Kelola Template Meta (broadcast, follow-up, OTP)
+          </Link>
         )}
 
         <div className="space-y-3">

@@ -4,8 +4,18 @@ import type { MessageRole, MessageStatus, PipelineStage } from '@prisma/client'
 export type InboxFilter = 'all' | 'ai' | 'attention' | 'resolved'
 
 // Asal pesan AGENT/AI: WA_DIRECT (CS balas langsung dari WA HP), WEB_DASHBOARD
-// (CS balas dari inbox web), AI (otomatis). null = legacy/customer.
-export type MessageSource = 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI' | 'WA_HISTORY'
+// (CS balas dari inbox web), AI (otomatis), WA_HISTORY (import riwayat).
+// Trek 2B (Cloud API): TEMPLATE (CS kirim template), BROADCAST, FOLLOWUP,
+// SYSTEM (OTP/notif platform). null = legacy/customer.
+export type MessageSource =
+  | 'WA_DIRECT'
+  | 'WEB_DASHBOARD'
+  | 'AI'
+  | 'WA_HISTORY'
+  | 'TEMPLATE'
+  | 'BROADCAST'
+  | 'FOLLOWUP'
+  | 'SYSTEM'
 
 export interface InboxConversation {
   id: string
