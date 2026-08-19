@@ -15,10 +15,10 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { getClientIp } from '@/lib/client-ip'
 import { normalizePhone, toWaNumber } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
+import { findHandoffCandidates, sendHandoffWa } from '@/lib/services/live/handoff'
 import { generateQueueForLead } from '@/lib/services/followup-engine'
 import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
 import { ensureLiveSession, logLiveEvent, makeFingerprint } from '@/lib/services/live/tangkap'
-import { waService } from '@/lib/wa-service'
 
 function hashIp(ip: string): string {
   const salt = process.env.IP_SALT ?? 'hulao-default-ip-salt-rotate-me'
@@ -174,10 +174,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     let handoffError: string | null = null
     let contactId: string | null = null
     try {
-      const session = await prisma.whatsappSession.findFirst({
-        where: { userId: room.userId, status: 'CONNECTED' },
-        select: { id: true, phoneNumber: true },
-      })
+      // Provider-aware (Trek 2B) — kandidat pertama untuk pin Contact.
+      const candidates = await findHandoffCandidates(room.userId, waNumber)
+      const session = candidates[0] ? { id: candidates[0].sessionId } : null
       if (session) {
         const contact = await prisma.contact.upsert({
           where: {
@@ -204,13 +203,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
           roomName: room.name,
           productInterest: data.productInterest ?? null,
         })
-        await waService.sendMessage(session.id, normalized, msg)
-        handoffStatus = 'HANDOFF_SENT'
+        // Dulu: sendMessage tanpa cek success → HANDOFF_SENT palsu saat
+        // wa-service gagal. sendHandoffWa (smartSend) mengembalikan hasil nyata.
+        const send = await sendHandoffWa({
+          candidates,
+          to: normalized,
+          text: msg,
+          customerName: data.name,
+          roomName: room.name,
+          productInterest: data.productInterest ?? null,
+        })
+        if (send.success) {
+          handoffStatus = 'HANDOFF_SENT'
+        } else {
+          handoffError = send.error ?? 'Gagal kirim WA'
+        }
 
         await logLiveEvent({
           liveSessionId: sessionId,
           type: 'HANDOFF_WA',
-          payload: { phoneNumber: normalized, sessionId: session.id, success: true },
+          payload: {
+            phoneNumber: normalized,
+            sessionId: send.sessionId ?? session.id,
+            via: send.via,
+            success: send.success,
+            ...(send.success ? {} : { error: send.error }),
+          },
         })
       } else {
         handoffError = 'Owner belum punya WA session CONNECTED'

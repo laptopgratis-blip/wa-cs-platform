@@ -25,7 +25,19 @@ interface ConnectedSession {
   phoneNumber: string | null
   displayName: string | null
   updatedAt: string
+  // Trek 2B: sesi bisa Baileys (teks bebas) atau Cloud API (OTP di luar
+  // window butuh template AUTH_OTP ter-approve di WABA-nya).
+  provider?: 'BAILEYS' | 'CLOUD_API'
+  wabaId?: string | null
   user: { email: string; role: string }
+}
+
+interface PlatformTemplateItem {
+  purposeKey: string
+  description: string
+  name: string
+  status: string | null
+  rejectionReason: string | null
 }
 
 type ChannelMode = 'EMAIL' | 'WA' | 'BOTH'
@@ -58,6 +70,9 @@ export function OtpWaSenderPicker() {
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  // Status template platform (AUTH_OTP/INFO_GENERIC) sesi cloud yang dipilih.
+  const [platformItems, setPlatformItems] = useState<PlatformTemplateItem[] | null>(null)
+  const [platformBusy, setPlatformBusy] = useState(false)
 
   async function load(): Promise<ConnectedSession[]> {
     setLoading(true)
@@ -143,6 +158,56 @@ export function OtpWaSenderPicker() {
   }
 
   const dirty = currentValue !== savedValue || mode !== savedMode
+  const selectedSession = sessions.find((s) => s.id === currentValue) ?? null
+  const selectedIsCloud = selectedSession?.provider === 'CLOUD_API'
+
+  // Muat status template platform saat sender terpilih = sesi Cloud API.
+  useEffect(() => {
+    if (!selectedIsCloud || !currentValue) {
+      const t = window.setTimeout(() => setPlatformItems(null), 0)
+      return () => window.clearTimeout(t)
+    }
+    let cancelled = false
+    const t = window.setTimeout(() => {
+      fetch(`/api/admin/platform-templates?sessionId=${encodeURIComponent(currentValue)}`)
+        .then((r) => r.json() as Promise<{ success: boolean; data?: { items: PlatformTemplateItem[] } }>)
+        .then((json) => {
+          if (!cancelled) setPlatformItems(json.success && json.data ? json.data.items : [])
+        })
+        .catch(() => {
+          if (!cancelled) setPlatformItems([])
+        })
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [selectedIsCloud, currentValue])
+
+  async function preparePlatformTemplates() {
+    if (!currentValue) return
+    setPlatformBusy(true)
+    try {
+      const res = await fetch('/api/admin/platform-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: currentValue }),
+      })
+      const json = (await res.json()) as {
+        success: boolean
+        error?: string
+        data?: { items: PlatformTemplateItem[] }
+      }
+      if (!json.success || !json.data) {
+        toast.error(json.error ?? 'Gagal menyiapkan template platform')
+        return
+      }
+      setPlatformItems(json.data.items)
+      toast.success('Template platform dikirim ke Meta — tunggu review')
+    } finally {
+      setPlatformBusy(false)
+    }
+  }
 
   return (
     <Card className="rounded-xl border-warm-200">
@@ -292,6 +357,11 @@ export function OtpWaSenderPicker() {
                               Admin
                             </span>
                           )}
+                          {s.provider === 'CLOUD_API' && (
+                            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+                              Cloud API
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-warm-500">
                           {s.phoneNumber ?? '—'} · pemilik {s.user.email}
@@ -306,6 +376,61 @@ export function OtpWaSenderPicker() {
               )}
             </fieldset>
             </div>
+
+            {selectedIsCloud && (
+              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-emerald-900">
+                    Template platform (nomor Cloud API)
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={preparePlatformTemplates}
+                    disabled={platformBusy}
+                  >
+                    {platformBusy ? (
+                      <Loader2 className="mr-1.5 size-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-1.5 size-3" />
+                    )}
+                    Siapkan template platform
+                  </Button>
+                </div>
+                <p className="text-[11px] text-emerald-900/70">
+                  OTP di luar window 24 jam Meta hanya bisa lewat template AUTHENTICATION yang
+                  disetujui. Siapkan sekali; status berubah otomatis setelah review Meta.
+                </p>
+                {platformItems === null ? (
+                  <p className="text-[11px] text-emerald-900/60">Memuat status…</p>
+                ) : platformItems.length === 0 ? (
+                  <p className="text-[11px] text-emerald-900/60">Belum ada template — klik Siapkan.</p>
+                ) : (
+                  <ul className="space-y-1 text-[11px]">
+                    {platformItems.map((it) => (
+                      <li key={it.purposeKey} className="flex items-center justify-between gap-2">
+                        <span className="truncate text-emerald-900/80">
+                          {it.name} — {it.description}
+                        </span>
+                        <span
+                          className={
+                            it.status === 'APPROVED'
+                              ? 'font-semibold text-emerald-700'
+                              : it.status === 'REJECTED' || it.status === 'PAUSED'
+                                ? 'font-semibold text-red-600'
+                                : 'font-semibold text-amber-700'
+                          }
+                          title={it.rejectionReason ?? undefined}
+                        >
+                          {it.status ?? 'Belum dibuat'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2">
               {dirty && !saving && (

@@ -190,10 +190,12 @@ export const waService = {
     items: { phoneNumber: string; content: string }[]
   }) {
     if ((await resolveProvider(input.sessionId)) === 'CLOUD_API') {
+      // Broadcast Cloud API TIDAK lewat wa-service — jalurnya
+      // lib/services/broadcast/start.ts → cloud-runner (template Meta +
+      // Kredit Pesan). Sampai di sini berarti pemanggil salah jalur.
       return {
         success: false,
-        error:
-          'Broadcast belum didukung untuk sesi Cloud API — butuh template ter-approve Meta (increment berikutnya)',
+        error: 'Broadcast Cloud API dijalankan via startBroadcast (lib/services/broadcast), bukan wa-service',
       } satisfies ServiceResponse<{ broadcastId: string; total: number }>
     }
     return request<{ broadcastId: string; total: number }>(

@@ -5,7 +5,7 @@
 // nomor admin diblokir permanen — tanpa fallback ini magic link course &
 // e-book mati total padahal WA penjual hidup). Caller (api / hook) yang
 // decide apakah retry via email kalau delivered=false.
-import { waService } from '@/lib/wa-service'
+import { smartSend, type SmartSendTemplateSpec } from '@/lib/services/wa-send/smart-send'
 
 import {
   findStudentWaSenders,
@@ -20,12 +20,15 @@ export interface SendMagicLinkResult {
   reason?: string
 }
 
-// Loop kandidat pengirim sampai satu berhasil. Dipakai kedua varian pesan.
+// Kirim lewat pool via smartSend (provider-aware, Trek 2B): Baileys / Cloud
+// dalam window → teks; Cloud di luar window → template INFO_GENERIC (bila
+// disediakan & APPROVED di WABA kandidat). Dipakai semua varian pesan.
 async function sendViaPool(input: {
   senders: WaSenderCandidate[]
   phone: string
   text: string
   logTag: string
+  template?: SmartSendTemplateSpec
 }): Promise<SendMagicLinkResult> {
   if (input.senders.length === 0) {
     console.warn(
@@ -37,28 +40,25 @@ async function sendViaPool(input: {
       reason: 'Tidak ada sesi WA aktif (admin/penjual)',
     }
   }
-  let lastError: string | undefined
-  for (const sender of input.senders) {
-    const send = await waService.sendMessage(
-      sender.sessionId,
-      input.phone,
-      input.text,
-    )
-    if (send.success) {
-      if (sender.label === 'penjual') {
-        console.warn(
-          `[${input.logTag}] terkirim via sesi PENJUAL (admin down) ke ${input.phone}`,
-        )
-      }
-      return { delivered: true, channel: 'WA' }
+  const send = await smartSend({
+    candidates: input.senders,
+    to: input.phone,
+    text: input.text,
+    template: input.template,
+    purpose: 'LMS',
+    source: 'SYSTEM',
+  })
+  if (send.success) {
+    const winner = input.senders.find((c) => c.sessionId === send.sessionId)
+    if (winner?.label === 'penjual') {
+      console.warn(
+        `[${input.logTag}] terkirim via sesi PENJUAL (admin down) ke ${input.phone}`,
+      )
     }
-    lastError = send.error ?? 'Gagal kirim WA'
-    console.warn(
-      `[${input.logTag}] gagal kirim via sesi ${sender.label} ke ${input.phone}:`,
-      send.error,
-    )
+    return { delivered: true, channel: 'WA' }
   }
-  return { delivered: false, channel: 'WA', reason: lastError }
+  console.warn(`[${input.logTag}] gagal kirim ke ${input.phone}: ${send.error}`)
+  return { delivered: false, channel: 'WA', reason: send.error }
 }
 
 function buildMessage(input: {
@@ -105,6 +105,19 @@ export async function sendMagicLinkViaWa(input: {
     phone: input.studentPhone,
     text: buildMessage(input),
     logTag: 'lms-magic',
+    // Cloud di luar window: INFO_GENERIC — [nama, ringkasan, link].
+    template: {
+      purposeKey: 'INFO_GENERIC',
+      params: {
+        body: [
+          input.studentName || 'Kak',
+          input.courseTitle
+            ? `akses course ${input.courseTitle} sudah aktif — klik link untuk masuk tanpa OTP`
+            : 'akses portal belajar kamu sudah aktif — klik link untuk masuk tanpa OTP',
+          input.magicUrl,
+        ],
+      },
+    },
   })
 }
 
@@ -149,5 +162,15 @@ export async function sendEbookAccessViaWa(input: {
     phone: input.buyerPhone,
     text,
     logTag: 'ebook-magic',
+    template: {
+      purposeKey: 'INFO_GENERIC',
+      params: {
+        body: [
+          input.buyerName || 'Kak',
+          `akses e-book ${input.ebookTitle} sudah aktif (download ${input.maxDownloads}x) — klik link untuk membuka Perpustakaan`,
+          input.magicUrl,
+        ],
+      },
+    },
   })
 }

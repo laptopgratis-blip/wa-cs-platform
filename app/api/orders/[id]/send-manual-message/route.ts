@@ -8,8 +8,9 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 import { resolveTemplateVariables } from '@/lib/services/followup-variables'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
 import { followupManualSendSchema } from '@/lib/validations/followup'
-import { waService } from '@/lib/wa-service'
+import { listSenderCandidates } from '@/lib/wa-session'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -50,11 +51,13 @@ export async function POST(req: Request, { params }: Params) {
       )
     }
 
-    const waSession = await prisma.whatsappSession.findFirst({
-      where: { userId: session.user.id, status: 'CONNECTED' },
-      select: { id: true },
+    // Provider-aware (Trek 2B): Baileys / Cloud dalam window → teks; Cloud
+    // di luar window → template INFO_GENERIC (bila APPROVED).
+    const candidates = await listSenderCandidates({
+      userId: session.user.id,
+      preferContactPhone: order.customerPhone,
     })
-    if (!waSession) {
+    if (candidates.length === 0) {
       return jsonError('WhatsApp belum tersambung', 400)
     }
 
@@ -87,13 +90,28 @@ export async function POST(req: Request, { params }: Params) {
       shippingProfile,
     })
 
-    const sendResult = await waService
-      .sendMessage(waSession.id, order.customerPhone, resolved)
-      .then((data) => ({ ok: true as const, data }))
-      .catch((err: unknown) => ({
-        ok: false as const,
-        error: err instanceof Error ? err.message : String(err),
-      }))
+    const send = await smartSend({
+      candidates,
+      to: order.customerPhone,
+      text: resolved,
+      template: {
+        purposeKey: 'INFO_GENERIC',
+        params: {
+          body: [
+            order.customerName || 'Kak',
+            order.user.name || 'Toko Kami',
+            `pesan tentang pesanan ${order.invoiceNumber ?? order.id}: ${resolved.slice(0, 300)}`,
+          ],
+        },
+      },
+      purpose: 'NOTIF',
+      source: 'SYSTEM',
+    })
+    // Dulu: .then(data => ({ok:true, data})) TANPA cek data.success — kegagalan
+    // wa-service tercatat SENT palsu. smartSend mengembalikan success nyata.
+    const sendResult = send.success
+      ? { ok: true as const }
+      : { ok: false as const, error: send.error ?? 'Gagal kirim' }
 
     if (!sendResult.ok) {
       await prisma.followUpLog.create({

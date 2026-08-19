@@ -170,6 +170,18 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 - Setiap WA session = 1 instance Baileys
 - Credentials disimpan di database agar reconnect otomatis
 
+## WABA Trek 2B — Template Meta & Kredit Pesan (2026-08-20)
+
+Dua jalur WA permanen: Baileys (unofficial) + Cloud API (resmi Meta). Sesi Cloud
+di luar window 24 jam wajib template ter-approve & berbayar per pesan (dompet
+Kredit Pesan WA, Rp — terpisah dari token AI). Kontrak satu-pintu:
+`assertCanSendCloud` (compliance) → `sendCloudTemplate` (never-throw, charge
+idempoten by wamid) → webhook `statuses[].pricing` merekonsiliasi. SEMUA jalur
+non-CS (OTP/follow-up/notif/handoff/LMS) lewat `smartSend` +
+`listSenderCandidates` — jangan `findFirst({status:'CONNECTED'})` buta provider.
+Broadcast Cloud = `BroadcastRecipient` + cron `broadcast-send` (1 menit).
+Detail: `docs/waba-templates.md`.
+
 ## Perintah Penting
 ```bash
 # Development

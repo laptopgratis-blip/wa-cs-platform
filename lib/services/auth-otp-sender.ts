@@ -7,9 +7,9 @@
 //   sukses tanpa channel apapun terkirim.
 import { sendAuthOtpEmail } from '@/lib/email'
 import type { OtpMode } from '@/lib/otp/auth-otp'
-import { prisma } from '@/lib/prisma'
 import { getOtpChannelMode, getSetting } from '@/lib/settings'
-import { waService } from '@/lib/wa-service'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
+import { listSenderCandidates, type SenderCandidate } from '@/lib/wa-session'
 
 const OTP_BRAND = 'Hulao'
 
@@ -19,35 +19,15 @@ const OTP_BRAND = 'Hulao'
 //    tidak perlu redeploy.
 // 2. Env var `OTP_WA_SESSION_ID` — backward-compat / bootstrap.
 // 3. Fallback: sesi CONNECTED milik admin (any), pattern lama dari LMS OTP.
-async function findOtpWaSessionId(): Promise<string | null> {
+// Provider-aware (Trek 2B): sesi bisa Baileys atau Cloud API. smartSend akan
+// memilih free-text (Baileys / Cloud dalam window) atau template AUTH_OTP.
+async function findOtpSenderCandidates(): Promise<SenderCandidate[]> {
+  const explicit: string[] = []
   const dbId = (await getSetting('OTP_WA_SESSION_ID')).trim()
-  if (dbId) {
-    const session = await prisma.whatsappSession.findFirst({
-      where: { id: dbId, status: 'CONNECTED' },
-      select: { id: true },
-    })
-    if (session) return session.id
-    console.warn(
-      `[auth-otp-sender] OTP_WA_SESSION_ID (DB)=${dbId} tidak CONNECTED, fallback berikutnya.`,
-    )
-  }
+  if (dbId) explicit.push(dbId)
   const envId = process.env.OTP_WA_SESSION_ID?.trim()
-  if (envId) {
-    const session = await prisma.whatsappSession.findFirst({
-      where: { id: envId, status: 'CONNECTED' },
-      select: { id: true },
-    })
-    if (session) return session.id
-    console.warn(
-      `[auth-otp-sender] OTP_WA_SESSION_ID (env)=${envId} tidak CONNECTED, fallback admin.`,
-    )
-  }
-  const session = await prisma.whatsappSession.findFirst({
-    where: { status: 'CONNECTED', user: { role: 'ADMIN' } },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  })
-  return session?.id ?? null
+  if (envId && envId !== dbId) explicit.push(envId)
+  return listSenderCandidates({ explicitSessionIds: explicit, adminSessions: true })
 }
 
 function buildWaMessage(code: string, mode: OtpMode): string {
@@ -162,16 +142,23 @@ async function sendWa(
   mode: OtpMode,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!phone) return { ok: false, error: 'Nomor WA tidak tersedia' }
-  const sessionId = await findOtpWaSessionId()
-  if (!sessionId) {
+  const candidates = await findOtpSenderCandidates()
+  if (candidates.length === 0) {
     const error = 'Sesi WA pengirim tidak aktif'
     console.warn(`[auth-otp-sender] ${error} (target ${phone})`)
     return { ok: false, error }
   }
   const text = buildWaMessage(code, mode)
-  // Baileys format: tanpa '+'.
   const phoneForWa = phone.replace(/^\+/, '')
-  const send = await waService.sendMessage(sessionId, phoneForWa, text)
+  const send = await smartSend({
+    candidates,
+    to: phoneForWa,
+    text,
+    // Cloud API di luar window: template AUTHENTICATION (kode = parameter).
+    template: { purposeKey: 'AUTH_OTP', params: { body: [code] } },
+    purpose: 'OTP',
+    source: 'SYSTEM',
+  })
   if (!send.success) {
     const error = send.error ?? 'Unknown WA error'
     console.warn(`[auth-otp-sender] WA ke ${phone} gagal: ${error}`)

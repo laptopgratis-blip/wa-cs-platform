@@ -10,11 +10,42 @@
 // sellerUserId eksplisit (dari hook order yang tahu pemilik produk)
 // diprioritaskan di urutan pertama setelah admin.
 import { prisma } from '@/lib/prisma'
+import type { SenderCandidate } from '@/lib/wa-session'
 
-export interface WaSenderCandidate {
-  // 'admin' | 'penjual' — untuk logging siapa pengirim yang berhasil.
+// Kandidat pool = SenderCandidate (provider-aware, Trek 2B: bisa Baileys
+// atau Cloud API — smartSend yang memilih free-text vs template) + label
+// 'admin' | 'penjual' untuk logging siapa pengirim yang berhasil.
+export interface WaSenderCandidate extends SenderCandidate {
   label: 'admin' | 'penjual'
-  sessionId: string
+}
+
+const CANDIDATE_SELECT = {
+  id: true,
+  userId: true,
+  provider: true,
+  wabaId: true,
+  phoneNumber: true,
+  displayName: true,
+} as const
+
+type Row = {
+  id: string
+  userId: string
+  provider: SenderCandidate['provider']
+  wabaId: string | null
+  phoneNumber: string | null
+  displayName: string | null
+}
+
+function toCandidate(row: Row, label: 'admin' | 'penjual'): WaSenderCandidate {
+  const base = {
+    sessionId: row.id,
+    userId: row.userId,
+    provider: row.provider,
+    wabaId: row.wabaId,
+    phoneNumber: row.phoneNumber,
+  }
+  return { ...base, label }
 }
 
 // Maksimal penjual yang dicoba — student lintas banyak toko tetap wajar.
@@ -29,12 +60,12 @@ export async function findStudentWaSenders(opts: {
   const sellerIds: string[] = []
 
   const admin = await prisma.whatsappSession.findFirst({
-    where: { status: 'CONNECTED', user: { role: 'ADMIN' } },
-    select: { id: true },
+    where: { status: 'CONNECTED', isActive: true, user: { role: 'ADMIN' } },
+    select: CANDIDATE_SELECT,
     orderBy: { updatedAt: 'desc' },
   })
   if (admin) {
-    candidates.push({ label: 'admin', sessionId: admin.id })
+    candidates.push(toCandidate(admin, 'admin'))
     seenSessions.add(admin.id)
   }
 
@@ -70,12 +101,12 @@ export async function findStudentWaSenders(opts: {
   )
   for (const userId of uniqueSellerIds) {
     const session = await prisma.whatsappSession.findFirst({
-      where: { userId, status: 'CONNECTED' },
-      select: { id: true },
+      where: { userId, status: 'CONNECTED', isActive: true },
+      select: CANDIDATE_SELECT,
       orderBy: { updatedAt: 'desc' },
     })
     if (session && !seenSessions.has(session.id)) {
-      candidates.push({ label: 'penjual', sessionId: session.id })
+      candidates.push(toCandidate(session, 'penjual'))
       seenSessions.add(session.id)
     }
   }

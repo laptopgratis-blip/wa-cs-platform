@@ -6,7 +6,43 @@
 import { toWaNumber } from '@/lib/phone'
 import { prisma } from '@/lib/prisma'
 import { logLiveEvent } from '@/lib/services/live/tangkap'
-import { waService } from '@/lib/wa-service'
+import { smartSend, type SmartSendResult } from '@/lib/services/wa-send/smart-send'
+import { listSenderCandidates, type SenderCandidate } from '@/lib/wa-session'
+
+// Kandidat sesi pengirim handoff milik owner (provider-aware, Trek 2B).
+export async function findHandoffCandidates(
+  userId: string,
+  customerPhone?: string,
+): Promise<SenderCandidate[]> {
+  return listSenderCandidates({ userId, preferContactPhone: customerPhone })
+}
+
+// Kirim pesan handoff via smartSend: Baileys / Cloud dalam window → teks;
+// Cloud di luar window → template INFO_GENERIC (lead live = customer belum
+// pernah chat WA duluan, jadi window hampir pasti tutup di sesi Cloud).
+export async function sendHandoffWa(input: {
+  candidates: SenderCandidate[]
+  to: string
+  text: string
+  customerName: string
+  roomName: string
+  productInterest: string | null
+}): Promise<SmartSendResult> {
+  const summary = input.productInterest
+    ? `terima kasih sudah tertarik ${input.productInterest} saat live ${input.roomName} — balas pesan ini untuk lanjut order`
+    : `terima kasih sudah ngobrol di live ${input.roomName} — balas pesan ini untuk lanjut order`
+  return smartSend({
+    candidates: input.candidates,
+    to: input.to,
+    text: input.text,
+    template: {
+      purposeKey: 'INFO_GENERIC',
+      params: { body: [input.customerName || 'Kak', input.roomName, summary] },
+    },
+    purpose: 'HANDOFF',
+    source: 'SYSTEM',
+  })
+}
 
 // Marker klaim anti dobel-kirim antar run cron yang overlap. Klaim dianggap
 // basi (boleh diambil proses lain) kalau updatedAt-nya lebih tua dari ini —
@@ -89,12 +125,9 @@ export async function retryLeadHandoff(leadId: string): Promise<HandoffRetryResu
   })
   if (!lead || lead.status !== 'HANDOFF_FAILED') return 'SKIPPED'
 
-  const waSession = await prisma.whatsappSession.findFirst({
-    where: { userId: lead.userId, status: 'CONNECTED' },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  })
-  if (!waSession) return 'SKIPPED' // owner masih offline — coba lagi nanti
+  const candidates = await findHandoffCandidates(lead.userId, lead.customerPhone)
+  if (candidates.length === 0) return 'SKIPPED' // owner masih offline — coba lagi nanti
+  const pinSessionId = candidates[0]!.sessionId
 
   // Klaim atomik. Klaim [retrying] yang basi (proses mati) boleh direbut.
   const staleBefore = new Date(Date.now() - HANDOFF_CLAIM_STALE_MS)
@@ -124,13 +157,13 @@ export async function retryLeadHandoff(leadId: string): Promise<HandoffRetryResu
   const contact = await prisma.contact.upsert({
     where: {
       waSessionId_phoneNumber: {
-        waSessionId: waSession.id,
+        waSessionId: pinSessionId,
         phoneNumber: waNumber,
       },
     },
     create: {
       userId: lead.userId,
-      waSessionId: waSession.id,
+      waSessionId: pinSessionId,
       phoneNumber: waNumber,
       name: lead.customerName,
       tags: ['live-room'],
@@ -146,7 +179,14 @@ export async function retryLeadHandoff(leadId: string): Promise<HandoffRetryResu
     roomName: lead.liveRoom.name,
     productInterest: lead.productInterest,
   })
-  const sendResult = await waService.sendMessage(waSession.id, waNumber, msg)
+  const sendResult = await sendHandoffWa({
+    candidates,
+    to: waNumber,
+    text: msg,
+    customerName: lead.customerName,
+    roomName: lead.liveRoom.name,
+    productInterest: lead.productInterest,
+  })
 
   if (sendResult.success) {
     await prisma.liveLead.update({
@@ -160,7 +200,8 @@ export async function retryLeadHandoff(leadId: string): Promise<HandoffRetryResu
         success: true,
         retry: true,
         contactId: contact.id,
-        waSessionId: waSession.id,
+        waSessionId: sendResult.sessionId ?? pinSessionId,
+        via: sendResult.via,
       },
     })
     return 'SENT'
