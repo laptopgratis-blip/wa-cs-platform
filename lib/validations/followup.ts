@@ -68,6 +68,9 @@ export const followupTemplateCreateSchema = z.object({
   scope: z.enum(['GLOBAL', 'FORM']).default('GLOBAL'),
   orderFormId: optionalString,
   order: z.number().int().min(0).max(9999).default(0),
+  // Cloud API (Trek 2B): link ke WabaTemplate + peta placeholder per {{n}}.
+  metaTemplateId: z.string().min(1).nullable().optional(),
+  metaParamMap: z.array(z.string().max(64)).max(30).nullable().optional(),
 })
 
 export const followupTemplateUpdateSchema = followupTemplateCreateSchema

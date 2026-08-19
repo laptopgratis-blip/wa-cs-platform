@@ -10,6 +10,7 @@ import type {
 } from '@prisma/client'
 
 import { confirmReceivedLink, reviewLink } from '@/lib/review-token'
+import { flattenParamValue } from '@/lib/services/waba/template-payload'
 
 interface OrderItem {
   productId?: string
@@ -195,4 +196,27 @@ export const DUMMY_RESOLVE_CONTEXT: ResolveContext = {
   shippingProfile: {
     waConfirmNumber: '628111222333',
   } as UserShippingProfile,
+}
+
+// ── Trek 2B: resolve parameter template Meta (Cloud API) ────────────────────
+// metaParamMap = placeholder hulao per {{n}} (index 0 = {{1}}). Tiap entri
+// di-resolve lewat resolver yang sama seperti pesan bebas, lalu di-flatten
+// (Meta menolak newline/tab/>4 spasi berurutan di parameter).
+export function resolveTemplateParams(paramMap: string[], ctx: ResolveContext): string[] {
+  return paramMap.map((ph) => flattenParamValue(compactProduk(resolveTemplateVariables(ph, ctx), ph)))
+}
+
+export function resolveLeadTemplateParams(paramMap: string[], ctx: LeadResolveContext): string[] {
+  return paramMap.map((ph) => flattenParamValue(resolveLeadTemplateVariables(ph, ctx)))
+}
+
+// {produk} versi multi-baris ("- A × 2\n- B × 1") tidak cocok untuk parameter
+// Meta (satu baris). Ringkas jadi "A ×2, B ×1" hanya untuk placeholder {produk}.
+function compactProduk(value: string, placeholder: string): string {
+  if (!placeholder.includes('{produk}')) return value
+  return value
+    .split('\n')
+    .map((l) => l.replace(/^-\s*/, '').replace(/\s*\([^)]*\)\s*$/, '').replace(/\s*×\s*/, ' ×').trim())
+    .filter(Boolean)
+    .join(', ')
 }

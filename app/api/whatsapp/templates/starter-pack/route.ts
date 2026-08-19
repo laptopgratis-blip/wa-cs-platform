@@ -6,7 +6,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { ensureTemplatesByPurpose, getStarterPackStatus } from '@/lib/services/waba/starter-pack'
+import { autoLinkStarterFollowUps, ensureTemplatesByPurpose, getStarterPackStatus } from '@/lib/services/waba/starter-pack'
 import { starterPackSchema } from '@/lib/validations/waba-template'
 
 async function resolveWaba(sessionId: string, userId: string) {
@@ -54,7 +54,9 @@ export async function POST(req: Request) {
       keys: parsed.data.keys,
     })
     if (!r.ok) return jsonError(r.error ?? 'Gagal menyiapkan template', 400)
-    return jsonOk({ results: r.results, items: await getStarterPackStatus(wabaId) })
+    // Auto-link ke follow-up default yang cocok (best-effort).
+    const link = await autoLinkStarterFollowUps({ userId: session.user.id, wabaId }).catch(() => ({ linked: 0 }))
+    return jsonOk({ results: r.results, linkedFollowUps: link.linked, items: await getStarterPackStatus(wabaId) })
   } catch (err) {
     console.error('[POST /api/whatsapp/templates/starter-pack] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)

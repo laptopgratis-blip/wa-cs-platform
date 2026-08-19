@@ -21,7 +21,7 @@ import {
 } from '@/lib/services/live/handoff'
 import { notifyEbookAccess } from '@/lib/services/ebook/access-notif'
 import { notifyNewOrder } from '@/lib/services/order-notif'
-import { waService } from '@/lib/wa-service'
+import { sendQueueItem } from '@/lib/services/followup-sender'
 
 const BATCH_SIZE = 50
 const MAX_SEND_RETRY = 3 // failure transmisi WA
@@ -124,33 +124,6 @@ async function handle(req: Request) {
         continue
       }
 
-      // Cek WA session — kalau disconnected, retry ulang nanti (jangan langsung
-      // FAILED, mungkin user lagi reconnect).
-      const session = await prisma.whatsappSession.findFirst({
-        where: { userId: item.userId, status: 'CONNECTED' },
-        select: { id: true },
-      })
-      if (!session) {
-        if (item.retryCount >= MAX_WA_RETRY) {
-          await markFailed(
-            item.id,
-            `WA session not connected after ${MAX_WA_RETRY} retries`,
-          )
-          failed++
-        } else {
-          await prisma.followUpQueue.update({
-            where: { id: item.id },
-            data: {
-              retryCount: { increment: 1 },
-              scheduledAt: new Date(Date.now() + WA_RECONNECT_BACKOFF_MS),
-              failedReason: 'WA session disconnected — retry later',
-            },
-          })
-          retried++
-        }
-        continue
-      }
-
       // Claim atomik SEBELUM kirim (at-most-once): PENDING → SENT hanya kalau
       // status masih PENDING. Dua trigger cron yang overlap tidak akan
       // mengirim WA dobel ke customer — yang kalah claim (count 0) skip.
@@ -167,25 +140,65 @@ async function handle(req: Request) {
         continue
       }
 
-      // Kirim via WA service. PENTING: sendMessage TIDAK melempar saat gagal
-      // — ia me-return { success:false, error } (wa-service down / session
-      // zombie / Baileys error). Wajib cek success; dulu semua resolve
-      // dibungkus ok:true sehingga kegagalan ditandai SENT palsu dan tidak
-      // pernah diretry (kasus prod 2026-07-16: konfirmasi order tak sampai).
-      const sendResult = await waService
-        .sendMessage(session.id, item.customerPhone, item.resolvedMessage)
-        .then((data) =>
-          data.success
-            ? { ok: true as const }
-            : {
-                ok: false as const,
-                error: data.error ?? 'wa-service gagal kirim',
-              },
-        )
-        .catch((err: unknown) => ({
-          ok: false as const,
-          error: err instanceof Error ? err.message : String(err),
-        }))
+      // Kirim via smartSend (provider-aware): Baileys free-text, Cloud API
+      // dalam window free-text, di luar window → template Meta ter-approve.
+      // NEVER throw — hasil {success, code, error}.
+      const send = await sendQueueItem(item, { source: 'AUTOMATIC' })
+      const sendResult = send.success
+        ? { ok: true as const }
+        : { ok: false as const, error: send.error ?? 'Gagal kirim', code: send.code }
+
+      // Tidak ada sesi terhubung sama sekali → tunda (mungkin lagi reconnect).
+      if (!sendResult.ok && sendResult.code === 'NO_SESSION') {
+        if (item.retryCount >= MAX_WA_RETRY) {
+          await markFailed(item.id, `WA session not connected after ${MAX_WA_RETRY} retries`)
+          failed++
+        } else {
+          await prisma.followUpQueue.update({
+            where: { id: item.id },
+            data: {
+              status: 'PENDING',
+              sentAt: null,
+              retryCount: { increment: 1 },
+              scheduledAt: new Date(Date.now() + WA_RECONNECT_BACKOFF_MS),
+              failedReason: 'WA session disconnected — retry later',
+            },
+          })
+          retried++
+        }
+        continue
+      }
+
+      // Cloud API di luar window & template belum siap / kredit habis → tunda
+      // 30 menit dengan alasan jelas. Customer opt-out marketing → SKIPPED.
+      if (!sendResult.ok && (sendResult.code === 'NO_TEMPLATE' || sendResult.code === 'INSUFFICIENT_CREDIT')) {
+        const reason =
+          sendResult.code === 'INSUFFICIENT_CREDIT'
+            ? 'Kredit pesan habis — top up untuk mengirim template Meta'
+            : 'Template Meta belum disetujui / belum disiapkan'
+        if (item.retryCount >= MAX_WA_RETRY) {
+          await markFailed(item.id, reason)
+          failed++
+        } else {
+          await prisma.followUpQueue.update({
+            where: { id: item.id },
+            data: {
+              status: 'PENDING',
+              sentAt: null,
+              retryCount: { increment: 1 },
+              scheduledAt: new Date(Date.now() + WA_RECONNECT_BACKOFF_MS),
+              failedReason: reason,
+            },
+          })
+          retried++
+        }
+        continue
+      }
+      if (!sendResult.ok && sendResult.code === 'MARKETING_OPT_OUT') {
+        await markSkipped(item.id, 'Customer opt-out pesan marketing')
+        skipped++
+        continue
+      }
 
       if (sendResult.ok) {
         // Status & sentAt sudah di-set saat claim di atas.

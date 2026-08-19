@@ -323,3 +323,44 @@ export async function getStarterPackStatus(wabaId: string, pool: StarterTemplate
     }
   })
 }
+
+/**
+ * Auto-link template Meta bawaan ke FollowUpTemplate default user yang cocok
+ * (trigger + paymentMethod + orderType + delayDays). Dipanggil setelah
+ * ensureTemplatesByPurpose supaya follow-up otomatis pakai template Meta di
+ * sesi Cloud API. Hanya mengisi yang belum punya metaTemplateId.
+ */
+export async function autoLinkStarterFollowUps(input: {
+  userId: string
+  wabaId: string
+}): Promise<{ linked: number }> {
+  const defs = STARTER_TEMPLATES.filter((d) => d.matchDefault?.length)
+  const templates = await prisma.wabaTemplate.findMany({
+    where: { wabaId: input.wabaId, purposeKey: { in: defs.map((d) => d.purposeKey) }, status: { not: 'DELETED' } },
+    select: { id: true, purposeKey: true },
+  })
+  const byPurpose = new Map(templates.map((t) => [t.purposeKey, t.id]))
+
+  let linked = 0
+  for (const def of defs) {
+    const metaTemplateId = byPurpose.get(def.purposeKey)
+    if (!metaTemplateId) continue
+    for (const match of def.matchDefault ?? []) {
+      const where: Record<string, unknown> = {
+        userId: input.userId,
+        isDefault: true,
+        trigger: match.trigger,
+        metaTemplateId: null,
+      }
+      if (match.paymentMethod !== undefined) where.paymentMethod = match.paymentMethod
+      if (match.orderType !== undefined) where.orderType = match.orderType
+      if (match.delayDays !== undefined) where.delayDays = match.delayDays
+      const r = await prisma.followUpTemplate.updateMany({
+        where: where as never,
+        data: { metaTemplateId, metaParamMap: def.metaParamMap },
+      })
+      linked += r.count
+    }
+  }
+  return { linked }
+}
