@@ -7,6 +7,8 @@
 import type { MessageStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
+import { applyRecipientStatusByMessage } from '@/lib/services/broadcast/recipient-status'
+
 import { markMarketingOptOut, reconcileFromStatus } from './billing-reconcile'
 import { relayEmit } from './realtime'
 import type { WabaChangeValue, WabaStatusUpdate } from './types'
@@ -92,6 +94,18 @@ async function processOne(
     }
   }
 
-  // Progres BroadcastRecipient (delivered/read/failed) — diisi WI-6
-  // (lib/services/broadcast/recipient-status.ts) setelah Migrasi 2.
+  // Progres BroadcastRecipient (delivered/read/failed) — hanya bila Message
+  // ini bagian broadcast Cloud API (no-op untuk yang lain).
+  if (updated.count > 0) {
+    const msg = await prisma.message.findUnique({
+      where: { externalMsgId: status.id },
+      select: { id: true, broadcastRecipientId: true },
+    })
+    if (msg?.broadcastRecipientId) {
+      await applyRecipientStatusByMessage(msg.id, kind as 'delivered' | 'read' | 'failed', {
+        code: errInfo?.code,
+        message: errInfo?.error_data?.details ?? errInfo?.title ?? errInfo?.message,
+      })
+    }
+  }
 }

@@ -142,6 +142,7 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
           creditUserId,
           creditChargedRp: expectedChargeRp,
           pricingCategory: category.toLowerCase(),
+          broadcastRecipientId: input.broadcastRecipientId ?? null,
         },
         // OTP/notif platform dari sesi admin: jangan REPIN kontak user lain.
         skipRepin: session.ownerRole === 'ADMIN' && input.purpose !== 'CS',

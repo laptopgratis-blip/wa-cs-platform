@@ -317,19 +317,12 @@ export async function deleteTemplate(templateId: string, userId: string): Promis
   }
 }
 
-// Relasi Broadcast/FollowUpTemplate baru ada di Migrasi 2 — cek dinamis
-// supaya file ini tidak perlu diubah lagi nanti.
 async function isTemplateReferenced(templateId: string): Promise<boolean> {
-  const db = prisma as unknown as Record<string, { count?: (args: unknown) => Promise<number> } | undefined>
-  const checks: Array<Promise<number>> = []
-  if (db.broadcast?.count) {
-    checks.push(db.broadcast.count({ where: { templateId } }).catch(() => 0))
-  }
-  if (db.followUpTemplate?.count) {
-    checks.push(db.followUpTemplate.count({ where: { metaTemplateId: templateId } }).catch(() => 0))
-  }
-  const counts = await Promise.all(checks)
-  return counts.some((c) => c > 0)
+  const [broadcasts, followups] = await Promise.all([
+    prisma.broadcast.count({ where: { templateId } }),
+    prisma.followUpTemplate.count({ where: { metaTemplateId: templateId } }),
+  ])
+  return broadcasts > 0 || followups > 0
 }
 
 // ── Query ──

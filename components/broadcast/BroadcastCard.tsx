@@ -3,9 +3,11 @@
 // Card per broadcast: status, progress, action.
 import type { BroadcastStatus } from '@prisma/client'
 import {
+  BadgeCheck,
   CheckCircle2,
   Clock,
   Loader2,
+  PauseCircle,
   Play,
   Send,
   XCircle,
@@ -35,9 +37,16 @@ const statusBadge: Record<
   DRAFT: { label: 'Draft', variant: 'outline' },
   SCHEDULED: { label: 'Terjadwal', variant: 'secondary' },
   SENDING: { label: 'Mengirim', variant: 'default' },
+  PAUSED: { label: 'Dijeda', variant: 'destructive' },
   COMPLETED: { label: 'Selesai', variant: 'default' },
   FAILED: { label: 'Gagal', variant: 'destructive' },
   CANCELLED: { label: 'Dibatalkan', variant: 'outline' },
+}
+
+const CATEGORY_LABEL: Record<string, string> = {
+  MARKETING: 'Marketing',
+  UTILITY: 'Utility',
+  AUTHENTICATION: 'OTP',
 }
 
 export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
@@ -45,15 +54,20 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
   const [isCancelling, setCancelling] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  const isCloud = broadcast.provider === 'CLOUD_API'
   const total = broadcast.totalTargets
-  const done = broadcast.totalSent + broadcast.totalFailed
+  const done = broadcast.totalSent + broadcast.totalFailed + (isCloud ? broadcast.totalSkipped : 0)
   const percent = total === 0 ? 0 : Math.min(100, Math.round((done / total) * 100))
   const badge = statusBadge[broadcast.status]
-  const canStart = broadcast.status === 'DRAFT' || broadcast.status === 'SCHEDULED'
+  const canStart =
+    broadcast.status === 'DRAFT' ||
+    broadcast.status === 'SCHEDULED' ||
+    (isCloud && broadcast.status === 'PAUSED')
   const canCancel =
     broadcast.status === 'DRAFT' ||
     broadcast.status === 'SCHEDULED' ||
-    broadcast.status === 'SENDING'
+    broadcast.status === 'SENDING' ||
+    broadcast.status === 'PAUSED'
 
   async function start() {
     setStarting(true)
@@ -66,7 +80,7 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
         toast.error(json.error || 'Gagal menjalankan broadcast')
         return
       }
-      toast.success('Broadcast dimulai')
+      toast.success(broadcast.status === 'PAUSED' ? 'Broadcast dilanjutkan' : 'Broadcast dimulai')
       onChanged()
     } finally {
       setStarting(false)
@@ -109,13 +123,39 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
           {broadcast.status === 'COMPLETED' && <CheckCircle2 className="size-3" />}
           {broadcast.status === 'CANCELLED' && <XCircle className="size-3" />}
           {broadcast.status === 'SCHEDULED' && <Clock className="size-3" />}
+          {broadcast.status === 'PAUSED' && <PauseCircle className="size-3" />}
           {badge.label}
         </Badge>
       </CardHeader>
       <CardContent className="space-y-3">
+        {isCloud && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <Badge variant="outline" className="gap-1 font-normal">
+              <BadgeCheck className="size-3 text-emerald-600" /> Cloud API
+            </Badge>
+            {broadcast.template && (
+              <Badge variant="secondary" className="font-normal">
+                {broadcast.template.name} · {CATEGORY_LABEL[broadcast.template.category] ?? broadcast.template.category}
+              </Badge>
+            )}
+            {(broadcast.chargedCreditRp > 0 || broadcast.estimatedCreditRp > 0) && (
+              <span className="text-muted-foreground">
+                Kredit: Rp {broadcast.chargedCreditRp.toLocaleString('id-ID')}
+                {broadcast.status !== 'COMPLETED' && broadcast.estimatedCreditRp > 0
+                  ? ` / est. Rp ${broadcast.estimatedCreditRp.toLocaleString('id-ID')}`
+                  : ''}
+              </span>
+            )}
+          </div>
+        )}
         <p className="line-clamp-2 rounded-md border bg-muted/30 p-2 text-xs text-muted-foreground">
           {broadcast.message}
         </p>
+        {broadcast.status === 'PAUSED' && broadcast.pausedReason && (
+          <p className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+            Dijeda: {broadcast.pausedReason}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-1">
           {broadcast.targetTags.map((t) => (
@@ -134,7 +174,10 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">
               {broadcast.totalSent} terkirim
+              {isCloud && broadcast.totalDelivered > 0 && ` · ${broadcast.totalDelivered} sampai`}
+              {isCloud && broadcast.totalRead > 0 && ` · ${broadcast.totalRead} dibaca`}
               {broadcast.totalFailed > 0 && ` · ${broadcast.totalFailed} gagal`}
+              {isCloud && broadcast.totalSkipped > 0 && ` · ${broadcast.totalSkipped} dilewati`}
             </span>
             <span className="font-medium">
               {done} / {total}
@@ -165,7 +208,7 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
               ) : (
                 <Play className="mr-2 size-4" />
               )}
-              {broadcast.status === 'SCHEDULED' ? 'Kirim Sekarang' : 'Mulai'}
+              {broadcast.status === 'SCHEDULED' ? 'Kirim Sekarang' : broadcast.status === 'PAUSED' ? 'Lanjutkan' : 'Mulai'}
             </Button>
           )}
           {canCancel && (

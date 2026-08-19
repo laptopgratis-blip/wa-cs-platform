@@ -46,6 +46,7 @@ export interface SaveMessageInput {
     creditUserId: string | null
     creditChargedRp: number
     pricingCategory: string | null
+    broadcastRecipientId?: string | null
   }
   /** Kontak tidak di-REPIN ke sesi pengirim (mis. OTP platform dari sesi admin). */
   skipRepin?: boolean
@@ -165,6 +166,7 @@ export async function saveMessage(
               creditUserId: input.billing.creditUserId,
               creditChargedRp: input.billing.creditChargedRp,
               pricingCategory: input.billing.pricingCategory,
+              broadcastRecipientId: input.billing.broadcastRecipientId ?? null,
             }
           : {}),
       },

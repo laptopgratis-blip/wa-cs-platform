@@ -1,11 +1,17 @@
 // Schema validasi untuk broadcast.
+// Baileys: `message` free-text wajib. Cloud API (Trek 2B): `templateId`
+// (APPROVED) + `templateParams`; `message` opsional (diisi server = render).
 import { z } from 'zod'
+
+import { templateSendParamsSchema } from '@/lib/validations/waba-template'
 
 export const broadcastCreateSchema = z
   .object({
     name: z.string().trim().min(2, 'Nama broadcast minimal 2 karakter').max(80),
     waSessionId: z.string().min(1, 'Pilih akun WhatsApp'),
-    message: z.string().trim().min(1, 'Pesan tidak boleh kosong').max(4000),
+    message: z.string().trim().max(4000).optional().default(''),
+    templateId: z.string().trim().min(1).nullable().optional(),
+    templateParams: templateSendParamsSchema.nullable().optional(),
     targetTags: z.array(z.string()).max(20).default([]),
     targetStages: z
       .array(
@@ -30,5 +36,9 @@ export const broadcastCreateSchema = z
     (v) => v.targetTags.length > 0 || v.targetStages.length > 0,
     { message: 'Pilih minimal satu tag atau stage', path: ['targetTags'] },
   )
+  .refine((v) => Boolean(v.templateId) || v.message.trim().length > 0, {
+    message: 'Pesan tidak boleh kosong',
+    path: ['message'],
+  })
 
 export type BroadcastCreateInput = z.infer<typeof broadcastCreateSchema>

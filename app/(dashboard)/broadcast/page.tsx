@@ -10,6 +10,7 @@ import type {
 } from '@/components/broadcast/types'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { BROADCAST_LIST_SELECT, serializeBroadcastRow } from '@/lib/services/broadcast/list-select'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,27 +25,12 @@ export default async function BroadcastPage() {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: {
-        id: true,
-        name: true,
-        message: true,
-        targetTags: true,
-        targetStages: true,
-        status: true,
-        scheduledAt: true,
-        startedAt: true,
-        completedAt: true,
-        totalTargets: true,
-        totalSent: true,
-        totalFailed: true,
-        createdAt: true,
-        waSession: { select: { id: true, displayName: true, phoneNumber: true } },
-      },
+      select: BROADCAST_LIST_SELECT,
     }),
     prisma.whatsappSession.findMany({
       where: { userId, isActive: true },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, displayName: true, phoneNumber: true, status: true },
+      select: { id: true, displayName: true, phoneNumber: true, status: true, provider: true, wabaId: true },
     }),
     prisma.contact.findMany({
       where: { userId },
@@ -57,20 +43,8 @@ export default async function BroadcastPage() {
   for (const c of contactsForTags) for (const t of c.tags) tagSet.add(t)
 
   const initialBroadcasts: BroadcastListItem[] = broadcasts.map((b) => ({
-    id: b.id,
-    name: b.name,
-    message: b.message,
-    targetTags: b.targetTags,
+    ...serializeBroadcastRow(b),
     targetStages: b.targetStages as PipelineStage[],
-    status: b.status,
-    scheduledAt: b.scheduledAt?.toISOString() ?? null,
-    startedAt: b.startedAt?.toISOString() ?? null,
-    completedAt: b.completedAt?.toISOString() ?? null,
-    totalTargets: b.totalTargets,
-    totalSent: b.totalSent,
-    totalFailed: b.totalFailed,
-    createdAt: b.createdAt.toISOString(),
-    waSession: b.waSession,
   }))
 
   const sessionOptions: SessionOption[] = sessions

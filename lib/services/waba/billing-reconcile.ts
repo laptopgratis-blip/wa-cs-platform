@@ -114,29 +114,22 @@ async function refundOnFailed(wamid: string): Promise<void> {
   await propagateRecipientCredit(msg.id, 0, -charged)
 }
 
-// BroadcastRecipient/Broadcast.chargedCreditRp baru ada di Migrasi 2 —
-// akses dinamis supaya file ini tidak perlu diubah lagi nanti.
+// Teruskan koreksi biaya ke BroadcastRecipient.creditRp & Broadcast.chargedCreditRp.
 async function propagateRecipientCredit(messageId: string, actual: number, delta: number): Promise<void> {
   if (delta === 0) return
-  const db = prisma as unknown as {
-    broadcastRecipient?: {
-      findFirst: (args: unknown) => Promise<{ id: string; broadcastId: string } | null>
-      update: (args: unknown) => Promise<unknown>
-    }
-    broadcast?: { update: (args: unknown) => Promise<unknown> }
-  }
-  if (!db.broadcastRecipient || !db.broadcast) return
   try {
-    const rec = await db.broadcastRecipient.findFirst({
+    const rec = await prisma.broadcastRecipient.findFirst({
       where: { messageId },
       select: { id: true, broadcastId: true },
     })
     if (!rec) return
-    await db.broadcastRecipient.update({ where: { id: rec.id }, data: { creditRp: actual } })
-    await db.broadcast.update({
-      where: { id: rec.broadcastId },
-      data: { chargedCreditRp: { increment: delta } },
-    })
+    await prisma.$transaction([
+      prisma.broadcastRecipient.update({ where: { id: rec.id }, data: { creditRp: actual } }),
+      prisma.broadcast.update({
+        where: { id: rec.broadcastId },
+        data: { chargedCreditRp: { increment: delta } },
+      }),
+    ])
   } catch (err) {
     console.error('[waba/billing-reconcile] propagasi recipient gagal:', err)
   }

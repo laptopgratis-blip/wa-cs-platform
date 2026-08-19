@@ -467,8 +467,10 @@ model WabaTemplate {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages Message[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  broadcasts        Broadcast[]
+  followUpTemplates FollowUpTemplate[]
 
   // Kunci UPSERT sync dari Meta — jangan pernah delete-all-recreate (FK).
   @@unique([wabaId, name, language])
@@ -742,10 +744,12 @@ model Message {
   billable            Boolean?
   billingReconciledAt DateTime?
   billingRefundedAt   DateTime?
+  broadcastRecipientId String? @unique
 
-  contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
-  template  WabaTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  contact            Contact             @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  waSession          WhatsappSession     @relation(fields: [waSessionId], references: [id])
+  template           WabaTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  broadcastRecipient BroadcastRecipient? @relation(fields: [broadcastRecipientId], references: [id], onDelete: SetNull)
 
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
@@ -761,9 +765,21 @@ enum BroadcastStatus {
   DRAFT
   SCHEDULED
   SENDING
+  PAUSED // Cloud API: kredit habis / template dijeda — bisa dilanjutkan
   COMPLETED
   FAILED
   CANCELLED
+}
+
+// Status per penerima broadcast Cloud API (Trek 2B).
+enum BroadcastRecipientStatus {
+  PENDING
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED // opt-out / blacklist / dibatalkan
 }
 
 model Broadcast {
@@ -771,7 +787,7 @@ model Broadcast {
   userId       String
   waSessionId  String
   name         String
-  message      String          @db.Text
+  message      String          @db.Text // Baileys: isi pesan; Cloud: teks render template (preview)
   targetTags   String[]        @default([]) // tag kontak yang dituju
   targetStages String[]        @default([]) // pipeline stage yang dituju
   status       BroadcastStatus @default(DRAFT)
@@ -783,8 +799,52 @@ model Broadcast {
   totalFailed  Int             @default(0)
   createdAt    DateTime        @default(now())
 
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+  // ── Cloud API (Trek 2B): broadcast = template Meta APPROVED, berbayar per
+  // pesan dari Kredit Pesan; worker = cron broadcast-send + BroadcastRecipient.
+  provider          WaProvider            @default(BAILEYS) // snapshot saat create
+  templateId        String?
+  templateParams    Json? // TemplateSendParams — nilai boleh memuat {nama}/{nomor}
+  category          MetaTemplateCategory?
+  estimatedCreditRp Int                   @default(0)
+  chargedCreditRp   Int                   @default(0)
+  totalDelivered    Int                   @default(0)
+  totalRead         Int                   @default(0)
+  totalSkipped      Int                   @default(0)
+  pausedReason      String?
+  lastBatchAt       DateTime? // heartbeat worker cloud
+
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession  WhatsappSession      @relation(fields: [waSessionId], references: [id])
+  template   WabaTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipients BroadcastRecipient[]
+
+  @@index([status, scheduledAt])
+}
+
+// Progres per penerima broadcast Cloud API — ganti "results JSON" yang O(n²).
+model BroadcastRecipient {
+  id            String                   @id @default(cuid())
+  broadcastId   String
+  contactId     String
+  phoneNumber   String
+  name          String?
+  status        BroadcastRecipientStatus @default(PENDING)
+  attempt       Int                      @default(0)
+  claimedAt     DateTime?
+  sentAt        DateTime?
+  externalMsgId String? // wamid
+  messageId     String?
+  errorCode     Int?
+  errorMessage  String?
+  creditRp      Int                      @default(0)
+  createdAt     DateTime                 @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  message   Message?
+
+  @@unique([broadcastId, contactId])
+  @@index([broadcastId, status])
+  @@index([messageId])
 }
 
 // ─────────────────────────────────────────
@@ -2643,6 +2703,13 @@ model FollowUpTemplate {
   scope       String  @default("GLOBAL") // GLOBAL, FORM
   orderFormId String?
 
+  // ── Cloud API (Trek 2B): template Meta yang dipakai bila sesi pengirim
+  // CLOUD_API dan window 24 jam customer tutup. metaParamMap = placeholder
+  // hulao per {{n}} (index 0 = {{1}}), mis. ["{nama}","{nama_toko}","{invoice}"].
+  metaTemplateId String?
+  metaTemplate   WabaTemplate? @relation(fields: [metaTemplateId], references: [id], onDelete: SetNull)
+  metaParamMap   Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2674,6 +2741,12 @@ model FollowUpQueue {
   customerPhone   String
 
   triggerEvent String // event yang trigger queue ini
+
+  // ── Jejak pengiriman provider-aware (Trek 2B) ──
+  waSessionId    String? // sesi yang dipakai kirim (diisi saat terkirim)
+  sentVia        String? // BAILEYS | CLOUD_TEXT | CLOUD_TEMPLATE
+  resolvedParams Json? // string[] nilai param template (sudah di-flatten)
+  externalMsgId  String?
 
   createdAt DateTime @default(now())
 
