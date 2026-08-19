@@ -40,6 +40,8 @@ model User {
   sessions                     Session[]
   tokenBalance                 TokenBalance?
   tokenTx                      TokenTransaction[]
+  messageCreditTx              MessageCreditTransaction[]
+  wabaTemplates                WabaTemplate[]
   waSessions                   WhatsappSession[]
   souls                        Soul[]
   contacts                     Contact[]
@@ -248,7 +250,51 @@ model TokenBalance {
   totalUsed      Int      @default(0)
   updatedAt      DateTime @updatedAt
 
+  // ── Kredit Pesan WA (Trek 2B, 2026-08-20) — dompet KEDUA, satuan RUPIAH ──
+  // Dipakai membayar pesan template Meta (Cloud API) di luar window 24 jam.
+  // Terpisah dari `balance` (token AI). Boleh minus maksimal ±1 pesan saat
+  // race (deduct terjadi SETELAH Meta menerima pesan, tanpa guard gte).
+  messageCreditRp        Int @default(0)
+  messageCreditPurchased Int @default(0)
+  messageCreditUsed      Int @default(0)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Kredit Pesan WA: harga per pesan per kategori template (editable admin) ──
+model MessageCreditRate {
+  id        String               @id @default(cuid())
+  category  MetaTemplateCategory @unique
+  priceRp   Int // Rp per pesan (sudah termasuk margin hulao)
+  metaUsd   Float? // info: rate card Meta (USD) untuk referensi admin
+  updatedAt DateTime             @updatedAt
+}
+
+enum MessageCreditTxType {
+  PURCHASE // top-up (Tripay/manual)
+  USAGE // potong saat pesan template diterima Meta (reference = wamid)
+  REFUND // pesan gagal / Meta tidak menagih (reference = wamid)
+  ADJUSTMENT // rekonsiliasi webhook pricing (+/−) atau koreksi admin
+  BONUS // bonus dari admin
+}
+
+model MessageCreditTransaction {
+  id          String                @id @default(cuid())
+  userId      String
+  amountRp    Int // positif = tambah, negatif = kurang
+  type        MessageCreditTxType
+  category    MetaTemplateCategory?
+  description String?
+  // wamid (USAGE/REFUND/ADJUSTMENT) | orderId/paymentId (PURCHASE/BONUS).
+  reference   String?
+  messageId   String?
+  createdAt   DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Idempoten: webhook retry / race tidak boleh memotong dua kali.
+  @@unique([userId, reference, type], name: "userId_reference_type_unique")
+  @@index([userId, createdAt])
 }
 
 enum TokenTxType {
@@ -360,6 +406,74 @@ model WhatsappSession {
 
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────
+// WABA TEMPLATE (Trek 2B, 2026-08-20) — template pesan Meta per WABA.
+// Wajib APPROVED untuk pesan business-initiated (di luar window 24 jam)
+// pada sesi CLOUD_API. Sumber kebenaran status = Meta (webhook + sync).
+// ─────────────────────────────────────────
+
+enum MetaTemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum MetaTemplateStatus {
+  DRAFT // lokal, belum disubmit ke Meta
+  PENDING // dikirim ke Meta, menunggu review
+  APPROVED
+  REJECTED
+  PAUSED // kualitas rendah — Meta menghentikan sementara
+  DISABLED
+  IN_APPEAL
+  LIMIT_EXCEEDED
+  DELETED // hilang dari Meta saat sync / dihapus user (soft — jaga FK)
+}
+
+model WabaTemplate {
+  id             String               @id @default(cuid())
+  userId         String // pemilik (denormalisasi dari sesi yang memakai WABA ini)
+  wabaId         String
+  name           String // ^[a-z0-9_]{1,512}$
+  language       String // 'id' | 'en' | 'en_US' ...
+  category       MetaTemplateCategory
+  status         MetaTemplateStatus   @default(DRAFT)
+  metaTemplateId String?              @unique // id dari Meta (global unik)
+  // Kunci semantik template bawaan hulao (starter pack / platform), mis.
+  // 'FOLLOWUP_ORDER_MASUK_COD', 'AUTH_OTP', 'INFO_GENERIC'. null = custom user.
+  purposeKey     String?
+
+  headerType         String? // 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null
+  headerText         String? // headerType TEXT (boleh 1 variabel {{1}})
+  headerTextExample  String?
+  headerMediaHandle  String? // handle Resumable Upload (contoh untuk review Meta)
+  headerMediaUrl     String? // URL publik file di storage hulao (preview + link saat kirim)
+  bodyText           String   @db.Text
+  bodyExamples       String[] @default([]) // contoh {{1}}..{{n}} (index 0 = {{1}})
+  footerText         String?
+  buttons            Json? // WabaTemplateButton[] (lib/services/waba/types.ts)
+  // Khusus AUTHENTICATION.
+  authAddSecurityRecommendation Boolean @default(true)
+  authCodeExpirationMinutes     Int?
+
+  rejectionReason    String? @db.Text
+  qualityScore       String? // GREEN | YELLOW | RED | UNKNOWN
+  componentsSnapshot Json? // komponen mentah dari Meta saat sync (template dibuat di luar hulao)
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  // Kunci UPSERT sync dari Meta — jangan pernah delete-all-recreate (FK).
+  @@unique([wabaId, name, language])
+  @@index([userId, status])
+  @@index([wabaId, purposeKey])
 }
 
 // ─────────────────────────────────────────
@@ -526,18 +640,44 @@ model Contact {
   lastInboundAt   DateTime?
   windowExpiresAt DateTime? // lastInboundAt + 24 jam
 
+  // ── Consent marketing Meta (Trek 2B) — hanya memengaruhi template MARKETING ──
+  // Diset dari webhook `user_preferences` (customer memilih "stop" di WA) atau
+  // error 131050. Tidak menyentuh isBlacklisted (CS/utility tetap boleh).
+  marketingOptOut       Boolean   @default(false)
+  marketingOptOutAt     DateTime?
+  marketingOptOutSource String? // META_USER_PREFERENCE | META_ERROR_131050 | MANUAL
+
   // Data tambahan (flexible)
   customFields Json?
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waSession     WhatsappSession @relation(fields: [waSessionId], references: [id])
-  messages      Message[]
-  orderSessions OrderSession[]
-  orders        UserOrder[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession               WhatsappSession          @relation(fields: [waSessionId], references: [id])
+  messages                Message[]
+  orderSessions           OrderSession[]
+  orders                  UserOrder[]
+  marketingPreferenceLogs MarketingPreferenceLog[]
 
   @@unique([waSessionId, phoneNumber])
   @@index([userId, pipelineStage])
   @@index([userId, lastMessageAt])
+}
+
+// Jejak perubahan preferensi marketing customer (STOP/RESUME) — audit &
+// bukti kepatuhan.
+model MarketingPreferenceLog {
+  id            String    @id @default(cuid())
+  contactId     String
+  userId        String
+  phoneNumber   String
+  action        String // STOP | RESUME
+  source        String // META_USER_PREFERENCE | META_ERROR_131050 | MANUAL
+  detail        String?
+  metaTimestamp DateTime?
+  createdAt     DateTime  @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
 }
 
 // ─────────────────────────────────────────
@@ -593,12 +733,24 @@ model Message {
   externalMsgId   String?       @unique
   createdAt       DateTime      @default(now())
 
+  // ── Jejak template & billing Kredit Pesan (Trek 2B; hanya pesan template
+  // Cloud API). creditUserId null = platform/admin (tidak ditagih).
+  templateId          String?
+  creditUserId        String?
+  creditChargedRp     Int? // nilai terakhir (setelah rekonsiliasi webhook pricing)
+  pricingCategory     String? // dari webhook statuses[].pricing.category
+  billable            Boolean?
+  billingReconciledAt DateTime?
+  billingRefundedAt   DateTime?
+
   contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
   waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+  template  WabaTemplate?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
   @@index([createdAt])
+  @@index([templateId])
 }
 
 // ─────────────────────────────────────────
@@ -652,6 +804,7 @@ enum PaymentStatus {
 enum PaymentPurpose {
   TOKEN_PURCHASE
   LP_UPGRADE
+  MESSAGE_CREDIT_PURCHASE // top-up Kredit Pesan WA (Trek 2B) — tokenAmount = Rp kredit
 }
 
 model Payment {
@@ -686,15 +839,23 @@ model Payment {
 // TOKEN PACKAGE (diset admin)
 // ─────────────────────────────────────────
 
+// Jenis paket: TOKEN (token AI, default lama) atau MESSAGE_CREDIT (Kredit
+// Pesan WA — tokenAmount diartikan sebagai Rp kredit yang diterima).
+enum TokenPackageKind {
+  TOKEN
+  MESSAGE_CREDIT
+}
+
 model TokenPackage {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   name        String // "Starter", "Popular", "Power"
-  tokenAmount Int // jumlah token
+  tokenAmount Int // jumlah token (TOKEN) | Rp kredit (MESSAGE_CREDIT)
   price       Int // harga dalam Rupiah
-  isPopular   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  isPopular   Boolean          @default(false)
+  isActive    Boolean          @default(true)
+  sortOrder   Int              @default(0)
+  kind        TokenPackageKind @default(TOKEN)
+  createdAt   DateTime         @default(now())
 
   manualPayments ManualPayment[]
 }

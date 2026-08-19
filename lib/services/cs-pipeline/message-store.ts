@@ -18,7 +18,11 @@ export interface SaveMessageInput {
   tokensUsed?: number
   /** Kalau true: sertakan 10 pesan terakhir (kronologis) untuk konteks AI. */
   withHistory?: boolean
-  source?: 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI' | 'WA_HISTORY'
+  /**
+   * Asal pesan: 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI' | 'WA_HISTORY' |
+   * 'TEMPLATE' | 'BROADCAST' | 'FOLLOWUP' | 'SYSTEM' (Trek 2B).
+   */
+  source?: string | null
   externalMsgId?: string | null
   status?: MessageStatus
   apiInputTokens?: number
@@ -32,6 +36,19 @@ export interface SaveMessageInput {
    * Baileys tidak memakai ini (tidak ada aturan window).
    */
   touchWindow?: boolean
+  /**
+   * Jejak template & Kredit Pesan (pesan template Cloud API, Trek 2B).
+   * Diisi saat create supaya webhook statuses yang datang cepat langsung
+   * menemukan creditUserId (rekonsiliasi).
+   */
+  billing?: {
+    templateId: string
+    creditUserId: string | null
+    creditChargedRp: number
+    pricingCategory: string | null
+  }
+  /** Kontak tidak di-REPIN ke sesi pengirim (mis. OTP platform dari sesi admin). */
+  skipRepin?: boolean
 }
 
 export interface SavedMessageHistoryItem {
@@ -117,7 +134,7 @@ export async function saveMessage(
       data: {
         name: input.pushName ?? undefined,
         lastMessageAt: now,
-        waSessionId: input.sessionId,
+        ...(input.skipRepin ? {} : { waSessionId: input.sessionId }),
         ...windowFields,
       },
     })
@@ -142,6 +159,14 @@ export async function saveMessage(
         externalMsgId: input.externalMsgId ?? null,
         // Absent → biarkan default schema (SENT).
         status: input.status ?? undefined,
+        ...(input.billing
+          ? {
+              templateId: input.billing.templateId,
+              creditUserId: input.billing.creditUserId,
+              creditChargedRp: input.billing.creditChargedRp,
+              pricingCategory: input.billing.pricingCategory,
+            }
+          : {}),
       },
     })
   } catch (err) {

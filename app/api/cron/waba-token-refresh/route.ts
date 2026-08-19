@@ -7,6 +7,9 @@
 //    kosong) MENGHAPUS override kita diam-diam → pesan berhenti tanpa jejak.
 // 2) Refresh token yang mendekati kedaluwarsa (long-lived ±60 hari): refresh
 //    saat sisa < 14 hari; gagal & sisa < 3 hari → sesi ERROR actionable.
+// 3) Polling status template (Trek 2B): WABA yang punya template PENDING/
+//    IN_APPEAL > 10 menit atau lastSyncedAt > 6 jam → sync dari Meta. Jaring
+//    pengaman bila webhook template (App-level) tidak sampai.
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
@@ -14,9 +17,44 @@ import { encrypt, decrypt } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
 import { refreshLongLivedToken } from '@/lib/services/waba/oauth'
 import { ensureWebhookOverride } from '@/lib/services/waba/resources'
+import { syncTemplatesFromMeta } from '@/lib/services/waba/templates-sync'
 
 const REFRESH_BEFORE_MS = 14 * 24 * 60 * 60 * 1000
 const ERROR_BEFORE_MS = 3 * 24 * 60 * 60 * 1000
+const TEMPLATE_PENDING_POLL_MS = 10 * 60 * 1000
+const TEMPLATE_STALE_SYNC_MS = 6 * 60 * 60 * 1000
+const TEMPLATE_SYNC_MAX_WABA = 20
+
+/** WABA yang perlu disinkron status templatenya (lihat catatan 3). */
+async function syncStaleTemplates(): Promise<{ wabas: number; ok: number; failed: number }> {
+  const now = Date.now()
+  const pendingSince = new Date(now - TEMPLATE_PENDING_POLL_MS)
+  const staleSince = new Date(now - TEMPLATE_STALE_SYNC_MS)
+  const rows = await prisma.wabaTemplate.findMany({
+    where: {
+      status: { notIn: ['DRAFT', 'DELETED'] },
+      OR: [
+        { status: { in: ['PENDING', 'IN_APPEAL'] }, updatedAt: { lte: pendingSince } },
+        { lastSyncedAt: null },
+        { lastSyncedAt: { lte: staleSince } },
+      ],
+    },
+    select: { wabaId: true, userId: true },
+    distinct: ['wabaId'],
+    take: TEMPLATE_SYNC_MAX_WABA,
+  })
+  let ok = 0
+  let failed = 0
+  for (const r of rows) {
+    const res = await syncTemplatesFromMeta({ wabaId: r.wabaId, userId: r.userId })
+    if (res.ok) ok += 1
+    else {
+      failed += 1
+      console.error(`[cron/waba] sync template WABA ${r.wabaId} gagal: ${res.error}`)
+    }
+  }
+  return { wabas: rows.length, ok, failed }
+}
 
 async function handle(req: Request) {
   const authErr = requireCronAuth(req)
@@ -124,11 +162,18 @@ async function handle(req: Request) {
       }
     }
 
+    // ── 3) Polling status template ──
+    const templates = await syncStaleTemplates().catch((err) => {
+      console.error('[cron/waba] polling template gagal:', err)
+      return { wabas: 0, ok: 0, failed: 1 }
+    })
+
     return NextResponse.json({
       success: true,
       data: {
         webhook: { checked: webhookChecked, repaired: webhookRepaired, failed: webhookFailed },
         token: { candidates: sessions.length, refreshed, failed },
+        templates,
       },
     })
   } catch (err) {

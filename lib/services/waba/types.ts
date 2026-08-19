@@ -119,6 +119,9 @@ export interface WabaStatusUpdate {
   timestamp?: string
   recipient_id?: string
   errors?: WabaError[]
+  /** Biaya Meta untuk pesan ini (dipakai rekonsiliasi Kredit Pesan). */
+  pricing?: WabaStatusPricing
+  conversation?: WabaStatusConversation
 }
 
 export interface WabaError {
@@ -127,3 +130,71 @@ export interface WabaError {
   message?: string
   error_data?: { details?: string }
 }
+
+// ── Trek 2B: pricing/conversation di statuses (sumber kebenaran biaya Meta) ──
+export interface WabaStatusPricing {
+  billable?: boolean
+  pricing_model?: string // 'CBP' | 'PMP'
+  category?: string // marketing | utility | authentication | authentication-international | service | referral_conversion
+  type?: string // 'regular' | 'free_customer_service' | 'free_entry_point'
+}
+
+export interface WabaStatusConversation {
+  id?: string
+  origin?: { type?: string }
+  expiration_timestamp?: string
+}
+
+// ── Trek 2B: webhook template (App-level; tidak bisa di-override per WABA) ──
+export interface WabaTemplateStatusValue {
+  event?: string // APPROVED | REJECTED | PENDING | PAUSED | DISABLED | IN_APPEAL | FLAGGED | PENDING_DELETION | DELETED | ...
+  message_template_id?: number | string
+  message_template_name?: string
+  message_template_language?: string
+  reason?: string
+  disable_info?: { disable_date?: string }
+  other_info?: { title?: string; description?: string }
+}
+
+export interface WabaTemplateQualityValue {
+  message_template_id?: number | string
+  message_template_name?: string
+  message_template_language?: string
+  previous_quality_score?: string
+  new_quality_score?: string
+}
+
+export interface WabaTemplateCategoryValue {
+  message_template_id?: number | string
+  message_template_name?: string
+  message_template_language?: string
+  previous_category?: string
+  new_category?: string
+  correct_category?: string
+}
+
+// ── Trek 2B: preferensi marketing customer (stop/resume) ──
+export interface WabaUserPreferenceItem {
+  wa_id?: string
+  detail?: string
+  category?: string // 'marketing_messages'
+  value?: 'stop' | 'resume' | string
+  timestamp?: string
+}
+
+export interface WabaUserPreferencesValue {
+  messaging_product?: string
+  metadata?: { display_phone_number?: string; phone_number_id?: string }
+  contacts?: WabaContact[]
+  user_preferences?: WabaUserPreferenceItem[]
+}
+
+// ── Trek 2B: tombol template (disimpan di WabaTemplate.buttons) ──
+export type WabaTemplateButton =
+  | { type: 'QUICK_REPLY'; text: string }
+  | { type: 'URL'; text: string; url: string; example?: string }
+  | { type: 'PHONE_NUMBER'; text: string; phone_number: string }
+  | { type: 'COPY_CODE'; example: string }
+  | { type: 'OTP'; otp_type: 'COPY_CODE'; text?: string }
+
+export type WabaTemplateButtonType = WabaTemplateButton['type']

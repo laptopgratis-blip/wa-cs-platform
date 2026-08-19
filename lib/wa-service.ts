@@ -8,6 +8,7 @@
 import type { WaProvider, WaStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { sendCloudText } from '@/lib/services/waba/send'
+import { sendCloudTemplate, type SendCloudTemplateInput } from '@/lib/services/waba/send-template'
 
 const BASE = process.env.WA_SERVICE_URL || 'http://localhost:3001'
 const SECRET = process.env.WA_SERVICE_SECRET || ''
@@ -168,6 +169,20 @@ export const waService = {
       method: 'POST',
       body: JSON.stringify({ phoneNumber, content }),
     })
+  },
+  /**
+   * Kirim pesan TEMPLATE Meta (hanya sesi CLOUD_API). Baileys tidak punya
+   * konsep template → ditolak jelas; pemanggil non-CS pakai smartSend.
+   */
+  async sendTemplate(input: SendCloudTemplateInput) {
+    if ((await resolveProvider(input.sessionId)) !== 'CLOUD_API') {
+      return {
+        success: false,
+        error: 'Template Meta hanya untuk sesi Cloud API — sesi Baileys kirim teks biasa',
+        code: 'SESSION_UNAVAILABLE' as const,
+      }
+    }
+    return sendCloudTemplate(input)
   },
   async startBroadcast(input: {
     sessionId: string

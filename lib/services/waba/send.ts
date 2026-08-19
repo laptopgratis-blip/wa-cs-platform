@@ -3,7 +3,8 @@
 // supaya dispatcher lib/wa-service.ts bisa mengembalikannya apa adanya.
 
 import { prisma } from '@/lib/prisma'
-import { decrypt } from '@/lib/crypto'
+import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
+import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
 
 // Kode error Meta yang berarti token/sesi tidak sehat → sesi di-ERROR-kan.
@@ -15,6 +16,8 @@ export interface CloudSendResult {
   success: boolean
   data?: { sessionId: string; phoneNumber: string; messageId: string | null }
   error?: string
+  /** Kode kegagalan terstruktur (UI inbox memakai WINDOW_CLOSED → tawarkan template). */
+  code?: CloudComplianceCode | 'META_ERROR' | 'TOKEN_INVALID'
 }
 
 interface CloudMessagesResponse {
@@ -31,60 +34,19 @@ export async function sendCloudText(input: {
   content: string
 }): Promise<CloudSendResult> {
   try {
-    const session = await prisma.whatsappSession.findUnique({
-      where: { id: input.sessionId },
-      select: {
-        id: true,
-        userId: true,
-        provider: true,
-        status: true,
-        phoneNumberId: true,
-        wabaTokenEnc: true,
-      },
+    // Aturan kepatuhan terpusat (sesi valid, blacklist, window 24 jam) —
+    // lib/services/waba/compliance.ts. Nomor dinormalisasi ke digit murni.
+    const check = await assertCanSendCloud({
+      sessionId: input.sessionId,
+      to: input.phoneNumber,
+      intent: { kind: 'freeform' },
     })
-    if (!session || session.provider !== 'CLOUD_API') {
-      return { success: false, error: 'Sesi Cloud API tidak ditemukan' }
-    }
-    if (!session.phoneNumberId || !session.wabaTokenEnc) {
-      return { success: false, error: 'Sesi Cloud API belum punya kredensial lengkap' }
-    }
-    // Hanya DISCONNECTED (diputus user) yang diblokir lokal. ERROR/PAUSED
-    // tetap boleh mencoba kirim — biar Meta yang jadi sumber kebenaran; kalau
-    // nomor memang belum aktif, error Meta di bawah menjelaskannya.
-    if (session.status === 'DISCONNECTED') {
-      return { success: false, error: 'Sesi Cloud API sudah diputus — hubungkan ulang' }
-    }
+    if (!check.ok) return { success: false, error: check.message, code: check.code }
+    const { session, to } = check
 
-    // Nomor tujuan dalam digit murni (format kanonik Contact.phoneNumber,
-    // sama dengan wa_id Meta).
-    const to = input.phoneNumber.replace(/\D/g, '')
-    if (!to) return { success: false, error: 'Nomor tujuan tidak valid' }
-
-    // Guard window 24 jam: free-form hanya boleh selama window aktif.
-    // Window dibuka/di-refresh oleh pesan masuk (lib/services/waba/inbound).
-    const contact = await prisma.contact.findFirst({
-      where: { userId: session.userId, phoneNumber: to },
-      select: { windowExpiresAt: true },
-    })
-    if (!contact?.windowExpiresAt || contact.windowExpiresAt < new Date()) {
-      return {
-        success: false,
-        error:
-          'Window 24 jam Meta sudah tutup untuk kontak ini — pesan free-form ' +
-          'hanya bisa dikirim dalam 24 jam sejak pesan terakhir customer. ' +
-          'Gunakan template (segera hadir) atau tunggu customer chat dulu.',
-      }
-    }
-
-    let token: string
-    try {
-      token = decrypt(session.wabaTokenEnc)
-    } catch {
-      return {
-        success: false,
-        error: 'Token WABA tidak bisa didekripsi (ENCRYPTION_KEY berubah?) — hubungkan ulang nomor',
-      }
-    }
+    const credRes = await getWabaCredentialsBySession(session.id)
+    if (!credRes.ok) return { success: false, error: credRes.error, code: 'SESSION_UNAVAILABLE' }
+    const token = credRes.creds.token
 
     const result = await graphRequest<CloudMessagesResponse>(
       `/${session.phoneNumberId}/messages`,
@@ -111,12 +73,12 @@ export async function sendCloudText(input: {
             data: { status: 'ERROR', lastError: `Token Meta ditolak: ${message}` },
           })
           .catch(() => undefined)
-        return { success: false, error: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup' }
+        return { success: false, error: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup', code: 'TOKEN_INVALID' }
       }
       if (code !== undefined && WINDOW_ERROR_CODES.has(code)) {
-        return { success: false, error: 'Meta menolak: window 24 jam sudah tutup untuk kontak ini' }
+        return { success: false, error: 'Meta menolak: window 24 jam sudah tutup untuk kontak ini', code: 'WINDOW_CLOSED' }
       }
-      return { success: false, error: `Meta menolak pesan: ${message}${code ? ` (code ${code})` : ''}` }
+      return { success: false, error: `Meta menolak pesan: ${message}${code ? ` (code ${code})` : ''}`, code: 'META_ERROR' }
     }
 
     return {
@@ -130,6 +92,6 @@ export async function sendCloudText(input: {
   } catch (err) {
     // Jaring pengaman terakhir — kontrak never-throw.
     console.error('[waba/send] gagal:', err)
-    return { success: false, error: `Gagal kirim via Cloud API: ${(err as Error).message}` }
+    return { success: false, error: `Gagal kirim via Cloud API: ${(err as Error).message}`, code: 'META_ERROR' }
   }
 }

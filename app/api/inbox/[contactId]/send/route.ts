@@ -1,7 +1,7 @@
 // POST /api/inbox/[contactId]/send
 // Body: { content: string }
 // Kirim pesan manual dari CS via wa-service, simpan ke DB sebagai HUMAN msg.
-import type { NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
@@ -64,6 +64,15 @@ export async function POST(req: Request, { params }: Params) {
       parsed.data.content,
     )
     if (!send.success) {
+      // Sesi Cloud API di luar window 24 jam Meta → 409 + code supaya UI
+      // menawarkan kirim template (SendTemplateDialog), bukan error buntu.
+      const code = (send as { code?: string }).code
+      if (code === 'WINDOW_CLOSED') {
+        return NextResponse.json(
+          { success: false, error: send.error, code: 'WINDOW_CLOSED', sessionId: sendSessionId },
+          { status: 409 },
+        )
+      }
       return jsonError(send.error || 'Gagal kirim ke WhatsApp', 502)
     }
 
