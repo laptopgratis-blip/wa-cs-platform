@@ -159,6 +159,9 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Cara Jualan', href: '/cara-jualan', icon: ShoppingBag },
       { label: 'Kontak', href: '/contacts', icon: Users },
       { label: 'Broadcast', href: '/broadcast', icon: Send },
+      // Template Meta (Trek 2B, 2026-08-20) — template pesan WhatsApp Cloud
+      // API (wajib untuk pesan di luar window 24 jam pada nomor resmi Meta).
+      { label: 'Template Meta', href: '/whatsapp/templates', icon: LayoutTemplate },
       // CS Live AI rooms (PR-0b, 2026-06-01). Avatar live shopping dengan
       // chat AI + TTS. Customer akses URL publik /live/<slug>.
       { label: 'Live Rooms', href: '/live-rooms', icon: Video },
@@ -290,6 +293,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         label: 'Token Packages',
         href: '/admin/packages',
         icon: Box,
+        roles: ['ADMIN'],
+      },
+      // Trek 2B — harga Kredit Pesan WA per kategori template Meta.
+      {
+        label: 'Kredit Pesan WA',
+        href: '/admin/message-credits',
+        icon: MessageCircle,
         roles: ['ADMIN'],
       },
       {

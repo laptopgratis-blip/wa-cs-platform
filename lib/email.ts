@@ -126,6 +126,8 @@ interface ManualPaymentEmailContext {
   packageName: string
   tokenAmount: number
   totalAmount: number
+  /** 'token' (default) | 'kredit pesan' — paket Kredit Pesan WA (Rp). */
+  unitLabel?: string
 }
 
 function defaultFrom(): string {
@@ -148,15 +150,18 @@ function formatRupiahID(n: number): string {
 export async function sendManualPaymentConfirmedEmail(ctx: ManualPaymentEmailContext) {
   const transporter = getTransporter()
   const greet = ctx.userName ? `Halo ${ctx.userName},` : 'Halo,'
+  const unit = ctx.unitLabel ?? 'token'
+  const isCredit = unit !== 'token'
+  const amountText = isCredit ? `${formatRupiahID(ctx.tokenAmount)} ${unit}` : `${formatNumberID(ctx.tokenAmount)} ${unit}`
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f1f1f;">
       <h2 style="color: #16a34a; margin-bottom: 16px;">Pembayaran Dikonfirmasi</h2>
       <p>${greet}</p>
-      <p>Pembayaran transfer manual kamu sudah diverifikasi. <strong>${formatNumberID(ctx.tokenAmount)} token</strong> dari paket
+      <p>Pembayaran transfer manual kamu sudah diverifikasi. <strong>${amountText}</strong> dari paket
         <strong>${ctx.packageName}</strong> sudah ditambahkan ke saldo kamu.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
         <tr><td style="padding: 6px 0; color: #666;">Paket</td><td style="text-align:right; font-weight:600;">${ctx.packageName}</td></tr>
-        <tr><td style="padding: 6px 0; color: #666;">Token</td><td style="text-align:right; font-weight:600;">${formatNumberID(ctx.tokenAmount)}</td></tr>
+        <tr><td style="padding: 6px 0; color: #666;">${isCredit ? 'Kredit pesan' : 'Token'}</td><td style="text-align:right; font-weight:600;">${isCredit ? formatRupiahID(ctx.tokenAmount) : formatNumberID(ctx.tokenAmount)}</td></tr>
         <tr><td style="padding: 6px 0; color: #666;">Total transfer</td><td style="text-align:right; font-weight:600;">${formatRupiahID(ctx.totalAmount)}</td></tr>
       </table>
       <p>Cek saldo kamu di halaman Billing.</p>
@@ -167,10 +172,10 @@ export async function sendManualPaymentConfirmedEmail(ctx: ManualPaymentEmailCon
   await transporter.sendMail({
     from: defaultFrom(),
     to: ctx.userEmail,
-    subject: 'Token kamu sudah ditambahkan — Hulao',
+    subject: isCredit ? 'Kredit pesan WA kamu sudah ditambahkan — Hulao' : 'Token kamu sudah ditambahkan — Hulao',
     html,
     text:
-      `${greet}\n\nPembayaran transfer manual kamu sudah diverifikasi. ${formatNumberID(ctx.tokenAmount)} token ` +
+      `${greet}\n\nPembayaran transfer manual kamu sudah diverifikasi. ${amountText} ` +
       `dari paket ${ctx.packageName} sudah ditambahkan ke saldo kamu.\n\nCek di halaman Billing.`,
   })
 }

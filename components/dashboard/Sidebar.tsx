@@ -32,6 +32,8 @@ interface SidebarProps {
   onNavigate?: () => void
   /** Saldo token user untuk card di bawah. Null = sembunyi (mis. admin). */
   tokenBalance?: number | null
+  /** Saldo Kredit Pesan WA (Rp). Null = sembunyi (tidak punya sesi Cloud API). */
+  messageCreditRp?: number | null
   /** Akses ke Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
@@ -42,6 +44,7 @@ export function Sidebar({
   className,
   onNavigate,
   tokenBalance,
+  messageCreditRp = null,
   hasOrderSystemAccess = false,
   onboardingGoal = null,
 }: SidebarProps) {
@@ -269,6 +272,42 @@ export function Sidebar({
               </Link>
             )
           })()}
+        </div>
+      )}
+
+      {/* Kredit Pesan WA (Cloud API) — hanya bila user punya nomor resmi Meta */}
+      {typeof messageCreditRp === 'number' && (
+        <div className="px-3 pb-3">
+          <Link
+            href="/billing#kredit-pesan"
+            onClick={onNavigate}
+            className={cn(
+              'block rounded-lg border p-2.5 transition-colors',
+              messageCreditRp <= 0
+                ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
+                : 'border-sky-200 bg-sky-50 hover:bg-sky-100',
+            )}
+          >
+            <p
+              className={cn(
+                'text-[10px] font-medium uppercase tracking-wider',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700',
+              )}
+            >
+              Kredit Pesan WA
+            </p>
+            <p
+              className={cn(
+                'mt-0.5 font-display text-base font-bold tabular-nums',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700',
+              )}
+            >
+              Rp {formatNumber(messageCreditRp)}
+            </p>
+            <p className={cn('text-[10px]', messageCreditRp <= 0 ? 'text-destructive/80' : 'text-sky-700/70')}>
+              {messageCreditRp <= 0 ? 'Habis — top up untuk template Meta' : 'Untuk template Meta (Cloud API)'}
+            </p>
+          </Link>
         </div>
       )}
 

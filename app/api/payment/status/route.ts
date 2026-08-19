@@ -6,6 +6,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { applyPaymentCredit } from '@/lib/billing/apply-payment-credit'
 import { getTransactionDetail } from '@/lib/tripay'
 
 export async function GET(req: Request) {
@@ -73,28 +74,14 @@ export async function GET(req: Request) {
             },
           })
 
-          // Kredit token kalau PAID — atomik dengan tier upgrade.
+          // Kredit kalau PAID — cabang by purpose (token / kredit pesan).
           if (next === 'SUCCESS') {
-            await tx.tokenBalance.upsert({
-              where: { userId: payment.userId },
-              create: {
-                userId: payment.userId,
-                balance: payment.tokenAmount,
-                totalPurchased: payment.tokenAmount,
-              },
-              update: {
-                balance: { increment: payment.tokenAmount },
-                totalPurchased: { increment: payment.tokenAmount },
-              },
-            })
-            await tx.tokenTransaction.create({
-              data: {
-                userId: payment.userId,
-                amount: payment.tokenAmount,
-                type: 'PURCHASE',
-                description: `Pembelian via Tripay (${payment.paymentMethod ?? 'unknown'})`,
-                reference: orderId,
-              },
+            await applyPaymentCredit(tx, {
+              userId: payment.userId,
+              purpose: payment.purpose,
+              amount: payment.tokenAmount,
+              reference: orderId,
+              description: `Pembelian via Tripay (${payment.paymentMethod ?? 'unknown'})`,
             })
             // Catatan 2026-07-14: top-up tidak lagi menaikkan tier kuota LP.
           }

@@ -11,6 +11,7 @@ import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishRetu
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { unitLabelForPurpose } from '@/lib/billing/apply-payment-credit'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,8 +40,13 @@ export default async function ManualCheckoutPage({
 
   if (!payment) notFound()
   if (payment.userId !== session.user.id) notFound()
-  // Halaman ini khusus pembelian token. LP upgrade pakai /checkout/manual-lp/[id].
-  if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) notFound()
+  // Halaman ini khusus paket token / kredit pesan. LP upgrade pakai /checkout/manual-lp/[id].
+  if (
+    (payment.purpose !== 'TOKEN_PURCHASE' && payment.purpose !== 'MESSAGE_CREDIT_PURCHASE') ||
+    !payment.package
+  ) {
+    notFound()
+  }
 
   const expiresAt = new Date(payment.createdAt.getTime() + TRANSFER_TTL_MS)
 
@@ -88,6 +94,7 @@ export default async function ManualCheckoutPage({
           packageName: payment.package.name,
           createdAt: payment.createdAt.toISOString(),
           expiresAt: expiresAt.toISOString(),
+          unitLabel: unitLabelForPurpose(payment.purpose),
         }}
         banks={banks.map((b) => ({
           id: b.id,

@@ -30,6 +30,8 @@ import {
 } from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
 
+type PackageKind = 'TOKEN' | 'MESSAGE_CREDIT'
+
 interface PackageRow {
   id: string
   name: string
@@ -38,6 +40,7 @@ interface PackageRow {
   isPopular: boolean
   isActive: boolean
   sortOrder: number
+  kind: PackageKind
 }
 
 export function PackagesManager() {
@@ -51,6 +54,7 @@ export function PackagesManager() {
   const [sortOrder, setSortOrder] = useState('0')
   const [isPopular, setIsPopular] = useState(false)
   const [isActive, setIsActive] = useState(true)
+  const [kind, setKind] = useState<PackageKind>('TOKEN')
   const [isSaving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<PackageRow | null>(null)
   const [isDeleting, setDeleting] = useState(false)
@@ -77,6 +81,7 @@ export function PackagesManager() {
     setSortOrder(String(rows.length))
     setIsPopular(false)
     setIsActive(true)
+    setKind('TOKEN')
     setOpen(true)
   }
   function openEdit(p: PackageRow) {
@@ -87,6 +92,7 @@ export function PackagesManager() {
     setSortOrder(String(p.sortOrder))
     setIsPopular(p.isPopular)
     setIsActive(p.isActive)
+    setKind(p.kind ?? 'TOKEN')
     setOpen(true)
   }
 
@@ -100,6 +106,7 @@ export function PackagesManager() {
         sortOrder: Number(sortOrder),
         isPopular,
         isActive,
+        kind,
       }
       const res = await fetch(
         editing ? `/api/admin/packages/${editing.id}` : '/api/admin/packages',
@@ -173,9 +180,9 @@ export function PackagesManager() {
           <TableHeader>
             <TableRow>
               <TableHead>Nama</TableHead>
-              <TableHead className="text-right">Token</TableHead>
+              <TableHead className="text-right">Token / Kredit</TableHead>
               <TableHead className="text-right">Harga</TableHead>
-              <TableHead className="text-right">Per token</TableHead>
+              <TableHead className="text-right">Per token / Harga%</TableHead>
               <TableHead className="text-right">Order</TableHead>
               <TableHead>Populer</TableHead>
               <TableHead>Aktif</TableHead>
@@ -198,17 +205,26 @@ export function PackagesManager() {
             ) : (
               rows.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {p.name}
+                    {p.kind === 'MESSAGE_CREDIT' && (
+                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
+                        Kredit Pesan WA
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatNumber(p.tokenAmount)}
+                    {p.kind === 'MESSAGE_CREDIT' ? formatRupiah(p.tokenAmount) : formatNumber(p.tokenAmount)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatRupiah(p.price)}
                   </TableCell>
                   <TableCell className="text-right text-xs text-muted-foreground">
-                    {p.tokenAmount > 0
-                      ? formatRupiah(Math.round(p.price / p.tokenAmount))
-                      : '—'}
+                    {p.kind === 'MESSAGE_CREDIT'
+                      ? `${Math.round((p.price / Math.max(p.tokenAmount, 1)) * 100)}%`
+                      : p.tokenAmount > 0
+                        ? formatRupiah(Math.round(p.price / p.tokenAmount))
+                        : '—'}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground">
                     {p.sortOrder}
@@ -261,9 +277,21 @@ export function PackagesManager() {
               <Label htmlFor="p-name">Nama</Label>
               <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="p-kind">Jenis paket</Label>
+              <select
+                id="p-kind"
+                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as PackageKind)}
+              >
+                <option value="TOKEN">Token AI</option>
+                <option value="MESSAGE_CREDIT">Kredit Pesan WA (Rp, untuk template Meta)</option>
+              </select>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="p-tok">Jumlah Token</Label>
+                <Label htmlFor="p-tok">{kind === 'MESSAGE_CREDIT' ? 'Kredit diterima (Rp)' : 'Jumlah Token'}</Label>
                 <Input
                   id="p-tok"
                   type="number"

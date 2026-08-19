@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
 import { prisma } from '@/lib/prisma'
+import { applyPaymentCredit } from '@/lib/billing/apply-payment-credit'
 import { verifySignature } from '@/lib/tripay'
 
 interface TripayCallbackPayload {
@@ -109,26 +110,13 @@ export async function POST(req: Request) {
         })
 
         if (next === 'SUCCESS') {
-          await tx.tokenBalance.upsert({
-            where: { userId: payment.userId },
-            create: {
-              userId: payment.userId,
-              balance: payment.tokenAmount,
-              totalPurchased: payment.tokenAmount,
-            },
-            update: {
-              balance: { increment: payment.tokenAmount },
-              totalPurchased: { increment: payment.tokenAmount },
-            },
-          })
-          await tx.tokenTransaction.create({
-            data: {
-              userId: payment.userId,
-              amount: payment.tokenAmount,
-              type: 'PURCHASE',
-              description: `Pembelian via Tripay (${body.payment_method ?? 'unknown'})`,
-              reference: merchantRef,
-            },
+          // Cabang by purpose: token AI vs Kredit Pesan WA (Trek 2B).
+          await applyPaymentCredit(tx, {
+            userId: payment.userId,
+            purpose: payment.purpose,
+            amount: payment.tokenAmount,
+            reference: merchantRef,
+            description: `Pembelian via Tripay (${body.payment_method ?? 'unknown'})`,
           })
           // Catatan 2026-07-14: top-up token TIDAK lagi menaikkan tier kuota
           // LP — tier murni dari subscription (lib/services/subscription.ts).

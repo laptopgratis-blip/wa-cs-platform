@@ -50,6 +50,8 @@ interface PaymentData {
   packageName: string
   createdAt: string
   expiresAt: string
+  /** 'token' (default) | 'kredit pesan' — paket Kredit Pesan WA (nilai Rp). */
+  unitLabel?: string
 }
 
 interface Props {
@@ -160,7 +162,9 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
                 Paket {payment.packageName}
               </div>
               <div className="text-xs text-warm-500">
-                {formatNumber(payment.tokenAmount)} token
+                {payment.unitLabel && payment.unitLabel !== 'token'
+                  ? `${payment.unitLabel} Rp ${formatNumber(payment.tokenAmount)}`
+                  : `${formatNumber(payment.tokenAmount)} token`}
               </div>
             </div>
             <Badge
@@ -299,7 +303,7 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
         <Card className="rounded-xl border-emerald-200 bg-emerald-50">
           <CardContent className="flex items-center gap-2 p-4 text-sm text-emerald-800">
             <CheckCircle2 className="size-4" />
-            Pembayaran sudah dikonfirmasi — token sudah masuk ke akun kamu.
+            Pembayaran sudah dikonfirmasi — {payment.unitLabel ?? 'token'} sudah masuk ke akun kamu.
           </CardContent>
         </Card>
       )}
@@ -372,6 +376,7 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
               message={buildTokenConfirmMessage({
                 packageName: payment.packageName,
                 tokenAmount: payment.tokenAmount,
+                unitLabel: payment.unitLabel,
                 userName: user.name,
                 userEmail: user.email,
                 totalAmount: payment.totalAmount,

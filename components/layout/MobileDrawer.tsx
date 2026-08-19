@@ -52,6 +52,7 @@ interface MobileDrawerProps {
   }
   /** Saldo token user — untuk card di drawer. */
   tokenBalance?: number | null
+  messageCreditRp?: number | null
   /** Akses Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
@@ -63,6 +64,7 @@ export function MobileDrawer({
   onOpenChange,
   user,
   tokenBalance,
+  messageCreditRp = null,
   hasOrderSystemAccess = false,
   onboardingGoal = null,
 }: MobileDrawerProps) {
@@ -169,6 +171,32 @@ export function MobileDrawer({
               <div className="text-xs font-medium text-primary-700">
                 Top-up →
               </div>
+            </Link>
+          </div>
+        )}
+
+        {/* Kredit Pesan WA (Cloud API) */}
+        {typeof messageCreditRp === 'number' && (
+          <div className="px-4 pb-3">
+            <Link
+              href="/billing#kredit-pesan"
+              onClick={close}
+              className={cn(
+                'flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors',
+                messageCreditRp <= 0
+                  ? 'border-destructive/40 bg-destructive/10'
+                  : 'border-sky-200 bg-sky-50 hover:bg-sky-100',
+              )}
+            >
+              <div>
+                <p className={cn('text-[11px] font-medium uppercase tracking-wider', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>
+                  Kredit Pesan WA
+                </p>
+                <p className={cn('mt-0.5 font-display text-base font-bold tabular-nums', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>
+                  Rp {formatNumber(messageCreditRp)}
+                </p>
+              </div>
+              <div className={cn('text-xs font-medium', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>Top-up →</div>
             </Link>
           </div>
         )}

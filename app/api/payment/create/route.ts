@@ -50,6 +50,9 @@ export async function POST(req: Request) {
 
     // Buat row Payment dulu — kalau Tripay gagal, status berubah jadi FAILED
     // dan order ID-nya unik (constraint) jadi aman untuk retry.
+    // Paket Kredit Pesan WA (kind MESSAGE_CREDIT) → purpose khusus supaya
+    // webhook/reconcile mengkredit dompet yang benar (Trek 2B).
+    const purpose = pkg.kind === 'MESSAGE_CREDIT' ? 'MESSAGE_CREDIT_PURCHASE' : 'TOKEN_PURCHASE'
     const payment = await prisma.payment.create({
       data: {
         userId: user.id,
@@ -58,6 +61,7 @@ export async function POST(req: Request) {
         tokenAmount: pkg.tokenAmount,
         status: 'PENDING',
         expiredAt,
+        purpose,
       },
     })
 

@@ -91,6 +91,7 @@ export async function POST(req: Request) {
         uniqueCode,
         totalAmount: pkg.price + uniqueCode,
         status: 'PENDING',
+        purpose: pkg.kind === 'MESSAGE_CREDIT' ? 'MESSAGE_CREDIT_PURCHASE' : 'TOKEN_PURCHASE',
       },
       select: {
         id: true,

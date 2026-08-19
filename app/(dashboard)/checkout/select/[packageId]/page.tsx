@@ -39,6 +39,8 @@ export default async function SelectPaymentPage({
   if (!pkg) notFound()
 
   const pricePerToken = pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
+  // Paket Kredit Pesan WA (Trek 2B): tokenAmount = Rp kredit yang diterima.
+  const isCredit = pkg.kind === 'MESSAGE_CREDIT'
 
   return (
     <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
@@ -81,13 +83,15 @@ export default async function SelectPaymentPage({
               <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
                 <Check className="size-3" strokeWidth={3} />
               </span>
-              {formatNumber(pkg.tokenAmount)} token siap pakai
+              {isCredit
+                ? `Kredit Pesan WA ${formatRupiah(pkg.tokenAmount)} (untuk template Meta di nomor Cloud API)`
+                : `${formatNumber(pkg.tokenAmount)} token siap pakai`}
             </li>
             <li className="flex items-center gap-2">
               <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
                 <Check className="size-3" strokeWidth={3} />
               </span>
-              Akses semua model AI yang aktif
+              {isCredit ? 'Dipotong per pesan sesuai kategori (utility/marketing/OTP)' : 'Akses semua model AI yang aktif'}
             </li>
             <li className="flex items-center gap-2">
               <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
@@ -101,7 +105,9 @@ export default async function SelectPaymentPage({
 
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-warm-500">
-              ≈ {formatRupiah(Math.round(pricePerToken))} per token
+              {isCredit
+                ? `Harga ${Math.round((pkg.price / Math.max(pkg.tokenAmount, 1)) * 100)}% dari nilai kredit`
+                : `≈ ${formatRupiah(Math.round(pricePerToken))} per token`}
             </span>
             <div className="text-right">
               <div className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">

@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { MessageCreditSection } from '@/components/billing/MessageCreditSection'
 import { OnboardingGoalCard } from '@/components/onboarding/OnboardingGoalCard'
 import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { authOptions } from '@/lib/auth'
@@ -40,6 +41,7 @@ import { computeValueUnits } from '@/lib/billing/value-units'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { getPricingSettings } from '@/lib/pricing-settings'
 import { prisma } from '@/lib/prisma'
+import { getMessageCreditRates } from '@/lib/services/message-credits'
 import { friendlyTokenDescription } from '@/lib/token-usage-label'
 import { cn } from '@/lib/utils'
 
@@ -116,7 +118,7 @@ export default async function BillingPage({
   ] = await Promise.all([
     prisma.tokenBalance.findUnique({ where: { userId: session.user.id } }),
     prisma.tokenPackage.findMany({
-      where: { isActive: true },
+      where: { isActive: true, kind: 'TOKEN' },
       orderBy: { sortOrder: 'asc' },
     }),
     prisma.tokenTransaction.findMany({
@@ -136,7 +138,7 @@ export default async function BillingPage({
     prisma.manualPayment.findMany({
       where: {
         userId: session.user.id,
-        purpose: 'TOKEN_PURCHASE',
+        purpose: { in: ['TOKEN_PURCHASE', 'MESSAGE_CREDIT_PURCHASE'] },
         OR: [
           { status: { in: ['PENDING', 'REJECTED'] } },
           { status: 'CONFIRMED', confirmedAt: { gte: manualSince } },
@@ -165,6 +167,33 @@ export default async function BillingPage({
   const balance = tokenBalance?.balance ?? 0
   const totalPurchased = tokenBalance?.totalPurchased ?? 0
   const totalUsed = tokenBalance?.totalUsed ?? 0
+
+  // ── Kredit Pesan WA (Trek 2B) — tampil bila user punya sesi Cloud API
+  // atau sudah pernah punya saldo/ledger kredit.
+  const [cloudSessionCount, creditTxCount] = await Promise.all([
+    prisma.whatsappSession.count({
+      where: { userId: session.user.id, provider: 'CLOUD_API', isActive: true },
+    }),
+    prisma.messageCreditTransaction.count({ where: { userId: session.user.id } }),
+  ])
+  const showMessageCredit =
+    cloudSessionCount > 0 || creditTxCount > 0 || (tokenBalance?.messageCreditRp ?? 0) !== 0
+  const [creditRates, creditPackages, creditTx] = showMessageCredit
+    ? await Promise.all([
+        getMessageCreditRates(),
+        prisma.tokenPackage.findMany({
+          where: { isActive: true, kind: 'MESSAGE_CREDIT' },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, name: true, tokenAmount: true, price: true, isPopular: true },
+        }),
+        prisma.messageCreditTransaction.findMany({
+          where: { userId: session.user.id },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, amountRp: true, type: true, category: true, description: true, createdAt: true },
+        }),
+      ])
+    : [null, [], []]
   const totalPages = Math.max(1, Math.ceil(txCount / PAGE_SIZE))
   const onboardingGoal = userMeta?.onboardingGoal as
     | 'CS_AI'
@@ -237,7 +266,9 @@ export default async function BillingPage({
                           Paket {mp.package?.name ?? '—'}
                         </span>
                         <span className="text-xs text-warm-500">
-                          ({formatNumber(mp.tokenAmount)} token)
+                          ({mp.purpose === 'MESSAGE_CREDIT_PURCHASE'
+                            ? `kredit pesan ${formatRupiah(mp.tokenAmount)}`
+                            : `${formatNumber(mp.tokenAmount)} token`})
                         </span>
                       </div>
                       <div className="text-sm text-warm-600">
@@ -284,6 +315,17 @@ export default async function BillingPage({
             })}
           </div>
         </div>
+      )}
+
+      {showMessageCredit && creditRates && (
+        <MessageCreditSection
+          balanceRp={tokenBalance?.messageCreditRp ?? 0}
+          purchasedRp={tokenBalance?.messageCreditPurchased ?? 0}
+          usedRp={tokenBalance?.messageCreditUsed ?? 0}
+          rates={creditRates}
+          packages={creditPackages}
+          transactions={creditTx}
+        />
       )}
 
       <div>

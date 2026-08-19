@@ -70,6 +70,8 @@ export default async function CheckoutPage({
   if (!payment) notFound()
   // Cegah user lain melihat order ini.
   if (payment.userId !== session.user.id) notFound()
+  // Paket Kredit Pesan WA (Trek 2B) — label unit beda (Rp kredit, bukan token).
+  const isCredit = payment.purpose === 'MESSAGE_CREDIT_PURCHASE'
 
   // Auto-tandai expired kalau lewat batas tapi masih PENDING.
   const isExpiredByTime =
@@ -103,7 +105,7 @@ export default async function CheckoutPage({
           Checkout
         </h1>
         <p className="mt-1 text-sm text-warm-500">
-          Selesaikan pembayaran untuk menambah saldo token.
+          Selesaikan pembayaran untuk menambah saldo {isCredit ? 'kredit pesan WA' : 'token'}.
         </p>
       </div>
 
@@ -153,18 +155,18 @@ export default async function CheckoutPage({
         <CardContent className="space-y-4">
           <div className="rounded-lg border border-warm-200 bg-warm-50/50 p-4">
             <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
-              Paket Token
+              {isCredit ? 'Paket Kredit Pesan WA' : 'Paket Token'}
             </div>
             <div className="mt-1 font-display text-xl font-bold text-warm-900 dark:text-warm-50">
-              {formatNumber(payment.tokenAmount)} token
+              {isCredit ? `Kredit ${formatRupiah(payment.tokenAmount)}` : `${formatNumber(payment.tokenAmount)} token`}
             </div>
           </div>
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-warm-500">Jumlah Token</span>
+              <span className="text-warm-500">{isCredit ? 'Kredit diterima' : 'Jumlah Token'}</span>
               <span className="font-medium tabular-nums">
-                {formatNumber(payment.tokenAmount)} token
+                {isCredit ? formatRupiah(payment.tokenAmount) : `${formatNumber(payment.tokenAmount)} token`}
               </span>
             </div>
             <div className="flex justify-between">
@@ -216,7 +218,7 @@ export default async function CheckoutPage({
           {/* Status messages */}
           {displayStatus === 'SUCCESS' && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              Pembayaran sukses — saldo token sudah masuk ke akun kamu.
+              Pembayaran sukses — saldo {isCredit ? 'kredit pesan' : 'token'} sudah masuk ke akun kamu.
             </div>
           )}
           {displayStatus === 'EXPIRED' && (
@@ -240,7 +242,7 @@ export default async function CheckoutPage({
       {displayStatus === 'PENDING' && (
         <p className="text-center text-xs text-warm-500">
           Setelah pembayaran selesai, halaman ini akan otomatis update status.
-          Saldo token akan langsung masuk ke akun kamu.
+          Saldo {isCredit ? 'kredit pesan' : 'token'} akan langsung masuk ke akun kamu.
         </p>
       )}
     </div>
