@@ -32,6 +32,15 @@ export default async function WhatsappPage() {
         soulId: true,
         modelId: true,
         provider: true,
+        isCoexistence: true,
+        lastError: true,
+        coexContactSyncStatus: true,
+        coexContactsImported: true,
+        coexHistorySyncStatus: true,
+        coexHistorySyncProgress: true,
+        coexMessagesImported: true,
+        coexSyncRequestedAt: true,
+        coexSyncError: true,
       },
     }),
     prisma.soul.findMany({
@@ -55,6 +64,20 @@ export default async function WhatsappPage() {
     soulId: r.soulId,
     modelId: r.modelId,
     provider: r.provider,
+    isCoexistence: r.isCoexistence,
+    lastError: r.lastError,
+    coexSync: r.isCoexistence
+      ? {
+          contact: { status: r.coexContactSyncStatus, count: r.coexContactsImported },
+          history: {
+            status: r.coexHistorySyncStatus,
+            progress: r.coexHistorySyncProgress,
+            count: r.coexMessagesImported,
+          },
+          error: r.coexSyncError,
+          requestedAt: r.coexSyncRequestedAt?.toISOString() ?? null,
+        }
+      : null,
   }))
 
   const souls: SoulOption[] = soulRows

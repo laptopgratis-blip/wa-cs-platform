@@ -128,8 +128,12 @@ export function useEmbeddedSignup(open: boolean) {
     }
     activeRef.current = true
     sessionInfoRef.current = {}
-    setResult(null)
-    void prepare()
+    // Jalankan di tick berikutnya: setState di dalam effect memicu cascading
+    // render (react-hooks/set-state-in-effect); prepare() bersifat async
+    // (fetch + load SDK), jadi penundaan satu tick tidak mengubah UX.
+    const t = window.setTimeout(() => {
+      if (activeRef.current) void prepare()
+    }, 0)
     const unsubscribe = subscribeSessionInfo((info) => {
       // Merge — nilai lama tidak ditimpa undefined (event bertahap).
       sessionInfoRef.current = {
@@ -141,6 +145,7 @@ export function useEmbeddedSignup(open: boolean) {
     })
     return () => {
       activeRef.current = false
+      window.clearTimeout(t)
       unsubscribe()
     }
   }, [open, prepare])
@@ -148,6 +153,7 @@ export function useEmbeddedSignup(open: boolean) {
   const launch = useCallback(
     async (opts: { pin?: string }): Promise<{ cancelled?: boolean }> => {
       setError(null)
+      setResult(null)
       try {
         // Pastikan config & SDK siap (mungkin preload gagal / state tua).
         let cfg = configRef.current

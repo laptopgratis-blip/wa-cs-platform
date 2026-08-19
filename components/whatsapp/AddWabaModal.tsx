@@ -96,7 +96,7 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
                 <Smartphone className="size-4" /> Direkomendasikan: nomor tetap dipakai di HP
               </p>
               <ul className="mt-1.5 space-y-1 text-xs text-emerald-900/80">
-                <li>• Di jendela Meta pilih <b>"Hubungkan Aplikasi WhatsApp Business"</b> lalu scan QR dari HP.</li>
+                <li>• Di jendela Meta pilih <b>&ldquo;Hubungkan Aplikasi WhatsApp Business&rdquo;</b> lalu scan QR dari HP.</li>
                 <li>• Chat tetap masuk ke HP; CS bisa balas dari HP maupun dari hulao — semuanya tercatat di inbox.</li>
                 <li>• Kontak & riwayat chat (≤ 6 bulan) ikut disinkronkan ke hulao.</li>
                 <li>• Syarat: nomor terpasang di <b>WhatsApp Business App</b> (bukan WhatsApp biasa) versi terbaru.</li>
@@ -105,7 +105,7 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
 
             <div className="text-xs text-muted-foreground">
               <p className="flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5" /> Alternatif: nomor baru/khusus (tidak terpasang di aplikasi WA mana pun) — pilih "Tambahkan nomor" di jendela Meta.
+                <ShieldCheck className="size-3.5" /> Alternatif: nomor baru/khusus (tidak terpasang di aplikasi WA mana pun) — pilih &ldquo;Tambahkan nomor&rdquo; di jendela Meta.
               </p>
             </div>
 

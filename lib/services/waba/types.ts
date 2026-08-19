@@ -28,6 +28,40 @@ export interface WabaChangeValue {
   errors?: WabaError[]
   /** Coexistence (smb_message_echoes): pesan yang dikirim owner dari WA Business App. */
   message_echoes?: WabaMessageEcho[]
+  /** Coexistence (history): chunk riwayat chat dari WA Business App. */
+  history?: WabaHistoryEntry[]
+  /** Coexistence (smb_app_state_sync): kontak dari WA Business App. */
+  state_sync?: WabaStateSyncItem[]
+}
+
+// ── Coexistence: sync riwayat (webhook field `history`) ──
+// Satu webhook = satu chunk; chunk_order bisa datang tidak berurutan; progress
+// 100 = selesai. phase 0 = hari 0-1, 1 = hari 1-90, 2 = hari 90-180.
+export interface WabaHistoryMessage extends WabaInboundMessage {
+  to?: string
+  /** Status pesan saat itu: DELIVERED | ERROR | PENDING | PLAYED | READ | SENT */
+  history_context?: { status?: string }
+}
+
+export interface WabaHistoryThread {
+  /** wa_id customer (digit murni). */
+  id: string
+  messages?: WabaHistoryMessage[]
+}
+
+export interface WabaHistoryEntry {
+  metadata?: { phase?: number; chunk_order?: number; progress?: number }
+  threads?: WabaHistoryThread[]
+  /** 2593109 = user menolak berbagi riwayat di HP. */
+  errors?: WabaError[]
+}
+
+// ── Coexistence: sync kontak (webhook field `smb_app_state_sync`) ──
+export interface WabaStateSyncItem {
+  type?: 'contact' | string
+  contact?: { full_name?: string; first_name?: string; phone_number?: string }
+  action?: 'add' | 'remove' | string
+  metadata?: { timestamp?: string }
 }
 
 export interface WabaMessageEcho {

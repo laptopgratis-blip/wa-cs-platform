@@ -5,12 +5,10 @@
 import { handleInboundMessages } from './inbound'
 import { handleAccountUpdate } from './account-update'
 import { handleMessageEchoes } from './echoes'
+import { handleHistory } from './history-import'
+import { handleStateSync } from './state-sync'
 import { handleStatuses } from './statuses'
 import type { WabaChangeValue, WabaWebhookPayload } from './types'
-
-// Field coexistence yang sengaja diabaikan (sync kontak/riwayat = increment
-// berikutnya). Dicatat supaya tidak dianggap event tak dikenal.
-const IGNORED_FIELDS = new Set(['history', 'smb_app_state_sync'])
 
 // CATATAN ARSITEKTUR (dok Meta "Webhooks Overrides"): account_update,
 // account_review_update, account_alerts, dan semua template webhook TIDAK
@@ -36,7 +34,13 @@ export async function processMetaWebhook(payload: WabaWebhookPayload): Promise<v
           await handleMessageEchoes(change.value)
         } else if (change.field === 'account_update') {
           await handleAccountUpdate(entry.id, change.value)
-        } else if (!IGNORED_FIELDS.has(change.field)) {
+        } else if (change.field === 'history') {
+          // Coexistence: chunk riwayat chat dari WA Business App → import.
+          await handleHistory(change.value)
+        } else if (change.field === 'smb_app_state_sync') {
+          // Coexistence: daftar kontak dari WA Business App → import.
+          await handleStateSync(change.value)
+        } else {
           console.log(`[waba/webhook-router] field ${change.field} tidak ditangani — dilewati`)
         }
       } catch (err) {

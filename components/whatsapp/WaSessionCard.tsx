@@ -15,6 +15,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { CoexSyncStatus, type CoexSyncSnapshot } from '@/components/whatsapp/CoexSyncStatus'
 import { StatusBadge } from '@/components/whatsapp/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -56,6 +58,11 @@ export interface WaSessionData {
   modelId: string | null
   // BAILEYS (QR, unofficial) atau CLOUD_API (WhatsApp Business API resmi).
   provider: 'BAILEYS' | 'CLOUD_API'
+  // Cloud API: nomor juga hidup di WA Business App di HP.
+  isCoexistence: boolean
+  lastError: string | null
+  // Status sync kontak/riwayat coexistence (null bila bukan coexistence).
+  coexSync: CoexSyncSnapshot | null
 }
 
 export interface SoulOption {
@@ -210,6 +217,7 @@ export function WaSessionCard({
   }
 
   return (
+    <TooltipProvider>
     <Card className="rounded-xl border-warm-200 shadow-sm hover-lift">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <div className="flex items-center gap-3">
@@ -277,18 +285,42 @@ export function WaSessionCard({
       <CardContent className="space-y-4 border-t pt-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <StatusBadge status={status} />
+            {status === 'ERROR' && session.lastError ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help">
+                    <StatusBadge status={status} />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">{session.lastError}</TooltipContent>
+              </Tooltip>
+            ) : (
+              <StatusBadge status={status} />
+            )}
             {isCloud && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                <BadgeCheck className="size-3" />
-                Cloud API
-              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-default items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <BadgeCheck className="size-3" />
+                    {session.isCoexistence ? 'Coexistence' : 'Cloud API'}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs">
+                  {session.isCoexistence
+                    ? 'WhatsApp Business API resmi — nomor tetap aktif di WA Business App di HP'
+                    : 'WhatsApp Business API resmi (nomor khusus Cloud API)'}
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
           <span className="text-xs text-muted-foreground">
             Ditambahkan {formatDate(session.createdAt)}
           </span>
         </div>
+
+        {isCloud && session.isCoexistence && session.coexSync && (
+          <CoexSyncStatus sessionId={session.id} initial={session.coexSync} />
+        )}
 
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -354,6 +386,7 @@ export function WaSessionCard({
         </div>
       </CardContent>
     </Card>
+    </TooltipProvider>
   )
 }
 
