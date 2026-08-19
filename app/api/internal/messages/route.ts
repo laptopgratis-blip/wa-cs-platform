@@ -9,7 +9,10 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
-import { saveMessage } from '@/lib/services/cs-pipeline/message-store'
+import {
+  isDuplicateExternalMessageError,
+  saveMessage,
+} from '@/lib/services/cs-pipeline/message-store'
 
 const bodySchema = z.object({
   sessionId: z.string().min(1),
@@ -74,6 +77,14 @@ export async function POST(req: Request) {
       },
     })
   } catch (err) {
+    // externalMsgId unique: pesan yang sama sudah tersimpan (echo/retry).
+    // 409 supaya wa-service memperlakukannya sebagai skip, bukan gagal.
+    if (isDuplicateExternalMessageError(err)) {
+      return NextResponse.json(
+        { success: false, error: 'duplicate', externalMsgId: err.externalMsgId },
+        { status: 409 },
+      )
+    }
     console.error('[POST /api/internal/messages] gagal:', err)
     return NextResponse.json(
       { success: false, error: 'internal error' },

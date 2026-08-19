@@ -2,7 +2,7 @@
 // Diekstrak dari app/api/internal/messages/route.ts supaya bisa dipanggil
 // langsung (webhook Cloud API) maupun via HTTP (wa-service Baileys).
 
-import type { MessageRole, MessageStatus } from '@prisma/client'
+import { Prisma, type MessageRole, type MessageStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 // Window customer service Meta: 24 jam sejak pesan masuk terakhir.
@@ -18,7 +18,7 @@ export interface SaveMessageInput {
   tokensUsed?: number
   /** Kalau true: sertakan 10 pesan terakhir (kronologis) untuk konteks AI. */
   withHistory?: boolean
-  source?: 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI'
+  source?: 'WA_DIRECT' | 'WEB_DASHBOARD' | 'AI' | 'WA_HISTORY'
   externalMsgId?: string | null
   status?: MessageStatus
   apiInputTokens?: number
@@ -45,6 +45,23 @@ export interface SaveMessageResult {
   contactId: string
   contact: { aiPaused: boolean; isResolved: boolean }
   history: SavedMessageHistoryItem[]
+}
+
+/**
+ * externalMsgId UNIQUE di DB — pesan dengan ID eksternal (wamid / Baileys id)
+ * yang sudah pernah disimpan ditolak Postgres (P2002). Dilempar sebagai error
+ * bertipe supaya caller bisa memperlakukannya sebagai "duplikat, skip" (webhook
+ * retry, race echo fromMe vs simpan web), bukan kegagalan.
+ */
+export class DuplicateExternalMessageError extends Error {
+  constructor(public readonly externalMsgId: string) {
+    super(`Pesan dengan externalMsgId ${externalMsgId} sudah tersimpan`)
+    this.name = 'DuplicateExternalMessageError'
+  }
+}
+
+export function isDuplicateExternalMessageError(err: unknown): err is DuplicateExternalMessageError {
+  return err instanceof DuplicateExternalMessageError
 }
 
 // Normalisasi phoneNumber sebelum lookup/create kontak supaya tidak duplikat.
@@ -106,25 +123,37 @@ export async function saveMessage(
     })
   }
 
-  const message = await prisma.message.create({
-    data: {
-      contactId: contact.id,
-      waSessionId: input.sessionId,
-      content: input.content,
-      role: input.role,
-      tokensUsed: input.tokensUsed ?? null,
-      apiInputTokens: input.apiInputTokens ?? null,
-      apiOutputTokens: input.apiOutputTokens ?? null,
-      apiCostRp: input.apiCostRp ?? null,
-      tokensCharged: input.tokensCharged ?? null,
-      revenueRp: input.revenueRp ?? null,
-      profitRp: input.profitRp ?? null,
-      source: input.source ?? null,
-      externalMsgId: input.externalMsgId ?? null,
-      // Absent → biarkan default schema (SENT).
-      status: input.status ?? undefined,
-    },
-  })
+  let message
+  try {
+    message = await prisma.message.create({
+      data: {
+        contactId: contact.id,
+        waSessionId: input.sessionId,
+        content: input.content,
+        role: input.role,
+        tokensUsed: input.tokensUsed ?? null,
+        apiInputTokens: input.apiInputTokens ?? null,
+        apiOutputTokens: input.apiOutputTokens ?? null,
+        apiCostRp: input.apiCostRp ?? null,
+        tokensCharged: input.tokensCharged ?? null,
+        revenueRp: input.revenueRp ?? null,
+        profitRp: input.profitRp ?? null,
+        source: input.source ?? null,
+        externalMsgId: input.externalMsgId ?? null,
+        // Absent → biarkan default schema (SENT).
+        status: input.status ?? undefined,
+      },
+    })
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002' &&
+      input.externalMsgId
+    ) {
+      throw new DuplicateExternalMessageError(input.externalMsgId)
+    }
+    throw err
+  }
 
   let history: SavedMessageHistoryItem[] = []
   if (input.withHistory) {

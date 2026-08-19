@@ -13,7 +13,10 @@ import { NextResponse, after } from 'next/server'
 import { getMetaConfig } from '@/lib/services/waba/config'
 import { processMetaWebhook } from '@/lib/services/waba/webhook-router'
 
-const MAX_BODY_BYTES = 1_000_000 // 1 MB — payload webhook Meta jauh di bawah ini
+// 8 MB: satu webhook `history` (sync riwayat coexistence) bisa memuat ribuan
+// pesan. Payload event biasa jauh di bawah 1 MB.
+const MAX_BODY_BYTES = 8_000_000
+const WARN_BODY_BYTES = 1_000_000
 
 function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a)
@@ -55,6 +58,9 @@ export async function POST(req: Request) {
   const rawBody = await req.text()
   if (rawBody.length > MAX_BODY_BYTES) {
     return new NextResponse('payload terlalu besar', { status: 413 })
+  }
+  if (rawBody.length > WARN_BODY_BYTES) {
+    console.warn(`[webhooks/meta] payload besar: ${rawBody.length} byte`)
   }
 
   const signature = req.headers.get('x-hub-signature-256') || ''

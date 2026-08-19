@@ -490,9 +490,11 @@ function Bubble({
   const agentLabel =
     message.source === 'WA_DIRECT'
       ? 'CS via WA'
-      : message.source === 'WEB_DASHBOARD'
-        ? 'CS via Web'
-        : 'CS'
+      : message.source === 'WA_HISTORY'
+        ? 'CS via WA (riwayat)'
+        : message.source === 'WEB_DASHBOARD'
+          ? 'CS via Web'
+          : 'CS'
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
       <div

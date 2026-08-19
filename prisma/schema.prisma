@@ -295,6 +295,17 @@ enum WaProvider {
   CLOUD_API
 }
 
+// Status sinkronisasi coexistence (kontak/riwayat dari WhatsApp Business App
+// di HP). Meta hanya mengizinkan SEKALI per onboarding, dalam 24 jam.
+enum CoexSyncStatus {
+  REQUESTED // POST smb_app_data sukses, menunggu webhook
+  IN_PROGRESS // chunk riwayat mulai masuk (progress < 100)
+  DONE
+  DECLINED // user menolak berbagi riwayat di HP (Meta 2593109)
+  SKIPPED // di luar jendela 24 jam (2593108) / tidak eligible
+  ERROR
+}
+
 model WhatsappSession {
   id          String   @id @default(cuid())
   userId      String
@@ -320,6 +331,21 @@ model WhatsappSession {
   // Error terakhir yang membuat sesi ERROR/PAUSED (Baileys menyimpan ini
   // in-memory di wa-service; sesi Cloud API butuh persist untuk UI).
   lastError          String?
+
+  // ── Coexistence & PIN (provider CLOUD_API) ──
+  // true = nomor juga hidup di WhatsApp Business App di HP (is_on_biz_app).
+  isCoexistence           Boolean         @default(false)
+  // PIN two-step nomor (jalur standar) — terenkripsi lib/crypto.ts.
+  // JANGAN pernah masuk `select` yang mengalir ke client.
+  wabaPinEnc              String?         @db.Text
+  wabaPinGenerated        Boolean         @default(false) // true = dibuat hulao (ditampilkan sekali)
+  coexContactSyncStatus   CoexSyncStatus?
+  coexHistorySyncStatus   CoexSyncStatus?
+  coexHistorySyncProgress Int             @default(0) // 0-100, monotonic max (chunk bisa out-of-order)
+  coexContactsImported    Int             @default(0)
+  coexMessagesImported    Int             @default(0)
+  coexSyncRequestedAt     DateTime?
+  coexSyncError           String?
 
   // Soul & model yang dipakai sesi ini
   soulId  String?
@@ -562,7 +588,9 @@ model Message {
   source          String?
   // ID pesan dari Baileys (msg.key.id) — dipakai untuk dedup saat event
   // messages.upsert masuk untuk pesan yang baru saja kita kirim sendiri.
-  externalMsgId   String?
+  // ID pesan eksternal: Baileys msg.key.id / Cloud API wamid. UNIQUE untuk
+  // dedup webhook retry & import riwayat (Postgres: multi-NULL aman).
+  externalMsgId   String?       @unique
   createdAt       DateTime      @default(now())
 
   contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -571,7 +599,6 @@ model Message {
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
   @@index([createdAt])
-  @@index([externalMsgId])
 }
 
 // ─────────────────────────────────────────

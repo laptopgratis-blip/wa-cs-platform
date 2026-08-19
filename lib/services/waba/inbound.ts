@@ -7,7 +7,10 @@
 
 import { prisma } from '@/lib/prisma'
 import { runCsPipeline } from '@/lib/services/cs-pipeline'
-import { saveMessage } from '@/lib/services/cs-pipeline/message-store'
+import {
+  isDuplicateExternalMessageError,
+  saveMessage,
+} from '@/lib/services/cs-pipeline/message-store'
 
 import { withContactLock } from './pipeline-lock'
 import { relayEmit } from './realtime'
@@ -46,6 +49,10 @@ export async function handleInboundMessages(
     try {
       await processOne(session.id, message, value)
     } catch (err) {
+      if (isDuplicateExternalMessageError(err)) {
+        console.log(`[waba/inbound] duplikat wamid=${message.id} (race) — di-skip`)
+        continue
+      }
       console.error(`[waba/inbound] gagal proses wamid=${message.id}:`, err)
     }
   }
@@ -60,7 +67,9 @@ async function processOne(
   if (!waId || !message.id) return
 
   // Dedup lintas proses: wamid sudah pernah disimpan → webhook retry, skip.
-  const existing = await prisma.message.findFirst({
+  // (externalMsgId unique; race yang lolos cek ini ditangkap sebagai
+  // DuplicateExternalMessageError di bawah.)
+  const existing = await prisma.message.findUnique({
     where: { externalMsgId: message.id },
     select: { id: true },
   })
@@ -72,7 +81,7 @@ async function processOne(
   const pushName =
     value.contacts?.find((c) => c.wa_id === message.from)?.profile?.name ?? null
 
-  const extracted = extractContent(message)
+  const extracted = extractInboundContent(message)
   if (!extracted) return // reaction / tipe tak didukung — paritas Baileys
 
   const emitSaved = (info: {
@@ -199,12 +208,12 @@ async function processOne(
 // ── Ekstraksi konten per tipe pesan (paritas extractText +
 // extractMediaPlaceholder di wa-manager) ──
 
-interface ExtractedContent {
+export interface ExtractedContent {
   kind: 'text' | 'placeholder'
   content: string
 }
 
-function extractContent(message: WabaInboundMessage): ExtractedContent | null {
+export function extractInboundContent(message: WabaInboundMessage): ExtractedContent | null {
   switch (message.type) {
     case 'text': {
       const body = message.text?.body?.trim()

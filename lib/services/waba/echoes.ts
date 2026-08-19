@@ -5,7 +5,10 @@
 // menjawab. Pesan yang dikirim hulao sendiri via API TIDAK di-echo Meta.
 
 import { prisma } from '@/lib/prisma'
-import { saveMessage } from '@/lib/services/cs-pipeline/message-store'
+import {
+  isDuplicateExternalMessageError,
+  saveMessage,
+} from '@/lib/services/cs-pipeline/message-store'
 
 import { relayEmit } from './realtime'
 import type { WabaChangeValue, WabaMessageEcho } from './types'
@@ -24,6 +27,7 @@ export async function handleMessageEchoes(value: WabaChangeValue): Promise<void>
     try {
       await processOne(session.id, echo)
     } catch (err) {
+      if (isDuplicateExternalMessageError(err)) continue
       console.error(`[waba/echoes] gagal proses echo wamid=${echo.id}:`, err)
     }
   }
@@ -33,8 +37,8 @@ async function processOne(sessionId: string, echo: WabaMessageEcho): Promise<voi
   const to = echo.to?.replace(/\D/g, '') ?? ''
   if (!to || !echo.id) return
 
-  // Dedup lintas retry (wamid unik).
-  const existing = await prisma.message.findFirst({
+  // Dedup lintas retry (wamid unik; race ditangkap sebagai duplicate error).
+  const existing = await prisma.message.findUnique({
     where: { externalMsgId: echo.id },
     select: { id: true },
   })

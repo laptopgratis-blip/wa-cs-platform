@@ -5,6 +5,7 @@ import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveConnectedSessionId } from '@/lib/wa-session'
 import { waService } from '@/lib/wa-service'
@@ -69,24 +70,43 @@ export async function POST(req: Request, { params }: Params) {
     // 2. Simpan ke DB sebagai AGENT/WEB_DASHBOARD. waSessionId = session yang
     // dipakai kirim (yang terhubung), supaya dedup echo fromMe (checkMessageExists
     // by externalMsgId+sessionId) cocok dan tidak menyimpan pesan ganda.
-    const message = await prisma.message.create({
-      data: {
-        contactId: contact.id,
-        waSessionId: sendSessionId,
-        content: parsed.data.content,
-        role: 'AGENT',
-        status: 'SENT',
-        source: 'WEB_DASHBOARD',
-        externalMsgId: send.data?.messageId ?? null,
-      },
-      select: {
-        id: true,
-        content: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-    })
+    const messageSelect = {
+      id: true,
+      content: true,
+      role: true,
+      status: true,
+      createdAt: true,
+    } as const
+    let message
+    try {
+      message = await prisma.message.create({
+        data: {
+          contactId: contact.id,
+          waSessionId: sendSessionId,
+          content: parsed.data.content,
+          role: 'AGENT',
+          status: 'SENT',
+          source: 'WEB_DASHBOARD',
+          externalMsgId: send.data?.messageId ?? null,
+        },
+        select: messageSelect,
+      })
+    } catch (err) {
+      // externalMsgId unique: echo fromMe (Baileys) / echo coexistence bisa
+      // menyimpan pesan yang sama lebih dulu (race). Ambil yang sudah ada —
+      // pesan memang terkirim, jangan laporkan gagal ke CS.
+      const isDup =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+      const existing =
+        isDup && send.data?.messageId
+          ? await prisma.message.findUnique({
+              where: { externalMsgId: send.data.messageId },
+              select: messageSelect,
+            })
+          : null
+      if (!existing) throw err
+      message = existing
+    }
     await prisma.contact.update({
       where: { id: contact.id },
       data: { lastMessageAt: message.createdAt },
