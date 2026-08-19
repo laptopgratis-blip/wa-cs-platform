@@ -15,12 +15,8 @@ export interface MetaConfig {
   graphVersion: string
   /** Base URL Graph API, contoh: https://graph.facebook.com/v23.0 */
   graphBaseUrl: string
-  /** Redirect OAuth Embedded Signup — halaman frontend, bukan API route. */
-  redirectUri: string
   /** Endpoint webhook publik instance ini (dipakai override per-WABA). */
   webhookUrl: string
-  /** PIN two-step untuk register nomor ke Cloud API. */
-  registerPin: string
 }
 
 /**
@@ -54,10 +50,6 @@ export function getMetaConfig(): MetaConfig {
     configId,
     graphVersion,
     graphBaseUrl: `https://graph.facebook.com/${graphVersion}`,
-    redirectUri: `${appUrl.replace(/\/$/, '')}/whatsapp/waba-callback`,
     webhookUrl: `${appUrl.replace(/\/$/, '')}/api/webhooks/meta`,
-    // PIN two-step saat register nomor ke Cloud API. Nomor baru: PIN ini
-    // DISET sebagai PIN 2FA nomor tersebut. Ganti via env di produksi.
-    registerPin: process.env.META_REGISTER_PIN || '135246',
   }
 }

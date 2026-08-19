@@ -1,10 +1,11 @@
-// Embedded Signup OAuth — pembuatan URL dialog + exchange code → token.
-// State anti-CSRF dienkripsi AES-256-GCM (lib/crypto.ts) dan berumur 10 menit.
+// Embedded Signup OAuth — state anti-CSRF + exchange code → token (jalur FB JS SDK).
+// State anti-CSRF dienkripsi AES-256-GCM (lib/crypto.ts) dan berumur 30 menit.
 
 import { decrypt, encrypt } from '@/lib/crypto'
 import { getMetaConfig } from './config'
 
-const STATE_TTL_MS = 10 * 60 * 1000
+// 30 menit: wizard Meta bisa lama (buat portofolio bisnis, verifikasi OTP nomor).
+const STATE_TTL_MS = 30 * 60 * 1000
 
 interface SignupState {
   userId: string
@@ -37,36 +38,6 @@ export function validateSignupState(rawState: string): { userId: string } | null
   }
 }
 
-/**
- * URL dialog OAuth Embedded Signup (dibuka di popup dari halaman WhatsApp).
- *
- * `extras.featureType = whatsapp_business_app_onboarding` mengaktifkan mode
- * COEXISTENCE: wizard Meta menawarkan opsi "Hubungkan Aplikasi WhatsApp
- * Business" — nomor yang masih hidup di aplikasi WA Business di HP bisa
- * terhubung ke Cloud API TANPA register/hapus akun (nomor tetap dipakai di
- * HP, CS bisa balas dari HP). Tanpa flag ini wizard hanya menawarkan jalur
- * standar yang mewajibkan nomor benar-benar bebas dari aplikasi WA.
- */
-export function buildSignupUrl(state: string): string {
-  const cfg = getMetaConfig()
-  if (!cfg.configId) {
-    throw new Error('META_CONFIG_ID kosong — buat konfigurasi Embedded Signup di Meta App dashboard')
-  }
-  const params = new URLSearchParams({
-    client_id: cfg.appId,
-    redirect_uri: cfg.redirectUri,
-    state,
-    config_id: cfg.configId,
-    response_type: 'code',
-    scope: 'whatsapp_business_management,whatsapp_business_messaging',
-    extras: JSON.stringify({
-      featureType: 'whatsapp_business_app_onboarding',
-      sessionInfoVersion: '3',
-    }),
-  })
-  return `https://www.facebook.com/${cfg.graphVersion}/dialog/oauth?${params.toString()}`
-}
-
 export interface TokenExchangeResult {
   ok: boolean
   accessToken?: string
@@ -76,10 +47,9 @@ export interface TokenExchangeResult {
 }
 
 /**
- * Tukar authorization code → access token. Code kita berasal dari REDIRECT
- * dialog OAuth (bukan FB JS SDK), jadi Meta MEWAJIBKAN redirect_uri yang
- * identik dengan yang dipakai saat membuka dialog. Retry 3× untuk error
- * jaringan.
+ * Tukar authorization code → access token. Code berasal dari FB JS SDK
+ * (FB.login dengan config_id Embedded Signup) — jalur ini TANPA redirect_uri;
+ * menyertakannya justru ditolak Meta. Retry 3× untuk error jaringan.
  */
 export async function exchangeCodeForToken(code: string): Promise<TokenExchangeResult> {
   const cfg = getMetaConfig()
@@ -88,7 +58,6 @@ export async function exchangeCodeForToken(code: string): Promise<TokenExchangeR
     new URLSearchParams({
       client_id: cfg.appId,
       client_secret: cfg.appSecret,
-      redirect_uri: cfg.redirectUri,
       code,
     }).toString()
 

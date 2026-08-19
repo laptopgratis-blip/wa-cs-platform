@@ -14,6 +14,8 @@ export interface UpsertCloudSessionInput {
   accessToken: string
   /** Kedaluwarsa token per debug_token; null = never-expire. */
   tokenExpiresAt: Date | null
+  /** true = nomor juga hidup di WhatsApp Business App di HP (is_on_biz_app). */
+  isCoexistence: boolean
 }
 
 export async function upsertCloudSession(input: UpsertCloudSessionInput) {
@@ -32,6 +34,14 @@ export async function upsertCloudSession(input: UpsertCloudSessionInput) {
     status: 'CONNECTED' as const,
     isActive: true,
     lastError: null,
+    isCoexistence: input.isCoexistence,
+    // Onboarding (ulang) = siklus sync coexistence baru; counter dibiarkan
+    // (mencerminkan data yang benar-benar ada di DB).
+    coexContactSyncStatus: null,
+    coexHistorySyncStatus: null,
+    coexHistorySyncProgress: 0,
+    coexSyncRequestedAt: null,
+    coexSyncError: null,
   }
 
   const existing = await prisma.whatsappSession.findUnique({

@@ -1,11 +1,12 @@
 'use client'
 
-// Modal "Hubungkan WhatsApp Business API (resmi)" — membuka popup Embedded
-// Signup Meta. Hasil dikirim balik oleh halaman /whatsapp/waba-callback via
-// postMessage (origin yang sama), lalu daftar sesi di-refresh.
+// Modal "Hubungkan WhatsApp Business API (resmi Meta)" — jalur FB JS SDK.
+// Default & yang dijelaskan: COEXISTENCE (nomor tetap dipakai di HP, CS bisa
+// balas dari HP, hulao membaca & membalas via Cloud API). Alternatif nomor
+// baru/khusus dipilih langsung di wizard Meta. Alur state di useEmbeddedSignup.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { BadgeCheck, Loader2, ShieldCheck, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, Loader2, Monitor, Smartphone, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+import { useEmbeddedSignup } from './useEmbeddedSignup'
+import { WabaConnectResult } from './WabaConnectResult'
 
 interface AddWabaModalProps {
   open: boolean
@@ -23,120 +29,133 @@ interface AddWabaModalProps {
   onConnected: () => void
 }
 
-type WabaPostMessage =
-  | { type: 'waba:connected'; sessionId?: string }
-  | { type: 'waba:error'; error?: string }
-
 export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalProps) {
-  const [isStarting, setStarting] = useState(false)
-  const [isWaiting, setWaiting] = useState(false)
-  const popupRef = useRef<Window | null>(null)
+  const { phase, error, result, launch, retryRegister, reset, retryPrepare } =
+    useEmbeddedSignup(open)
+  const [pin, setPin] = useState('')
 
-  // Terima hasil dari halaman callback di popup.
-  useEffect(() => {
-    if (!open) return
+  const busy = phase === 'preparing' || phase === 'meta' || phase === 'exchanging'
+  const buttonText =
+    phase === 'preparing'
+      ? 'Menyiapkan...'
+      : phase === 'meta'
+        ? 'Menunggu proses di jendela Meta...'
+        : phase === 'exchanging'
+          ? 'Menghubungkan nomor...'
+          : 'Lanjutkan dengan Meta'
 
-    function handleMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return
-      const data = event.data as WabaPostMessage
-      if (data?.type === 'waba:connected') {
-        toast.success('Nomor WhatsApp Business API berhasil terhubung!')
-        setWaiting(false)
-        onConnected()
-        onOpenChange(false)
-      } else if (data?.type === 'waba:error') {
-        toast.error(data.error || 'Gagal menghubungkan nomor')
-        setWaiting(false)
-      }
+  async function handleLaunch() {
+    if (pin && !/^\d{6}$/.test(pin)) {
+      toast.error('PIN harus 6 digit angka')
+      return
     }
+    const r = await launch({ pin: pin || undefined })
+    if (r.cancelled) toast.info('Proses dibatalkan di jendela Meta')
+  }
 
-    window.addEventListener('message', handleMessage)
-    return () => window.removeEventListener('message', handleMessage)
-  }, [open, onConnected, onOpenChange])
+  function handleDone() {
+    onConnected()
+    onOpenChange(false)
+    reset()
+    setPin('')
+  }
 
-  const startSignup = useCallback(async () => {
-    setStarting(true)
-    // Buka popup SINKRON dalam gesture klik (anti popup-blocker), isi URL
-    // setelah didapat dari server.
-    const popup = window.open(
-      '',
-      'waba-signup',
-      'width=680,height=760,menubar=no,toolbar=no',
-    )
-    popupRef.current = popup
-
-    try {
-      const res = await fetch('/api/whatsapp/waba/signup', { method: 'POST' })
-      const json = (await res.json().catch(() => null)) as {
-        success?: boolean
-        data?: { url?: string }
-        error?: string
-      } | null
-
-      if (!json?.success || !json.data?.url) {
-        popup?.close()
-        toast.error(json?.error || 'Gagal memulai proses hubungkan')
-        return
-      }
-
-      if (popup && !popup.closed) {
-        popup.location.href = json.data.url
-        setWaiting(true)
-      } else {
-        // Popup diblokir browser — fallback: buka di tab yang sama.
-        toast.info('Popup diblokir — membuka halaman Meta di tab ini')
-        window.location.href = json.data.url
-      }
-    } catch {
-      popup?.close()
-      toast.error('Tidak bisa menghubungi server')
-    } finally {
-      setStarting(false)
+  function handleOpenChange(next: boolean) {
+    // Jangan tutup di tengah proses — hasil bisa hilang (mis. PIN yang baru dibuat).
+    if (!next && busy) return
+    if (!next) {
+      if (result) onConnected()
+      reset()
+      setPin('')
     }
-  }, [])
+    onOpenChange(next)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Hubungkan WhatsApp Business API</DialogTitle>
           <DialogDescription>
-            Jalur resmi Meta (Cloud API) — tanpa scan QR, tanpa risiko banned.
-            Kamu akan login Facebook lalu memilih/membuat WhatsApp Business
-            Account di jendela popup.
+            Jalur resmi Meta (Cloud API) — tanpa scan QR, tanpa risiko banned. Kamu
+            akan login Facebook lalu memilih cara menghubungkan nomor di jendela Meta.
           </DialogDescription>
         </DialogHeader>
 
-        <ul className="space-y-2 text-sm text-muted-foreground">
-          <li className="flex items-start gap-2">
-            <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-500" />
-            Nomor terdaftar resmi di Meta atas nama bisnismu
-          </li>
-          <li className="flex items-start gap-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary-500" />
-            Stabil — tidak bergantung koneksi HP dan tidak kena putus sesi
-          </li>
-          <li className="flex items-start gap-2">
-            <Zap className="mt-0.5 size-4 shrink-0 text-primary-500" />
-            Balasan AI dalam 24 jam sejak chat customer: gratis biaya Meta
-          </li>
-        </ul>
+        {phase === 'success' && result ? (
+          <WabaConnectResult
+            result={result}
+            error={error}
+            onRetryRegister={retryRegister}
+            onDone={handleDone}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+              <p className="flex items-center gap-2 font-medium text-emerald-900">
+                <Smartphone className="size-4" /> Direkomendasikan: nomor tetap dipakai di HP
+              </p>
+              <ul className="mt-1.5 space-y-1 text-xs text-emerald-900/80">
+                <li>• Di jendela Meta pilih <b>"Hubungkan Aplikasi WhatsApp Business"</b> lalu scan QR dari HP.</li>
+                <li>• Chat tetap masuk ke HP; CS bisa balas dari HP maupun dari hulao — semuanya tercatat di inbox.</li>
+                <li>• Kontak & riwayat chat (≤ 6 bulan) ikut disinkronkan ke hulao.</li>
+                <li>• Syarat: nomor terpasang di <b>WhatsApp Business App</b> (bukan WhatsApp biasa) versi terbaru.</li>
+              </ul>
+            </div>
 
-        <Button
-          onClick={startSignup}
-          disabled={isStarting || isWaiting}
-          className="w-full bg-primary-500 text-white hover:bg-primary-600"
-        >
-          {isStarting || isWaiting ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : null}
-          {isWaiting ? 'Menunggu proses di jendela Meta...' : 'Lanjutkan dengan Meta'}
-        </Button>
+            <div className="text-xs text-muted-foreground">
+              <p className="flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5" /> Alternatif: nomor baru/khusus (tidak terpasang di aplikasi WA mana pun) — pilih "Tambahkan nomor" di jendela Meta.
+              </p>
+            </div>
 
-        <p className="text-xs text-muted-foreground">
-          Butuh: akun Facebook yang mengelola bisnis + nomor yang tidak sedang
-          dipakai aplikasi WhatsApp biasa.
-        </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="waba-pin" className="text-xs">
+                PIN verifikasi dua langkah <span className="text-muted-foreground">(opsional — hanya nomor baru/khusus yang sudah punya PIN)</span>
+              </Label>
+              <Input
+                id="waba-pin"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Kosongkan bila tidak punya — akan dibuatkan otomatis"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                disabled={busy}
+              />
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                <div className="space-y-1">
+                  <p>{error}</p>
+                  {phase === 'error' && (
+                    <button
+                      type="button"
+                      className="underline underline-offset-2"
+                      onClick={() => void retryPrepare()}
+                    >
+                      Coba lagi
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <Button
+              onClick={handleLaunch}
+              disabled={busy}
+              className="w-full bg-primary-500 text-white hover:bg-primary-600"
+            >
+              {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+              {buttonText}
+            </Button>
+
+            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Monitor className="size-3" /> Disarankan dari laptop/desktop; izinkan popup untuk situs ini.
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

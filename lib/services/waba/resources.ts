@@ -151,38 +151,67 @@ export async function subscribeAppToWaba(
 
 // Nomor masih terpasang di akun WhatsApp lain (aplikasi WA di HP).
 const NUMBER_STILL_ATTACHED_SUBCODE = 2388001
+// Two-step verification PIN salah / terlalu banyak percobaan.
+const PIN_MISMATCH_CODE = 133005
+const PIN_RATE_LIMIT_CODES = new Set([133008, 133009])
+
+export type RegisterFailReason =
+  | 'PIN_MISMATCH'
+  | 'PIN_RATE_LIMIT'
+  | 'NUMBER_STILL_ATTACHED'
+  | 'OTHER'
+
+export type RegisterResult =
+  | { ok: true }
+  | { ok: false; reason: RegisterFailReason; error: string }
 
 /**
- * Register nomor ke infrastruktur Cloud API — WAJIB setelah Embedded Signup.
- * Tanpa ini status nomor tetap PENDING dan Meta membuang semua pesan masuk
- * (ES hanya menambahkan nomor ke WABA, TIDAK meregistrasinya — pelajaran
- * dari kasus nyata; asumsi kirimchat bahwa ES otomatis register itu salah).
- * Untuk nomor tanpa 2FA sebelumnya, PIN ini DISET sebagai PIN barunya.
+ * Register nomor ke infrastruktur Cloud API — WAJIB untuk jalur STANDAR
+ * (nomor baru/khusus). Tanpa ini status nomor tetap PENDING dan Meta membuang
+ * pesan masuk. JANGAN dipanggil untuk nomor coexistence (is_on_biz_app) —
+ * ditolak 2388001 padahal nomor sehat. Untuk nomor tanpa 2FA sebelumnya, PIN
+ * ini DISET sebagai PIN two-step nomor tersebut.
  */
 export async function registerPhoneNumber(
   phoneNumberId: string,
   userToken: string,
-): Promise<{ ok: boolean; numberStillAttached?: boolean; error?: string }> {
-  const cfg = getMetaConfig()
+  pin: string,
+): Promise<RegisterResult> {
   const res = await graphRequest<{ success?: boolean }>(`/${phoneNumberId}/register`, {
     method: 'POST',
     token: userToken,
-    body: { messaging_product: 'whatsapp', pin: cfg.registerPin },
+    body: { messaging_product: 'whatsapp', pin },
   })
-  if (!res.ok) {
-    if (res.error.subcode === NUMBER_STILL_ATTACHED_SUBCODE) {
-      return {
-        ok: false,
-        numberStillAttached: true,
-        error:
-          'Nomor masih aktif di aplikasi WhatsApp Business di HP. Hubungkan ulang dan ' +
-          'pilih "Hubungkan Aplikasi WhatsApp Business" (nomor tetap bisa dipakai di HP), ' +
-          'atau hapus akun WA di HP dulu (Pengaturan → Akun → Hapus akun) lalu ulangi.',
-      }
+  if (res.ok) return { ok: true }
+
+  const { code, subcode, message } = res.error
+  if (subcode === NUMBER_STILL_ATTACHED_SUBCODE) {
+    return {
+      ok: false,
+      reason: 'NUMBER_STILL_ATTACHED',
+      error:
+        'Nomor masih aktif di aplikasi WhatsApp Business di HP. Hubungkan ulang dan ' +
+        'pilih "Hubungkan Aplikasi WhatsApp Business" (nomor tetap bisa dipakai di HP), ' +
+        'atau hapus akun WA di HP dulu (Pengaturan → Akun → Hapus akun) lalu ulangi.',
     }
-    return { ok: false, error: `Register nomor gagal: ${res.error.message}` }
   }
-  return { ok: true }
+  if (code === PIN_MISMATCH_CODE) {
+    return {
+      ok: false,
+      reason: 'PIN_MISMATCH',
+      error:
+        'PIN two-step salah — nomor ini sudah punya PIN verifikasi dua langkah. ' +
+        'Masukkan PIN yang benar, atau reset PIN lewat WhatsApp Manager lalu coba lagi.',
+    }
+  }
+  if (code !== undefined && PIN_RATE_LIMIT_CODES.has(code)) {
+    return {
+      ok: false,
+      reason: 'PIN_RATE_LIMIT',
+      error: 'Terlalu banyak percobaan PIN — tunggu beberapa menit lalu coba lagi.',
+    }
+  }
+  return { ok: false, reason: 'OTHER', error: `Register nomor gagal: ${message}` }
 }
 
 /**

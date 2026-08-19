@@ -1,10 +1,13 @@
 // POST /api/whatsapp/waba/signup
-// Mulai Embedded Signup: buat state anti-CSRF + URL dialog OAuth Meta.
-// Frontend membuka URL ini di popup.
+// Mulai Embedded Signup (jalur FB JS SDK): buat state anti-CSRF dan kirim
+// konfigurasi yang dibutuhkan client untuk FB.init + FB.login. App ID &
+// Config ID Embedded Signup bukan rahasia (dipakai di browser), tapi diambil
+// dari server supaya satu sumber kebenaran (env) tanpa NEXT_PUBLIC_*.
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
-import { buildSignupUrl, createSignupState } from '@/lib/services/waba/oauth'
+import { getMetaConfig } from '@/lib/services/waba/config'
+import { createSignupState } from '@/lib/services/waba/oauth'
 
 export async function POST() {
   let session
@@ -15,9 +18,20 @@ export async function POST() {
   }
 
   try {
+    const cfg = getMetaConfig()
+    if (!cfg.configId) {
+      return jsonError(
+        'META_CONFIG_ID kosong — buat konfigurasi Embedded Signup di Meta App dashboard',
+        503,
+      )
+    }
     const state = createSignupState(session.user.id)
-    const url = buildSignupUrl(state)
-    return jsonOk({ url })
+    return jsonOk({
+      appId: cfg.appId,
+      configId: cfg.configId,
+      graphVersion: cfg.graphVersion,
+      state,
+    })
   } catch (err) {
     console.error('[POST /api/whatsapp/waba/signup] gagal:', err)
     return jsonError(
