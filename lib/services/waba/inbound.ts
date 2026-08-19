@@ -30,12 +30,15 @@ export async function handleInboundMessages(
     )
     return
   }
-  // PAUSED (token habis) tetap menerima pesan ke inbox — paritas Baileys;
-  // AI reply digate oleh pre-flight token di pipeline, bukan di sini.
-  if (session.status !== 'CONNECTED' && session.status !== 'PAUSED') {
-    console.log(
-      `[waba/inbound] sesi ${session.id} berstatus ${session.status} — pesan diabaikan`,
-    )
+  // Terima pesan ke inbox selama sesi aktif dan bukan DISCONNECTED (user
+  // sengaja memutus). PAUSED (token habis) dan ERROR (mis. register gagal /
+  // token perlu refresh) TETAP menerima — kalau webhook masih mengirim, berarti
+  // Meta menganggap nomor hidup; membuang pesan customer di sini membuat sesi
+  // 'mati total tanpa jalur pulih'. AI reply digate terpisah oleh pipeline
+  // (pre-flight token, soul/model). Paritas kirimchat: inbound tidak pernah
+  // digate status koneksi.
+  if (session.status === 'DISCONNECTED') {
+    console.log(`[waba/inbound] sesi ${session.id} DISCONNECTED — pesan diabaikan`)
     return
   }
 

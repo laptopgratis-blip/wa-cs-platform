@@ -75,8 +75,14 @@ export async function POST(req: Request) {
       return jsonError(discovery.error, 400)
     }
 
-    // Increment 1: ambil nomor pertama WABA. Multi-nomor per WABA menyusul.
-    const phone = discovery.waba.phoneNumbers[0]
+    // Pilih nomor: prioritas nomor coexistence (is_on_biz_app) → nomor yang
+    // sudah CONNECTED → nomor pertama. Bukan [0] buta: WABA bisa punya lebih
+    // dari satu nomor dan yang baru di-onboard tidak selalu di indeks 0.
+    const phones = discovery.waba.phoneNumbers
+    const phone =
+      phones.find((p) => p.is_on_biz_app) ??
+      phones.find((p) => p.status === 'CONNECTED') ??
+      phones[0]
     const created = await upsertCloudSession({
       userId: session.user.id,
       wabaId: discovery.waba.wabaId,
@@ -87,44 +93,42 @@ export async function POST(req: Request) {
       expiresInSeconds: exchange.expiresIn,
     })
 
-    // Register nomor ke Cloud API HANYA kalau belum aktif. Nomor hasil
-    // coexistence (Hubungkan Aplikasi WhatsApp Business) atau yang sudah
-    // dipakai platform lain di WABA yang sama sudah CONNECTED — register
-    // ulang justru ditolak (2388001) padahal nomor sehat. Nomor PENDING
-    // (jalur standar) wajib register, kalau tidak Meta membuang pesan masuk.
-    if (phone.status !== 'CONNECTED') {
+    // Register nomor ke Cloud API HANYA untuk jalur standar yang belum aktif.
+    // Nomor coexistence (is_on_biz_app: hidup di WA Business App di HP) dan
+    // nomor yang sudah CONNECTED tidak boleh diregister ulang — Meta menolak
+    // (2388001) padahal nomor sehat. Ini mengikuti dokumentasi Meta & pola
+    // kirimchat (deteksi via is_on_biz_app, bukan tebakan dari status).
+    const isCoexistence = phone.is_on_biz_app === true
+    const needsRegister = !isCoexistence && phone.status !== 'CONNECTED'
+    let registerWarning: string | undefined
+    if (needsRegister) {
       const reg = await registerPhoneNumber(phone.id, exchange.accessToken)
       if (!reg.ok) {
         console.error('[waba/exchange] register nomor gagal:', reg.error)
-        await prisma.whatsappSession.update({
-          where: { id: created.id },
-          data: { status: 'ERROR', lastError: reg.error ?? 'Register nomor gagal' },
-        })
-        return jsonOk({
-          sessionId: created.id,
-          phoneNumber: created.phoneNumber,
-          displayName: created.displayName,
-          warning: reg.error,
-        })
+        registerWarning = reg.error ?? 'Register nomor gagal'
       }
     }
 
-    // Tanpa subscribe, Meta tidak mengirim webhook — tapi kegagalan di sini
-    // bisa di-retry, jadi jangan gagalkan koneksi: tandai ERROR + lastError.
+    // Subscribe webhook SELALU dijalankan — meski register gagal. Kalau tidak,
+    // sesi mati total tanpa jalur pulih (pesan dibuang, tidak ada retry).
+    // Override per-WABA memastikan event masuk ke hulao, bukan platform lain
+    // di Meta App yang sama.
     const sub = await subscribeAppToWaba(discovery.waba.wabaId, exchange.accessToken)
-    if (!sub.ok) {
+    if (!sub.ok) console.error('[waba/exchange] subscribe webhook gagal:', sub.error)
+
+    if (registerWarning || !sub.ok) {
+      const lastError = registerWarning
+        ? registerWarning
+        : `Webhook belum aktif — subscribe app gagal: ${sub.error}`
       await prisma.whatsappSession.update({
         where: { id: created.id },
-        data: {
-          status: 'ERROR',
-          lastError: `Webhook belum aktif — subscribe app gagal: ${sub.error}`,
-        },
+        data: { status: 'ERROR', lastError },
       })
       return jsonOk({
         sessionId: created.id,
         phoneNumber: created.phoneNumber,
         displayName: created.displayName,
-        warning: `Nomor terhubung tapi subscribe webhook gagal: ${sub.error}`,
+        warning: lastError,
       })
     }
 

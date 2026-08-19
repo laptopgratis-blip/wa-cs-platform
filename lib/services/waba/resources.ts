@@ -10,6 +10,10 @@ export interface WabaPhoneNumber {
   verified_name?: string
   quality_rating?: string
   status?: string
+  /** true = nomor juga hidup di aplikasi WA Business di HP (coexistence). */
+  is_on_biz_app?: boolean
+  /** CLOUD_API | ON_PREMISE | NOT_APPLICABLE */
+  platform_type?: string
 }
 
 export interface DiscoveredWaba {
@@ -61,7 +65,7 @@ export async function discoverWaba(input: {
       token: input.userToken,
     }),
     graphRequest<{ data?: WabaPhoneNumber[] }>(
-      `/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,status`,
+      `/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,status,is_on_biz_app,platform_type`,
       { token: input.userToken },
     ),
   ])
@@ -145,4 +149,27 @@ export async function registerPhoneNumber(
     return { ok: false, error: `Register nomor gagal: ${res.error.message}` }
   }
   return { ok: true }
+}
+
+/**
+ * Pastikan override webhook per-WABA masih menunjuk ke hulao. Pada Meta App
+ * yang dipakai bersama platform lain, POST subscribed_apps ber-body kosong
+ * dari platform itu (onboarding ulang / cron re-subscribe) MENGHAPUS override
+ * kita secara diam-diam → pesan berhenti masuk tanpa jejak. Dipanggil sebelum
+ * pipeline butuh webhook (mis. cron) dan bisa dipanggil idempoten.
+ */
+export async function ensureWebhookOverride(
+  wabaId: string,
+  userToken: string,
+): Promise<{ ok: boolean; repaired: boolean; error?: string }> {
+  const cfg = getMetaConfig()
+  const cur = await graphRequest<{ data?: { override_callback_uri?: string }[] }>(
+    `/${wabaId}/subscribed_apps`,
+    { token: userToken },
+  )
+  if (!cur.ok) return { ok: false, repaired: false, error: cur.error.message }
+  const mine = cur.data.data?.find((d) => d.override_callback_uri === cfg.webhookUrl)
+  if (mine) return { ok: true, repaired: false }
+  const sub = await subscribeAppToWaba(wabaId, userToken)
+  return { ok: sub.ok, repaired: sub.ok, error: sub.error }
 }

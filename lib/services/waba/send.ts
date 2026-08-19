@@ -48,8 +48,11 @@ export async function sendCloudText(input: {
     if (!session.phoneNumberId || !session.wabaTokenEnc) {
       return { success: false, error: 'Sesi Cloud API belum punya kredensial lengkap' }
     }
-    if (session.status !== 'CONNECTED') {
-      return { success: false, error: `Sesi Cloud API berstatus ${session.status}` }
+    // Hanya DISCONNECTED (diputus user) yang diblokir lokal. ERROR/PAUSED
+    // tetap boleh mencoba kirim — biar Meta yang jadi sumber kebenaran; kalau
+    // nomor memang belum aktif, error Meta di bawah menjelaskannya.
+    if (session.status === 'DISCONNECTED') {
+      return { success: false, error: 'Sesi Cloud API sudah diputus — hubungkan ulang' }
     }
 
     // Nomor tujuan dalam digit murni (format kanonik Contact.phoneNumber,
