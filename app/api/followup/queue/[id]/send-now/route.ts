@@ -31,15 +31,31 @@ export async function POST(_req: Request, { params }: Params) {
       },
     })
     if (blacklisted) {
-      await prisma.followUpQueue.update({
-        where: { id },
+      await prisma.followUpQueue.updateMany({
+        where: { id, status: 'PENDING' },
         data: { status: 'SKIPPED', failedReason: 'Customer in blacklist' },
       })
       return jsonError('Customer ada di blacklist', 400)
     }
 
+    // Claim atomik SEBELUM kirim — cron followup-send memproses item due
+    // dengan claim yang sama; tanpa ini klik "Kirim sekarang" yang overlap
+    // dengan run cron mengirim WA dobel + memotong kredit dobel (wamid beda).
+    const claim = await prisma.followUpQueue.updateMany({
+      where: { id, status: 'PENDING' },
+      data: { status: 'SENT', sentAt: new Date() },
+    })
+    if (claim.count === 0) {
+      return jsonError('Item sedang/baru saja diproses — muat ulang daftar', 409)
+    }
+
     const send = await sendQueueItem(item, { source: 'MANUAL' })
     if (!send.success) {
+      // Lepas claim supaya bisa dikirim ulang (manual atau cron).
+      await prisma.followUpQueue.updateMany({
+        where: { id, status: 'SENT' },
+        data: { status: 'PENDING', sentAt: null, failedReason: send.error ?? 'Gagal kirim' },
+      })
       await prisma.followUpLog.create({
         data: {
           userId: session.user.id,
@@ -57,10 +73,7 @@ export async function POST(_req: Request, { params }: Params) {
       return jsonError(`Gagal kirim: ${send.error}`, 500)
     }
 
-    await prisma.followUpQueue.update({
-      where: { id },
-      data: { status: 'SENT', sentAt: new Date() },
-    })
+    // Status & sentAt sudah di-set saat claim di atas.
     await prisma.followUpLog.create({
       data: {
         userId: session.user.id,

@@ -30,6 +30,10 @@ const PAUSE_CODES = new Set([
   'TEMPLATE_PAUSED',
   'TEMPLATE_NOT_APPROVED',
   'TEMPLATE_WABA_MISMATCH',
+  // Param tidak cocok bersifat DETERMINISTIK untuk semua penerima
+  // (templateParams disimpan sekali di Broadcast; template bisa diedit di
+  // antara create dan start) — tanpa pause, seluruh penerima habis FAILED.
+  'TEMPLATE_PARAM_MISMATCH',
   'PAYMENT_REQUIRED',
   'TOKEN_INVALID',
   'SESSION_UNAVAILABLE',

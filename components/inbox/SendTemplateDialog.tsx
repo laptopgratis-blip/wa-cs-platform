@@ -56,7 +56,7 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
           const first = json.data.templates[0]
           if (first) {
             setTemplateId(first.id)
-            setParams(prefill(first, contactName))
+            setParams(emptyParamsFor(first))
           }
         })
         .finally(() => {
@@ -69,14 +69,9 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
     }
   }, [open, sessionId, contactName])
 
-  function prefill(t: WabaTemplateDto, name: string | null): TemplateSendParamsDto {
-    const p = emptyParamsFor(t)
-    // Heuristik: variabel pertama biasanya nama — isi otomatis bila ada.
-    if (p.body.length > 0 && name && /nama|name/i.test(t.bodyExamples[0] ?? '') === false) {
-      p.body[0] = name
-    }
-    return p
-  }
+  // Tidak ada auto-prefill nama: heuristik "variabel pertama = nama" salah
+  // untuk template yang {{1}}-nya invoice/kode OTP — CS yang percaya prefill
+  // bisa mengirim isi salah. Chip "Nama kontak" tersedia untuk sisip 1 klik.
 
   async function send() {
     if (!template) return
@@ -141,7 +136,7 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
                   onValueChange={(v) => {
                     setTemplateId(v)
                     const t = templates.find((x) => x.id === v)
-                    if (t) setParams(prefill(t, contactName))
+                    if (t) setParams(emptyParamsFor(t))
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger>
