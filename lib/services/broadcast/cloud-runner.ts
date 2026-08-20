@@ -113,7 +113,7 @@ export async function runCloudBroadcastBatch(
     for (const rec of pending) {
       // Re-cek status broadcast tiap beberapa item (cancel/pause dari UI) +
       // heartbeat lastBatchAt supaya cron tidak memulai batch paralel.
-      if (result.processed % 10 === 0 && result.processed > 0) {
+      if (result.processed % 5 === 0 && result.processed > 0) {
         const cur = await prisma.broadcast.findUnique({ where: { id: broadcastId }, select: { status: true } })
         if (cur?.status === 'CANCELLED') {
           await skipRemaining(broadcastId)
@@ -145,27 +145,31 @@ export async function runCloudBroadcastBatch(
 
       if (sendRes.success) {
         result.sent += 1
-        await prisma.$transaction([
-          prisma.broadcastRecipient.update({
-            where: { id: rec.id },
-            data: {
-              status: 'SENT',
-              sentAt: new Date(),
-              externalMsgId: sendRes.data?.messageId ?? null,
-              messageId: sendRes.data?.messageDbId ?? null,
-              creditRp: sendRes.data?.chargedRp ?? 0,
-              errorCode: null,
-              errorMessage: null,
-            },
-          }),
-          prisma.broadcast.update({
+        // Guard status SENDING: cancel (skipRemaining) yang menang race saat
+        // kirim in-flight sudah menandai SKIPPED — jangan timpa & jangan
+        // dobel hitung. Webhook delivered/read juga bisa sudah menaikkan
+        // status via recipient-status (guard asal SENT di sana).
+        const marked = await prisma.broadcastRecipient.updateMany({
+          where: { id: rec.id, status: 'SENDING' },
+          data: {
+            status: 'SENT',
+            sentAt: new Date(),
+            externalMsgId: sendRes.data?.messageId ?? null,
+            messageId: sendRes.data?.messageDbId ?? null,
+            creditRp: sendRes.data?.chargedRp ?? 0,
+            errorCode: null,
+            errorMessage: null,
+          },
+        })
+        if (marked.count > 0) {
+          await prisma.broadcast.update({
             where: { id: broadcastId },
             data: {
               totalSent: { increment: 1 },
               chargedCreditRp: { increment: sendRes.data?.chargedRp ?? 0 },
             },
-          }),
-        ])
+          })
+        }
         if (delayMs > 0) await sleep(delayMs)
         continue
       }

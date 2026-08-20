@@ -3,7 +3,7 @@
 // Message/Broadcast/FollowUpTemplate). Template yang hilang dari Meta
 // setelah paging lengkap → status DELETED (soft).
 
-import type { MetaTemplateCategory, MetaTemplateStatus, Prisma } from '@prisma/client'
+import { Prisma, type MetaTemplateCategory, type MetaTemplateStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 import { getWabaCredentialsByWaba } from './credentials'
@@ -94,12 +94,15 @@ export async function syncTemplatesFromMeta(input: {
 
     for (const row of res.data) {
       if (!row?.id || !row.name) continue
+      // Tandai TERLIHAT dulu — template kategori tak dikenal (legacy / enum
+      // baru Meta) di-skip dari upsert tapi TIDAK boleh dianggap hilang
+      // (blok DELETED di bawah memakai seenIds).
+      seenIds.add(String(row.id))
       const category = mapMetaCategory(row.category)
-      if (!category) continue // kategori tak dikenal (mis. legacy) — lewati
+      if (!category) continue // kategori tak dikenal — lewati upsert
       const language = row.language ?? 'id'
       const status = mapMetaStatus(row.status)
       const parsed = parseMetaComponents(row.components)
-      seenIds.add(String(row.id))
 
       const common = {
         category,
@@ -133,7 +136,12 @@ export async function syncTemplatesFromMeta(input: {
             bodyText: parsed.bodyText,
             bodyExamples: parsed.bodyExamples,
             footerText: parsed.footerText,
-            buttons: (parsed.buttons ?? undefined) as Prisma.InputJsonValue | undefined,
+            // Tombol dihapus di Meta → kolom lokal HARUS dikosongkan (DbNull),
+            // bukan dilewati — tombol hantu membuat send kirim komponen button
+            // yang tidak ada di Meta → error 132000.
+            buttons: parsed.buttons
+              ? (parsed.buttons as unknown as Prisma.InputJsonValue)
+              : Prisma.DbNull,
             authAddSecurityRecommendation: parsed.authAddSecurityRecommendation,
             authCodeExpirationMinutes: parsed.authCodeExpirationMinutes,
           },

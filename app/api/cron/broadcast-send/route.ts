@@ -13,9 +13,11 @@ import { startBroadcast } from '@/lib/services/broadcast/start'
 const MAX_SCHEDULED = 10
 const MAX_SENDING = 5
 const MAX_PER_RUN = 120
-// Broadcast SENDING cloud yang heartbeat-nya masih sangat baru sedang
-// diproses run lain (after() dari /send atau cron sebelumnya) — lewati.
-const ACTIVE_HEARTBEAT_MS = 20 * 1000
+// Broadcast SENDING cloud yang heartbeat-nya masih baru sedang diproses run
+// lain (after() dari /send atau cron sebelumnya) — lewati. Worker menyegarkan
+// heartbeat tiap 5 item; 90 dtk memberi ruang untuk backoff rate-limit tanpa
+// memicu worker paralel (klaim per-recipient tetap atomik sebagai lapis kedua).
+const ACTIVE_HEARTBEAT_MS = 90 * 1000
 
 async function handle(req: Request) {
   const authErr = requireCronAuth(req)

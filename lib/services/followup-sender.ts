@@ -68,8 +68,27 @@ export async function ensureResolvedParams(item: QueueItemForSend): Promise<stri
 
 export async function sendQueueItem(
   item: QueueItemForSend,
-  _opts: { source: 'AUTOMATIC' | 'MANUAL' },
+  // Konteks pemanggil (cron vs manual) — disimpan di signature untuk logging
+  // future; belum dipakai.
+  opts: { source: 'AUTOMATIC' | 'MANUAL' },
 ): Promise<SmartSendResult> {
+  void opts
+  try {
+    return await sendQueueItemInner(item)
+  } catch (err) {
+    // NEVER throw — cron sudah claim PENDING→SENT sebelum memanggil; throw di
+    // sini membuat status SENT palsu permanen tanpa pesan terkirim.
+    console.error('[followup-sender] sendQueueItem gagal:', err)
+    return {
+      success: false,
+      code: 'META_ERROR',
+      error: `Gagal kirim follow-up: ${(err as Error).message}`,
+      attempts: [],
+    }
+  }
+}
+
+async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResult> {
   const candidates = await listSenderCandidates({
     userId: item.userId,
     preferContactPhone: item.customerPhone,

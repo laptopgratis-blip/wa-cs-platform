@@ -176,8 +176,18 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
         messageId: messageDbId,
         description: `Template ${template.name} (${input.purpose.toLowerCase()})`,
       })
-      if (ch.ok) chargedRp = expectedChargeRp
-      else console.error('[waba/send-template] charge kredit gagal:', ch.error)
+      if (ch.ok) {
+        chargedRp = expectedChargeRp
+      } else {
+        console.error('[waba/send-template] charge kredit gagal:', ch.error)
+        // Ledger tidak terpotong → nolkan jejak di Message supaya rekonsiliasi/
+        // refund tidak mengkredit uang yang tidak pernah dipotong.
+        if (messageDbId) {
+          await prisma.message
+            .updateMany({ where: { id: messageDbId }, data: { creditChargedRp: 0 } })
+            .catch(() => undefined)
+        }
+      }
     }
 
     if (REALTIME_PURPOSES.includes(input.purpose) && contactId) {

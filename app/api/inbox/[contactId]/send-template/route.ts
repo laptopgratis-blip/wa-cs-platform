@@ -49,8 +49,23 @@ export async function POST(req: Request, { params }: Params) {
     if (!template) return jsonError('Template tidak ditemukan', 404)
 
     // Sesi Cloud yang memakai WABA template ini: prefer sesi kontak, lalu
-    // sesi CONNECTED terbaru di WABA yang sama.
-    let sendSessionId = parsed.data.sessionId ?? null
+    // sesi CONNECTED terbaru di WABA yang sama. sessionId dari body WAJIB
+    // divalidasi kepemilikan + WABA-nya — tanpa ini user bisa menumpang sesi
+    // (dan kredit) user lain (IDOR).
+    let sendSessionId: string | null = null
+    if (parsed.data.sessionId) {
+      const owned = await prisma.whatsappSession.findFirst({
+        where: {
+          id: parsed.data.sessionId,
+          userId: session.user.id,
+          provider: 'CLOUD_API',
+          wabaId: template.wabaId,
+        },
+        select: { id: true },
+      })
+      if (!owned) return jsonError('Sesi pengirim tidak valid', 403)
+      sendSessionId = owned.id
+    }
     if (!sendSessionId) {
       const pinned = await prisma.whatsappSession.findFirst({
         where: { id: contact.waSessionId, userId: session.user.id, provider: 'CLOUD_API', wabaId: template.wabaId, status: { not: 'DISCONNECTED' } },

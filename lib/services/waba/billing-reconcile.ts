@@ -33,6 +33,7 @@ const BILLING_SELECT = {
   creditChargedRp: true,
   billingReconciledAt: true,
   billingRefundedAt: true,
+  broadcastRecipientId: true,
   template: { select: { category: true } },
 } as const
 
@@ -72,26 +73,38 @@ export async function reconcileFromStatus(status: WabaStatusUpdate): Promise<voi
   })
   if (claimed.count === 0) return
 
-  if (delta < 0) {
-    await refundMessageCredit({
-      userId: msg.creditUserId,
-      amountRp: -delta,
-      reference: status.id,
-      category: category ?? msg.template?.category ?? null,
-      messageId: msg.id,
-      description: billable ? 'Koreksi biaya Meta (lebih murah)' : 'Meta tidak menagih pesan ini',
-    })
-  } else if (delta > 0) {
-    await adjustMessageCredit({
+  if (delta !== 0) {
+    // Koreksi dua arah lewat ADJUSTMENT (reference wamid) — type REFUND
+    // dicadangkan KHUSUS refund pesan gagal, supaya unique
+    // (userId, wamid, type) tidak menabrak antara koreksi pricing dan
+    // refund `failed` untuk wamid yang sama.
+    const adj = await adjustMessageCredit({
       userId: msg.creditUserId,
       deltaRp: -delta,
       reference: status.id,
       category: category ?? msg.template?.category ?? null,
       messageId: msg.id,
-      description: 'Koreksi biaya Meta (kategori/harga berbeda)',
+      description:
+        delta < 0
+          ? billable
+            ? 'Koreksi biaya Meta (lebih murah)'
+            : 'Meta tidak menagih pesan ini'
+          : 'Koreksi biaya Meta (kategori/harga berbeda)',
     })
+    if (!adj.ok) {
+      // Ledger gagal ditulis → lepas klaim supaya webhook retry berikutnya
+      // mengulang rekonsiliasi (jangan sampai koreksi uang hilang permanen).
+      await prisma.message
+        .updateMany({
+          where: { id: msg.id },
+          data: { billingReconciledAt: null, creditChargedRp: charged },
+        })
+        .catch(() => undefined)
+      console.error(`[waba/billing-reconcile] ledger gagal wamid=${status.id} — klaim dilepas`)
+      return
+    }
   }
-  await propagateRecipientCredit(msg.id, actual, delta)
+  await propagateRecipientCredit(msg.broadcastRecipientId, actual, delta)
 }
 
 async function refundOnFailed(wamid: string): Promise<void> {
@@ -103,7 +116,7 @@ async function refundOnFailed(wamid: string): Promise<void> {
     data: { billingRefundedAt: new Date(), creditChargedRp: 0, billable: false },
   })
   if (claimed.count === 0 || charged <= 0) return
-  await refundMessageCredit({
+  const r = await refundMessageCredit({
     userId: msg.creditUserId,
     amountRp: charged,
     reference: wamid,
@@ -111,15 +124,32 @@ async function refundOnFailed(wamid: string): Promise<void> {
     messageId: msg.id,
     description: 'Refund — pesan gagal terkirim',
   })
-  await propagateRecipientCredit(msg.id, 0, -charged)
+  if (!r.ok) {
+    // Ledger gagal → lepas klaim supaya retry webhook mengulang refund.
+    await prisma.message
+      .updateMany({
+        where: { id: msg.id },
+        data: { billingRefundedAt: null, creditChargedRp: charged },
+      })
+      .catch(() => undefined)
+    console.error(`[waba/billing-reconcile] refund gagal wamid=${wamid} — klaim dilepas`)
+    return
+  }
+  await propagateRecipientCredit(msg.broadcastRecipientId, 0, -charged)
 }
 
 // Teruskan koreksi biaya ke BroadcastRecipient.creditRp & Broadcast.chargedCreditRp.
-async function propagateRecipientCredit(messageId: string, actual: number, delta: number): Promise<void> {
-  if (delta === 0) return
+// Pakai Message.broadcastRecipientId (bukan cari by recipient.messageId) —
+// recipient.messageId baru ditulis worker SETELAH kirim, webhook bisa lebih dulu.
+async function propagateRecipientCredit(
+  recipientId: string | null,
+  actual: number,
+  delta: number,
+): Promise<void> {
+  if (delta === 0 || !recipientId) return
   try {
-    const rec = await prisma.broadcastRecipient.findFirst({
-      where: { messageId },
+    const rec = await prisma.broadcastRecipient.findUnique({
+      where: { id: recipientId },
       select: { id: true, broadcastId: true },
     })
     if (!rec) return

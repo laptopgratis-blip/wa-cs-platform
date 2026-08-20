@@ -32,10 +32,39 @@ export async function startBroadcast(
     return { ok: false, error: `Broadcast tidak bisa dijalankan dari status ${broadcast.status}` }
   }
 
-  if (broadcast.provider === 'CLOUD_API' || broadcast.waSession.provider === 'CLOUD_API') {
-    return startCloudBroadcast(broadcast)
+  // Klaim atomik: user klik "Mulai" & cron SCHEDULED-due bisa overlap — yang
+  // kalah klaim berhenti di sini, bukan menimpa broadcast yang sedang jalan
+  // (dulu: start dobel Baileys bisa menandai FAILED padahal terkirim).
+  const claimed = await prisma.broadcast.updateMany({
+    where: { id: broadcast.id, status: broadcast.status },
+    data: { status: 'SENDING', startedAt: broadcast.startedAt ?? new Date() },
+    // status di-set final oleh cabang provider di bawah; SENDING sementara
+    // ini mencegah pemroses kedua lolos guard status di atas.
+  })
+  if (claimed.count === 0) {
+    return { ok: false, error: 'Broadcast sedang diproses oleh permintaan lain' }
   }
-  return startBaileysBroadcast(broadcast)
+  const revert = async (status: 'DRAFT' | 'SCHEDULED' | 'PAUSED', reason?: string) => {
+    await prisma.broadcast
+      .updateMany({
+        where: { id: broadcast.id, status: 'SENDING' },
+        data: { status, ...(reason ? { pausedReason: reason.slice(0, 500) } : {}) },
+      })
+      .catch(() => undefined)
+  }
+  const revertStatus = resumable ? 'PAUSED' : (broadcast.status as 'DRAFT' | 'SCHEDULED')
+
+  try {
+    if (broadcast.provider === 'CLOUD_API' || broadcast.waSession.provider === 'CLOUD_API') {
+      const r = await startCloudBroadcast(broadcast)
+      if (!r.ok) await revert(revertStatus === 'SCHEDULED' ? 'PAUSED' : revertStatus, r.error)
+      return r
+    }
+    return startBaileysBroadcast(broadcast)
+  } catch (err) {
+    await revert(revertStatus)
+    throw err
+  }
 }
 
 type LoadedBroadcast = NonNullable<Awaited<ReturnType<typeof loadForStart>>>

@@ -141,45 +141,54 @@ export async function saveMessage(
     })
   }
 
+  const messageData = {
+    contactId: contact.id,
+    waSessionId: input.sessionId,
+    content: input.content,
+    role: input.role,
+    tokensUsed: input.tokensUsed ?? null,
+    apiInputTokens: input.apiInputTokens ?? null,
+    apiOutputTokens: input.apiOutputTokens ?? null,
+    apiCostRp: input.apiCostRp ?? null,
+    tokensCharged: input.tokensCharged ?? null,
+    revenueRp: input.revenueRp ?? null,
+    profitRp: input.profitRp ?? null,
+    source: input.source ?? null,
+    externalMsgId: input.externalMsgId ?? null,
+    // Absent → biarkan default schema (SENT).
+    status: input.status ?? undefined,
+    ...(input.billing
+      ? {
+          templateId: input.billing.templateId,
+          creditUserId: input.billing.creditUserId,
+          creditChargedRp: input.billing.creditChargedRp,
+          pricingCategory: input.billing.pricingCategory,
+          broadcastRecipientId: input.billing.broadcastRecipientId ?? null,
+        }
+      : {}),
+  }
+
   let message
   try {
-    message = await prisma.message.create({
-      data: {
-        contactId: contact.id,
-        waSessionId: input.sessionId,
-        content: input.content,
-        role: input.role,
-        tokensUsed: input.tokensUsed ?? null,
-        apiInputTokens: input.apiInputTokens ?? null,
-        apiOutputTokens: input.apiOutputTokens ?? null,
-        apiCostRp: input.apiCostRp ?? null,
-        tokensCharged: input.tokensCharged ?? null,
-        revenueRp: input.revenueRp ?? null,
-        profitRp: input.profitRp ?? null,
-        source: input.source ?? null,
-        externalMsgId: input.externalMsgId ?? null,
-        // Absent → biarkan default schema (SENT).
-        status: input.status ?? undefined,
-        ...(input.billing
-          ? {
-              templateId: input.billing.templateId,
-              creditUserId: input.billing.creditUserId,
-              creditChargedRp: input.billing.creditChargedRp,
-              pricingCategory: input.billing.pricingCategory,
-              broadcastRecipientId: input.billing.broadcastRecipientId ?? null,
-            }
-          : {}),
-      },
-    })
+    message = await prisma.message.create({ data: messageData })
   } catch (err) {
-    if (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2002' &&
-      input.externalMsgId
-    ) {
+    const isP2002 = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+    const target = isP2002 ? String((err as Prisma.PrismaClientKnownRequestError).meta?.target ?? '') : ''
+    // Kirim-ulang broadcast (klaim basi: worker mati SETELAH Meta menerima
+    // pesan pertama) menabrak unique broadcastRecipientId — Message LAMA
+    // masih memegang link. Pindahkan link ke pesan terbaru (wamid baru =
+    // yang dilacak webhook) lalu coba sekali lagi.
+    if (isP2002 && target.includes('broadcastRecipientId') && input.billing?.broadcastRecipientId) {
+      await prisma.message.updateMany({
+        where: { broadcastRecipientId: input.billing.broadcastRecipientId },
+        data: { broadcastRecipientId: null },
+      })
+      message = await prisma.message.create({ data: messageData })
+    } else if (isP2002 && input.externalMsgId) {
       throw new DuplicateExternalMessageError(input.externalMsgId)
+    } else {
+      throw err
     }
-    throw err
   }
 
   let history: SavedMessageHistoryItem[] = []

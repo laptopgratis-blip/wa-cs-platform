@@ -194,6 +194,21 @@ export async function submitTemplate(templateId: string, userId: string): Promis
 }
 
 async function resubmitViaEdit(tpl: WabaTemplate): Promise<TemplateOpResult> {
+  // Template hasil sync ber-header media tidak punya headerMediaHandle (sync
+  // hanya mengisi URL contoh) — buildTemplateComponents akan MELEWATKAN
+  // komponen HEADER dan Meta mengganti seluruh components → header hilang
+  // permanen tanpa peringatan. Blokir sampai user unggah ulang media.
+  if (tpl.headerType && tpl.headerType !== 'TEXT' && !tpl.headerMediaHandle) {
+    return {
+      ok: false,
+      error:
+        `Template ini ber-header ${tpl.headerType} tapi file contohnya tidak tersimpan di hulao ` +
+        '(dibuat di luar hulao). Edit template dan unggah ulang file contoh sebelum submit ulang.',
+    }
+  }
+  const v = validateTemplateDraft(tpl as unknown as TemplateDraftInput)
+  if (!v.ok) return { ok: false, error: v.errors.join('; '), warnings: v.warnings }
+
   const credRes = await getWabaCredentialsByWaba(tpl.wabaId, tpl.userId)
   if (!credRes.ok) return { ok: false, error: credRes.error }
   const res = await graphRequest<{ success?: boolean }>(`/${tpl.metaTemplateId}`, {

@@ -239,6 +239,15 @@ export function buildSendComponents(tpl: TemplateLike, params: TemplateSendParam
   } else if (headerType && headerType !== 'TEXT') {
     const link = params.header && params.header.type !== 'text' ? params.header.value : tpl.headerMediaUrl
     if (!link) throw new TemplateParamError(`Header ${headerType} butuh URL media publik`)
+    // headerMediaUrl hasil sync dari Meta = URL CDN contoh (lookaside/scontent)
+    // yang BERUMUR PENDEK — dipakai kirim akan gagal diunduh Meta setelah
+    // kedaluwarsa (wamid tetap keluar → kredit terpotong, pesan failed).
+    if (!params.header && /(^|\.)(lookaside\.fbsbx\.com|fbcdn\.net|scontent[.-])/i.test(link)) {
+      throw new TemplateParamError(
+        `Header ${headerType} template ini memakai URL contoh Meta yang kedaluwarsa — ` +
+          'sertakan URL media publik saat kirim, atau unggah ulang media di editor template',
+      )
+    }
     const kind = headerType.toLowerCase() as 'image' | 'video' | 'document'
     const media: Record<string, unknown> = { link }
     if (kind === 'document' && params.header?.filename) media.filename = params.header.filename

@@ -1,56 +1,82 @@
 // Progres per-penerima broadcast Cloud API dari webhook statuses
-// (delivered/read/failed). Guard progresi via updateMany + increment atomik
-// di Broadcast — tanpa JSON results O(n²).
+// (delivered/read/failed). Semua transisi + counter ATOMIK (updateMany
+// dengan guard status asal) — webhook bisa dobel/paralel/out-of-order.
 
-import type { BroadcastRecipientStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
-const OVERWRITABLE: Record<'delivered' | 'read' | 'failed', BroadcastRecipientStatus[]> = {
-  delivered: ['SENT'],
-  read: ['SENT', 'DELIVERED'],
-  failed: ['SENT', 'DELIVERED'],
-}
-const TARGET: Record<'delivered' | 'read' | 'failed', BroadcastRecipientStatus> = {
-  delivered: 'DELIVERED',
-  read: 'READ',
-  failed: 'FAILED',
-}
-
 /**
- * Terapkan status webhook ke BroadcastRecipient yang terkait Message ini.
- * No-op bila Message bukan bagian broadcast. Never-throw.
+ * Terapkan status webhook ke satu BroadcastRecipient (by id — diambil dari
+ * Message.broadcastRecipientId supaya tidak bergantung pada recipient.messageId
+ * yang baru ditulis worker SETELAH kirim; webhook bisa datang lebih dulu).
+ * Counter Broadcast di-increment hanya bila transisi benar-benar terjadi,
+ * dan per-transisi spesifik supaya dua webhook paralel tidak dobel hitung.
+ * Never-throw.
  */
-export async function applyRecipientStatusByMessage(
-  messageId: string,
+export async function applyRecipientStatus(
+  recipientId: string,
   kind: 'delivered' | 'read' | 'failed',
   err?: { code?: number; message?: string },
 ): Promise<void> {
   try {
-    const rec = await prisma.broadcastRecipient.findFirst({
-      where: { messageId },
-      select: { id: true, broadcastId: true, status: true },
+    const rec = await prisma.broadcastRecipient.findUnique({
+      where: { id: recipientId },
+      select: { id: true, broadcastId: true },
     })
     if (!rec) return
-    const wasDelivered = rec.status === 'DELIVERED' || rec.status === 'READ'
-    const updated = await prisma.broadcastRecipient.updateMany({
-      where: { id: rec.id, status: { in: OVERWRITABLE[kind] } },
-      data: {
-        status: TARGET[kind],
-        ...(kind === 'failed' ? { errorCode: err?.code ?? null, errorMessage: err?.message ?? null } : {}),
-      },
-    })
-    if (updated.count === 0) return
 
     if (kind === 'delivered') {
-      await prisma.broadcast.update({ where: { id: rec.broadcastId }, data: { totalDelivered: { increment: 1 } } })
-    } else if (kind === 'read') {
-      // READ langsung dari SENT (delivered terlewat) → hitung delivered juga.
-      await prisma.broadcast.update({
-        where: { id: rec.broadcastId },
-        data: { totalRead: { increment: 1 }, ...(wasDelivered ? {} : { totalDelivered: { increment: 1 } }) },
+      const r = await prisma.broadcastRecipient.updateMany({
+        where: { id: rec.id, status: 'SENT' },
+        data: { status: 'DELIVERED' },
       })
-    } else {
-      // Gagal setelah sempat SENT → pindahkan hitungan sent → failed.
+      if (r.count > 0) {
+        await prisma.broadcast.update({
+          where: { id: rec.broadcastId },
+          data: { totalDelivered: { increment: 1 } },
+        })
+      }
+      return
+    }
+
+    if (kind === 'read') {
+      // Dua transisi terpisah supaya atomik: DELIVERED→READ (read saja) vs
+      // SENT→READ (delivered terlewat → hitung delivered juga). Webhook
+      // delivered paralel tidak bisa dobel karena guard status asal.
+      const fromDelivered = await prisma.broadcastRecipient.updateMany({
+        where: { id: rec.id, status: 'DELIVERED' },
+        data: { status: 'READ' },
+      })
+      if (fromDelivered.count > 0) {
+        await prisma.broadcast.update({
+          where: { id: rec.broadcastId },
+          data: { totalRead: { increment: 1 } },
+        })
+        return
+      }
+      const fromSent = await prisma.broadcastRecipient.updateMany({
+        where: { id: rec.id, status: 'SENT' },
+        data: { status: 'READ' },
+      })
+      if (fromSent.count > 0) {
+        await prisma.broadcast.update({
+          where: { id: rec.broadcastId },
+          data: { totalRead: { increment: 1 }, totalDelivered: { increment: 1 } },
+        })
+      }
+      return
+    }
+
+    // failed — hanya dari SENT/DELIVERED (READ tidak diturunkan). Pesan yang
+    // sempat SENT dipindah hitungannya sent → failed.
+    const r = await prisma.broadcastRecipient.updateMany({
+      where: { id: rec.id, status: { in: ['SENT', 'DELIVERED'] } },
+      data: {
+        status: 'FAILED',
+        errorCode: err?.code ?? null,
+        errorMessage: err?.message ?? null,
+      },
+    })
+    if (r.count > 0) {
       await prisma.broadcast.update({
         where: { id: rec.broadcastId },
         data: { totalSent: { decrement: 1 }, totalFailed: { increment: 1 } },
@@ -58,5 +84,23 @@ export async function applyRecipientStatusByMessage(
     }
   } catch (e) {
     console.error('[broadcast/recipient-status] gagal:', e)
+  }
+}
+
+/** Kompat: lookup recipient via Message lalu terapkan. */
+export async function applyRecipientStatusByMessage(
+  messageId: string,
+  kind: 'delivered' | 'read' | 'failed',
+  err?: { code?: number; message?: string },
+): Promise<void> {
+  try {
+    const msg = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { broadcastRecipientId: true },
+    })
+    if (!msg?.broadcastRecipientId) return
+    await applyRecipientStatus(msg.broadcastRecipientId, kind, err)
+  } catch (e) {
+    console.error('[broadcast/recipient-status] byMessage gagal:', e)
   }
 }
