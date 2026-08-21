@@ -182,6 +182,62 @@ non-CS (OTP/follow-up/notif/handoff/LMS) lewat `smartSend` +
 Broadcast Cloud = `BroadcastRecipient` + cron `broadcast-send` (1 menit).
 Detail: `docs/waba-templates.md`.
 
+## Design System UI (2026-08-21)
+
+Aturan konsistensi UI dashboard/admin/auth. Registry tone: `lib/ui-tones.ts`
+(SATU-SATUNYA file yang boleh pakai palet Tailwind mentah untuk status).
+Scope aturan: `app/(dashboard)`, `app/(admin)`, `app/(auth)` + komponennya.
+Halaman publik (landing, /live, /embed, /order, /review, belajar, onboarding)
+punya gaya sendiri — JANGAN disapu aturan ini.
+
+### Warna
+- Brand/aksen dekoratif: `primary-*` (orange) atau token semantic (`bg-primary`,
+  `text-muted-foreground`, `bg-card`, `border-border`). DILARANG: `orange-*`
+  (duplikat primary), `blue|purple|violet|indigo|fuchsia|pink|rose|teal|cyan|lime-*`
+  dekoratif, `zinc|neutral|gray|slate|stone-*` (pakai `warm-*`).
+- Status HANYA via `lib/ui-tones.ts` / `<StatusBadge>` + registry `lib/status.ts`:
+  success=emerald · warning=amber · danger=red · info=sky · neutral=warm · brand=primary.
+- Chart (recharts): `var(--chart-1)`..`var(--chart-5)` — bukan hex literal.
+- EXEMPT: hex non-UI (wallpaper chat WA, brand Google OAuth, template OG/canvas di
+  `components/content/visual-templates/`, output LP `app/p/[slug]`), class-map
+  dinamis berbasis pilihan user (tag palette).
+
+### Typography
+- Body `text-sm`; `text-xs` hanya meta/caption/badge. FLOOR 12px: dilarang
+  `text-[8..11px]` (→ `text-xs`) dan `text-[13px]` (→ `text-sm`).
+- h1 = milik `<PageHeader>` (satu per halaman). h2 section:
+  `font-display text-xl font-semibold text-warm-900`; h3 `text-lg font-semibold`;
+  label field `text-sm font-medium text-warm-700`.
+- Weight: `font-medium` / `font-semibold` / `font-bold` (h1 saja). Tanpa
+  `font-extrabold`. `font-display` untuk heading (alias `font-heading` dihapus).
+
+### Layout & Komponen
+- Container halaman: `<PageContainer width>` (`components/shared/PageContainer.tsx`)
+  — narrow `max-w-3xl` (form/detail) · default `max-w-6xl` · wide `max-w-7xl`
+  (tabel/analytics) · full-bleed = tanpa container. Jangan dobel page+client.
+- `<Card>` polos (radix-nova: rounded-xl + ring + px-4). Dilarang menambah
+  `border-warm-200` (no-op), `rounded-xl` (redundan), `shadow-*`, `bg-white`.
+  Panel hand-rolled → `<Card>`; tint dekoratif hanya `bg-primary-50`; panel
+  status → `TONES[tone].bg/border`.
+- Radius ikuti primitive: card/panel/dialog `rounded-xl` · input/button `rounded-lg`
+  · chip `rounded-md` · pill/avatar `rounded-full`. Maks 2-3 radius per file.
+- Spacing: antar section `gap-6`; dalam card `space-y-4`; label→input `space-y-2`;
+  toolbar `gap-2`.
+- Button: filled default = maks SATU aksi utama per halaman/dialog, TANPA override
+  `bg-primary-500...` (default sudah orange). Toolbar `outline`, tersier `ghost`,
+  destruktif `destructive`. Icon size diatur primitive — jangan `h-4 w-4` manual.
+- Badge status → `<StatusBadge>`; `ui/Badge` untuk label non-status tanpa warna raw.
+- Tabel: `space-y-4` → toolbar → wrapper `rounded-md border` → shadcn `<Table>` →
+  `<Pagination>` (components/shared).
+- Empty state: `<EmptyState bordered>`. Loading: skeleton shared /
+  `<Loader2 className="size-4 animate-spin" />` + label `"Memuat…"`.
+- Nav: aksen tunggal `NAV_ACCENT` (lib/navigation.ts) — grup dibedakan spacing,
+  bukan warna. Modal pakai `ui/dialog.tsx`/`ui/sheet.tsx`, bukan hand-rolled
+  `fixed inset-0`.
+- Icon: lucide-react, bukan emoji, di seluruh chrome UI (header, menu, status).
+- Dark mode: nonaktif (forcedTheme light). Jangan tulis class `dark:` baru;
+  hapus `dark:` di file yang disentuh. Blok `.dark` di globals.css dibiarkan.
+
 ## Perintah Penting
 ```bash
 # Development

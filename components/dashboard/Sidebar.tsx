@@ -13,8 +13,7 @@ import { useEffect, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
 import {
-  NAV_ACCENTS,
-  type NavAccent,
+  NAV_ACCENT,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -169,7 +168,6 @@ export function Sidebar({
         {groups.map((group) => {
           const hasActive = groupHasActive(group.items)
           const isCollapsed = collapsed.has(group.label) && !hasActive
-          const accent = NAV_ACCENTS[group.accent ?? 'neutral']
           return (
             <div key={group.label} className="mt-4">
               <button
@@ -178,7 +176,7 @@ export function Sidebar({
                 aria-expanded={!isCollapsed}
                 className={cn(
                   'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
-                  accent.header,
+                  NAV_ACCENT.header,
                 )}
                 title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
               >
@@ -198,7 +196,6 @@ export function Sidebar({
                         label={it.label}
                         Icon={it.icon}
                         active={isActive(it.href)}
-                        accent={accent}
                         onClick={onNavigate}
                       />
                     </li>
@@ -346,18 +343,15 @@ function SidebarLink({
   label,
   Icon,
   active,
-  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: (typeof USER_NAV_GROUPS)[number]['items'][number]['icon']
   active: boolean
-  /** Aksen warna grup — undefined (mis. Dashboard) fallback ke neutral. */
-  accent?: NavAccent
   onClick?: () => void
 }) {
-  const a = accent ?? NAV_ACCENTS.neutral
+  const a = NAV_ACCENT
   return (
     <Link
       href={href}

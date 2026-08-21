@@ -27,8 +27,7 @@ import { formatNumber } from '@/lib/format'
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_NAV_HOME,
-  NAV_ACCENTS,
-  type NavAccent,
+  NAV_ACCENT,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -305,13 +304,12 @@ function DrawerSection({
   pathnameActive: (href: string) => boolean
   onClickItem: () => void
 }) {
-  const accent = NAV_ACCENTS[group.accent ?? 'neutral']
   return (
     <div className="mb-2">
       <p
         className={cn(
           'px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider',
-          accent.header,
+          NAV_ACCENT.header,
         )}
       >
         {group.label}
@@ -324,7 +322,6 @@ function DrawerSection({
             label={it.label}
             Icon={it.icon}
             active={pathnameActive(it.href)}
-            accent={accent}
             onClick={onClickItem}
           />
         ))}
@@ -338,17 +335,15 @@ function DrawerLink({
   label,
   Icon,
   active,
-  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: NavGroup['items'][number]['icon']
   active: boolean
-  accent?: NavAccent
   onClick: () => void
 }) {
-  const a = accent ?? NAV_ACCENTS.neutral
+  const a = NAV_ACCENT
   return (
     <Link
       href={href}

@@ -64,9 +64,9 @@ export interface NavItem {
   roles?: Role[]
 }
 
-// Aksen warna per grup — full class literal supaya kebaca Tailwind JIT.
-// Dipakai Sidebar (desktop) + MobileDrawer supaya grup gampang dibedakan
-// secara visual (chunking), bukan satu daftar abu-abu panjang.
+// Aksen nav TUNGGAL — brand orange untuk state aktif, netral untuk sisanya.
+// Grup dibedakan lewat spacing + header uppercase, bukan warna-warni
+// (pelangi 9-hue sebelumnya = sumber utama kesan UI berantakan).
 export interface NavAccent {
   /** Warna teks header grup (uppercase kecil). */
   header: string
@@ -80,71 +80,12 @@ export interface NavAccent {
   bar: string
 }
 
-export const NAV_ACCENTS: Record<string, NavAccent> = {
-  teal: {
-    header: 'text-teal-600',
-    icon: 'text-teal-600/70',
-    active: 'bg-teal-50 text-teal-700',
-    activeIcon: 'text-teal-600',
-    bar: 'bg-teal-500',
-  },
-  orange: {
-    header: 'text-primary-600',
-    icon: 'text-primary-500/80',
-    active: 'bg-primary-50 text-primary-700',
-    activeIcon: 'text-primary-600',
-    bar: 'bg-primary-500',
-  },
-  violet: {
-    header: 'text-violet-600',
-    icon: 'text-violet-500/80',
-    active: 'bg-violet-50 text-violet-700',
-    activeIcon: 'text-violet-600',
-    bar: 'bg-violet-500',
-  },
-  sky: {
-    header: 'text-sky-600',
-    icon: 'text-sky-600/80',
-    active: 'bg-sky-50 text-sky-700',
-    activeIcon: 'text-sky-600',
-    bar: 'bg-sky-500',
-  },
-  emerald: {
-    header: 'text-emerald-600',
-    icon: 'text-emerald-600/80',
-    active: 'bg-emerald-50 text-emerald-700',
-    activeIcon: 'text-emerald-600',
-    bar: 'bg-emerald-500',
-  },
-  amber: {
-    header: 'text-amber-600',
-    icon: 'text-amber-600/80',
-    active: 'bg-amber-50 text-amber-700',
-    activeIcon: 'text-amber-600',
-    bar: 'bg-amber-500',
-  },
-  indigo: {
-    header: 'text-indigo-600',
-    icon: 'text-indigo-600/80',
-    active: 'bg-indigo-50 text-indigo-700',
-    activeIcon: 'text-indigo-600',
-    bar: 'bg-indigo-500',
-  },
-  rose: {
-    header: 'text-rose-600',
-    icon: 'text-rose-600/80',
-    active: 'bg-rose-50 text-rose-700',
-    activeIcon: 'text-rose-600',
-    bar: 'bg-rose-500',
-  },
-  // Netral — grup AKUN & fallback grup admin (tanpa accent).
-  neutral: {
-    header: 'text-warm-400',
-    icon: 'text-warm-500',
-    active: 'bg-primary-50 text-primary-700',
-    activeIcon: 'text-primary-600',
-    bar: 'bg-primary-500',
-  },
+export const NAV_ACCENT: NavAccent = {
+  header: 'text-warm-400',
+  icon: 'text-warm-500',
+  active: 'bg-primary-50 text-primary-700',
+  activeIcon: 'text-primary-600',
+  bar: 'bg-primary-500',
 }
 
 export interface NavGroup {
@@ -153,8 +94,6 @@ export interface NavGroup {
   // Group hanya tampil kalau user punya akses Order System (paket POWER).
   // Filter dilakukan di komponen yang konsumsi (Sidebar, MobileDrawer).
   requiresOrderSystem?: boolean
-  // Key ke NAV_ACCENTS — warna pembeda grup. Undefined = neutral.
-  accent?: keyof typeof NAV_ACCENTS
 }
 
 // ─── USER (dashboard) ─────────────────────────────────────────────────
@@ -168,7 +107,6 @@ export interface NavGroup {
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'CHAT & CS',
-    accent: 'teal',
     items: [
       { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
       { label: 'Inbox', href: '/inbox', icon: Inbox },
@@ -194,7 +132,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'ORDER SYSTEM',
     requiresOrderSystem: true,
-    accent: 'orange',
     items: [
       { label: 'Pesanan', href: '/pesanan', icon: Package },
       { label: 'Produk', href: '/products', icon: ShoppingCart },
@@ -224,7 +161,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'LANDING PAGE',
-    accent: 'violet',
     items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
       { label: 'Content Studio', href: '/content', icon: Palette },
@@ -234,7 +170,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Customer beli produk linked → otomatis enroll.
   {
     label: 'LMS',
-    accent: 'sky',
     items: [
       { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
     ],
@@ -244,7 +179,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'INTEGRASI TOKO',
     requiresOrderSystem: true,
-    accent: 'emerald',
     items: [
       { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
       // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
@@ -258,14 +192,12 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'LAPORAN',
-    accent: 'amber',
     items: [{ label: 'Analytics', href: '/analytics', icon: BarChart3 }],
   },
   // Upgrade LP/LMS dipindah ke sini (2026-07-10) — upsell dipisah dari grup
   // fitur supaya grup fitur murni navigasi operasional.
   {
     label: 'AKUN',
-    accent: 'neutral',
     items: [
       { label: 'Billing', href: '/billing', icon: CreditCard },
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
@@ -278,7 +210,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Kunci API tetap harus dibuat sendiri, jadi menu ini aman dilihat siapa pun.
   {
     label: 'PENGEMBANG',
-    accent: 'indigo',
     items: [
       { label: 'API', href: '/pengembang/api', icon: Code2 },
       { label: 'Integrasi', href: '/pengembang/integrasi', icon: Plug },
@@ -288,7 +219,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // user yang paling butuh bantuan justru yang menyederhanakan menunya.
   {
     label: 'DUKUNGAN',
-    accent: 'rose',
     items: [
       { label: 'Dokumentasi', href: '/dokumentasi', icon: BookMarked },
       { label: 'Bantuan & Dukungan', href: '/bantuan', icon: LifeBuoy },
