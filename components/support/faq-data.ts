@@ -39,7 +39,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Berapa biaya per pesan template?',
-        a: 'Utility (konfirmasi order, resi, invoice) dan OTP Rp 393 per pesan; Marketing (promo, broadcast penawaran) Rp 657 per pesan. Pesan yang dikirim saat window 24 jam customer masih terbuka gratis, begitu juga lead yang masuk dari iklan Click-to-WhatsApp selama 72 jam pertama. Kalau Meta ternyata tidak menagih, kredit yang terlanjur terpotong dikembalikan otomatis.',
+        a: 'Tarifnya beda per kategori: Utility (konfirmasi order, resi, invoice), Marketing (promo, broadcast penawaran), dan Authentication (OTP). Tarif yang sedang berlaku selalu tampil di menu Billing sebelum kamu mengirim — angkanya bisa disesuaikan, jadi pakai yang di sana sebagai patokan. Gratis hanya untuk: template Utility yang dikirim selagi window 24 jam customer masih terbuka, dan lead dari iklan Click-to-WhatsApp selama 72 jam pertama. Template Marketing dan OTP tetap ditagih penuh walaupun window sedang terbuka. Kalau Meta ternyata tidak menagih, kredit yang terlanjur terpotong dikembalikan otomatis.',
       },
       {
         q: 'Token saya habis, apa yang terjadi?',

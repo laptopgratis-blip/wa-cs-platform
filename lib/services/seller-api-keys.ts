@@ -130,8 +130,17 @@ export async function createSellerApiKey(input: {
       // retry saat transaksi kalah race. Lock otomatis lepas saat commit.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('seller_api_key'), hashtext(${input.userId}))`
 
+      // "Aktif" harus berarti sama dengan badge di tabel (revokedAt null DAN
+      // belum kedaluwarsa). Kalau kunci kedaluwarsa ikut memakan slot, seller
+      // yang 5 kuncinya mati serentak melihat tombol "Buat Kunci" mati total
+      // dengan pesan "maksimal 5 kunci aktif" — padahal tak satu pun bisa
+      // dipakai lagi.
       const active = await tx.sellerApiKey.count({
-        where: { userId: input.userId, revokedAt: null },
+        where: {
+          userId: input.userId,
+          revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
       })
       if (active >= MAX_ACTIVE_KEYS_PER_USER) throw new QuotaExceededError()
 

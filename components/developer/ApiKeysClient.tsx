@@ -121,7 +121,9 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
     }
   }
 
-  const activeCount = keys.filter((k) => !k.revokedAt).length
+  // Definisi "aktif" harus sama persis dengan badge status di tabel dan dengan
+  // penegakan kuota di server: belum dicabut DAN belum kedaluwarsa.
+  const activeCount = keys.filter((k) => k.isActive).length
 
   const handleCreate = async () => {
     setCreating(true)

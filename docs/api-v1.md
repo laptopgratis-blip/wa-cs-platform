@@ -79,7 +79,7 @@ pola DB-backed kalau perlu ada di `lib/otp/auth-otp.ts`.
 
 `GET/POST /api/pengembang/api-keys`, `DELETE /api/pengembang/api-keys/[id]`.
 POST = satu-satunya tempat `plainKey` muncul — dilarang `console.log` body/respons di file itu.
-Pembuatan dibatasi 10/jam per user.
+Pembuatan dibatasi 15 percobaan/jam per user (yang gagal ikut dihitung, lewat `consumeRateLimit`).
 
 ## Fase 2 (belum ada)
 

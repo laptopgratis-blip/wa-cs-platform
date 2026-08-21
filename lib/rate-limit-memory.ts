@@ -3,20 +3,30 @@
 // saat proses restart — acceptable untuk guard brute-force ringan (mis.
 // percobaan password). Kalau nanti multi-instance, pindah ke DB/Redis
 // (lihat pola DB-backed di lib/otp/auth-otp.ts).
+//
+// SATU Map dipakai bersama oleh pemanggil dengan window yang BERBEDA-BEDA
+// (60 detik untuk API publik, 15 menit untuk guard password, 1 jam untuk
+// pembuatan kunci API). Karena itu window disimpan PER ENTRI: kalau pruning
+// memakai window milik pemanggil yang kebetulan sedang jalan, trafik API
+// (60 detik) akan menghapus counter password yang baru berjalan 2 dari 15
+// menit — guard-nya diam-diam melemah jadi 5 percobaan per menit.
 
 interface WindowEntry {
   count: number
   windowStart: number
+  /** Window milik entri ini — dipakai saat pruning, bukan window pemanggil. */
+  windowMs: number
 }
 
 const buckets = new Map<string, WindowEntry>()
 
-// Cegah Map tumbuh tak terbatas — buang entry yang window-nya sudah lewat.
-function pruneExpired(windowMs: number): void {
+// Cegah Map tumbuh tak terbatas — buang entry yang window-nya sudah lewat,
+// dinilai dengan window masing-masing entri.
+function pruneExpired(): void {
   if (buckets.size < 1000) return
   const now = Date.now()
   for (const [key, entry] of buckets) {
-    if (now - entry.windowStart >= windowMs) buckets.delete(key)
+    if (now - entry.windowStart >= entry.windowMs) buckets.delete(key)
   }
 }
 
@@ -43,11 +53,11 @@ export function recordRateLimitHit(input: {
   key: string
   windowMs: number
 }): void {
-  pruneExpired(input.windowMs)
+  pruneExpired()
   const now = Date.now()
   const entry = buckets.get(input.key)
   if (!entry || now - entry.windowStart >= input.windowMs) {
-    buckets.set(input.key, { count: 1, windowStart: now })
+    buckets.set(input.key, { count: 1, windowStart: now, windowMs: input.windowMs })
     return
   }
   buckets.set(input.key, { ...entry, count: entry.count + 1 })
@@ -73,13 +83,13 @@ export function consumeRateLimit(input: {
   resetAtMs: number
   retryAfterMs: number
 } {
-  pruneExpired(input.windowMs)
+  pruneExpired()
   const now = Date.now()
   const entry = buckets.get(input.key)
   const fresh = !entry || now - entry.windowStart >= input.windowMs
 
   if (fresh) {
-    buckets.set(input.key, { count: 1, windowStart: now })
+    buckets.set(input.key, { count: 1, windowStart: now, windowMs: input.windowMs })
     return {
       allowed: true,
       limit: input.limit,

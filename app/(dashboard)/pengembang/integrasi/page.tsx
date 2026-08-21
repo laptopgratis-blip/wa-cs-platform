@@ -79,15 +79,16 @@ export default async function PengembangIntegrasiPage() {
           </p>
           <Snippet>{`<a href="/checkout" data-lp-cta="checkout-atas">Pesan Sekarang</a>`}</Snippet>
           <p className="text-sm text-warm-600 dark:text-warm-300">
-            Ini bukan sekadar soal label. Yang otomatis dikenali sebagai CTA tanpa atribut hanyalah
+            Ini bukan sekadar soal label. Yang otomatis masuk laporan CTA tanpa atribut hanyalah
             elemen <code className="font-mono text-xs">&lt;button&gt;</code> dan tautan ke{' '}
             <code className="font-mono text-xs">wa.me</code>,{' '}
-            <code className="font-mono text-xs">mailto:</code>,{' '}
-            <code className="font-mono text-xs">tel:</code>, anchor{' '}
-            <code className="font-mono text-xs">#bagian</code>, atau domain luar. Tautan ke halaman
-            sendiri seperti contoh di atas <strong>tidak masuk laporan CTA sama sekali</strong>{' '}
-            tanpa <code className="font-mono text-xs">data-lp-cta</code> — kliknya hanya tercatat di
-            peta panas.
+            <code className="font-mono text-xs">tel:</code>, atau anchor{' '}
+            <code className="font-mono text-xs">#bagian</code>. Tautan{' '}
+            <code className="font-mono text-xs">mailto:</code> dan tautan ke domain luar tercatat
+            sebagai klik keluar — bukan CTA. Tautan ke halaman sendiri seperti contoh di atas{' '}
+            <strong>tidak masuk laporan CTA sama sekali</strong> tanpa{' '}
+            <code className="font-mono text-xs">data-lp-cta</code>; kliknya hanya tercatat di peta
+            panas. Jadi pasang atribut itu di tombol mana pun yang ingin kamu ukur.
           </p>
           <p className="text-xs text-warm-500">
             Isi field input tidak pernah direkam, dan IP pengunjung di-hash di server. Script aman
