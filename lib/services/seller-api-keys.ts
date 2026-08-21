@@ -16,9 +16,10 @@
 
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import { prisma } from '@/lib/prisma'
+import { MAX_ACTIVE_KEYS_PER_USER } from '@/lib/validations/seller-api-key'
 
 export const KEY_PREFIX_LIVE = 'hl_live_'
-export const MAX_ACTIVE_KEYS_PER_USER = 5
+export { MAX_ACTIVE_KEYS_PER_USER }
 
 // 32 byte → 43 char base64url. Total panjang kunci = 8 + 43 = 51.
 const SECRET_BYTES = 32

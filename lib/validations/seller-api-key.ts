@@ -6,6 +6,10 @@ import { z } from 'zod'
 // akan mematikan integrasi n8n orang tanpa peringatan.
 export const API_KEY_EXPIRY_OPTIONS = [30, 90, 365] as const
 
+// Ditaruh di file validasi (bukan di service) supaya komponen client bisa
+// mengimpornya tanpa ikut menarik Prisma ke bundle browser.
+export const MAX_ACTIVE_KEYS_PER_USER = 5
+
 export const sellerApiKeyCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(60, 'Nama maksimal 60 karakter'),
   expiresInDays: z
