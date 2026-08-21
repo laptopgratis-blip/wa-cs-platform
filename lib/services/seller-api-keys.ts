@@ -47,6 +47,9 @@ export type VerifyResult =
   | { ok: true; keyId: string; userId: string; name: string; scopes: string[] }
   | { ok: false; reason: VerifyFailReason }
 
+/** Penanda internal: kuota kunci aktif penuh (dilempar dari dalam transaksi). */
+class QuotaExceededError extends Error {}
+
 /** SHA-256 hex dari kunci penuh. Deterministik — dipakai lookup by @unique. */
 export function hashApiKey(fullKey: string): string {
   return createHash('sha256').update(fullKey, 'utf8').digest('hex')
@@ -107,18 +110,6 @@ export async function createSellerApiKey(input: {
     return { ok: false, error: 'Nama kunci harus 2–60 karakter' }
   }
 
-  // Batas ditegakkan di service, bukan cuma di UI — request langsung ke API
-  // tetap harus tertahan.
-  const active = await prisma.sellerApiKey.count({
-    where: { userId: input.userId, revokedAt: null },
-  })
-  if (active >= MAX_ACTIVE_KEYS_PER_USER) {
-    return {
-      ok: false,
-      error: `Maksimal ${MAX_ACTIVE_KEYS_PER_USER} kunci aktif. Cabut salah satu kunci lama dulu.`,
-    }
-  }
-
   const secret = randomBytes(SECRET_BYTES).toString('base64url')
   const plainKey = `${KEY_PREFIX_LIVE}${secret}`
   const expiresAt =
@@ -127,20 +118,44 @@ export async function createSellerApiKey(input: {
       : null
 
   try {
-    const row = await prisma.sellerApiKey.create({
-      data: {
-        userId: input.userId,
-        name,
-        keyHash: hashApiKey(plainKey),
-        keyPrefix: plainKey.slice(0, 16),
-        lastFour: plainKey.slice(-4),
-        scopes: ['read'],
-        expiresAt,
-      },
-      select: VIEW_SELECT,
+    const row = await prisma.$transaction(async (tx) => {
+      // Batas ditegakkan di service, bukan cuma di UI — request langsung ke
+      // API tetap harus tertahan.
+      //
+      // count() lalu create() adalah check-then-act: dua request paralel
+      // dari satu sesi sama-sama membaca "4 kunci" lalu sama-sama menulis →
+      // kuota tembus (terbukti: 10 request serentak menghasilkan 10 kunci).
+      // Advisory lock per-user membuat pasangan baca-tulis ini berurutan;
+      // dipilih daripada isolasi Serializable supaya tidak perlu logika
+      // retry saat transaksi kalah race. Lock otomatis lepas saat commit.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('seller_api_key'), hashtext(${input.userId}))`
+
+      const active = await tx.sellerApiKey.count({
+        where: { userId: input.userId, revokedAt: null },
+      })
+      if (active >= MAX_ACTIVE_KEYS_PER_USER) throw new QuotaExceededError()
+
+      return tx.sellerApiKey.create({
+        data: {
+          userId: input.userId,
+          name,
+          keyHash: hashApiKey(plainKey),
+          keyPrefix: plainKey.slice(0, 16),
+          lastFour: plainKey.slice(-4),
+          scopes: ['read'],
+          expiresAt,
+        },
+        select: VIEW_SELECT,
+      })
     })
     return { ok: true, plainKey, key: toView(row) }
   } catch (err) {
+    if (err instanceof QuotaExceededError) {
+      return {
+        ok: false,
+        error: `Maksimal ${MAX_ACTIVE_KEYS_PER_USER} kunci aktif. Cabut salah satu kunci lama dulu.`,
+      }
+    }
     // Sengaja tidak menyertakan pesan asli ke pemanggil — err Prisma bisa
     // memuat potongan data baris.
     console.error('[seller-api-keys] gagal membuat kunci:', err)

@@ -34,6 +34,24 @@ export async function GET(req: Request) {
       return apiV1Error('not_found', 'Kontak tidak ditemukan.', 404, gate.auth.rateLimitHeaders)
     }
 
+    // Cursor WAJIB divalidasi dalam scope yang sama (lihat komentar panjang di
+    // app/api/v1/contacts/route.ts): anchor cursor Prisma tidak ikut memakai
+    // klausa where, jadi cursor basi/asing menghilangkan baris diam-diam.
+    if (page.cursor) {
+      const anchor = await prisma.message.findFirst({
+        where: { id: page.cursor, contactId, contact: { userId: gate.auth.userId } },
+        select: { id: true },
+      })
+      if (!anchor) {
+        return apiV1Error(
+          'invalid_cursor',
+          'Cursor tidak dikenal atau pesannya sudah dihapus. Ulangi dari halaman pertama.',
+          400,
+          gate.auth.rateLimitHeaders,
+        )
+      }
+    }
+
     const rows = await prisma.message.findMany({
       where: { contactId, contact: { userId: gate.auth.userId } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

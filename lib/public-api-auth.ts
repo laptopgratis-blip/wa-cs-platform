@@ -26,6 +26,14 @@ export const RATE_LIMIT_PER_KEY = 60
  * requirePublicApiAuth.
  */
 export const RATE_LIMIT_PER_IP = 120
+
+/**
+ * Plafon KERAS per IP: semua request dihitung, dan yang melewatinya ditolak
+ * SEBELUM menyentuh DB. Sengaja jauh di atas pemakaian wajar (satu IP kantor
+ * dengan 5 kunci pun cuma 300 req/menit) — tugasnya hanya membatasi biaya
+ * tebak-kunci beruntun, bukan mengatur kuota pemakaian.
+ */
+export const RATE_LIMIT_PER_IP_HARD = 600
 export const RATE_WINDOW_MS = 60_000
 
 export interface PublicApiAuth {
@@ -90,9 +98,29 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
   //       diverifikasi dan yang SAH tetap dilayani. Banyak seller berbagi satu
   //       IP publik (kantor/NAT/hosting), jadi menolak buta akan mengunci orang
   //       yang tidak melakukan apa-apa gara-gara tetangga se-IP salah kunci.
-  //       Biaya untuk penyerang tetap ada: jawabannya jadi 429 tanpa informasi,
-  //       dan Cloudflare tetap lapis pertama untuk volume kasar.
-  const ipKey = `apiv1:ip:${getClientIp(req)}`
+  //       Jawaban untuk yang gagal jadi 429 tanpa informasi.
+  //
+  //    Konsekuensi (b): request bertoken tetap menghasilkan satu SHA-256 + satu
+  //    SELECT ter-index meski IP-nya sudah lewat jatah gagal. Karena itu ada
+  //    plafon keras terpisah di bawah yang menolak SEBELUM menyentuh DB —
+  //    biaya tebak-kunci tetap terbatas tanpa mengorbankan poin (b).
+  const ip = getClientIp(req)
+  const hardCap = consumeRateLimit({
+    key: `apiv1:iphard:${ip}`,
+    limit: RATE_LIMIT_PER_IP_HARD,
+    windowMs: RATE_WINDOW_MS,
+  })
+  if (!hardCap.allowed) {
+    return {
+      ok: false,
+      response: apiV1Error('rate_limited', 'Terlalu banyak request dari alamat ini.', 429, {
+        ...rateHeaders(hardCap),
+        'Retry-After': String(Math.ceil(hardCap.retryAfterMs / 1000)),
+      }),
+    }
+  }
+
+  const ipKey = `apiv1:ip:${ip}`
   const ipGuard = checkRateLimit({ key: ipKey, limit: RATE_LIMIT_PER_IP, windowMs: RATE_WINDOW_MS })
 
   const failAuth = (code: string, message: string): PublicApiAuthResult => {
@@ -180,7 +208,14 @@ export function requireScope(auth: PublicApiAuth, scope: string): NextResponse |
   )
 }
 
-/** Parser cursor pagination seragam untuk semua endpoint v1. */
+/**
+ * Parser cursor pagination seragam untuk semua endpoint v1.
+ *
+ * CATATAN: ini hanya memeriksa BENTUK. Pemanggil WAJIB memastikan barisnya ada
+ * dan masih dalam scope pemilik kunci sebelum meneruskannya ke `cursor:` Prisma
+ * — anchor cursor diselesaikan lewat subquery yang tidak memakai klausa where,
+ * jadi cursor basi/asing membuat baris hilang tanpa error.
+ */
 export function parsePagination(url: URL): { ok: true; limit: number; cursor: string | null } | { ok: false; error: string } {
   const rawLimit = url.searchParams.get('limit')
   let limit = 25

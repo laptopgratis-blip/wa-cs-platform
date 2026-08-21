@@ -162,14 +162,24 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
     }
   }
 
+  const resetForm = () => {
+    setPlainKey(null)
+    setName('')
+    setExpiry('null')
+  }
+
   const closeDialog = () => {
     setDialogOpen(false)
     // Reset ditunda supaya teks tidak berkedip saat dialog menutup.
-    setTimeout(() => {
-      setPlainKey(null)
-      setName('')
-      setExpiry('null')
-    }, 200)
+    setTimeout(resetForm, 200)
+  }
+
+  const openDialog = () => {
+    // Reset SINKRON di sini juga: kalau user menutup tampilan kunci lalu
+    // membuka dialog lagi dalam 200 ms, timeout di atas belum jalan dan dialog
+    // akan terbuka menampilkan kunci lama yang tadi sudah "disimpan".
+    resetForm()
+    setDialogOpen(true)
   }
 
   return (
@@ -185,7 +195,7 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
             </p>
           </div>
           <Button
-            onClick={() => setDialogOpen(true)}
+            onClick={openDialog}
             disabled={activeCount >= MAX_ACTIVE_KEYS_PER_USER}
           >
             <Plus className="mr-2 size-4" /> Buat Kunci
@@ -254,7 +264,7 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => (o ? setDialogOpen(true) : closeDialog())}>
+      <Dialog open={dialogOpen} onOpenChange={(o) => (o ? openDialog() : closeDialog())}>
         <DialogContent>
           {plainKey ? (
             <>

@@ -9,9 +9,9 @@ Dibuat sendiri dari `/pengembang/api`, dipakai dari skrip / n8n / Zapier / Make.
 |---|---|---|
 | `requirePublicApiAuth` | `lib/public-api-auth.ts` | SATU-SATUNYA gerbang `/api/v1/*`. Guard percobaan gagal per IP → verifikasi Bearer → rate limit per kunci → `touchApiKeyUsage`. Balikannya discriminated union `{ok:true,auth}` / `{ok:false,response}`. |
 | `apiV1Ok` / `apiV1Error` | idem | Envelope `{success,data}` / `{success,error,code}` + header `X-RateLimit-*`. |
-| `parsePagination` | idem | `?limit=1..100&cursor=<id>` seragam untuk semua endpoint list. |
+| `parsePagination` | idem | `?limit=1..100&cursor=<id>` seragam untuk semua endpoint list. Hanya memeriksa BENTUK — lihat "Cursor" di bawah. |
 | `verifySellerApiKey` | `lib/services/seller-api-keys.ts` | Guard bentuk (prefix + panjang) → lookup by `keyHash` @unique → cek revoke/expiry. |
-| `createSellerApiKey` | idem | Batas 5 kunci aktif ditegakkan di service, bukan hanya UI. `plainKey` hanya keluar sekali. |
+| `createSellerApiKey` | idem | Batas 5 kunci aktif ditegakkan di service (bukan hanya UI) di dalam transaksi + `pg_advisory_xact_lock` per user — tanpa lock, request paralel sama-sama membaca hitungan lama dan kuota tembus. `plainKey` hanya keluar sekali. |
 
 **PENTING:** `middleware.ts` tidak mencakup `/api/**`. Tanpa `requirePublicApiAuth` di baris pertama
 handler, endpoint v1 terbuka penuh. Jadikan ini butir checklist tiap menambah route v1.
@@ -64,6 +64,12 @@ Dua lapis dengan semantik berbeda:
   akan kena 429 IP sebelum kuota per-kunci yang kita janjikan habis. Saat jatah gagal habis,
   request tetap diverifikasi dan **kunci sah tetap dilayani** — banyak seller berbagi satu IP
   publik (kantor/NAT/hosting); yang gagal dijawab 429 tanpa membocorkan alasan aslinya.
+- **Plafon keras per IP, 600 request/menit** — menghitung SEMUA request dan menolak **sebelum**
+  menyentuh DB. Tanpa ini, konsekuensi aturan di atas adalah penyerang bisa memaksa satu SHA-256 +
+  satu SELECT per tebakan tanpa batas. Angkanya sengaja jauh di atas pemakaian wajar.
+
+Header `X-RateLimit-*` hanya ada di respons yang lolos autentikasi (dan di 429 plafon keras);
+respons 401 tidak membawanya karena kuota per-kunci belum bisa dihitung.
 
 Keterbatasan (didokumentasikan juga di tab "Batas & Kuota"): in-memory per proses → reset saat
 deploy, dan limit efektif × jumlah replika bila di-scale. Deployment sekarang single-instance;

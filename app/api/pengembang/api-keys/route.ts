@@ -6,15 +6,18 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
-import { checkRateLimit, recordRateLimitHit } from '@/lib/rate-limit-memory'
+import { consumeRateLimit } from '@/lib/rate-limit-memory'
 import { createSellerApiKey, listSellerApiKeys } from '@/lib/services/seller-api-keys'
 import { sellerApiKeyCreateSchema } from '@/lib/validations/seller-api-key'
 
 export const dynamic = 'force-dynamic'
 
-// Batas pembuatan kunci: 10 per jam per user (kunci lama tidak otomatis mati,
-// jadi loop pembuatan = sampah tabel + membingungkan user).
-const CREATE_LIMIT = 10
+// Batas PERCOBAAN pembuatan kunci: 15 per jam per user — menghitung yang
+// gagal juga (body invalid / sudah 5 kunci aktif). Kalau hanya yang sukses
+// dihitung, user yang sudah mentok 5 kunci bisa memukul endpoint ini tanpa
+// batas: tiap request tetap menjalankan count() ke DB tapi tak pernah
+// menaikkan counter. consumeRateLimit dipakai supaya check+record atomik.
+const CREATE_LIMIT = 15
 const CREATE_WINDOW_MS = 60 * 60 * 1000
 
 export async function GET() {
@@ -42,11 +45,14 @@ export async function POST(req: Request) {
     return res as NextResponse
   }
 
-  const rateKey = `apikey-create:${session.user.id}`
-  const rate = checkRateLimit({ key: rateKey, limit: CREATE_LIMIT, windowMs: CREATE_WINDOW_MS })
+  const rate = consumeRateLimit({
+    key: `apikey-create:${session.user.id}`,
+    limit: CREATE_LIMIT,
+    windowMs: CREATE_WINDOW_MS,
+  })
   if (!rate.allowed) {
     const menit = Math.max(1, Math.ceil(rate.retryAfterMs / 60_000))
-    return jsonError(`Terlalu banyak kunci dibuat. Coba lagi dalam ${menit} menit.`, 429)
+    return jsonError(`Terlalu banyak percobaan membuat kunci. Coba lagi dalam ${menit} menit.`, 429)
   }
 
   try {
@@ -63,7 +69,6 @@ export async function POST(req: Request) {
     })
     if (!res.ok) return jsonError(res.error)
 
-    recordRateLimitHit({ key: rateKey, windowMs: CREATE_WINDOW_MS })
     // plainKey hanya ada di sini, sekali seumur hidup kunci.
     return jsonOk({ plainKey: res.plainKey, key: res.key }, 201)
   } catch (err) {

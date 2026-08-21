@@ -39,6 +39,11 @@ const ERRORS: Array<{ http: string; code: string; act: string }> = [
   { http: '401', code: 'key_expired', act: 'Masa berlaku habis. Buat kunci baru.' },
   { http: '404', code: 'not_found', act: 'Data tidak ada, atau bukan milik akun pemilik kunci.' },
   { http: '400', code: 'invalid_query', act: 'Periksa parameter di pesan error.' },
+  {
+    http: '400',
+    code: 'invalid_cursor',
+    act: 'Cursor sudah tidak berlaku (datanya terhapus). Ulangi dari halaman pertama.',
+  },
   { http: '429', code: 'rate_limited', act: 'Tunggu sesuai header Retry-After lalu ulangi.' },
   { http: '500', code: 'server_error', act: 'Kesalahan di sisi kami — ulangi beberapa saat lagi.' },
 ]
@@ -163,9 +168,11 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
                 <strong>{RATE_LIMIT_PER_KEY} request per menit</strong> per kunci API.
               </li>
               <li>
-                Setiap respons membawa <code className="font-mono text-xs">X-RateLimit-Limit</code>,{' '}
+                Setiap respons yang berhasil diautentikasi membawa{' '}
+                <code className="font-mono text-xs">X-RateLimit-Limit</code>,{' '}
                 <code className="font-mono text-xs">X-RateLimit-Remaining</code>, dan{' '}
-                <code className="font-mono text-xs">X-RateLimit-Reset</code> (epoch detik).
+                <code className="font-mono text-xs">X-RateLimit-Reset</code> (epoch detik). Respons
+                401 tidak membawanya — kuota memang belum bisa dihitung sebelum kuncinya dikenali.
               </li>
               <li>
                 Saat kuota habis: <code className="font-mono text-xs">429</code> +{' '}

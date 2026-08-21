@@ -75,10 +75,20 @@ export default async function PengembangIntegrasiPage() {
           <p className="text-sm text-warm-600 dark:text-warm-300">
             <strong>Yang perlu kamu lakukan</strong> hanya satu: tambahkan atribut{' '}
             <code className="font-mono text-xs">data-lp-cta=&quot;nama-tombol&quot;</code>{' '}
-            pada tombol penting di HTML landing page-mu. Tanpa itu laporan hanya menyebut &quot;klik
-            CTA&quot;; dengan itu kamu tahu tombol mana yang benar-benar menang.
+            pada tombol penting di HTML landing page-mu.
           </p>
           <Snippet>{`<a href="/checkout" data-lp-cta="checkout-atas">Pesan Sekarang</a>`}</Snippet>
+          <p className="text-sm text-warm-600 dark:text-warm-300">
+            Ini bukan sekadar soal label. Yang otomatis dikenali sebagai CTA tanpa atribut hanyalah
+            elemen <code className="font-mono text-xs">&lt;button&gt;</code> dan tautan ke{' '}
+            <code className="font-mono text-xs">wa.me</code>,{' '}
+            <code className="font-mono text-xs">mailto:</code>,{' '}
+            <code className="font-mono text-xs">tel:</code>, anchor{' '}
+            <code className="font-mono text-xs">#bagian</code>, atau domain luar. Tautan ke halaman
+            sendiri seperti contoh di atas <strong>tidak masuk laporan CTA sama sekali</strong>{' '}
+            tanpa <code className="font-mono text-xs">data-lp-cta</code> — kliknya hanya tercatat di
+            peta panas.
+          </p>
           <p className="text-xs text-warm-500">
             Isi field input tidak pernah direkam, dan IP pengunjung di-hash di server. Script aman
             kalau tidak sengaja terpasang dua kali — perekaman tetap sekali. Catatan: tracker
@@ -106,9 +116,13 @@ export default async function PengembangIntegrasiPage() {
         data-base-url="${baseUrl}"></script>`}</Snippet>
           <p className="text-sm text-warm-600 dark:text-warm-300">
             Hanya <code className="font-mono text-xs">data-lp-id</code> yang wajib. Sisanya —
-            posisi (menyatu atau mengambang di salah satu pojok), ukuran, label tombol, dan
-            pengaturan form lead — diambil script dari pengaturan Live Embed di halaman landing page
-            terkait, jadi bisa diubah tanpa menyentuh kode di situsmu lagi.
+            posisi (menyatu atau mengambang di salah satu pojok), label tombol, dan pengaturan form
+            lead — diambil script dari pengaturan Live Embed di halaman landing page terkait, jadi
+            bisa diubah tanpa menyentuh kode di situsmu lagi.
+          </p>
+          <p className="text-xs text-warm-500">
+            Setelan ukuran hanya berlaku untuk mode menyatu. Mode mengambang selalu 360×600 piksel
+            (menyusut sendiri di layar kecil), berapa pun ukuran yang disetel.
           </p>
           <p className="text-xs text-warm-500">
             Penanda <code className="font-mono">&lt;div data-hulao-live-embed&gt;</code> menentukan

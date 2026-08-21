@@ -63,6 +63,27 @@ export async function GET(req: Request) {
   }
 
   try {
+    // Cursor WAJIB divalidasi dulu. Prisma menyelesaikan anchor cursor lewat
+    // subquery `WHERE id = $cursor` yang TIDAK ikut memakai klausa where kita,
+    // sehingga cursor basi (baris sudah dihapus) membuat hasil kosong +
+    // nextCursor null — klien mengira paginasi selesai padahal datanya masih
+    // ada. Cursor milik user lain lebih buruk lagi: `skip:1` membuang baris
+    // teratas milik user ini. Dua-duanya kehilangan data tanpa error.
+    if (page.cursor) {
+      const anchor = await prisma.contact.findFirst({
+        where: { id: page.cursor, userId: gate.auth.userId },
+        select: { id: true },
+      })
+      if (!anchor) {
+        return apiV1Error(
+          'invalid_cursor',
+          'Cursor tidak dikenal atau datanya sudah dihapus. Ulangi dari halaman pertama.',
+          400,
+          gate.auth.rateLimitHeaders,
+        )
+      }
+    }
+
     const rows = await prisma.contact.findMany({
       where: where as never,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
