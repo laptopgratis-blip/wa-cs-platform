@@ -145,7 +145,7 @@ export function Sidebar({
         </div>
         <div className="leading-tight">
           <p className="font-display text-base font-bold text-warm-900">Hulao</p>
-          <p className="text-[11px] font-medium text-primary-500">Dashboard</p>
+          <p className="text-xs font-medium text-primary-500">Dashboard</p>
         </div>
       </div>
 
@@ -175,7 +175,7 @@ export function Sidebar({
                 onClick={() => toggleGroup(group.label)}
                 aria-expanded={!isCollapsed}
                 className={cn(
-                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
+                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-xs font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
                   NAV_ACCENT.header,
                 )}
                 title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
@@ -216,12 +216,12 @@ export function Sidebar({
             const wrapClass = isEmpty
               ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
               : isLow
-                ? 'border-amber-300 bg-amber-50 hover:bg-amber-100'
+                ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
                 : 'border-primary-200 bg-primary-50 hover:bg-primary-100'
             const labelClass = isEmpty
               ? 'text-destructive'
               : isLow
-                ? 'text-amber-800'
+                ? 'text-amber-700'
                 : 'text-primary-700'
             const valueClass = isEmpty
               ? 'text-destructive'
@@ -249,7 +249,7 @@ export function Sidebar({
               >
                 <p
                   className={cn(
-                    'text-[11px] font-medium uppercase tracking-wider',
+                    'text-xs font-medium uppercase tracking-wider',
                     labelClass,
                   )}
                 >
@@ -263,7 +263,7 @@ export function Sidebar({
                 >
                   {formatNumber(tokenBalance)}
                 </p>
-                <p className={cn('mt-0.5 text-[11px]', helperClass)}>
+                <p className={cn('mt-0.5 text-xs', helperClass)}>
                   {helperText}
                 </p>
               </Link>
@@ -279,16 +279,16 @@ export function Sidebar({
             href="/billing#kredit-pesan"
             onClick={onNavigate}
             className={cn(
-              'block rounded-lg border p-2.5 transition-colors',
+              'block rounded-lg border p-3 transition-colors',
               messageCreditRp <= 0
                 ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
-                : 'border-sky-200 bg-sky-50 hover:bg-sky-100',
+                : 'border-primary-200 bg-primary-50 hover:bg-primary-100',
             )}
           >
             <p
               className={cn(
-                'text-[10px] font-medium uppercase tracking-wider',
-                messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700',
+                'text-xs font-medium uppercase tracking-wider',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700',
               )}
             >
               Kredit Pesan WA
@@ -296,12 +296,12 @@ export function Sidebar({
             <p
               className={cn(
                 'mt-0.5 font-display text-base font-bold tabular-nums',
-                messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-600',
               )}
             >
               Rp {formatNumber(messageCreditRp)}
             </p>
-            <p className={cn('text-[10px]', messageCreditRp <= 0 ? 'text-destructive/80' : 'text-sky-700/70')}>
+            <p className={cn('text-xs', messageCreditRp <= 0 ? 'text-destructive/80' : 'text-primary-700/70')}>
               {messageCreditRp <= 0 ? 'Habis — top up untuk template Meta' : 'Untuk template Meta (Cloud API)'}
             </p>
           </Link>
@@ -314,7 +314,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={toggleShowAll}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-medium text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-800"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-800"
             title={
               showAll
                 ? 'Sembunyikan menu yg tidak relevan untuk tujuanmu'
@@ -332,7 +332,7 @@ export function Sidebar({
             )}
           </button>
         )}
-        <p className="px-2 text-[11px] text-warm-400">v0.1.0 — beta</p>
+        <p className="px-2 text-xs text-warm-400">v0.1.0 — beta</p>
       </div>
     </aside>
   )

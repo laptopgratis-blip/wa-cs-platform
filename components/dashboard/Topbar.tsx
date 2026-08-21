@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 import { UserMenu } from '@/components/dashboard/UserMenu'
 import { NotificationBell } from '@/components/notification/NotificationBell'
 import { PlanBadge } from '@/components/subscription/PlanBadge'
+import { getNavTitle } from '@/lib/navigation'
 
 interface TopbarProps {
   name?: string | null
@@ -14,46 +15,16 @@ interface TopbarProps {
   image?: string | null
 }
 
-// Map path → judul halaman. Default: derive dari segment terakhir.
-const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/whatsapp': 'WhatsApp',
-  '/soul': 'Soul',
-  '/inbox': 'Inbox',
-  '/contacts': 'Contacts',
-  '/broadcast': 'Broadcast',
-  '/analytics': 'Analytics',
-  '/billing': 'Billing',
-  '/purchases': 'Riwayat Pembelian',
-  '/profile': 'Profil Saya',
-  '/pengembang/api': 'API',
-  '/pengembang/integrasi': 'Integrasi',
-  '/dokumentasi': 'Dokumentasi',
-  '/bantuan': 'Bantuan & Dukungan',
-  '/admin/dashboard': 'Admin Dashboard',
-  '/admin/models': 'AI Models',
-  '/admin/packages': 'Token Packages',
-  '/admin/users': 'Users',
-}
-
-function getPageTitle(pathname: string | null): string {
-  if (!pathname) return 'Dashboard'
-  if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname]!
-  // Fallback: ambil segment terakhir, capitalize.
-  const seg = pathname.split('/').filter(Boolean).pop() ?? 'Dashboard'
-  return seg.charAt(0).toUpperCase() + seg.slice(1)
-}
-
 export function Topbar({ name, email, image }: TopbarProps) {
   const pathname = usePathname()
-  const title = getPageTitle(pathname)
+  const title = getNavTitle(pathname)
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-warm-200 bg-card px-4 shadow-sm md:px-6">
       <div className="flex items-baseline gap-2">
-        <h1 className="font-display text-base font-semibold text-foreground">
+        <p className="font-display text-base font-semibold text-foreground">
           {title}
-        </h1>
+        </p>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           / {name ?? 'Pengguna'}
         </span>

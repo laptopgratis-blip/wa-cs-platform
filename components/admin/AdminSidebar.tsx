@@ -1,6 +1,7 @@
 'use client'
 
-// Sidebar admin panel — light theme, accent merah supaya admin context jelas.
+// Sidebar admin panel — light theme, aksen brand orange (konsisten user sidebar);
+// konteks admin ditandai ikon Shield + label, bukan warna terpisah.
 // Menu di-grup berdasarkan kategori (MANAJEMEN, AI & SOUL, ANALISIS, SISTEM)
 // dari lib/navigation.ts. Filter per role: FINANCE hanya melihat item
 // yang `roles` mereka.
@@ -45,12 +46,12 @@ export function AdminSidebar({
     >
       {/* Header */}
       <div className="flex h-16 items-center gap-3 border-b border-warm-200 px-4">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-red-100 text-red-600">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
           <Shield className="size-4" />
         </div>
         <div className="flex-1 leading-tight">
           <p className="font-display text-base font-bold text-warm-900">Admin</p>
-          <p className="text-[11px] font-medium text-red-600">Hulao</p>
+          <p className="text-xs font-medium text-primary-500">Hulao</p>
         </div>
         {role === 'ADMIN' && <AlertsBell />}
       </div>
@@ -71,7 +72,7 @@ export function AdminSidebar({
 
         {groups.map((group) => (
           <div key={group.label} className="mt-4">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-warm-400">
+            <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-warm-400">
               {group.label}
             </p>
             <ul className="space-y-1">

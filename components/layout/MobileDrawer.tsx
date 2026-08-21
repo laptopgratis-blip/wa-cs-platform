@@ -9,7 +9,15 @@
 //
 // Dipanggil dari header / bottom nav. State open dikontrol parent supaya
 // trigger di mana saja bisa pakai drawer yang sama.
-import { ChevronRight, Eye, EyeOff, LogOut, User as UserIcon } from 'lucide-react'
+import {
+  ChevronRight,
+  Eye,
+  EyeOff,
+  LogOut,
+  ShieldCheck,
+  User as UserIcon,
+  Wallet,
+} from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -160,8 +168,8 @@ export function MobileDrawer({
               className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-3 transition-colors hover:bg-primary-100"
             >
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-primary-700">
-                  💰 Saldo Token
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-700">
+                  <Wallet className="size-3.5" aria-hidden /> Saldo Token
                 </p>
                 <p className="mt-0.5 font-display text-xl font-bold tabular-nums text-primary-700">
                   {formatNumber(tokenBalance)}
@@ -184,18 +192,18 @@ export function MobileDrawer({
                 'flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors',
                 messageCreditRp <= 0
                   ? 'border-destructive/40 bg-destructive/10'
-                  : 'border-sky-200 bg-sky-50 hover:bg-sky-100',
+                  : 'border-primary-200 bg-primary-50 hover:bg-primary-100',
               )}
             >
               <div>
-                <p className={cn('text-[11px] font-medium uppercase tracking-wider', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>
+                <p className={cn('text-xs font-medium uppercase tracking-wider', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>
                   Kredit Pesan WA
                 </p>
-                <p className={cn('mt-0.5 font-display text-base font-bold tabular-nums', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>
+                <p className={cn('mt-0.5 font-display text-base font-bold tabular-nums', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>
                   Rp {formatNumber(messageCreditRp)}
                 </p>
               </div>
-              <div className={cn('text-xs font-medium', messageCreditRp <= 0 ? 'text-destructive' : 'text-sky-700')}>Top-up →</div>
+              <div className={cn('text-xs font-medium', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>Top-up →</div>
             </Link>
           </div>
         )}
@@ -221,8 +229,8 @@ export function MobileDrawer({
           <>
             <div className="mt-2 border-t" />
             <div className="px-4 pb-2 pt-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-red-600">
-                ⚡ ADMIN PANEL
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-warm-500">
+                <ShieldCheck className="size-3.5 text-primary-600" aria-hidden /> Admin Panel
               </p>
             </div>
             <nav className="px-3">
@@ -308,7 +316,7 @@ function DrawerSection({
     <div className="mb-2">
       <p
         className={cn(
-          'px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider',
+          'px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider',
           NAV_ACCENT.header,
         )}
       >

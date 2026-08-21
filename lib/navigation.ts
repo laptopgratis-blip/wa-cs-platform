@@ -421,6 +421,31 @@ export const BOTTOM_NAV_ITEMS: Array<{
 ]
 
 // Helper: filter NavGroup by role.
+
+// ─── Judul halaman dari nav (dipakai Topbar) ─────────────────────────
+// Satu sumber kebenaran: cari item nav dengan href terpanjang yang
+// prefix-match pathname. Fallback: kapitalisasi segmen terakhir.
+export function getNavTitle(pathname: string | null): string {
+  if (!pathname) return 'Dashboard'
+  const allItems: NavItem[] = [
+    USER_NAV_HOME,
+    ADMIN_NAV_HOME,
+    ...USER_NAV_GROUPS.flatMap((g) => g.items),
+    ...ADMIN_NAV_GROUPS.flatMap((g) => g.items),
+  ]
+  let best: NavItem | null = null
+  for (const item of allItems) {
+    const match =
+      pathname === item.href || pathname.startsWith(item.href + '/')
+    if (match && (!best || item.href.length > best.href.length)) {
+      best = item
+    }
+  }
+  if (best) return best.label
+  const seg = pathname.split('/').filter(Boolean).pop() ?? 'Dashboard'
+  return seg.charAt(0).toUpperCase() + seg.slice(1)
+}
+
 export function filterGroupsByRole(
   groups: NavGroup[],
   role: Role,

@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       {/* Background gradient + subtle dot grid */}
       <div
         aria-hidden
-        className="absolute inset-0 -z-20 bg-gradient-to-br from-primary-50 via-warm-50 to-white"
+        className="absolute inset-0 -z-20 bg-linear-to-br from-primary-50 via-warm-50 to-white"
       />
       <div
         aria-hidden
@@ -23,7 +23,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="leading-tight">
           <p className="font-display text-lg font-bold text-warm-900">Hulao</p>
-          <p className="text-[11px] font-medium text-primary-500">CS WhatsApp + CRM</p>
+          <p className="text-xs font-medium text-primary-500">CS WhatsApp + CRM</p>
         </div>
       </Link>
 
