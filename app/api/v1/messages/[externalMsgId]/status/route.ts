@@ -17,7 +17,9 @@ export async function GET(req: Request, { params }: Params) {
   if (!gate.ok) return gate.response
 
   const { externalMsgId } = await params
-  const wamid = decodeURIComponent(externalMsgId).trim()
+  // Next sudah men-decode segmen dinamis. decodeURIComponent lagi = double
+  // decode, dan melempar URIError untuk id yang memuat '%' → 500 HTML.
+  const wamid = externalMsgId.trim()
   if (!wamid || wamid.length > 200) {
     return apiV1Error('invalid_query', 'externalMsgId tidak valid.', 400, gate.auth.rateLimitHeaders)
   }

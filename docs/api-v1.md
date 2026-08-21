@@ -7,7 +7,7 @@ Dibuat sendiri dari `/pengembang/api`, dipakai dari skrip / n8n / Zapier / Make.
 
 | Fungsi | File | Peran |
 |---|---|---|
-| `requirePublicApiAuth` | `lib/public-api-auth.ts` | SATU-SATUNYA gerbang `/api/v1/*`. Rate limit per IP → verifikasi Bearer → rate limit per kunci → `touchApiKeyUsage`. Balikannya discriminated union `{ok:true,auth}` / `{ok:false,response}`. |
+| `requirePublicApiAuth` | `lib/public-api-auth.ts` | SATU-SATUNYA gerbang `/api/v1/*`. Guard percobaan gagal per IP → verifikasi Bearer → rate limit per kunci → `touchApiKeyUsage`. Balikannya discriminated union `{ok:true,auth}` / `{ok:false,response}`. |
 | `apiV1Ok` / `apiV1Error` | idem | Envelope `{success,data}` / `{success,error,code}` + header `X-RateLimit-*`. |
 | `parsePagination` | idem | `?limit=1..100&cursor=<id>` seragam untuk semua endpoint list. |
 | `verifySellerApiKey` | `lib/services/seller-api-keys.ts` | Guard bentuk (prefix + panjang) → lookup by `keyHash` @unique → cek revoke/expiry. |
@@ -54,9 +54,16 @@ handler, endpoint v1 terbuka penuh. Jadikan ini butir checklist tiap menambah ro
 
 ## Rate limit
 
-`consumeRateLimit` (`lib/rate-limit-memory.ts`, aditif — `checkRateLimit`/`recordRateLimitHit` lama
-tak disentuh): 60/menit per kunci, 120/menit per IP (pra-auth). Saat kuota habis counter TIDAK
-dinaikkan lagi supaya penyerang tidak memperpanjang window klien jujur.
+Dua lapis dengan semantik berbeda:
+
+- **Per kunci, 60/menit** — `consumeRateLimit` (`lib/rate-limit-memory.ts`, aditif; pasangan lama
+  tak disentuh) menghitung SETIAP request. Saat kuota habis counter tidak dinaikkan lagi supaya
+  penyerang tidak memperpanjang window klien jujur.
+- **Per IP, 120 percobaan GAGAL/menit** — `checkRateLimit` + `recordRateLimitHit`, dicatat hanya
+  saat auth gagal. Kalau request sah ikut dihitung, satu server dengan 3 kunci (3 × 60 = 180 req)
+  akan kena 429 IP sebelum kuota per-kunci yang kita janjikan habis. Saat jatah gagal habis,
+  request tetap diverifikasi dan **kunci sah tetap dilayani** — banyak seller berbagi satu IP
+  publik (kantor/NAT/hosting); yang gagal dijawab 429 tanpa membocorkan alasan aslinya.
 
 Keterbatasan (didokumentasikan juga di tab "Batas & Kuota"): in-memory per proses → reset saat
 deploy, dan limit efektif × jumlah replika bila di-scale. Deployment sekarang single-instance;

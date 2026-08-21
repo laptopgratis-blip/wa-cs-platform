@@ -13,14 +13,18 @@
 
 import { NextResponse } from 'next/server'
 import { getClientIp } from '@/lib/client-ip'
-import { consumeRateLimit } from '@/lib/rate-limit-memory'
+import { checkRateLimit, consumeRateLimit, recordRateLimitHit } from '@/lib/rate-limit-memory'
 import { touchApiKeyUsage, verifySellerApiKey } from '@/lib/services/seller-api-keys'
 
 export const API_VERSION = 'v1'
 
 /** Kuota per kunci. Diumumkan di tab "Batas & Kuota" halaman /pengembang/api. */
 export const RATE_LIMIT_PER_KEY = 60
-/** Kuota pra-auth per IP — menahan tebak-kunci beruntun sebelum menyentuh DB. */
+/**
+ * Batas percobaan auth GAGAL per IP per menit (kunci salah/dicabut/tanpa
+ * header). Request yang berhasil tidak dihitung ke sini — lihat komentar di
+ * requirePublicApiAuth.
+ */
 export const RATE_LIMIT_PER_IP = 120
 export const RATE_WINDOW_MS = 60_000
 
@@ -76,33 +80,38 @@ function readBearer(req: Request): string | null {
 }
 
 export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthResult> {
-  // 1. Rate limit pra-auth per IP — berlaku juga untuk request tanpa token,
-  //    supaya penyerang tidak bisa menembak kunci acak tanpa biaya.
-  const ipQuota = consumeRateLimit({
-    key: `apiv1:ip:${getClientIp(req)}`,
-    limit: RATE_LIMIT_PER_IP,
-    windowMs: RATE_WINDOW_MS,
-  })
-  if (!ipQuota.allowed) {
-    return {
-      ok: false,
-      response: apiV1Error('rate_limited', 'Terlalu banyak request. Coba lagi sebentar lagi.', 429, {
-        ...rateHeaders(ipQuota),
-        'Retry-After': String(Math.ceil(ipQuota.retryAfterMs / 1000)),
-      }),
+  // 1. Guard tebak-kunci per IP. Dua keputusan yang saling mengunci:
+  //
+  //    a. Yang dihitung HANYA percobaan GAGAL (pasangan check/record, bukan
+  //       consumeRateLimit). Satu server bisa memegang 3 kunci sah × 60
+  //       req/menit = 180 request; kalau request sah ikut masuk bucket IP,
+  //       kuota per-kunci yang kita janjikan tak pernah bisa dipakai penuh.
+  //    b. Saat jatah gagal habis, request TIDAK langsung ditolak — kunci tetap
+  //       diverifikasi dan yang SAH tetap dilayani. Banyak seller berbagi satu
+  //       IP publik (kantor/NAT/hosting), jadi menolak buta akan mengunci orang
+  //       yang tidak melakukan apa-apa gara-gara tetangga se-IP salah kunci.
+  //       Biaya untuk penyerang tetap ada: jawabannya jadi 429 tanpa informasi,
+  //       dan Cloudflare tetap lapis pertama untuk volume kasar.
+  const ipKey = `apiv1:ip:${getClientIp(req)}`
+  const ipGuard = checkRateLimit({ key: ipKey, limit: RATE_LIMIT_PER_IP, windowMs: RATE_WINDOW_MS })
+
+  const failAuth = (code: string, message: string): PublicApiAuthResult => {
+    recordRateLimitHit({ key: ipKey, windowMs: RATE_WINDOW_MS })
+    if (!ipGuard.allowed) {
+      // Sudah lewat jatah gagal: sembunyikan alasan aslinya.
+      return {
+        ok: false,
+        response: apiV1Error('rate_limited', 'Terlalu banyak percobaan. Coba lagi sebentar lagi.', 429, {
+          'Retry-After': String(Math.ceil(ipGuard.retryAfterMs / 1000)),
+        }),
+      }
     }
+    return { ok: false, response: apiV1Error(code, message, 401) }
   }
 
   const token = readBearer(req)
   if (!token) {
-    return {
-      ok: false,
-      response: apiV1Error(
-        'missing_token',
-        'Header Authorization: Bearer <API key> wajib diisi.',
-        401,
-      ),
-    }
+    return failAuth('missing_token', 'Header Authorization: Bearer <API key> wajib diisi.')
   }
 
   // DB tumbang tidak boleh keluar sebagai halaman error Next (bocor stack &
@@ -121,13 +130,9 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
   if (!verified.ok) {
     // malformed & not_found dijawab SAMA — jangan sampai penyerang bisa
     // membedakan "formatnya salah" dari "kunci ini tidak ada".
-    if (verified.reason === 'revoked') {
-      return { ok: false, response: apiV1Error('key_revoked', 'Kunci API sudah dicabut.', 401) }
-    }
-    if (verified.reason === 'expired') {
-      return { ok: false, response: apiV1Error('key_expired', 'Kunci API sudah kedaluwarsa.', 401) }
-    }
-    return { ok: false, response: apiV1Error('invalid_token', 'Kunci API tidak valid.', 401) }
+    if (verified.reason === 'revoked') return failAuth('key_revoked', 'Kunci API sudah dicabut.')
+    if (verified.reason === 'expired') return failAuth('key_expired', 'Kunci API sudah kedaluwarsa.')
+    return failAuth('invalid_token', 'Kunci API tidak valid.')
   }
 
   // 2. Rate limit utama per kunci.
