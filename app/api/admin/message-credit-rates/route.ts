@@ -1,6 +1,6 @@
 // GET   /api/admin/message-credit-rates — harga Kredit Pesan per kategori +
 //       ringkasan pemakaian 30 hari.
-// PATCH /api/admin/message-credit-rates {category, priceRp, metaUsd?}
+// PATCH /api/admin/message-credit-rates {category, priceRp, metaRp?}
 import type { NextResponse } from 'next/server'
 import { z } from 'zod'
 
@@ -11,7 +11,8 @@ import { DEFAULT_CREDIT_RATES, invalidateRateCache } from '@/lib/services/messag
 const patchSchema = z.object({
   category: z.enum(['MARKETING', 'UTILITY', 'AUTHENTICATION']),
   priceRp: z.number().int().min(0).max(1_000_000),
-  metaUsd: z.number().min(0).max(10).nullable().optional(),
+  // Harga dasar Meta per pesan (Rp) — informasi pembanding untuk admin.
+  metaRp: z.number().min(0).max(100_000).nullable().optional(),
 })
 
 const DAYS_30 = 30 * 24 * 60 * 60 * 1000
@@ -28,7 +29,7 @@ export async function GET() {
     const rates = (['UTILITY', 'MARKETING', 'AUTHENTICATION'] as const).map((c) => ({
       category: c,
       priceRp: byCat.get(c)?.priceRp ?? DEFAULT_CREDIT_RATES[c],
-      metaUsd: byCat.get(c)?.metaUsd ?? null,
+      metaRp: byCat.get(c)?.metaRp ?? null,
       updatedAt: byCat.get(c)?.updatedAt?.toISOString() ?? null,
       seeded: !byCat.has(c),
     }))
@@ -78,11 +79,11 @@ export async function PATCH(req: Request) {
       create: {
         category: parsed.data.category,
         priceRp: parsed.data.priceRp,
-        metaUsd: parsed.data.metaUsd ?? null,
+        metaRp: parsed.data.metaRp ?? null,
       },
       update: {
         priceRp: parsed.data.priceRp,
-        ...(parsed.data.metaUsd !== undefined ? { metaUsd: parsed.data.metaUsd } : {}),
+        ...(parsed.data.metaRp !== undefined ? { metaRp: parsed.data.metaRp } : {}),
       },
     })
     invalidateRateCache()

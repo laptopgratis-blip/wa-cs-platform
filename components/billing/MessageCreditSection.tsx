@@ -96,7 +96,9 @@ export function MessageCreditSection({ balanceRp, purchasedRp, usedRp, rates, pa
               <span>OTP {formatRupiah(rates.AUTHENTICATION)}</span>
             </div>
             <div className="text-[11px] text-muted-foreground">
-              Utility gratis bila dikirim saat window 24 jam customer masih terbuka.
+              Utility gratis bila dikirim saat window 24 jam customer masih terbuka. Lead dari
+              Click-to-WhatsApp Ads gratis hingga 72 jam (Free Entry Point) — bila Meta tidak
+              menagih, kredit yang terlanjur terpotong direfund otomatis.
             </div>
           </div>
         </CardContent>

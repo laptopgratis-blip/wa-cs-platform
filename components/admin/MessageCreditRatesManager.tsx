@@ -19,7 +19,7 @@ type Category = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION'
 interface RateRow {
   category: Category
   priceRp: number
-  metaUsd: number | null
+  metaRp: number | null
   updatedAt: string | null
   seeded: boolean
 }
@@ -63,10 +63,10 @@ const TX_LABEL: Record<string, string> = {
 export function MessageCreditRatesManager() {
   const [data, setData] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [drafts, setDrafts] = useState<Record<Category, { priceRp: string; metaUsd: string }>>({
-    UTILITY: { priceRp: '', metaUsd: '' },
-    MARKETING: { priceRp: '', metaUsd: '' },
-    AUTHENTICATION: { priceRp: '', metaUsd: '' },
+  const [drafts, setDrafts] = useState<Record<Category, { priceRp: string; metaRp: string }>>({
+    UTILITY: { priceRp: '', metaRp: '' },
+    MARKETING: { priceRp: '', metaRp: '' },
+    AUTHENTICATION: { priceRp: '', metaRp: '' },
   })
   const [saving, setSaving] = useState<Category | null>(null)
 
@@ -83,7 +83,7 @@ export function MessageCreditRatesManager() {
       setData(json.data)
       const next = { ...drafts }
       for (const r of json.data.rates) {
-        next[r.category] = { priceRp: String(r.priceRp), metaUsd: r.metaUsd === null ? '' : String(r.metaUsd) }
+        next[r.category] = { priceRp: String(r.priceRp), metaRp: r.metaRp === null ? '' : String(r.metaRp) }
       }
       setDrafts(next)
     } finally {
@@ -111,7 +111,7 @@ export function MessageCreditRatesManager() {
         body: JSON.stringify({
           category,
           priceRp,
-          metaUsd: d.metaUsd.trim() === '' ? null : Number(d.metaUsd),
+          metaRp: d.metaRp.trim() === '' ? null : Number(d.metaRp),
         }),
       })
       const json = (await res.json()) as { success: boolean; error?: string }
@@ -131,7 +131,7 @@ export function MessageCreditRatesManager() {
       <PageHeader
         icon={MessageCircle}
         title="Kredit Pesan WA"
-        description="Harga per pesan template Meta (Cloud API) yang dipotong dari dompet Kredit Pesan user. Sesuaikan dengan rate card Meta Indonesia × kurs × margin."
+        description="Harga per pesan template Meta (Cloud API) yang dipotong dari dompet Kredit Pesan user. Sesuai dokumen pricing: Marketing Rp657 · Utility Rp393 · Authentication Rp393 (markup ±10–12% di atas dasar Meta)."
       />
 
       {loading && !data ? (
@@ -191,16 +191,16 @@ export function MessageCreditRatesManager() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor={`usd-${r.category}`}>Rate Meta (USD, info)</Label>
+                    <Label htmlFor={`meta-${r.category}`}>Harga dasar Meta (Rp, info)</Label>
                     <Input
-                      id={`usd-${r.category}`}
+                      id={`meta-${r.category}`}
                       type="number"
-                      step="0.0001"
+                      step="0.01"
                       min={0}
-                      placeholder="mis. 0.0411"
-                      value={drafts[r.category].metaUsd}
+                      placeholder="mis. 586.33"
+                      value={drafts[r.category].metaRp}
                       onChange={(e) =>
-                        setDrafts((d) => ({ ...d, [r.category]: { ...d[r.category], metaUsd: e.target.value } }))
+                        setDrafts((d) => ({ ...d, [r.category]: { ...d[r.category], metaRp: e.target.value } }))
                       }
                     />
                   </div>

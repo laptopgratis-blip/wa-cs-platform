@@ -14,11 +14,13 @@ import { prisma } from '@/lib/prisma'
 
 export type CreditRates = Record<MetaTemplateCategory, number>
 
-// Fallback kalau tabel kosong (placeholder — admin harus set di /admin).
+// Fallback kalau tabel kosong — harga jual sesuai dokumen pricing owner
+// (2026-08-21): markup ±10–12% di atas dasar Meta ID (Marketing Rp586,33 /
+// Utility & Auth Rp356,65). Sumber kebenaran runtime tetap MessageCreditRate.
 export const DEFAULT_CREDIT_RATES: CreditRates = {
-  UTILITY: 500,
-  MARKETING: 1000,
-  AUTHENTICATION: 750,
+  UTILITY: 393,
+  MARKETING: 657,
+  AUTHENTICATION: 393,
 }
 
 const RATE_CACHE_TTL_MS = 60_000

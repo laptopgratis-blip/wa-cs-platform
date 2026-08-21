@@ -17,7 +17,10 @@ wajib **template ter-approve** dan **berbayar per pesan** → dompet **Kredit Pe
 
 - Kolom `TokenBalance.messageCreditRp/Purchased/Used`; ledger `MessageCreditTransaction`
   unique `(userId, reference, type)` — idempoten by wamid.
-- Harga per kategori di `MessageCreditRate` (admin: `/admin/message-credits`).
+- Harga per kategori di `MessageCreditRate` (admin: `/admin/message-credits`). Sesuai dokumen
+  pricing owner (2026-08-21): **Marketing Rp657 · Utility Rp393 · Authentication Rp393** per pesan
+  (dasar Meta ID: Rp586,33 / Rp356,65 / Rp356,65 — markup ±10–12%). Free Entry Point (CTWA 72 jam)
+  & pesan dalam window gratis — Meta tidak menagih → rekonsiliasi merefund otomatis.
 - Alur: pre-flight (assert) → **deduct saat wamid diterima** (tanpa guard gte — minus maks ±1
   pesan per race) → webhook `statuses[].pricing` merekonsiliasi (refund/adjust) →
   `failed` → refund penuh. UTILITY dalam window = gratis (expected 0).

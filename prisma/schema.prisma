@@ -265,8 +265,8 @@ model TokenBalance {
 model MessageCreditRate {
   id        String               @id @default(cuid())
   category  MetaTemplateCategory @unique
-  priceRp   Int // Rp per pesan (sudah termasuk margin hulao)
-  metaUsd   Float? // info: rate card Meta (USD) untuk referensi admin
+  priceRp   Int // Rp per pesan (harga jual ke customer, sudah termasuk margin hulao)
+  metaRp    Float? // info: harga dasar Meta per pesan (Rp) untuk referensi admin
   updatedAt DateTime             @updatedAt
 }
 
