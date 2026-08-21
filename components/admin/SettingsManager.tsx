@@ -24,6 +24,18 @@ interface Settings {
   WA_ADMIN: string
   PLATFORM_NAME: string
   SUPPORT_EMAIL: string
+  DOCS_URL: string
+  SUPPORT_HOURS: string
+}
+
+// Satu sumber initial state — dipakai `values` DAN `savedSnapshot`. Dulu dua
+// objek literal terpisah yang harus disamakan manual saat menambah field.
+const EMPTY_SETTINGS: Settings = {
+  WA_ADMIN: '',
+  PLATFORM_NAME: '',
+  SUPPORT_EMAIL: '',
+  DOCS_URL: '',
+  SUPPORT_HOURS: '',
 }
 
 const FIELDS: {
@@ -52,22 +64,29 @@ const FIELDS: {
     key: 'SUPPORT_EMAIL',
     label: 'Email Support',
     placeholder: 'support@hulao.id',
-    helper: 'Email yang ditampilkan di footer / halaman bantuan.',
+    helper: 'Email yang ditampilkan di halaman Bantuan & Dukungan user.',
     type: 'email',
+  },
+  {
+    key: 'SUPPORT_HOURS',
+    label: 'Jam Operasional Support',
+    placeholder: 'Senin–Jumat, 09.00–17.00 WIB',
+    helper:
+      'Ditampilkan di halaman Bantuan & Dukungan supaya user tahu kapan admin membalas.',
+  },
+  {
+    key: 'DOCS_URL',
+    label: 'URL Dokumentasi',
+    placeholder: 'https://docs.hulao.id',
+    helper:
+      'Alamat situs dokumentasi eksternal (wajib https). Kosongkan kalau belum ada — halaman Dokumentasi tetap menampilkan sumber internal.',
+    type: 'url',
   },
 ]
 
 export function SettingsManager() {
-  const [values, setValues] = useState<Settings>({
-    WA_ADMIN: '',
-    PLATFORM_NAME: '',
-    SUPPORT_EMAIL: '',
-  })
-  const [savedSnapshot, setSavedSnapshot] = useState<Settings>({
-    WA_ADMIN: '',
-    PLATFORM_NAME: '',
-    SUPPORT_EMAIL: '',
-  })
+  const [values, setValues] = useState<Settings>(EMPTY_SETTINGS)
+  const [savedSnapshot, setSavedSnapshot] = useState<Settings>(EMPTY_SETTINGS)
   const [isLoading, setLoading] = useState(true)
   const [savingKey, setSavingKey] = useState<keyof Settings | null>(null)
 

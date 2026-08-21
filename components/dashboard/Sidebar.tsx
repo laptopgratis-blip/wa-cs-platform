@@ -2,7 +2,7 @@
 
 // Sidebar utama dashboard — light theme.
 // Menu di-grup berdasarkan kategori (CHAT & CS, ORDER SYSTEM, LANDING PAGE,
-// INTEGRASI, LAPORAN, AKUN). Section header tipis di atas tiap grup. Group
+// INTEGRASI TOKO, LAPORAN, AKUN, PENGEMBANG, DUKUNGAN). Section header tipis
 // bisa di-collapse via chevron — state persist di localStorage. Sumber data
 // dari lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
 // dengan Drawer mobile.

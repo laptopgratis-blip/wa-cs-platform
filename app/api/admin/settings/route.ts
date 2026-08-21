@@ -32,6 +32,22 @@ async function validateValue(
   if (key === 'PLATFORM_NAME' && value && value.length < 2) {
     return 'Nama platform minimal 2 karakter'
   }
+  if (key === 'DOCS_URL' && value) {
+    // Nilai ini dirender jadi <a href> yang diklik user — wajib https supaya
+    // javascript:/data:/http polos tidak bisa diselipkan.
+    let parsed: URL
+    try {
+      parsed = new URL(value)
+    } catch {
+      return 'URL tidak valid. Contoh: https://docs.hulao.id'
+    }
+    if (parsed.protocol !== 'https:') {
+      return 'URL dokumentasi harus memakai https://'
+    }
+  }
+  if (key === 'SUPPORT_HOURS' && value && value.length > 120) {
+    return 'Jam operasional maksimal 120 karakter'
+  }
   if (key === 'OTP_CHANNEL_MODE' && value) {
     if (!['EMAIL', 'WA', 'BOTH'].includes(value)) {
       return 'Mode channel OTP harus EMAIL, WA, atau BOTH'

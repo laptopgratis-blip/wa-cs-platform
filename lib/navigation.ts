@@ -10,11 +10,13 @@ import {
   Banknote,
   BarChart3,
   BellRing,
+  BookMarked,
   BookOpen,
   Bot,
   Box,
   Building2,
   Calculator,
+  Code2,
   Compass,
   Cpu,
   CreditCard,
@@ -27,11 +29,13 @@ import {
   Inbox,
   Key,
   LayoutTemplate,
+  LifeBuoy,
   LineChart,
   MapPin,
   MessageCircle,
   Package,
   Palette,
+  Plug,
   Receipt,
   Rocket,
   Send,
@@ -119,6 +123,20 @@ export const NAV_ACCENTS: Record<string, NavAccent> = {
     activeIcon: 'text-amber-600',
     bar: 'bg-amber-500',
   },
+  indigo: {
+    header: 'text-indigo-600',
+    icon: 'text-indigo-600/80',
+    active: 'bg-indigo-50 text-indigo-700',
+    activeIcon: 'text-indigo-600',
+    bar: 'bg-indigo-500',
+  },
+  rose: {
+    header: 'text-rose-600',
+    icon: 'text-rose-600/80',
+    active: 'bg-rose-50 text-rose-700',
+    activeIcon: 'text-rose-600',
+    bar: 'bg-rose-500',
+  },
   // Netral — grup AKUN & fallback grup admin (tanpa accent).
   neutral: {
     header: 'text-warm-400',
@@ -145,7 +163,7 @@ export interface NavGroup {
 // - "Pesanan" pindah dari Produktivitas ke ORDER SYSTEM (kontekstual cocok)
 // - "Rekening" → "Pengaturan" (label, route tetap /bank-accounts) karena
 //   page itu juga berisi pengaturan pengiriman (origin city, kurir aktif)
-// - Pixel Tracking + Auto Confirm Bank pindah ke group "INTEGRASI" terpisah
+// - Pixel Tracking + Auto Confirm Bank pindah ke group "INTEGRASI TOKO" terpisah
 //   supaya ORDER SYSTEM fokus ke operasional jualan
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
@@ -224,7 +242,7 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
   // supaya scope grup itu fokus ke operasional jualan harian.
   {
-    label: 'INTEGRASI',
+    label: 'INTEGRASI TOKO',
     requiresOrderSystem: true,
     accent: 'emerald',
     items: [
@@ -253,6 +271,27 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
       { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
       { label: 'Upgrade LMS', href: '/pricing-lms', icon: Rocket },
+    ],
+  },
+  // PENGEMBANG (2026-08-21) — kunci API seller + dokumentasi script embed.
+  // Tanpa requiresOrderSystem/roles: tampil untuk SEMUA user (keputusan owner).
+  // Kunci API tetap harus dibuat sendiri, jadi menu ini aman dilihat siapa pun.
+  {
+    label: 'PENGEMBANG',
+    accent: 'indigo',
+    items: [
+      { label: 'API', href: '/pengembang/api', icon: Code2 },
+      { label: 'Integrasi', href: '/pengembang/integrasi', icon: Plug },
+    ],
+  },
+  // DUKUNGAN — sengaja TIDAK pernah disembunyikan oleh HIDDEN_GROUPS_BY_GOAL:
+  // user yang paling butuh bantuan justru yang menyederhanakan menunya.
+  {
+    label: 'DUKUNGAN',
+    accent: 'rose',
+    items: [
+      { label: 'Dokumentasi', href: '/dokumentasi', icon: BookMarked },
+      { label: 'Bantuan & Dukungan', href: '/bantuan', icon: LifeBuoy },
     ],
   },
 ]
@@ -485,7 +524,7 @@ export type OnboardingGoal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
 // di-update di mapping ini juga.
 const HIDDEN_GROUPS_BY_GOAL: Record<OnboardingGoal, string[]> = {
   // CS AI saja → tidak butuh jualan / course / integrasi pixel.
-  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS', 'INTEGRASI'],
+  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS', 'INTEGRASI TOKO'],
   // Jualan + LP → tidak butuh LMS.
   SELL_LP: ['LMS'],
   // Jualan WA only → tidak butuh LP & LMS. Content Studio (di group LP)
