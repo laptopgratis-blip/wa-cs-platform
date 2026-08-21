@@ -143,6 +143,8 @@ model User {
   liveProposals                LiveOptimizationProposal[]
   // LP × Live AI Embed (2026-06-04).
   lpLiveEmbeds                 LpLiveEmbed[]
+  // API publik seller (2026-08-21) — kunci Bearer untuk /api/v1/*.
+  sellerApiKeys                SellerApiKey[]
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -1666,6 +1668,37 @@ model ApiKey {
   lastTestError  String?   @db.Text
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// SELLER API KEY (2026-08-21) — kunci API publik milik SELLER untuk memanggil
+// /api/v1/*. BEDA TOTAL dari model ApiKey di atas, yang berisi kunci provider
+// AI milik PLATFORM (satu baris per provider, terenkripsi, dipakai server).
+//
+// Disimpan sebagai SHA-256 SATU ARAH: key penuh hanya bisa dilihat SEKALI saat
+// dibuat. Kalau DB bocor, hash tidak bisa dipakai memanggil API. Tanpa salt
+// karena entropinya 256-bit CSPRNG (bukan password manusia) — salt memaksa
+// scan seluruh tabel tiap request, sedangkan hash unik bisa di-index.
+// Cabut = soft (revokedAt) supaya jejak audit & lastUsedAt tetap ada.
+// ─────────────────────────────────────────
+model SellerApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String    @db.VarChar(60) // label bebas, mis. "n8n produksi"
+  keyHash    String    @unique // sha256 hex — lookup O(1) lewat index unik
+  keyPrefix  String    @db.VarChar(24) // 16 char awal, ditampilkan di tabel
+  lastFour   String    @db.VarChar(4)
+  // Fase 1 selalu ["read"]. Disiapkan supaya Fase 2 (kirim pesan) tidak
+  // perlu migrasi lagi.
+  scopes     String[]  @default(["read"])
+  lastUsedAt DateTime? // di-update maks. sekali per 5 menit (throttle)
+  expiresAt  DateTime? // null = tidak pernah kedaluwarsa
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
 }
 
 // ─────────────────────────────────────────
