@@ -105,7 +105,19 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
     }
   }
 
-  const verified = await verifySellerApiKey(token)
+  // DB tumbang tidak boleh keluar sebagai halaman error Next (bocor stack &
+  // bukan JSON) — klien API selalu berhak dapat envelope yang sama.
+  let verified: Awaited<ReturnType<typeof verifySellerApiKey>>
+  try {
+    verified = await verifySellerApiKey(token)
+  } catch (err) {
+    console.error('[api/v1] gagal verifikasi kunci:', err)
+    return {
+      ok: false,
+      response: apiV1Error('server_error', 'Gagal memverifikasi kunci API.', 500),
+    }
+  }
+
   if (!verified.ok) {
     // malformed & not_found dijawab SAMA — jangan sampai penyerang bisa
     // membedakan "formatnya salah" dari "kunci ini tidak ada".
