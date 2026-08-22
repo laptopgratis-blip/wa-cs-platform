@@ -197,6 +197,9 @@ punya gaya sendiri — JANGAN disapu aturan ini.
   dekoratif, `zinc|neutral|gray|slate|stone-*` (pakai `warm-*`).
 - Status HANYA via `lib/ui-tones.ts` / `<StatusBadge>` + registry `lib/status.ts`:
   success=emerald · warning=amber · danger=red · info=sky · neutral=warm · brand=primary.
+  Plus satu tone NON-status: `whatsapp`=emerald, aksen kanal WA (kartu/CTA
+  "hubungi via WhatsApp"). Sehue dengan `success`, jadi jangan pakai untuk arti
+  "berhasil" dan jangan taruh badge success bersebelahan dengan CTA WhatsApp.
 - Chart (recharts): `var(--chart-1)`..`var(--chart-5)` — bukan hex literal.
 - EXEMPT: hex non-UI (wallpaper chat WA, brand Google OAuth, template OG/canvas di
   `components/content/visual-templates/`, output LP `app/p/[slug]`), class-map
@@ -216,7 +219,11 @@ punya gaya sendiri — JANGAN disapu aturan ini.
   — narrow `max-w-3xl` (form/detail) · default `max-w-6xl` · wide `max-w-7xl`
   (tabel/analytics) · full-bleed = tanpa container. Jangan dobel page+client.
 - `<Card>` polos (radix-nova: rounded-xl + ring + px-4). Dilarang menambah
-  `border-warm-200` (no-op), `rounded-xl` (redundan), `shadow-*`, `bg-white`.
+  `border-warm-200` (no-op), `rounded-xl` (redundan), `shadow-sm/md/lg/xl`
+  (shadow generik), `bg-white`. PENGECUALIAN: `shadow-orange` boleh — itu token
+  terdefinisi (`--shadow-orange` di globals.css), dipakai sebagai penanda paket
+  unggulan di halaman uang. Card butuh garis nyata → `ring-*`, BUKAN `border-*`
+  (Card pakai `ring-1` tanpa border-width, jadi `border-*` no-op senyap).
   Panel hand-rolled → `<Card>`; tint dekoratif hanya `bg-primary-50`; panel
   status → `TONES[tone].bg/border`.
 - Radius ikuti primitive: card/panel/dialog `rounded-xl` · input/button `rounded-lg`

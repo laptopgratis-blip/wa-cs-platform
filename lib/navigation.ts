@@ -37,6 +37,7 @@ import {
   Palette,
   Plug,
   Receipt,
+  RefreshCw,
   Rocket,
   Send,
   Settings,
@@ -286,6 +287,16 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         href: '/admin/lp-upgrades',
         icon: TrendingUp,
         roles: ['ADMIN', 'FINANCE'],
+      },
+      // Approve/extend/cancel subscription + verifikasi transfer manual.
+      // Sebelumnya halaman ini hanya bisa dicapai lewat deep-link notifikasi
+      // upload bukti transfer — admin yang melewatkan notif kehilangan akses.
+      // ADMIN saja: middleware membatasi FINANCE ke /admin/finance/*.
+      {
+        label: 'Subscriptions',
+        href: '/admin/subscriptions',
+        icon: RefreshCw,
+        roles: ['ADMIN'],
       },
       // LMS Phase 1 — admin manual add/revoke enrollment student per course.
       {

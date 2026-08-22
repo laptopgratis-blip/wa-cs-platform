@@ -28,6 +28,8 @@ import {
 } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
 import { getSetting, SETTING_KEYS } from '@/lib/settings'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,19 +80,23 @@ export default async function BantuanPage() {
 
       {hasContact ? (
         <div className="grid gap-4 sm:grid-cols-2">
+          {/* Aksen kanal WhatsApp (hijau) lewat registry ui-tones, bukan class
+              palet mentah — keputusan owner 2026-08-22. */}
           {waAdmin && (
-            <Card className="bg-primary-50">
+            <Card className={TONES.whatsapp.bg}>
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <MessageCircle className="text-primary-500 size-4" /> Chat
-                  WhatsApp
+                  <MessageCircle
+                    className={cn('size-4', TONES.whatsapp.text)}
+                  />{' '}
+                  Chat WhatsApp
                 </CardTitle>
                 <CardDescription>
                   Cara tercepat. Pesanmu sudah terisi otomatis dengan data akun.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Button asChild className="w-full">
+                <Button asChild className={cn('w-full', TONES.whatsapp.solid)}>
                   <a href={waUrl} target="_blank" rel="noopener noreferrer">
                     Chat Admin via WhatsApp
                   </a>
