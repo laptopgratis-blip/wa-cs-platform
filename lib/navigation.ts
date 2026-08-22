@@ -117,7 +117,11 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Broadcast', href: '/broadcast', icon: Send },
       // Template Meta (Trek 2B, 2026-08-20) — template pesan WhatsApp Cloud
       // API (wajib untuk pesan di luar window 24 jam pada nomor resmi Meta).
-      { label: 'Template Meta', href: '/whatsapp/templates', icon: LayoutTemplate },
+      {
+        label: 'Template Meta',
+        href: '/whatsapp/templates',
+        icon: LayoutTemplate,
+      },
       // CS Live AI rooms (PR-0b, 2026-06-01). Avatar live shopping dengan
       // chat AI + TTS. Customer akses URL publik /live/<slug>.
       { label: 'Live Rooms', href: '/live-rooms', icon: Video },
@@ -315,7 +319,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   {
     label: 'AI & SOUL',
     items: [
-      { label: 'AI Models', href: '/admin/models', icon: Cpu, roles: ['ADMIN'] },
+      {
+        label: 'AI Models',
+        href: '/admin/models',
+        icon: Cpu,
+        roles: ['ADMIN'],
+      },
       {
         label: 'Pricing Database',
         href: '/admin/ai-pricing',
@@ -425,6 +434,19 @@ export const BOTTOM_NAV_ITEMS: Array<{
 // ─── Judul halaman dari nav (dipakai Topbar) ─────────────────────────
 // Satu sumber kebenaran: cari item nav dengan href terpanjang yang
 // prefix-match pathname. Fallback: kapitalisasi segmen terakhir.
+//
+// Halaman yang SENGAJA di luar menu (dicapai lewat menu avatar / CTA /
+// deep-link) tidak punya item nav, jadi fallback-nya menghasilkan judul
+// Inggris atau ber-tanda-hubung ("Profile", "Upgrade-lms"). Untuk itu saja
+// ada override di bawah — bukan pengganti PAGE_TITLES lama yang meng-hardcode
+// SEMUA rute. Jangan tambah entri di sini untuk halaman yang seharusnya
+// memang muncul di sidebar; daftarkan di NAV_GROUPS.
+const NAV_TITLE_OVERRIDES: Record<string, string> = {
+  '/profile': 'Profil Saya',
+  '/upgrade': 'Upgrade Paket',
+  '/upgrade-lms': 'Upgrade LMS',
+}
+
 export function getNavTitle(pathname: string | null): string {
   if (!pathname) return 'Dashboard'
   const allItems: NavItem[] = [
@@ -435,21 +457,19 @@ export function getNavTitle(pathname: string | null): string {
   ]
   let best: NavItem | null = null
   for (const item of allItems) {
-    const match =
-      pathname === item.href || pathname.startsWith(item.href + '/')
+    const match = pathname === item.href || pathname.startsWith(item.href + '/')
     if (match && (!best || item.href.length > best.href.length)) {
       best = item
     }
   }
   if (best) return best.label
+  const override = NAV_TITLE_OVERRIDES[pathname]
+  if (override) return override
   const seg = pathname.split('/').filter(Boolean).pop() ?? 'Dashboard'
   return seg.charAt(0).toUpperCase() + seg.slice(1)
 }
 
-export function filterGroupsByRole(
-  groups: NavGroup[],
-  role: Role,
-): NavGroup[] {
+export function filterGroupsByRole(groups: NavGroup[], role: Role): NavGroup[] {
   return groups
     .map((g) => ({
       ...g,

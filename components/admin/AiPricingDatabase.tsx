@@ -15,7 +15,6 @@ import {
   Loader2,
   Pencil,
   Plus,
-  RefreshCw,
   Sparkles,
   X,
 } from 'lucide-react'
