@@ -9,12 +9,15 @@
 //    kalau saldo nol.
 // 4. Checkbox per ide → tombol "Bikin konten ini"
 // 5. Pilih channel per ide → POST generate → redirect ke library
+import type { LucideIcon } from 'lucide-react'
 import {
   AlertCircle,
+  Flame,
   Loader2,
   Megaphone,
   Sparkles,
   Star,
+  Target,
   TrendingUp,
   Trophy,
   Wand2,
@@ -24,11 +27,16 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { funnelStageMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface LandingPage {
   id: string
@@ -59,19 +67,14 @@ interface Props {
   onPiecesCreated: () => void
 }
 
-const METHOD_LABEL: Record<string, { label: string; cls: string }> = {
-  HOOK: { label: 'Hook Framework', cls: 'bg-primary-100 text-primary-700' },
-  PAIN: { label: 'Pain Point', cls: 'bg-rose-100 text-rose-700' },
-  PERSONA: { label: 'Persona POV', cls: 'bg-purple-100 text-purple-700' },
-  TRENDS: { label: '🔥 Trending Search', cls: 'bg-amber-100 text-amber-700' },
-  WINNER: { label: '🏆 Pola Viral', cls: 'bg-emerald-100 text-emerald-700' },
-  ADS_FRAMEWORK: { label: '🎯 Iklan Berbayar', cls: 'bg-fuchsia-100 text-fuchsia-700' },
-}
-
-const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
-  TOFU: { label: 'Awareness', cls: 'bg-blue-100 text-blue-700' },
-  MOFU: { label: 'Pertimbangan', cls: 'bg-amber-100 text-amber-700' },
-  BOFU: { label: 'Beli', cls: 'bg-emerald-100 text-emerald-700' },
+// Metode ide = label taksonomi (bukan status) → Badge netral + ikon lucide.
+const METHOD_LABEL: Record<string, { label: string; icon?: LucideIcon }> = {
+  HOOK: { label: 'Hook Framework' },
+  PAIN: { label: 'Pain Point' },
+  PERSONA: { label: 'Persona POV' },
+  TRENDS: { label: 'Trending Search', icon: Flame },
+  WINNER: { label: 'Pola Viral', icon: Trophy },
+  ADS_FRAMEWORK: { label: 'Iklan Berbayar', icon: Target },
 }
 
 const CHANNEL_LABEL: Record<string, string> = {
@@ -120,7 +123,9 @@ export function IdeaGeneratorTab({
   const [mode, setMode] = useState<'lp' | 'manual'>(
     initialLpId || landingPages.length > 0 ? 'lp' : 'manual',
   )
-  const [lpId, setLpId] = useState<string>(initialLpId ?? landingPages[0]?.id ?? '')
+  const [lpId, setLpId] = useState<string>(
+    initialLpId ?? landingPages[0]?.id ?? '',
+  )
   const [manualTitle, setManualTitle] = useState('')
   const [manualAudience, setManualAudience] = useState('')
   const [manualOffer, setManualOffer] = useState('')
@@ -131,7 +136,9 @@ export function IdeaGeneratorTab({
   const [includeAdsFramework, setIncludeAdsFramework] = useState(false)
   // Phase 6 — saat user select ide ADS, butuh format (IMAGE/VIDEO/CAROUSEL).
   // Map: ideaId → 'IMAGE' | 'VIDEO' | 'CAROUSEL'. Fallback inferred dari format ide.
-  const [adsFormatChoice, setAdsFormatChoice] = useState<Map<string, string>>(new Map())
+  const [adsFormatChoice, setAdsFormatChoice] = useState<Map<string, string>>(
+    new Map(),
+  )
   // Filter target — default semua. Persist di localStorage supaya next time
   // auto-restore.
   const [targetChannels, setTargetChannels] = useState<string[]>(
@@ -148,7 +155,8 @@ export function IdeaGeneratorTab({
       const ch = localStorage.getItem(PREF_KEY_CHANNELS)
       if (ch) {
         const parsed = JSON.parse(ch)
-        if (Array.isArray(parsed) && parsed.length > 0) setTargetChannels(parsed)
+        if (Array.isArray(parsed) && parsed.length > 0)
+          setTargetChannels(parsed)
       }
       const fn = localStorage.getItem(PREF_KEY_FUNNELS)
       if (fn) {
@@ -283,7 +291,9 @@ export function IdeaGeneratorTab({
     setSelected(next)
   }
 
-  function inferAdsFormat(idea: Idea | undefined): 'IMAGE' | 'VIDEO' | 'CAROUSEL' {
+  function inferAdsFormat(
+    idea: Idea | undefined,
+  ): 'IMAGE' | 'VIDEO' | 'CAROUSEL' {
     if (!idea) return 'IMAGE'
     if (idea.format === 'ADS_VIDEO') return 'VIDEO'
     if (idea.format === 'ADS_CAROUSEL') return 'CAROUSEL'
@@ -320,7 +330,8 @@ export function IdeaGeneratorTab({
 
       // 2. Split ke organic vs ads.
       const organicItems: { ideaId: string; channel: string }[] = []
-      const adsItems: { ideaId: string; platform: string; format: string }[] = []
+      const adsItems: { ideaId: string; platform: string; format: string }[] =
+        []
       selected.forEach((channel, ideaId) => {
         if (ADS_CHANNELS.has(channel)) {
           const format =
@@ -345,7 +356,9 @@ export function IdeaGeneratorTab({
           toast.error(genJson.error || 'Gagal generate konten organik')
           return
         }
-        allResults.push(...(genJson.data.results as { status: string; title?: string }[]))
+        allResults.push(
+          ...(genJson.data.results as { status: string; title?: string }[]),
+        )
       }
 
       if (adsItems.length > 0) {
@@ -359,7 +372,9 @@ export function IdeaGeneratorTab({
           toast.error(adsJson.error || 'Gagal generate iklan')
           return
         }
-        allResults.push(...(adsJson.data.results as { status: string; title?: string }[]))
+        allResults.push(
+          ...(adsJson.data.results as { status: string; title?: string }[]),
+        )
       }
 
       const ok = allResults.filter((r) => r.status === 'OK').length
@@ -387,37 +402,39 @@ export function IdeaGeneratorTab({
         <CardContent className="space-y-4 p-5">
           <div className="flex items-baseline justify-between gap-3">
             <div>
-              <h2 className="font-display text-base font-bold text-warm-900">
+              <h2 className="font-display text-warm-900 text-xl font-semibold">
                 Sumber ide
               </h2>
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Hulao analisa LP atau brief kamu, lalu kasih 15 ide siap pakai.
               </p>
             </div>
-            <span className="text-xs text-warm-500">
-              Saldo: <strong>{tokenBalance.toLocaleString('id-ID')} token</strong>
+            <span className="text-warm-500 text-xs">
+              Saldo:{' '}
+              <strong>{tokenBalance.toLocaleString('id-ID')} token</strong>
             </span>
           </div>
 
-          <div className="flex gap-1 rounded-md border border-warm-300 bg-warm-50 p-0.5 text-xs">
+          <div className="border-warm-300 bg-warm-50 flex gap-1 rounded-md border p-0.5 text-xs">
             <button
               type="button"
               onClick={() => setMode('lp')}
               className={`flex-1 rounded px-3 py-1.5 font-medium ${
                 mode === 'lp'
-                  ? 'bg-white text-primary-700 shadow-sm'
+                  ? 'text-primary-700 bg-white shadow-sm'
                   : 'text-warm-600 hover:text-warm-900'
               }`}
               disabled={landingPages.length === 0}
             >
-              Dari LP saya {landingPages.length > 0 && `(${landingPages.length})`}
+              Dari LP saya{' '}
+              {landingPages.length > 0 && `(${landingPages.length})`}
             </button>
             <button
               type="button"
               onClick={() => setMode('manual')}
               className={`flex-1 rounded px-3 py-1.5 font-medium ${
                 mode === 'manual'
-                  ? 'bg-white text-primary-700 shadow-sm'
+                  ? 'text-primary-700 bg-white shadow-sm'
                   : 'text-warm-600 hover:text-warm-900'
               }`}
             >
@@ -429,7 +446,14 @@ export function IdeaGeneratorTab({
             <div className="space-y-1.5">
               <Label htmlFor="lp-select">Pilih LP</Label>
               {landingPages.length === 0 ? (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <div
+                  className={cn(
+                    'rounded-md border p-3 text-xs',
+                    TONES.warning.bg,
+                    TONES.warning.border,
+                    TONES.warning.text,
+                  )}
+                >
                   Belum punya LP. Buat dulu di{' '}
                   <Link
                     href="/landing-pages"
@@ -444,7 +468,7 @@ export function IdeaGeneratorTab({
                   id="lp-select"
                   value={lpId}
                   onChange={(e) => handleLpChange(e.target.value)}
-                  className="w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-sm"
+                  className="border-warm-300 w-full rounded-md border bg-white px-3 py-2 text-sm"
                 >
                   {landingPages.map((lp) => (
                     <option key={lp.id} value={lp.id}>
@@ -496,12 +520,12 @@ export function IdeaGeneratorTab({
           )}
 
           {/* Section: pilih channel target */}
-          <div className="space-y-2 rounded-md border border-warm-200 bg-white p-3">
+          <div className="border-warm-200 space-y-2 rounded-md border bg-white p-3">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-warm-900">
+              <Label className="text-warm-900 text-xs font-semibold">
                 Mau bikin konten apa? ({targetChannels.length}/8)
               </Label>
-              <div className="flex gap-1.5 text-[11px]">
+              <div className="flex gap-1.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setTargetChannels(Array.from(ALL_CHANNELS))}
@@ -527,7 +551,7 @@ export function IdeaGeneratorTab({
                     key={c}
                     className={`flex cursor-pointer items-center gap-2 rounded border px-2.5 py-1.5 text-xs transition-all ${
                       checked
-                        ? 'border-primary-500 bg-primary-50 font-medium text-primary-900'
+                        ? 'border-primary-500 bg-primary-50 text-primary-900 font-medium'
                         : 'border-warm-200 text-warm-600 hover:bg-warm-50'
                     }`}
                   >
@@ -535,7 +559,7 @@ export function IdeaGeneratorTab({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleChannel(c)}
-                      className="size-3.5 cursor-pointer accent-primary-500"
+                      className="accent-primary-500 size-3.5 cursor-pointer"
                     />
                     {CHANNEL_LABEL[c]}
                   </label>
@@ -545,12 +569,12 @@ export function IdeaGeneratorTab({
           </div>
 
           {/* Section: pilih funnel target */}
-          <div className="space-y-2 rounded-md border border-warm-200 bg-white p-3">
+          <div className="border-warm-200 space-y-2 rounded-md border bg-white p-3">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-warm-900">
+              <Label className="text-warm-900 text-xs font-semibold">
                 Targetin tahap apa? ({targetFunnels.length}/3)
               </Label>
-              <div className="flex gap-1.5 text-[11px]">
+              <div className="flex gap-1.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setTargetFunnels(Array.from(ALL_FUNNELS))}
@@ -585,13 +609,15 @@ export function IdeaGeneratorTab({
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggleFunnel(f)}
-                      className="mt-0.5 size-3.5 cursor-pointer accent-primary-500"
+                      className="accent-primary-500 mt-0.5 size-3.5 cursor-pointer"
                     />
                     <div className="flex-1">
-                      <div className={`font-semibold ${checked ? 'text-primary-900' : 'text-warm-900'}`}>
+                      <div
+                        className={`font-semibold ${checked ? 'text-primary-900' : 'text-warm-900'}`}
+                      >
                         {meta.label}
                       </div>
-                      <div className="text-[11px] text-warm-500">{meta.desc}</div>
+                      <div className="text-warm-500 text-xs">{meta.desc}</div>
                     </div>
                   </label>
                 )
@@ -599,58 +625,58 @@ export function IdeaGeneratorTab({
             </div>
           </div>
 
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+          <label className="border-warm-200 bg-warm-50 hover:bg-warm-100 flex cursor-pointer items-start gap-2 rounded-md border p-3 text-xs">
             <input
               type="checkbox"
               checked={includeTrends}
               onChange={(e) => setIncludeTrends(e.target.checked)}
-              className="mt-0.5 size-4 cursor-pointer accent-primary-500"
+              className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
             />
             <div className="flex-1">
-              <div className="flex items-center gap-1 font-semibold text-warm-900">
-                <TrendingUp className="size-3.5 text-amber-600" />
+              <div className="text-warm-900 flex items-center gap-1 font-semibold">
+                <TrendingUp className="text-primary-600 size-3.5" />
                 Tambahkan ide trending search (+5 ide)
               </div>
-              <p className="mt-0.5 text-[11px] text-warm-500">
+              <p className="text-warm-500 mt-0.5 text-xs">
                 Hulao cek apa yg lagi dicari orang di Google Indonesia terkait
                 produk kamu, lalu buat ide riding wave-nya.
               </p>
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+          <label className="border-warm-200 bg-warm-50 hover:bg-warm-100 flex cursor-pointer items-start gap-2 rounded-md border p-3 text-xs">
             <input
               type="checkbox"
               checked={includeWinner}
               onChange={(e) => setIncludeWinner(e.target.checked)}
-              className="mt-0.5 size-4 cursor-pointer accent-primary-500"
+              className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
             />
             <div className="flex-1">
-              <div className="flex items-center gap-1 font-semibold text-warm-900">
-                <Trophy className="size-3.5 text-emerald-600" />
+              <div className="text-warm-900 flex items-center gap-1 font-semibold">
+                <Trophy className="text-primary-600 size-3.5" />
                 Belajar dari konten viral (+5 ide)
               </div>
-              <p className="mt-0.5 text-[11px] text-warm-500">
-                Hulao analisa konten kamu dgn reach tertinggi & buat ide baru
-                yg tiru pola sukses-nya. Butuh konten POSTED dgn metric tercatat
-                — input metric di tab Insights setelah post.
+              <p className="text-warm-500 mt-0.5 text-xs">
+                Hulao analisa konten kamu dgn reach tertinggi & buat ide baru yg
+                tiru pola sukses-nya. Butuh konten POSTED dgn metric tercatat —
+                input metric di tab Insights setelah post.
               </p>
             </div>
           </label>
 
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs hover:bg-warm-100">
+          <label className="border-warm-200 bg-warm-50 hover:bg-warm-100 flex cursor-pointer items-start gap-2 rounded-md border p-3 text-xs">
             <input
               type="checkbox"
               checked={includeAdsFramework}
               onChange={(e) => setIncludeAdsFramework(e.target.checked)}
-              className="mt-0.5 size-4 cursor-pointer accent-fuchsia-500"
+              className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
             />
             <div className="flex-1">
-              <div className="flex items-center gap-1 font-semibold text-warm-900">
-                <Megaphone className="size-3.5 text-fuchsia-600" />
+              <div className="text-warm-900 flex items-center gap-1 font-semibold">
+                <Megaphone className="text-primary-600 size-3.5" />
                 Tambahkan ide iklan berbayar (+5 ide)
               </div>
-              <p className="mt-0.5 text-[11px] text-warm-500">
+              <p className="text-warm-500 mt-0.5 text-xs">
                 5 framework direct response untuk Meta Ads & TikTok Ads
                 (Hormozi/PAS/BAB/Social Proof/Scarcity). Output siap jadi ad
                 creative full — 5 headline variant + 3 primary text + visual
@@ -662,7 +688,7 @@ export function IdeaGeneratorTab({
           <Button
             onClick={handleGenerate}
             disabled={generating}
-            className="w-full bg-primary-500 text-white hover:bg-primary-600"
+            className="w-full"
             size="lg"
           >
             {generating ? (
@@ -673,7 +699,12 @@ export function IdeaGeneratorTab({
             ) : (
               <>
                 <Wand2 className="mr-2 size-4" />
-                Generate {15 + (includeTrends ? 5 : 0) + (includeWinner ? 5 : 0) + (includeAdsFramework ? 5 : 0)} ide konten
+                Generate{' '}
+                {15 +
+                  (includeTrends ? 5 : 0) +
+                  (includeWinner ? 5 : 0) +
+                  (includeAdsFramework ? 5 : 0)}{' '}
+                ide konten
               </>
             )}
           </Button>
@@ -684,11 +715,11 @@ export function IdeaGeneratorTab({
       {ideas.length > 0 && (
         <>
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-base font-bold text-warm-900">
+            <h2 className="font-display text-warm-900 text-xl font-semibold">
               Pilih ide yg mau di-bikin ({selected.size}/{ideas.length})
             </h2>
             {tokensCharged !== null && (
-              <span className="text-xs text-warm-500">
+              <span className="text-warm-500 text-xs">
                 Token kepake: {tokensCharged.toLocaleString('id-ID')}
               </span>
             )}
@@ -699,13 +730,13 @@ export function IdeaGeneratorTab({
               const isSelected = selected.has(idea.id)
               const channelChosen = selected.get(idea.id) ?? idea.channelFit[0]
               const method = METHOD_LABEL[idea.method]
-              const funnel = FUNNEL_LABEL[idea.funnelStage]
+              const funnel = funnelStageMeta[idea.funnelStage]
               return (
                 <Card
                   key={idea.id}
                   className={`cursor-pointer transition-all ${
                     isSelected
-                      ? 'border-primary-500 ring-2 ring-primary-200'
+                      ? 'border-primary-500 ring-primary-200 ring-2'
                       : 'hover:border-warm-300'
                   }`}
                   onClick={() => toggleIdea(idea)}
@@ -714,14 +745,16 @@ export function IdeaGeneratorTab({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex flex-wrap gap-1">
                         {method && (
-                          <Badge className={`text-[10px] ${method.cls}`}>
+                          <Badge variant="secondary">
+                            {method.icon && <method.icon aria-hidden />}
                             {method.label}
                           </Badge>
                         )}
                         {funnel && (
-                          <Badge className={`text-[10px] ${funnel.cls}`}>
-                            {funnel.label}
-                          </Badge>
+                          <StatusBadge
+                            tone={funnel.tone}
+                            label={funnel.label}
+                          />
                         )}
                       </div>
                       <div className="flex items-center gap-0.5">
@@ -730,7 +763,7 @@ export function IdeaGeneratorTab({
                             key={i}
                             className={`size-3 ${
                               i < idea.predictedVirality
-                                ? 'fill-amber-400 text-amber-400'
+                                ? 'fill-primary-400 text-primary-400'
                                 : 'text-warm-300'
                             }`}
                           />
@@ -738,24 +771,24 @@ export function IdeaGeneratorTab({
                       </div>
                     </div>
 
-                    <p className="text-sm font-semibold leading-snug text-warm-900">
+                    <p className="text-warm-900 text-sm leading-snug font-semibold">
                       {idea.hook}
                     </p>
-                    <p className="text-xs leading-relaxed text-warm-600">
+                    <p className="text-warm-600 text-xs leading-relaxed">
                       {idea.angle}
                     </p>
 
-                    <div className="border-t border-warm-100 pt-2 text-[11px] text-warm-500">
+                    <div className="border-warm-100 text-warm-500 border-t pt-2 text-xs">
                       <strong>Kenapa works:</strong> {idea.whyItWorks}
                     </div>
 
                     {isSelected && (
                       <div
-                        className="space-y-2 rounded-md border border-primary-200 bg-primary-50 p-2"
+                        className="border-primary-200 bg-primary-50 space-y-2 rounded-md border p-2"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div>
-                          <Label className="mb-1 block text-[11px] font-medium text-primary-900">
+                          <Label className="text-primary-900 mb-1 block text-xs font-medium">
                             {channelChosen && ADS_CHANNELS.has(channelChosen)
                               ? 'Iklan di platform:'
                               : 'Posting di channel:'}
@@ -765,7 +798,7 @@ export function IdeaGeneratorTab({
                             onChange={(e) =>
                               setIdeaChannel(idea.id, e.target.value)
                             }
-                            className="w-full rounded border border-primary-300 bg-white px-2 py-1 text-xs"
+                            className="border-primary-300 w-full rounded border bg-white px-2 py-1 text-xs"
                           >
                             {idea.channelFit.map((c) => (
                               <option key={c} value={c}>
@@ -776,22 +809,25 @@ export function IdeaGeneratorTab({
                         </div>
                         {channelChosen && ADS_CHANNELS.has(channelChosen) && (
                           <div>
-                            <Label className="mb-1 block text-[11px] font-medium text-fuchsia-900">
+                            <Label className="text-primary-900 mb-1 block text-xs font-medium">
                               Format iklan:
                             </Label>
                             <select
                               value={
-                                adsFormatChoice.get(idea.id) ?? inferAdsFormat(idea)
+                                adsFormatChoice.get(idea.id) ??
+                                inferAdsFormat(idea)
                               }
                               onChange={(e) => {
                                 const next = new Map(adsFormatChoice)
                                 next.set(idea.id, e.target.value)
                                 setAdsFormatChoice(next)
                               }}
-                              className="w-full rounded border border-fuchsia-300 bg-white px-2 py-1 text-xs"
+                              className="border-primary-300 w-full rounded border bg-white px-2 py-1 text-xs"
                             >
                               <option value="IMAGE">Static Image</option>
-                              <option value="VIDEO">Video Ad (storyboard)</option>
+                              <option value="VIDEO">
+                                Video Ad (storyboard)
+                              </option>
                               <option value="CAROUSEL">Carousel</option>
                             </select>
                           </div>
@@ -805,7 +841,7 @@ export function IdeaGeneratorTab({
           </div>
 
           {selected.size > 0 && (
-            <div className="sticky bottom-4 flex items-center justify-between gap-3 rounded-lg border border-primary-300 bg-primary-50 p-4 shadow-lg">
+            <div className="border-primary-300 bg-primary-50 sticky bottom-4 flex items-center justify-between gap-3 rounded-lg border p-4 shadow-lg">
               <div className="text-sm">
                 <strong>{selected.size} ide</strong> dipilih.{' '}
                 <span className="text-warm-600">
@@ -813,18 +849,15 @@ export function IdeaGeneratorTab({
                   {Array.from(selected.keys())
                     .map(
                       (id) =>
-                        ideas.find((it) => it.id === id)?.estimatedTokens ?? 800,
+                        ideas.find((it) => it.id === id)?.estimatedTokens ??
+                        800,
                     )
                     .reduce((a, b) => a + b, 0)
                     .toLocaleString('id-ID')}{' '}
                   token
                 </span>
               </div>
-              <Button
-                onClick={handleGeneratePieces}
-                disabled={briefBuilding}
-                className="bg-primary-500 text-white hover:bg-primary-600"
-              >
+              <Button onClick={handleGeneratePieces} disabled={briefBuilding}>
                 {briefBuilding ? (
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" />
@@ -844,27 +877,28 @@ export function IdeaGeneratorTab({
 
       {/* Empty state */}
       {ideas.length === 0 && !generating && (
-        <div className="rounded-xl border border-dashed border-warm-200 bg-warm-50 py-12 text-center">
-          <Sparkles className="mx-auto mb-2 size-8 text-warm-300" />
-          <p className="text-sm font-medium text-warm-700">
-            Klik tombol di atas untuk dapat 15 ide konten dari Hulao
-          </p>
-          <p className="mt-1 text-xs text-warm-500">
-            Hook framework + pain-point audience + persona POV — siap pilih
-          </p>
-        </div>
+        <EmptyState
+          bordered
+          icon={Sparkles}
+          title="Klik tombol di atas untuk dapat 15 ide konten dari Hulao"
+          description="Hook framework + pain-point audience + persona POV — siap pilih"
+        />
       )}
 
       {/* Saldo nol warning */}
       {tokenBalance < 100 && (
-        <div className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+        <div
+          className={cn(
+            'flex items-start gap-3 rounded-md border p-3 text-xs',
+            TONES.warning.bg,
+            TONES.warning.border,
+            TONES.warning.text,
+          )}
+        >
           <AlertCircle className="size-4 shrink-0" />
           <div>
             Saldo token kamu rendah ({tokenBalance.toLocaleString('id-ID')}).{' '}
-            <Link
-              href="/pricing"
-              className="font-semibold underline hover:text-amber-700"
-            >
+            <Link href="/pricing" className="font-semibold underline">
               Top up sekarang
             </Link>{' '}
             untuk lanjut generate ide & konten.

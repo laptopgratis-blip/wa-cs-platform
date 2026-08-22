@@ -108,7 +108,9 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
       )
       setInsufficientInfo(null)
     } catch {
-      toast.error('Browser tidak izinkan akses clipboard. Copy manual dari halaman ini.')
+      toast.error(
+        'Browser tidak izinkan akses clipboard. Copy manual dari halaman ini.',
+      )
     }
   }
 
@@ -183,25 +185,25 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
     <div className="bg-card">
       <button
         type="button"
-        className="flex w-full items-center justify-between border-b border-warm-200 px-4 py-2.5 text-left hover:bg-warm-50"
+        className="border-warm-200 hover:bg-warm-50 flex w-full items-center justify-between border-b px-4 py-2.5 text-left"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-primary-500" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Sparkles className="text-primary-500 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Generate dengan AI
           </span>
           {lastUsage && !open && (
-            <span className="text-[10px] text-warm-500">
+            <span className="text-warm-500 text-xs">
               · terakhir: {lastUsage.outputTokens} output tokens, potong{' '}
               {lastUsage.tokensUsed} token platform
             </span>
           )}
         </div>
         {open ? (
-          <ChevronUp className="size-4 text-warm-500" />
+          <ChevronUp className="text-warm-500 size-4" />
         ) : (
-          <ChevronDown className="size-4 text-warm-500" />
+          <ChevronDown className="text-warm-500 size-4" />
         )}
       </button>
 
@@ -235,7 +237,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
               value={imageUrls}
               onChange={(e) => setImageUrls(e.target.value)}
               maxLength={5000}
-              className="font-mono text-[11px]"
+              className="font-mono text-xs"
             />
           </div>
 
@@ -253,7 +255,11 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   {LP_STYLES.map((s) => (
-                    <SelectItem key={s.value} value={s.value} className="text-xs">
+                    <SelectItem
+                      key={s.value}
+                      value={s.value}
+                      className="text-xs"
+                    >
                       {s.label}
                     </SelectItem>
                   ))}
@@ -273,7 +279,11 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   {LP_CTA_TYPES.map((c) => (
-                    <SelectItem key={c.value} value={c.value} className="text-xs">
+                    <SelectItem
+                      key={c.value}
+                      value={c.value}
+                      className="text-xs"
+                    >
                       {c.label}
                     </SelectItem>
                   ))}
@@ -291,13 +301,11 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
                 id="ai-wa"
                 placeholder="6281234567890"
                 value={waNumber}
-                onChange={(e) =>
-                  setWaNumber(e.target.value.replace(/\D/g, ''))
-                }
+                onChange={(e) => setWaNumber(e.target.value.replace(/\D/g, ''))}
                 maxLength={15}
                 className="h-9 font-mono text-xs"
               />
-              <p className="text-[10px] text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Format: 62 + nomor tanpa 0 di depan (mis. 6281234567890)
               </p>
             </div>
@@ -322,9 +330,9 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
                 value={checkoutUrl}
                 onChange={(e) => setCheckoutUrl(e.target.value)}
                 maxLength={500}
-                className="h-9 font-mono text-[11px]"
+                className="h-9 font-mono text-xs"
               />
-              <p className="text-[10px] text-warm-500">
+              <p className="text-warm-500 text-xs">
                 {ctaType === 'BUY' &&
                   'URL halaman checkout/order eksternal (mis. Tokopedia, Shopee, atau order form Hulao). Kosongkan kalau mau AI buat form order inline.'}
                 {ctaType === 'SIGNUP' &&
@@ -338,7 +346,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
           <Button
             type="submit"
             disabled={isGenerating || description.trim().length < 20}
-            className="w-full bg-primary-500 text-white shadow-orange hover:bg-primary-600"
+            className="w-full"
           >
             {isGenerating ? (
               <>
@@ -352,12 +360,13 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
               </>
             )}
           </Button>
-          <p className="-mt-2 text-center text-[10px] text-warm-500">
-            Token dipotong sesuai pemakaian AI (otomatis dihitung setelah selesai)
+          <p className="text-warm-500 -mt-2 text-center text-xs">
+            Token dipotong sesuai pemakaian AI (otomatis dihitung setelah
+            selesai)
           </p>
 
           {lastUsage && (
-            <div className="rounded-md border border-warm-200 bg-warm-50 p-2 text-[10px] text-warm-600">
+            <div className="border-warm-200 bg-warm-50 text-warm-600 rounded-md border p-2 text-xs">
               Generasi terakhir:{' '}
               <span className="font-semibold">
                 {lastUsage.tokensUsed} token platform
@@ -368,7 +377,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
           )}
 
           {description.trim().length < 20 && (
-            <p className="text-[10px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               Deskripsi minimal 20 karakter — semakin detail semakin baik
               hasilnya.
             </p>
@@ -383,7 +392,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="size-5 text-primary-500" />
+              <Sparkles className="text-primary-500 size-5" />
               Saldo Token Tidak Cukup
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-2 text-left">
@@ -399,10 +408,13 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
                 .
               </span>
               <span className="block">
-                Kamu masih bisa buat LP keren tanpa AI dari Hulao — pakai cara ini:
+                Kamu masih bisa buat LP keren tanpa AI dari Hulao — pakai cara
+                ini:
               </span>
               <ol className="ml-5 list-decimal space-y-1 text-sm">
-                <li>Klik <strong>Copy Prompt Template</strong> di bawah</li>
+                <li>
+                  Klik <strong>Copy Prompt Template</strong> di bawah
+                </li>
                 <li>Paste di ChatGPT atau Claude.ai (gratis)</li>
                 <li>Copy HTML hasilnya</li>
                 <li>Paste di editor Hulao bagian bawah, preview & publish</li>

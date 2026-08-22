@@ -8,10 +8,7 @@ import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import {
-  TEMPLATES,
-  getTemplateComponent,
-} from './visual-templates/templates'
+import { TEMPLATES, getTemplateComponent } from './visual-templates/templates'
 import type { TemplateProps } from './visual-templates/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,7 +28,14 @@ interface Props {
   pieceTitle: string
 }
 
-const ACCENT_PRESETS = ['#ea580c', '#16a34a', '#2563eb', '#9333ea', '#db2777', '#1a1a1a']
+const ACCENT_PRESETS = [
+  '#ea580c',
+  '#16a34a',
+  '#2563eb',
+  '#9333ea',
+  '#db2777',
+  '#1a1a1a',
+]
 
 const REAL_W = 1080
 const REAL_H = 1080
@@ -79,7 +83,8 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
   }, [slideStates.length])
 
   const active = slideStates[activeIdx]
-  if (!active) return <div className="text-sm text-warm-500">Tidak ada slide</div>
+  if (!active)
+    return <div className="text-warm-500 text-sm">Tidak ada slide</div>
 
   const TemplateComp = getTemplateComponent(active.templateId)
 
@@ -171,7 +176,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
   return (
     <div className="space-y-4">
       {/* Header: slide count + thumb strip */}
-      <div className="flex flex-col gap-2 rounded-md border border-warm-200 bg-warm-50 p-3">
+      <div className="border-warm-200 bg-warm-50 flex flex-col gap-2 rounded-md border p-3">
         <div className="flex items-center justify-between text-xs">
           <strong className="text-warm-900">
             Slide {activeIdx + 1} dari {slideStates.length}
@@ -188,8 +193,8 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               onClick={() => setActiveIdx(i)}
               className={`shrink-0 rounded px-3 py-1 text-xs font-medium transition-all ${
                 i === activeIdx
-                  ? 'bg-primary-500 text-white shadow-md'
-                  : 'bg-white text-warm-600 hover:bg-warm-100'
+                  ? 'bg-primary-500 text-white'
+                  : 'text-warm-600 hover:bg-warm-100 bg-white'
               }`}
             >
               Slide {i + 1}
@@ -217,10 +222,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
                   transform: `scale(${PREVIEW_W / REAL_W})`,
                 }}
               >
-                <div
-                  ref={captureRef}
-                  style={{ width: REAL_W, height: REAL_H }}
-                >
+                <div ref={captureRef} style={{ width: REAL_W, height: REAL_H }}>
                   {/* key=activeIdx supaya React unmount template lama saat
                       switch slide — preview update cleanly */}
                   <TemplateComp
@@ -242,7 +244,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               type="button"
               onClick={goPrev}
               disabled={activeIdx === 0}
-              className="absolute left-1 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 ring-warm-200 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="ring-warm-200 absolute top-1/2 left-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Slide sebelumnya"
             >
               <ChevronLeft className="size-5" />
@@ -251,7 +253,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               type="button"
               onClick={goNext}
               disabled={activeIdx === slideStates.length - 1}
-              className="absolute right-1 top-1/2 translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 ring-warm-200 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="ring-warm-200 absolute top-1/2 right-1 translate-x-1/2 -translate-y-1/2 rounded-full bg-white/90 p-2 shadow-lg ring-1 backdrop-blur transition-opacity hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="Slide berikutnya"
             >
               <ChevronRight className="size-5" />
@@ -266,14 +268,14 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
                 onClick={() => setActiveIdx(i)}
                 className={`size-2 rounded-full transition-all ${
                   i === activeIdx
-                    ? 'w-6 bg-primary-500'
+                    ? 'bg-primary-500 w-6'
                     : 'bg-warm-300 hover:bg-warm-400'
                 }`}
                 aria-label={`Slide ${i + 1}`}
               />
             ))}
           </div>
-          <div className="text-[11px] text-warm-500">
+          <div className="text-warm-500 text-xs">
             Resolusi export: {REAL_W}×{REAL_H}
           </div>
           <div className="flex gap-2">
@@ -292,7 +294,6 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
             <Button
               onClick={downloadAll}
               disabled={downloadingOne || downloadingAll}
-              className="bg-primary-500 text-white hover:bg-primary-600"
             >
               {downloadingAll ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
@@ -307,7 +308,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
         {/* Controls */}
         <div className="space-y-4">
           <section className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+            <Label className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
               Template slide ke-{activeIdx + 1}
             </Label>
             <div className="grid grid-cols-2 gap-2">
@@ -318,21 +319,19 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
                   onClick={() => patch('templateId' as keyof SlideState, t.id)}
                   className={`rounded-md border p-2 text-left text-xs transition-all ${
                     active.templateId === t.id
-                      ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                      ? 'border-primary-500 bg-primary-50 ring-primary-200 ring-2'
                       : 'border-warm-200 hover:bg-warm-50'
                   }`}
                 >
-                  <div className="font-semibold text-warm-900">{t.name}</div>
-                  <div className="text-[10px] text-warm-500">
-                    {t.description}
-                  </div>
+                  <div className="text-warm-900 font-semibold">{t.name}</div>
+                  <div className="text-warm-500 text-xs">{t.description}</div>
                 </button>
               ))}
             </div>
           </section>
 
           <section className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+            <Label className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
               Warna utama
             </Label>
             <div className="flex flex-wrap gap-2">
@@ -346,7 +345,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
                   }}
                   className={`size-8 rounded-full border-2 transition-all ${
                     active.accent === color
-                      ? 'border-warm-900 ring-2 ring-primary-200'
+                      ? 'border-warm-900 ring-primary-200 ring-2'
                       : 'border-warm-200'
                   }`}
                   style={{ backgroundColor: color }}
@@ -359,7 +358,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
                   patch('accent', e.target.value)
                   patch('background', e.target.value)
                 }}
-                className="size-8 cursor-pointer rounded-full border-2 border-warm-200"
+                className="border-warm-200 size-8 cursor-pointer rounded-full border-2"
               />
             </div>
           </section>
@@ -368,11 +367,11 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               terbaru selalu reflect state slide aktif (defensif terhadap
               edge-case React reconciliation pada controlled input). */}
           <section key={`fields-${activeIdx}`} className="space-y-2">
-            <Label className="text-xs font-semibold uppercase tracking-wide text-primary-700">
+            <Label className="text-primary-700 text-xs font-semibold tracking-wide uppercase">
               ✏️ Edit slide {activeIdx + 1}
             </Label>
             <div className="space-y-1">
-              <Label className="text-[11px] text-warm-600">Headline</Label>
+              <Label className="text-warm-600 text-xs">Headline</Label>
               <Input
                 value={active.headline ?? ''}
                 onChange={(e) => patch('headline', e.target.value)}
@@ -380,7 +379,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px] text-warm-600">Badge</Label>
+              <Label className="text-warm-600 text-xs">Badge</Label>
               <Input
                 value={active.badge ?? ''}
                 onChange={(e) => patch('badge', e.target.value)}
@@ -389,17 +388,17 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-[11px] text-warm-600">Body</Label>
+              <Label className="text-warm-600 text-xs">Body</Label>
               <textarea
                 value={active.body ?? ''}
                 onChange={(e) => patch('body', e.target.value)}
                 rows={3}
-                className="w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-sm"
+                className="border-warm-300 w-full rounded-md border bg-white px-3 py-2 text-sm"
               />
             </div>
             {activeIdx === slideStates.length - 1 && (
               <div className="space-y-1">
-                <Label className="text-[11px] text-warm-600">CTA</Label>
+                <Label className="text-warm-600 text-xs">CTA</Label>
                 <Input
                   value={active.cta ?? ''}
                   onChange={(e) => patch('cta', e.target.value)}
@@ -408,7 +407,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               </div>
             )}
             <div className="space-y-1">
-              <Label className="text-[11px] text-warm-600">Brand label</Label>
+              <Label className="text-warm-600 text-xs">Brand label</Label>
               <Input
                 value={active.brandLabel ?? ''}
                 onChange={(e) => patch('brandLabel', e.target.value)}

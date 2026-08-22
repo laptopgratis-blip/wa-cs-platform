@@ -300,7 +300,7 @@ export function LpUpgradesManager() {
                         )}
                       </Badge>
                       {isManual && (
-                        <div className="text-muted-foreground mt-0.5 font-mono text-[10px]">
+                        <div className="text-muted-foreground mt-0.5 font-mono text-xs">
                           kode {r.uniqueCode}
                         </div>
                       )}
@@ -332,7 +332,7 @@ export function LpUpgradesManager() {
                         {STATUS_LABEL[r.status]}
                       </Badge>
                       {isManual && r.confirmer && r.status !== 'PENDING' && (
-                        <div className="text-muted-foreground mt-1 text-[10px]">
+                        <div className="text-muted-foreground mt-1 text-xs">
                           oleh {r.confirmer.name ?? r.confirmer.email}
                         </div>
                       )}

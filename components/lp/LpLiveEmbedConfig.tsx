@@ -2,19 +2,23 @@
 
 // Config panel Live AI Embed di LP — owner pilih LiveRoom, atur gate, position, dll.
 // Endpoint: GET/PUT/DELETE /api/lp/[lpId]/live-embed
-import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { PageHeader } from '@/components/shared/PageHeader'
-import { CardGridSkeleton } from '@/components/shared/skeletons'
-import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
+
 type GateMode = 'REQUIRED' | 'OPTIONAL' | 'HYBRID' | 'OFF'
 type GateField = 'name' | 'phone' | 'email' | 'city' | 'productInterest'
-type Position = 'inline' | 'floating-br' | 'floating-bl' | 'floating-tr' | 'floating-tl'
+type Position =
+  'inline' | 'floating-br' | 'floating-bl' | 'floating-tr' | 'floating-tl'
 
 interface AvailableRoom {
   id: string
@@ -103,7 +107,9 @@ export function LpLiveEmbedConfig({
           }
         }
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : String(err)),
+      )
       .finally(() => !canceled && setLoading(false))
     return () => {
       canceled = true
@@ -142,7 +148,9 @@ export function LpLiveEmbedConfig({
     setDeleting(true)
     setError(null)
     try {
-      const res = await fetch(`/api/lp/${lpId}/live-embed`, { method: 'DELETE' })
+      const res = await fetch(`/api/lp/${lpId}/live-embed`, {
+        method: 'DELETE',
+      })
       const json = await res.json()
       if (!res.ok || !json.success) {
         setError(json.error ?? 'Gagal hapus')
@@ -168,20 +176,20 @@ export function LpLiveEmbedConfig({
 
   if (loading) {
     return (
-      <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-6">
+      <PageContainer width="narrow">
         <CardGridSkeleton count={2} />
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="mx-auto h-full max-w-4xl space-y-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <div>
         <Link
           href={`/landing-pages/${lpId}/edit`}
-          className="mb-2 inline-flex items-center text-sm text-warm-500 hover:text-warm-700"
+          className="text-warm-500 hover:text-warm-700 mb-2 inline-flex items-center text-sm"
         >
-          <ArrowLeft className="mr-1 h-4 w-4" /> Kembali ke editor LP
+          <ArrowLeft className="mr-1 size-4" /> Kembali ke editor LP
         </Link>
         <PageHeader
           title="Live AI Embed"
@@ -189,7 +197,7 @@ export function LpLiveEmbedConfig({
             <>
               Hubungkan LP <strong>{lpTitle}</strong> dengan satu Live Room.
               Widget muncul otomatis di{' '}
-              <code className="rounded bg-warm-100 px-1.5 py-0.5 text-xs">
+              <code className="bg-warm-100 rounded px-1.5 py-0.5 text-xs">
                 /p/{lpSlug}
               </code>
               .
@@ -203,7 +211,7 @@ export function LpLiveEmbedConfig({
                 disabled={deleting}
                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <Trash2 className="mr-1 h-4 w-4" />
+                <Trash2 className="mr-1 size-4" />
                 {deleting ? 'Menghapus…' : 'Hapus'}
               </Button>
             ) : undefined
@@ -212,7 +220,14 @@ export function LpLiveEmbedConfig({
       </div>
 
       {rooms.length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div
+          className={cn(
+            'rounded-xl border p-4 text-sm',
+            TONES.warning.bg,
+            TONES.warning.border,
+            TONES.warning.text,
+          )}
+        >
           Belum ada Live Room. Bikin dulu di{' '}
           <Link href="/live-rooms/new" className="font-medium underline">
             /live-rooms/new
@@ -221,7 +236,7 @@ export function LpLiveEmbedConfig({
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
+      <section className="border-warm-200 bg-card space-y-4 rounded-xl border p-6">
         <h2 className="text-base font-medium">1. Pilih Live Room</h2>
         <div className="grid gap-2">
           {rooms.map((r) => (
@@ -238,14 +253,27 @@ export function LpLiveEmbedConfig({
                   type="radio"
                   name="liveRoomId"
                   checked={config.liveRoomId === r.id}
-                  onChange={() => setConfig((p) => ({ ...p, liveRoomId: r.id }))}
+                  onChange={() =>
+                    setConfig((p) => ({ ...p, liveRoomId: r.id }))
+                  }
                   className="mr-3"
                 />
                 <div>
-                  <div className="font-medium text-warm-900">{r.name}</div>
-                  <div className="text-xs text-warm-500">
-                    /live/{r.slug} · {r.hostTemplate.mode === 'NATIVE_LIBRARY' ? 'Klip Live' : 'TTS'}
-                    {!r.isActive && ' · ⚠️ tidak aktif'}
+                  <div className="text-warm-900 font-medium">{r.name}</div>
+                  <div className="text-warm-500 text-xs">
+                    /live/{r.slug} ·{' '}
+                    {r.hostTemplate.mode === 'NATIVE_LIBRARY'
+                      ? 'Klip Live'
+                      : 'TTS'}
+                    {!r.isActive && (
+                      <span className={cn('ml-1', TONES.warning.text)}>
+                        <AlertTriangle
+                          className="mr-0.5 inline size-3"
+                          aria-hidden
+                        />
+                        tidak aktif
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -254,15 +282,33 @@ export function LpLiveEmbedConfig({
         </div>
       </section>
 
-      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
-        <h2 className="text-base font-medium">2. Mode Gate (wajib isi nama+WA)</h2>
+      <section className="border-warm-200 bg-card space-y-4 rounded-xl border p-6">
+        <h2 className="text-base font-medium">
+          2. Mode Gate (wajib isi nama+WA)
+        </h2>
         <div className="grid gap-3 sm:grid-cols-2">
           {(
             [
-              { v: 'REQUIRED', label: 'Wajib', desc: 'Form blocking — harus isi dulu baru nonton' },
-              { v: 'OPTIONAL', label: 'Opsional', desc: 'Form muncul tapi ada tombol "lewati"' },
-              { v: 'HYBRID', label: 'Hybrid (rekomendasi)', desc: 'Auto-play; gate trigger di detik N atau klik chat' },
-              { v: 'OFF', label: 'Mati', desc: 'Tidak ada gate, pure tontonan (cocok SEO/showcase)' },
+              {
+                v: 'REQUIRED',
+                label: 'Wajib',
+                desc: 'Form blocking — harus isi dulu baru nonton',
+              },
+              {
+                v: 'OPTIONAL',
+                label: 'Opsional',
+                desc: 'Form muncul tapi ada tombol "lewati"',
+              },
+              {
+                v: 'HYBRID',
+                label: 'Hybrid (rekomendasi)',
+                desc: 'Auto-play; gate trigger di detik N atau klik chat',
+              },
+              {
+                v: 'OFF',
+                label: 'Mati',
+                desc: 'Tidak ada gate, pure tontonan (cocok SEO/showcase)',
+              },
             ] as const
           ).map((opt) => (
             <label
@@ -278,47 +324,67 @@ export function LpLiveEmbedConfig({
                 name="gateMode"
                 checked={config.gateMode === opt.v}
                 onChange={() => setConfig((p) => ({ ...p, gateMode: opt.v }))}
-                className="mr-3 mt-1"
+                className="mt-1 mr-3"
               />
               <div>
-                <div className="font-medium text-warm-900">{opt.label}</div>
-                <div className="text-xs text-warm-500">{opt.desc}</div>
+                <div className="text-warm-900 font-medium">{opt.label}</div>
+                <div className="text-warm-500 text-xs">{opt.desc}</div>
               </div>
             </label>
           ))}
         </div>
 
         {config.gateMode === 'HYBRID' && (
-          <div className="space-y-3 rounded-lg bg-warm-50 p-4">
+          <div className="bg-warm-50 space-y-3 rounded-lg p-4">
             <label className="block">
-              <span className="text-xs font-medium text-warm-700">Gate trigger setelah (detik)</span>
+              <span className="text-warm-700 text-xs font-medium">
+                Gate trigger setelah (detik)
+              </span>
               <input
                 type="number"
                 min={0}
                 max={600}
                 value={config.gateTriggerSec}
-                onChange={(e) => setConfig((p) => ({ ...p, gateTriggerSec: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-32 rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
+                onChange={(e) =>
+                  setConfig((p) => ({
+                    ...p,
+                    gateTriggerSec: parseInt(e.target.value) || 0,
+                  }))
+                }
+                className="border-warm-300 mt-1 w-32 rounded-lg border px-3 py-1.5 text-sm"
               />
-              <span className="ml-2 text-xs text-warm-500">0 = tidak pakai timer, tunggu klik chat</span>
+              <span className="text-warm-500 ml-2 text-xs">
+                0 = tidak pakai timer, tunggu klik chat
+              </span>
             </label>
             <label className="flex items-center">
               <input
                 type="checkbox"
                 checked={config.gateTriggerOnChat}
-                onChange={(e) => setConfig((p) => ({ ...p, gateTriggerOnChat: e.target.checked }))}
+                onChange={(e) =>
+                  setConfig((p) => ({
+                    ...p,
+                    gateTriggerOnChat: e.target.checked,
+                  }))
+                }
                 className="mr-2"
               />
-              <span className="text-xs text-warm-700">Trigger juga saat viewer klik area chat</span>
+              <span className="text-warm-700 text-xs">
+                Trigger juga saat viewer klik area chat
+              </span>
             </label>
           </div>
         )}
 
         {config.gateMode !== 'OFF' && (
           <div>
-            <div className="text-xs font-medium text-warm-700">Field yang dikumpulkan:</div>
+            <div className="text-warm-700 text-xs font-medium">
+              Field yang dikumpulkan:
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {(['name', 'phone', 'email', 'city', 'productInterest'] as const).map((f) => (
+              {(
+                ['name', 'phone', 'email', 'city', 'productInterest'] as const
+              ).map((f) => (
                 <label
                   key={f}
                   className={`cursor-pointer rounded-full border px-3 py-1 text-xs ${
@@ -341,12 +407,22 @@ export function LpLiveEmbedConfig({
         )}
       </section>
 
-      <section className="space-y-4 rounded-xl border border-warm-200 bg-card p-6">
+      <section className="border-warm-200 bg-card space-y-4 rounded-xl border p-6">
         <h2 className="text-base font-medium">3. Posisi & tampilan</h2>
         <div>
-          <span className="text-xs font-medium text-warm-700">Posisi widget:</span>
+          <span className="text-warm-700 text-xs font-medium">
+            Posisi widget:
+          </span>
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-            {(['inline', 'floating-br', 'floating-bl', 'floating-tr', 'floating-tl'] as const).map((p) => (
+            {(
+              [
+                'inline',
+                'floating-br',
+                'floating-bl',
+                'floating-tr',
+                'floating-tl',
+              ] as const
+            ).map((p) => (
               <button
                 key={p}
                 type="button"
@@ -357,14 +433,18 @@ export function LpLiveEmbedConfig({
                     : 'border-warm-200 text-warm-600'
                 }`}
               >
-                {p === 'inline' ? '📐 Inline' : `🪟 ${p.replace('floating-', '').toUpperCase()}`}
+                {p === 'inline'
+                  ? '📐 Inline'
+                  : `🪟 ${p.replace('floating-', '').toUpperCase()}`}
               </button>
             ))}
           </div>
           {config.position === 'inline' && (
-            <p className="mt-2 text-xs text-warm-500">
-              Owner paste <code className="rounded bg-warm-100 px-1.5 py-0.5">{`<div data-hulao-live-embed></div>`}</code> di HTML LP
-              untuk pilih posisi. Tanpa marker, widget muncul di akhir halaman.
+            <p className="text-warm-500 mt-2 text-xs">
+              Owner paste{' '}
+              <code className="bg-warm-100 rounded px-1.5 py-0.5">{`<div data-hulao-live-embed></div>`}</code>{' '}
+              di HTML LP untuk pilih posisi. Tanpa marker, widget muncul di
+              akhir halaman.
             </p>
           )}
         </div>
@@ -372,37 +452,55 @@ export function LpLiveEmbedConfig({
         {config.position === 'inline' && (
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="text-xs font-medium text-warm-700">Width (px)</span>
+              <span className="text-warm-700 text-xs font-medium">
+                Width (px)
+              </span>
               <input
                 type="number"
                 min={280}
                 max={1200}
                 value={config.widthPx}
-                onChange={(e) => setConfig((p) => ({ ...p, widthPx: parseInt(e.target.value) || 420 }))}
-                className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
+                onChange={(e) =>
+                  setConfig((p) => ({
+                    ...p,
+                    widthPx: parseInt(e.target.value) || 420,
+                  }))
+                }
+                className="border-warm-300 mt-1 w-full rounded-lg border px-3 py-1.5 text-sm"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-medium text-warm-700">Height (px)</span>
+              <span className="text-warm-700 text-xs font-medium">
+                Height (px)
+              </span>
               <input
                 type="number"
                 min={400}
                 max={1600}
                 value={config.heightPx}
-                onChange={(e) => setConfig((p) => ({ ...p, heightPx: parseInt(e.target.value) || 720 }))}
-                className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
+                onChange={(e) =>
+                  setConfig((p) => ({
+                    ...p,
+                    heightPx: parseInt(e.target.value) || 720,
+                  }))
+                }
+                className="border-warm-300 mt-1 w-full rounded-lg border px-3 py-1.5 text-sm"
               />
             </label>
           </div>
         )}
 
         <label className="block">
-          <span className="text-xs font-medium text-warm-700">CTA label (untuk tombol floating)</span>
+          <span className="text-warm-700 text-xs font-medium">
+            CTA label (untuk tombol floating)
+          </span>
           <input
             type="text"
             value={config.ctaLabel}
-            onChange={(e) => setConfig((p) => ({ ...p, ctaLabel: e.target.value }))}
-            className="mt-1 w-full rounded-lg border border-warm-300 px-3 py-1.5 text-sm"
+            onChange={(e) =>
+              setConfig((p) => ({ ...p, ctaLabel: e.target.value }))
+            }
+            className="border-warm-300 mt-1 w-full rounded-lg border px-3 py-1.5 text-sm"
           />
         </label>
 
@@ -410,56 +508,84 @@ export function LpLiveEmbedConfig({
           <input
             type="checkbox"
             checked={config.autoplay}
-            onChange={(e) => setConfig((p) => ({ ...p, autoplay: e.target.checked }))}
+            onChange={(e) =>
+              setConfig((p) => ({ ...p, autoplay: e.target.checked }))
+            }
             className="mr-2"
           />
-          <span className="text-xs text-warm-700">Auto-play saat halaman load</span>
+          <span className="text-warm-700 text-xs">
+            Auto-play saat halaman load
+          </span>
         </label>
         <label className="flex items-center">
           <input
             type="checkbox"
             checked={config.mutedDefault}
-            onChange={(e) => setConfig((p) => ({ ...p, mutedDefault: e.target.checked }))}
+            onChange={(e) =>
+              setConfig((p) => ({ ...p, mutedDefault: e.target.checked }))
+            }
             className="mr-2"
           />
-          <span className="text-xs text-warm-700">Mute by default (rekomendasi — Chrome block autoplay+audio)</span>
+          <span className="text-warm-700 text-xs">
+            Mute by default (rekomendasi — Chrome block autoplay+audio)
+          </span>
         </label>
       </section>
 
-      <section className="rounded-xl border border-warm-200 bg-card p-6">
+      <section className="border-warm-200 bg-card rounded-xl border p-6">
         <label className="flex items-center">
           <input
             type="checkbox"
             checked={config.isActive}
-            onChange={(e) => setConfig((p) => ({ ...p, isActive: e.target.checked }))}
+            onChange={(e) =>
+              setConfig((p) => ({ ...p, isActive: e.target.checked }))
+            }
             className="mr-2"
           />
-          <span className="text-sm font-medium text-warm-900">Aktifkan embed</span>
+          <span className="text-warm-900 text-sm font-medium">
+            Aktifkan embed
+          </span>
         </label>
-        <p className="mt-1 text-xs text-warm-500">
+        <p className="text-warm-500 mt-1 text-xs">
           Matikan tanpa hapus kalau lagi maintenance / iklan dipause.
         </p>
       </section>
 
       {error && (
-        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+        <div
+          className={cn(
+            'rounded-lg p-3 text-sm',
+            TONES.danger.bg,
+            TONES.danger.text,
+          )}
+        >
+          {error}
+        </div>
       )}
 
-      <div className="sticky bottom-4 flex items-center justify-end gap-3 rounded-xl border border-warm-200 bg-card/80 p-4 backdrop-blur">
-        {savedAt && <span className="text-xs text-green-600">Tersimpan {savedAt}</span>}
+      <div className="border-warm-200 bg-card/80 sticky bottom-4 flex items-center justify-end gap-3 rounded-xl border p-4 backdrop-blur">
+        {savedAt && (
+          <span className={cn('text-xs', TONES.success.text)}>
+            Tersimpan {savedAt}
+          </span>
+        )}
         <Link
           href={`/p/${lpSlug}`}
           target="_blank"
-          className="text-sm text-warm-600 hover:text-warm-900"
+          className="text-warm-600 hover:text-warm-900 text-sm"
         >
           Preview LP →
         </Link>
         <button
           onClick={handleSave}
           disabled={saving || !config.liveRoomId}
-          className="inline-flex items-center rounded-lg bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50"
+          className="bg-primary-500 hover:bg-primary-600 inline-flex items-center rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+          {saving ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <Save className="mr-2 size-4" />
+          )}
           {saving ? 'Menyimpan…' : 'Simpan konfigurasi'}
         </button>
       </div>
@@ -472,6 +598,6 @@ export function LpLiveEmbedConfig({
         isLoading={deleting}
         onConfirm={handleDelete}
       />
-    </div>
+    </PageContainer>
   )
 }

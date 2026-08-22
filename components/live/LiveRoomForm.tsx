@@ -6,10 +6,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 import { ProductPickerManager } from './ProductPickerManager'
 
@@ -66,7 +69,10 @@ interface OrderFormOption {
 }
 
 // Form memuat produk kalau universal (productIds kosong) atau eksplisit.
-function formContainsProduct(form: OrderFormOption, productId: string): boolean {
+function formContainsProduct(
+  form: OrderFormOption,
+  productId: string,
+): boolean {
   return form.productIds.length === 0 || form.productIds.includes(productId)
 }
 
@@ -145,7 +151,9 @@ export function LiveRoomForm({
   const [description, setDescription] = useState('')
   const [hostTemplateId, setHostTemplateId] = useState('')
   const [selectedProducts, setSelectedProducts] = useState<string[]>([])
-  const [featuredProductId, setFeaturedProductId] = useState<string | null>(null)
+  const [featuredProductId, setFeaturedProductId] = useState<string | null>(
+    null,
+  )
   const [systemPrompt, setSystemPrompt] = useState('')
   const [greeting, setGreeting] = useState('')
   const [ttsVoice, setTtsVoice] = useState('alloy')
@@ -157,7 +165,9 @@ export function LiveRoomForm({
   const [orderFormSlug, setOrderFormSlug] = useState<string>('')
   // Override form per-produk: { [productId]: formSlug }. Produk yang tidak ada
   // di map ikut form default (orderFormSlug).
-  const [productFormMap, setProductFormMap] = useState<Record<string, string>>({})
+  const [productFormMap, setProductFormMap] = useState<Record<string, string>>(
+    {},
+  )
   const [orderForms, setOrderForms] = useState<OrderFormOption[] | null>(null)
   const [ttsInstructions, setTtsInstructions] = useState('')
   const [ttsSpeed, setTtsSpeed] = useState(1.0)
@@ -173,7 +183,10 @@ export function LiveRoomForm({
       fetch('/api/products'),
       fetch('/api/order-forms'),
     ])
-    const hostsJson = (await hostsRes.json()) as { success: boolean; data?: HostOption[] }
+    const hostsJson = (await hostsRes.json()) as {
+      success: boolean
+      data?: HostOption[]
+    }
     const productsJson = (await productsRes.json()) as {
       success: boolean
       data?: { items?: ProductOption[] }
@@ -195,21 +208,26 @@ export function LiveRoomForm({
     } else {
       setProducts([])
     }
-    const forms = formsJson.success && formsJson.data?.items
-      ? formsJson.data.items
-          .filter((f) => f.isActive)
-          .map((f) => ({
-            slug: f.slug,
-            name: f.name,
-            productIds: f.productIds ?? [],
-          }))
-      : []
+    const forms =
+      formsJson.success && formsJson.data?.items
+        ? formsJson.data.items
+            .filter((f) => f.isActive)
+            .map((f) => ({
+              slug: f.slug,
+              name: f.name,
+              productIds: f.productIds ?? [],
+            }))
+        : []
     setOrderForms(forms)
   }, [])
 
   const loadRoom = useCallback(async (id: string) => {
     const res = await fetch(`/api/live-rooms/${id}`)
-    const json = (await res.json()) as { success: boolean; data?: RoomData; error?: string }
+    const json = (await res.json()) as {
+      success: boolean
+      data?: RoomData
+      error?: string
+    }
     if (!json.success || !json.data) {
       toast.error(json.error ?? 'Gagal load room')
       return
@@ -245,7 +263,6 @@ export function LiveRoomForm({
     if (mode === 'edit' && roomId) void loadRoom(roomId)
   }, [mode, roomId, loadOptions, loadRoom])
 
-
   function pickHost(id: string) {
     setHostTemplateId(id)
     // Auto-fill system prompt placeholder kalau masih kosong.
@@ -258,12 +275,15 @@ export function LiveRoomForm({
   async function handleSubmit() {
     if (mode === 'create') {
       if (!slug.match(/^[a-z0-9](?:[a-z0-9-]{1,60}[a-z0-9])?$/)) {
-        return toast.error('Slug: huruf kecil, angka, dan strip. 2-62 karakter.')
+        return toast.error(
+          'Slug: huruf kecil, angka, dan strip. 2-62 karakter.',
+        )
       }
     }
     if (name.trim().length < 2) return toast.error('Nama minimal 2 karakter')
     if (!hostTemplateId) return toast.error('Pilih host dulu')
-    if (systemPrompt.trim().length < 20) return toast.error('Persona host minimal 20 karakter')
+    if (systemPrompt.trim().length < 20)
+      return toast.error('Persona host minimal 20 karakter')
 
     setSaving(true)
     try {
@@ -318,14 +338,19 @@ export function LiveRoomForm({
         chatModel,
         chatTemperature,
       }
-      const url = mode === 'create' ? '/api/live-rooms' : `/api/live-rooms/${roomId}`
+      const url =
+        mode === 'create' ? '/api/live-rooms' : `/api/live-rooms/${roomId}`
       const method = mode === 'create' ? 'POST' : 'PUT'
       const res = await fetch(url, {
         method,
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      const json = (await res.json()) as { success: boolean; data?: { slug: string }; error?: string }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: { slug: string }
+        error?: string
+      }
       if (json.success) {
         toast.success(mode === 'create' ? 'Room dibuat' : 'Room diupdate')
         router.push('/live-rooms')
@@ -353,8 +378,9 @@ export function LiveRoomForm({
                 onChange={(e) => setSlug(e.target.value.toLowerCase())}
                 placeholder="cleanoz-flash"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                URL publik: <span className="font-mono">/live/{slug || '...'}</span>
+              <p className="text-muted-foreground mt-1 text-xs">
+                URL publik:{' '}
+                <span className="font-mono">/live/{slug || '...'}</span>
               </p>
             </div>
           ) : null}
@@ -384,7 +410,7 @@ export function LiveRoomForm({
                   type="checkbox"
                   checked={isActive}
                   onChange={(e) => setIsActive(e.target.checked)}
-                  className="h-4 w-4"
+                  className="size-4"
                 />
                 Room aktif (customer bisa akses)
               </label>
@@ -397,13 +423,14 @@ export function LiveRoomForm({
         <CardContent className="space-y-3 p-4">
           <Label>Pilih Host</Label>
           {hosts === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading host…
+            <div className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Loader2 className="size-4 animate-spin" /> Memuat…
             </div>
           ) : hosts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Belum ada host yang siap. Admin bikin dulu di /admin/host-templates,
-              atau Anda generate sendiri (akan ada di Phase 2).
+            <p className="text-muted-foreground text-sm">
+              Belum ada host yang siap. Admin bikin dulu di
+              /admin/host-templates, atau Anda generate sendiri (akan ada di
+              Phase 2).
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -414,11 +441,11 @@ export function LiveRoomForm({
                   onClick={() => pickHost(h.id)}
                   className={`overflow-hidden rounded-lg border-2 text-left transition ${
                     hostTemplateId === h.id
-                      ? 'border-orange-500 ring-2 ring-orange-200'
+                      ? 'border-primary-500 ring-primary-200 ring-2'
                       : 'border-warm-200 hover:border-warm-400'
                   }`}
                 >
-                  <div className="relative aspect-[9/16] bg-warm-100">
+                  <div className="bg-warm-100 relative aspect-[9/16]">
                     {h.videoLoopUrl ? (
                       <video
                         src={h.videoLoopUrl}
@@ -438,14 +465,14 @@ export function LiveRoomForm({
                       />
                     ) : null}
                     {h.mode === 'NATIVE_LIBRARY' && (
-                      <span className="absolute left-1.5 top-1.5 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
+                      <span className="bg-primary-100 text-primary-700 absolute top-1.5 left-1.5 rounded-full px-2 py-0.5 text-xs font-semibold">
                         Klip Live
                       </span>
                     )}
                   </div>
                   <div className="p-2">
                     <div className="truncate text-xs font-medium">{h.name}</div>
-                    <div className="text-[10px] text-muted-foreground">
+                    <div className="text-muted-foreground text-xs">
                       {h.isOwn ? 'milik Anda' : 'library admin'}
                     </div>
                   </div>
@@ -465,7 +492,7 @@ export function LiveRoomForm({
             onChangeSelected={setSelectedProducts}
             onChangeFeatured={setFeaturedProductId}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             ⭐ Produk unggulan tampil sebagai kartu sorotan di room. Urutan
             menentukan tampilan di rail produk &amp; katalog.
           </p>
@@ -480,12 +507,12 @@ export function LiveRoomForm({
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={5}
-              className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="focus:ring-primary-500 mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
               placeholder="Kamu adalah Siska, host yang ramah dan to-the-point…"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Karakter, gaya bahasa, dan target host. Jangan sebut produk di sini
-              (sistem auto-inject list produk + harga).
+            <p className="text-muted-foreground mt-1 text-xs">
+              Karakter, gaya bahasa, dan target host. Jangan sebut produk di
+              sini (sistem auto-inject list produk + harga).
             </p>
           </div>
 
@@ -502,15 +529,15 @@ export function LiveRoomForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               Pakai <strong>Nova</strong> / <strong>Shimmer</strong> /{' '}
               <strong>Coral</strong> / <strong>Sage</strong> kalau host
               perempuan. Coba beberapa untuk dengar yang paling cocok.
             </p>
           </div>
 
-          <div className="space-y-4 rounded-md border bg-warm-50/40 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-warm-700">
+          <div className="bg-warm-50/40 space-y-4 rounded-md border p-3">
+            <div className="text-warm-700 text-xs font-semibold tracking-wide uppercase">
               Kontrol Suara (slider)
             </div>
 
@@ -518,7 +545,7 @@ export function LiveRoomForm({
             <div>
               <Label className="flex items-center justify-between text-sm">
                 <span>Kecepatan bicara</span>
-                <span className="font-mono text-xs text-orange-600">
+                <span className="text-primary-600 font-mono text-xs">
                   {ttsSpeed.toFixed(2)}×
                 </span>
               </Label>
@@ -529,14 +556,14 @@ export function LiveRoomForm({
                 step={0.05}
                 value={ttsSpeed}
                 onChange={(e) => setTtsSpeed(Number(e.target.value))}
-                className="mt-1.5 w-full accent-orange-500"
+                className="accent-primary-500 mt-1.5 w-full"
               />
-              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+              <div className="text-muted-foreground mt-0.5 flex justify-between text-xs">
                 <span>0.5× pelan</span>
                 <span>1.0× normal</span>
                 <span>2.0× cepat</span>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-xs">
                 Tempo bicara host. 1.0 = pace normal Indonesian woman. Naikkan
                 kalau live energi tinggi, turunkan untuk produk premium yang
                 butuh tone tenang.
@@ -547,7 +574,7 @@ export function LiveRoomForm({
             <div>
               <Label className="flex items-center justify-between text-sm">
                 <span>Tone (tinggi rendah suara)</span>
-                <span className="font-mono text-xs text-orange-600">
+                <span className="text-primary-600 font-mono text-xs">
                   {ttsPitchOffset > 0 ? '+' : ''}
                   {ttsPitchOffset.toFixed(2)}
                 </span>
@@ -559,17 +586,17 @@ export function LiveRoomForm({
                 step={0.05}
                 value={ttsPitchOffset}
                 onChange={(e) => setTtsPitchOffset(Number(e.target.value))}
-                className="mt-1.5 w-full accent-orange-500"
+                className="accent-primary-500 mt-1.5 w-full"
               />
-              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+              <div className="text-muted-foreground mt-0.5 flex justify-between text-xs">
                 <span>−1 rendah</span>
                 <span>0 default</span>
                 <span>+1 tinggi</span>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Suara lebih bass (−) atau melengking (+). OpenAI gak punya
-                param pitch eksplisit — slider ini di-translate ke instruksi
-                natural language ("speak lower/higher pitch").
+              <p className="text-muted-foreground mt-1 text-xs">
+                Suara lebih bass (−) atau melengking (+). OpenAI gak punya param
+                pitch eksplisit — slider ini di-translate ke instruksi natural
+                language ("speak lower/higher pitch").
               </p>
             </div>
 
@@ -577,7 +604,7 @@ export function LiveRoomForm({
             <div>
               <Label className="flex items-center justify-between text-sm">
                 <span>Dinamis (naik-turun &amp; ekspresif)</span>
-                <span className="font-mono text-xs text-orange-600">
+                <span className="text-primary-600 font-mono text-xs">
                   {Math.round(ttsExpressiveness * 100)}%
                 </span>
               </Label>
@@ -588,14 +615,14 @@ export function LiveRoomForm({
                 step={0.05}
                 value={ttsExpressiveness}
                 onChange={(e) => setTtsExpressiveness(Number(e.target.value))}
-                className="mt-1.5 w-full accent-orange-500"
+                className="accent-primary-500 mt-1.5 w-full"
               />
-              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+              <div className="text-muted-foreground mt-0.5 flex justify-between text-xs">
                 <span>0% flat</span>
                 <span>50% natural</span>
                 <span>100% lively</span>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-xs">
                 Variasi intonasi: flat (monoton, terdengar robot) → natural
                 (conversational) → lively (banyak emphasis, smile-in-voice).
                 Untuk live shopping 60-80% biasanya bagus.
@@ -606,7 +633,7 @@ export function LiveRoomForm({
             <div>
               <Label className="flex items-center justify-between text-sm">
                 <span>Jeda antar kalimat</span>
-                <span className="font-mono text-xs text-orange-600">
+                <span className="text-primary-600 font-mono text-xs">
                   {ttsPauseMs} ms
                 </span>
               </Label>
@@ -617,17 +644,17 @@ export function LiveRoomForm({
                 step={25}
                 value={ttsPauseMs}
                 onChange={(e) => setTtsPauseMs(Number(e.target.value))}
-                className="mt-1.5 w-full accent-orange-500"
+                className="accent-primary-500 mt-1.5 w-full"
               />
-              <div className="mt-0.5 flex justify-between text-[10px] text-muted-foreground">
+              <div className="text-muted-foreground mt-0.5 flex justify-between text-xs">
                 <span>0 nyambung</span>
                 <span>300 normal</span>
                 <span>1000 lega</span>
               </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Jeda kosong (ms) antara kalimat audio yang main bergantian.
-                0 = lanjut tanpa jeda (cepat). 300-500 = natural seperti
-                breathing. 1000 = lega untuk bahasan serius.
+              <p className="text-muted-foreground mt-1 text-xs">
+                Jeda kosong (ms) antara kalimat audio yang main bergantian. 0 =
+                lanjut tanpa jeda (cepat). 300-500 = natural seperti breathing.
+                1000 = lega untuk bahasan serius.
               </p>
             </div>
           </div>
@@ -639,13 +666,13 @@ export function LiveRoomForm({
               onChange={(e) => setTtsInstructions(e.target.value)}
               rows={3}
               maxLength={2000}
-              className="mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="focus:ring-primary-500 mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm focus:ring-2 focus:outline-none"
               placeholder="Speak with light Surabayan accent, very enthusiastic on product benefits, smile-in-voice always."
             />
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               Override 3 slider di atas. Kalau diisi, slider tone &amp; dinamis
-              di-bypass — yang kepakai cuma text ini (+ speed slider tetap dipakai
-              karena native parameter). Tulis dalam English (model lebih
+              di-bypass — yang kepakai cuma text ini (+ speed slider tetap
+              dipakai karena native parameter). Tulis dalam English (model lebih
               responsive). Kosongkan = compose otomatis dari slider.
             </p>
           </div>
@@ -656,9 +683,9 @@ export function LiveRoomForm({
         <CardContent className="space-y-4 p-4">
           <div>
             <Label className="text-base">Model AI &amp; Kreativitas</Label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pilih model Claude yang membalas customer. Sesuaikan dengan
-              budget &amp; kompleksitas pertanyaan.
+            <p className="text-muted-foreground mt-1 text-xs">
+              Pilih model Claude yang membalas customer. Sesuaikan dengan budget
+              &amp; kompleksitas pertanyaan.
             </p>
           </div>
 
@@ -670,7 +697,7 @@ export function LiveRoomForm({
                   key={m.value}
                   className={`flex cursor-pointer items-start gap-2 rounded-md border p-2.5 text-sm transition ${
                     chatModel === m.value
-                      ? 'border-orange-500 bg-orange-50'
+                      ? 'border-primary-500 bg-primary-50'
                       : 'border-warm-200 hover:bg-warm-50'
                   }`}
                 >
@@ -685,17 +712,11 @@ export function LiveRoomForm({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{m.label}</span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                          m.provider === 'OpenAI'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-orange-100 text-orange-700'
-                        }`}
-                      >
-                        {m.provider}
-                      </span>
+                      <Badge variant="secondary">{m.provider}</Badge>
                     </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{m.tag}</div>
+                    <div className="text-muted-foreground mt-0.5 text-xs">
+                      {m.tag}
+                    </div>
                   </div>
                 </label>
               ))}
@@ -705,7 +726,7 @@ export function LiveRoomForm({
           <div>
             <Label className="flex items-center justify-between">
               <span>Temperature</span>
-              <span className="font-mono text-xs text-orange-600">
+              <span className="text-primary-600 font-mono text-xs">
                 {chatTemperature.toFixed(2)}
               </span>
             </Label>
@@ -716,25 +737,25 @@ export function LiveRoomForm({
               step={0.05}
               value={chatTemperature}
               onChange={(e) => setChatTemperature(Number(e.target.value))}
-              className="mt-2 w-full accent-orange-500"
+              className="accent-primary-500 mt-2 w-full"
             />
-            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+            <div className="text-muted-foreground mt-1 flex justify-between text-xs">
               <span>0.0 — konsisten</span>
               <span>0.5 — seimbang</span>
               <span>1.0 — kreatif</span>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-2 text-xs">
               <strong>Temperature</strong> ngatur seberapa "berani" AI dalam
               jawab.{' '}
-              <span className="text-orange-700">
+              <span className={TONES.brand.text}>
                 <strong>0.0-0.3</strong> — jawaban sama persis tiap kali untuk
                 pertanyaan sama (cocok jualan produk dengan jawaban baku).
               </span>{' '}
-              <span className="text-amber-700">
+              <span className={TONES.warning.text}>
                 <strong>0.4-0.7</strong> — natural conversational (rekomendasi
                 live shopping).
               </span>{' '}
-              <span className="text-rose-700">
+              <span className={TONES.danger.text}>
                 <strong>0.8-1.0</strong> — jawaban variatif/kreatif, kadang
                 surprising, tapi bisa miss-context.
               </span>
@@ -749,7 +770,7 @@ export function LiveRoomForm({
             <Label className="text-base">
               Form Checkout (klik produk → order langsung)
             </Label>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               Saat customer klik kartu produk di live, form order terbuka
               langsung dengan produk itu ter-preselect. Atur satu form default
               untuk semua produk, lalu (opsional) form khusus per produk.
@@ -757,13 +778,13 @@ export function LiveRoomForm({
           </div>
 
           {orderForms === null ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading form…
+            <div className="text-muted-foreground flex items-center gap-2 text-sm">
+              <Loader2 className="size-4 animate-spin" /> Memuat…
             </div>
           ) : orderForms.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Belum ada order form. Bikin dulu di{' '}
-              <a className="text-orange-600 underline" href="/order-forms">
+              <a className="text-primary-600 underline" href="/order-forms">
                 /order-forms
               </a>
               .
@@ -779,7 +800,7 @@ export function LiveRoomForm({
                   id="live-default-form"
                   value={orderFormSlug}
                   onChange={(e) => setOrderFormSlug(e.target.value)}
-                  className="mt-1 h-11 w-full rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="focus:ring-primary-500 mt-1 h-11 w-full rounded-md border bg-white px-3 text-sm focus:ring-2 focus:outline-none"
                 >
                   <option value="">
                     — Tidak ada (klik produk hanya isi chat) —
@@ -791,7 +812,7 @@ export function LiveRoomForm({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-muted-foreground mt-1 text-xs">
                   Dipakai semua produk yang tidak diberi form khusus di bawah.
                 </p>
                 {(() => {
@@ -813,8 +834,12 @@ export function LiveRoomForm({
                     .slice(0, 3)
                     .join(', ')
                   return (
-                    <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className={cn(
+                      'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
+                      TONES.warning.bg,
+                      TONES.warning.text,
+                    )}>
+                      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                       <span>
                         <strong>{gap.length} produk</strong> room tidak termuat
                         di form default ({names}
@@ -829,16 +854,16 @@ export function LiveRoomForm({
 
               {/* ── FORM PER PRODUK ──────────────────────────────────── */}
               {selectedProducts.length === 0 ? (
-                <p className="rounded-md border border-dashed border-warm-200 px-3 py-2.5 text-xs text-muted-foreground">
+                <p className="border-warm-200 text-muted-foreground rounded-md border border-dashed px-3 py-2.5 text-xs">
                   Pilih produk room dulu (bagian Produk di atas) untuk bisa
                   mengatur form per produk.
                 </p>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-warm-200">
-                  <div className="flex items-center justify-between gap-2 border-b border-warm-200 bg-warm-50/60 px-3 py-2.5">
+                <div className="border-warm-200 overflow-hidden rounded-lg border">
+                  <div className="border-warm-200 bg-warm-50/60 flex items-center justify-between gap-2 border-b px-3 py-2.5">
                     <div>
                       <div className="text-sm font-medium">Form per produk</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         Opsional — pakai form berbeda untuk produk tertentu.
                       </div>
                     </div>
@@ -847,13 +872,13 @@ export function LiveRoomForm({
                         (pid) => productFormMap[pid],
                       ).length
                       return n > 0 ? (
-                        <span className="shrink-0 rounded-full bg-orange-100 px-2.5 py-1 text-[11px] font-medium text-orange-700">
+                        <span className="bg-primary-100 text-primary-700 shrink-0 rounded-full px-2.5 py-1 text-xs font-medium">
                           {n} form khusus
                         </span>
                       ) : null
                     })()}
                   </div>
-                  <div className="divide-y divide-warm-100">
+                  <div className="divide-warm-100 divide-y">
                     {selectedProducts.map((pid) => {
                       const product = products?.find((p) => p.id === pid)
                       const chosen = productFormMap[pid] ?? ''
@@ -874,18 +899,18 @@ export function LiveRoomForm({
                                 <img
                                   src={product.imageUrl}
                                   alt=""
-                                  className="h-10 w-10 shrink-0 rounded-md border border-warm-200 object-cover"
+                                  className="border-warm-200 size-10 shrink-0 rounded-md border object-cover"
                                 />
                               ) : (
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-warm-200 bg-warm-50 text-warm-400">
-                                  <Package className="h-4 w-4" />
+                                <div className="border-warm-200 bg-warm-50 text-warm-400 flex size-10 shrink-0 items-center justify-center rounded-md border">
+                                  <Package className="size-4" />
                                 </div>
                               )}
                               <div className="min-w-0">
                                 <div className="truncate text-sm font-medium">
                                   {product?.name ?? 'Produk'}
                                 </div>
-                                <div className="truncate text-xs text-muted-foreground">
+                                <div className="text-muted-foreground truncate text-xs">
                                   {chosen
                                     ? `Form khusus: ${chosenForm?.name ?? chosen}`
                                     : defaultFormName
@@ -905,8 +930,8 @@ export function LiveRoomForm({
                                   return next
                                 })
                               }
-                              className={`h-11 w-full rounded-md border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 sm:w-64 ${
-                                mismatch ? 'border-amber-400' : ''
+                              className={`focus:ring-primary-500 h-11 w-full rounded-md border bg-white px-3 text-sm focus:ring-2 focus:outline-none sm:w-64 ${
+                                mismatch ? TONES.warning.border : ''
                               }`}
                             >
                               <option value="">Ikuti default</option>
@@ -921,8 +946,12 @@ export function LiveRoomForm({
                             </select>
                           </div>
                           {mismatch && chosenForm ? (
-                            <div className="mt-2 flex items-start gap-1.5 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <div className={cn(
+                      'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
+                      TONES.warning.bg,
+                      TONES.warning.text,
+                    )}>
+                              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                               <span>
                                 Form <strong>{chosenForm.name}</strong> tidak
                                 memuat produk ini — pilihan ini akan{' '}
@@ -951,7 +980,7 @@ export function LiveRoomForm({
           <div className="flex items-center justify-between gap-2">
             <div>
               <Label className="text-base">Bot Penonton (Auto-Engage)</Label>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-xs">
                 Bot bertanya ke host random tiap interval supaya live terasa
                 ramai. Customer real selalu prioritas — bot pause 60dtk setelah
                 pesan asli. Tiap bot question potong token sama seperti chat
@@ -963,7 +992,7 @@ export function LiveRoomForm({
                 type="checkbox"
                 checked={botEnabled}
                 onChange={(e) => setBotEnabled(e.target.checked)}
-                className="h-4 w-4"
+                className="size-4"
               />
               Aktifkan
             </label>
@@ -979,7 +1008,9 @@ export function LiveRoomForm({
                     min={10}
                     max={600}
                     value={botIntervalMinSec}
-                    onChange={(e) => setBotIntervalMinSec(Number(e.target.value))}
+                    onChange={(e) =>
+                      setBotIntervalMinSec(Number(e.target.value))
+                    }
                     className="mt-1"
                   />
                 </div>
@@ -990,7 +1021,9 @@ export function LiveRoomForm({
                     min={10}
                     max={600}
                     value={botIntervalMaxSec}
-                    onChange={(e) => setBotIntervalMaxSec(Number(e.target.value))}
+                    onChange={(e) =>
+                      setBotIntervalMaxSec(Number(e.target.value))
+                    }
                     className="mt-1"
                   />
                 </div>
@@ -1028,7 +1061,7 @@ export function LiveRoomForm({
                         ].join('\n'),
                       )
                     }
-                    className="rounded-md border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-100"
+                    className="border-primary-300 bg-primary-50 text-primary-700 hover:bg-primary-100 rounded-md border px-2 py-0.5 text-xs font-medium"
                   >
                     + Isi contoh
                   </button>
@@ -1037,22 +1070,32 @@ export function LiveRoomForm({
                   value={botPromptsText}
                   onChange={(e) => setBotPromptsText(e.target.value)}
                   rows={8}
-                  className="mt-1 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="focus:ring-primary-500 mt-1 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs focus:ring-2 focus:outline-none"
                   placeholder={
                     'Halo sis! Cleanoz beneran ampuh ya?\nBisa COD nggak kak?\nStok masih banyak?'
                   }
                 />
-                {botPromptsText.split('\n').filter((s) => s.trim().length >= 3).length === 0 ? (
-                  <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
-                    ⚠️ <span>
-                      Bot AKTIF tapi belum ada pertanyaan — bot gak akan
-                      jalan. Klik <strong>+ Isi contoh</strong> di atas atau
-                      tulis manual (min 3 huruf per baris).
+                {botPromptsText.split('\n').filter((s) => s.trim().length >= 3)
+                  .length === 0 ? (
+                  <div className={cn(
+                    'mt-1.5 flex items-start gap-1.5 rounded-md px-2 py-1.5 text-xs',
+                    TONES.warning.bg,
+                    TONES.warning.text,
+                  )}>
+                    ⚠️{' '}
+                    <span>
+                      Bot AKTIF tapi belum ada pertanyaan — bot gak akan jalan.
+                      Klik <strong>+ Isi contoh</strong> di atas atau tulis
+                      manual (min 3 huruf per baris).
                     </span>
                   </div>
                 ) : (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {botPromptsText.split('\n').filter((s) => s.trim().length >= 3).length}{' '}
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {
+                      botPromptsText
+                        .split('\n')
+                        .filter((s) => s.trim().length >= 3).length
+                    }{' '}
                     pertanyaan aktif. Bot pick random tiap interval.
                   </p>
                 )}
@@ -1069,11 +1112,12 @@ export function LiveRoomForm({
         <Button onClick={handleSubmit} disabled={saving}>
           {saving ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Simpan…
+              <Loader2 className="mr-2 size-4 animate-spin" /> Simpan…
             </>
           ) : (
             <>
-              <Save className="mr-2 h-4 w-4" /> {mode === 'create' ? 'Bikin Room' : 'Simpan Perubahan'}
+              <Save className="mr-2 size-4" />{' '}
+              {mode === 'create' ? 'Bikin Room' : 'Simpan Perubahan'}
             </>
           )}
         </Button>

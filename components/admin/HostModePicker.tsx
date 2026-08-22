@@ -9,9 +9,11 @@
 // - Cost estimate inline jadi owner aware sebelum commit.
 // - "Coming Soon" badge buat Klip Live (Sprint 2 baru aktif full pipeline).
 
-import { Bot, Sparkles, Mic, Lock } from 'lucide-react'
+import { Bot, Check, Sparkles, Mic, Lock, Minus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -78,15 +80,24 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
             </p>
             <ul className="mt-3 space-y-1 text-xs text-warm-700">
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Bisa jawab pertanyaan apa pun
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Setup cepat — 1 video loop saja
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-amber-600">~</span>
+                <Minus
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.warning.text)}
+                  aria-hidden
+                />
                 Suara TTS realtime, sedikit delay
               </li>
             </ul>
@@ -138,18 +149,27 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
             </p>
             <ul className="mt-3 space-y-1 text-xs text-warm-700">
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Suara natural (ElevenLabs) + lip-sync presisi
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 <span className="inline-flex items-center gap-0.5">
                   <Mic className="size-3 text-primary-500" />
                   Visual hook + background TikTok-optimized
                 </span>
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-amber-600">~</span>
+                <Minus
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.warning.text)}
+                  aria-hidden
+                />
                 Jawaban terbatas pada library klip
               </li>
             </ul>

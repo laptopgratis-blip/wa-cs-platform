@@ -5,6 +5,7 @@
 // applied (user discard sebelumnya), tampil tombol "Apply Sekarang" yang
 // langsung commit (tidak charge ulang token — sudah dipotong saat generate).
 import {
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -17,7 +18,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,6 +28,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Suggestion {
   title: string
@@ -55,10 +58,11 @@ interface Props {
   onApplied?: () => void
 }
 
-const IMPACT_COLOR: Record<string, string> = {
-  high: 'bg-rose-100 text-rose-800',
-  medium: 'bg-amber-100 text-amber-800',
-  low: 'bg-warm-100 text-warm-700',
+// Level impact saran (enum AI) → tone registry lib/ui-tones.ts.
+const IMPACT_TONE: Record<string, Tone> = {
+  high: 'danger',
+  medium: 'warning',
+  low: 'neutral',
 }
 
 function formatRelative(iso: string): string {
@@ -145,13 +149,13 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
         </DialogHeader>
 
         {loading && (
-          <div className="flex items-center justify-center py-8 text-warm-500">
-            <Loader2 className="mr-2 size-5 animate-spin" /> Memuat…
+          <div className="text-warm-500 flex items-center justify-center py-8">
+            <Loader2 className="mr-2 size-4 animate-spin" /> Memuat…
           </div>
         )}
 
         {!loading && records.length === 0 && (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-warm-500">
+          <div className="text-warm-500 rounded-lg border border-dashed p-8 text-center text-sm">
             Belum ada riwayat optimasi AI. Klik &ldquo;Optimasi dengan AI&rdquo;
             di header untuk mulai.
           </div>
@@ -169,70 +173,82 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                     ? 'pending'
                     : 'no_html'
               return (
-                <li key={r.id} className="rounded-lg border border-warm-200">
+                <li key={r.id} className="border-warm-200 rounded-lg border">
                   <button
                     type="button"
                     onClick={() => setExpandedId(isExpanded ? null : r.id)}
-                    className="flex w-full items-start gap-3 p-3 text-left hover:bg-warm-50"
+                    className="hover:bg-warm-50 flex w-full items-start gap-3 p-3 text-left"
                   >
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                    <div className="bg-primary-50 text-primary-600 mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg">
                       <Sparkles className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
                           {status === 'applied' && (
-                            <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                              <CheckCircle2 className="mr-0.5 size-3" /> Applied
-                            </Badge>
+                            <StatusBadge
+                              tone="success"
+                              icon={CheckCircle2}
+                              label="Applied"
+                            />
                           )}
                           {status === 'pending' && (
-                            <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                              Pending Apply
-                            </Badge>
+                            <StatusBadge tone="warning" label="Pending Apply" />
                           )}
                           {status === 'error' && (
-                            <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">
-                              <XCircle className="mr-0.5 size-3" /> Error
-                            </Badge>
+                            <StatusBadge
+                              tone="danger"
+                              icon={XCircle}
+                              label="Error"
+                            />
                           )}
                           {status === 'no_html' && (
-                            <Badge variant="secondary">No HTML</Badge>
+                            <StatusBadge tone="neutral" label="No HTML" />
                           )}
-                          <span className="text-xs text-warm-500">
+                          <span className="text-warm-500 text-xs">
                             {r.suggestions.length} saran ·{' '}
                             {r.scoreBefore != null && r.scoreAfter != null
                               ? `${r.scoreBefore} → ${r.scoreAfter}`
                               : '-'}
                           </span>
                         </div>
-                        <span className="text-[11px] text-warm-500">
+                        <span className="text-warm-500 text-xs">
                           {formatRelative(r.createdAt)}
                         </span>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-warm-600">
-                        {r.focusAreas.slice(0, 4).join(' · ') || 'Tidak ada focus area'}
+                      <div className="text-warm-600 mt-0.5 truncate text-xs">
+                        {r.focusAreas.slice(0, 4).join(' · ') ||
+                          'Tidak ada focus area'}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-warm-400">
-                        {r.model} · {r.platformTokensCharged.toLocaleString('id-ID')} token kepake
+                      <div className="text-warm-400 mt-0.5 text-xs">
+                        {r.model} ·{' '}
+                        {r.platformTokensCharged.toLocaleString('id-ID')} token
+                        kepake
                       </div>
                     </div>
                     {isExpanded ? (
-                      <ChevronUp className="mt-1 size-4 shrink-0 text-warm-400" />
+                      <ChevronUp className="text-warm-400 mt-1 size-4 shrink-0" />
                     ) : (
-                      <ChevronDown className="mt-1 size-4 shrink-0 text-warm-400" />
+                      <ChevronDown className="text-warm-400 mt-1 size-4 shrink-0" />
                     )}
                   </button>
 
                   {isExpanded && (
-                    <div className="space-y-2 border-t border-warm-100 bg-warm-50/50 p-3">
+                    <div className="border-warm-100 bg-warm-50/50 space-y-2 border-t p-3">
                       {r.errorMessage && (
-                        <div className="rounded border border-rose-300 bg-rose-50 p-2 text-xs text-rose-900">
+                        <div
+                          className={cn(
+                            'rounded-md border p-2 text-xs',
+                            TONES.danger.bg,
+                            TONES.danger.border,
+                            TONES.danger.text,
+                          )}
+                        >
                           <strong>Error:</strong> {r.errorMessage}
                         </div>
                       )}
                       {r.suggestions.length === 0 ? (
-                        <p className="text-xs italic text-warm-500">
+                        <p className="text-warm-500 text-xs italic">
                           Tidak ada saran tersimpan.
                         </p>
                       ) : (
@@ -240,28 +256,33 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                           {r.suggestions.map((s, i) => (
                             <li
                               key={i}
-                              className="rounded border border-warm-200 bg-white p-2.5 text-xs"
+                              className="border-warm-200 bg-card rounded-md border p-2.5 text-xs"
                             >
                               <div className="flex items-baseline justify-between gap-2">
                                 <strong className="text-warm-900">
                                   {i + 1}. {s.title}
                                 </strong>
-                                <Badge
-                                  className={
-                                    IMPACT_COLOR[s.impact] ?? 'bg-warm-100 text-warm-700'
-                                  }
-                                >
-                                  {s.impact}
-                                </Badge>
+                                <StatusBadge
+                                  tone={IMPACT_TONE[s.impact] ?? 'neutral'}
+                                  label={s.impact}
+                                />
                               </div>
-                              <p className="mt-1 text-warm-600">{s.rationale}</p>
+                              <p className="text-warm-600 mt-1">
+                                {s.rationale}
+                              </p>
                             </li>
                           ))}
                         </ol>
                       )}
                       {r.canApply && (
-                        <div className="flex items-center justify-between gap-3 rounded border border-amber-200 bg-amber-50 p-2.5">
-                          <div className="text-xs text-amber-900">
+                        <div
+                          className={cn(
+                            'flex items-center justify-between gap-3 rounded-md border p-2.5',
+                            TONES.warning.bg,
+                            TONES.warning.border,
+                          )}
+                        >
+                          <div className={cn('text-xs', TONES.warning.text)}>
                             Saran ini sudah di-generate &amp; bayar — bisa
                             di-apply kapan saja tanpa biaya tambahan.
                           </div>
@@ -269,21 +290,28 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                             size="sm"
                             onClick={() => setPendingApplyId(r.id)}
                             disabled={applyingId === r.id}
-                            className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700"
+                            className="shrink-0"
                           >
                             {applyingId === r.id ? (
                               <Loader2 className="size-3.5 animate-spin" />
                             ) : (
                               <>
-                                <CheckCircle2 className="mr-1 size-3.5" /> Apply Sekarang
+                                <CheckCircle2 className="mr-1 size-3.5" /> Apply
+                                Sekarang
                               </>
                             )}
                           </Button>
                         </div>
                       )}
                       {r.applied && r.appliedAt && (
-                        <p className="text-[11px] text-emerald-700">
-                          ✓ Sudah di-apply {formatRelative(r.appliedAt)}
+                        <p
+                          className={cn(
+                            'flex items-center gap-1 text-xs',
+                            TONES.success.text,
+                          )}
+                        >
+                          <Check className="size-3" aria-hidden />
+                          Sudah di-apply {formatRelative(r.appliedAt)}
                         </p>
                       )}
                     </div>

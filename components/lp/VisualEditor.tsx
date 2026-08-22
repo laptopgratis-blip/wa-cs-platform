@@ -7,12 +7,15 @@
 //
 // Tagged HTML: htmlContent ter-`data-lp-edit` index supaya iframe & parent
 // punya identifikasi konsisten untuk setiap elemen editable.
-import { Eye, Info, RotateCw, Scissors, X } from 'lucide-react'
+import { ClipboardPaste, Eye, Info, RotateCw, Scissors, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
-import { InlineEditPopover, type PopoverAction } from '@/components/lp/InlineEditPopover'
+import {
+  InlineEditPopover,
+  type PopoverAction,
+} from '@/components/lp/InlineEditPopover'
 import {
   changeElementTag,
   deleteElement,
@@ -27,6 +30,7 @@ import {
   tagEditableElements,
   updateElement,
 } from '@/lib/lp/html-mutation'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 import type { Viewport } from '@/components/lp/EditorTopbar'
 
@@ -260,7 +264,9 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
   const [debouncedHtml, setDebouncedHtml] = useState(htmlContent)
   const [refreshKey, setRefreshKey] = useState(0)
   const [selected, setSelected] = useState<
-    (EditableSnapshot & { absRect: { top: number; left: number; width: number; height: number } })
+    | (EditableSnapshot & {
+        absRect: { top: number; left: number; width: number; height: number }
+      })
     | null
   >(null)
   // Clipboard untuk fitur Cut → Paste antar elemen.
@@ -423,17 +429,17 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" ref={containerRef}>
-      <div className="flex items-center justify-between border-b border-warm-200 bg-card px-4 py-2">
+      <div className="border-warm-200 bg-card flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
-          <Eye className="size-4 text-warm-600" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Eye className="text-warm-600 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Edit Visual
           </span>
-          <span className="hidden items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 sm:flex">
+          <span className="bg-primary-50 text-primary-700 hidden items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium sm:flex">
             <Info className="size-3" />
             Klik untuk ubah · drag untuk pindah urutan
           </span>
-          <span className="text-[10px] text-warm-500">
+          <span className="text-warm-500 text-xs">
             {isMobile ? 'Mobile · 375px' : 'Desktop · 100%'}
           </span>
         </div>
@@ -450,17 +456,27 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
       </div>
 
       {clipboard && (
-        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+        <div
+          className={cn(
+            'flex items-center gap-2 border-b px-4 py-2 text-xs',
+            TONES.warning.bg,
+            TONES.warning.border,
+            TONES.warning.text,
+          )}
+        >
           <Scissors className="size-3.5 shrink-0" />
           <span className="flex-1">
             Bagian sudah dipotong. Klik elemen di preview → tombol{' '}
-            <span className="rounded bg-amber-100 px-1 font-mono">📋 Tempel</span>{' '}
+            <span className="bg-card inline-flex items-center gap-1 rounded px-1 font-mono">
+              <ClipboardPaste className="size-3" aria-hidden />
+              Tempel
+            </span>{' '}
             akan muncul di popover.
           </span>
           <button
             type="button"
             onClick={() => setClipboard(null)}
-            className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium hover:bg-amber-100"
+            className="hover:bg-warm-100 flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium"
           >
             <X className="size-3" />
             Batal
@@ -470,13 +486,13 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
 
       <div
         className={cn(
-          'relative min-h-0 flex-1 overflow-auto bg-warm-100/40 p-4',
+          'bg-warm-100/40 relative min-h-0 flex-1 overflow-auto p-4',
           isMobile && 'flex justify-center',
         )}
       >
         <div
           className={cn(
-            'h-full overflow-hidden rounded-md border border-warm-200 bg-card shadow-sm',
+            'border-warm-200 bg-card h-full overflow-hidden rounded-md border shadow-sm',
             isMobile ? 'w-[375px] flex-shrink-0' : 'w-full',
           )}
         >
@@ -490,7 +506,7 @@ export function VisualEditor({ htmlContent, viewport, onChange }: Props) {
               className="h-full w-full border-0"
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-warm-500">
+            <div className="text-warm-500 flex h-full items-center justify-center p-8 text-center text-sm">
               Belum ada konten — generate HTML pakai AI di atas, atau pindah ke
               tab Lanjutan untuk paste HTML manual.
             </div>

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { TableSkeleton } from '@/components/shared/skeletons'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -208,9 +209,9 @@ export function PackagesManager() {
                   <TableCell className="font-medium">
                     {p.name}
                     {p.kind === 'MESSAGE_CREDIT' && (
-                      <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
+                      <Badge variant="secondary" className="ml-2">
                         Kredit Pesan WA
-                      </span>
+                      </Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">

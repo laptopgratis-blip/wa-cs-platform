@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -38,6 +39,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface SoulOptionRow {
   id: string
@@ -262,12 +265,11 @@ function SoulOptionTable({
                   <TableCell className="font-medium">
                     {r.name}
                     {r.isTester && (
-                      <Badge
-                        variant="outline"
-                        className="ml-2 border-amber-300 bg-amber-50 text-amber-700"
-                      >
-                        Tester
-                      </Badge>
+                      <StatusBadge
+                        tone="warning"
+                        label="Tester"
+                        className="ml-2"
+                      />
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground max-w-md text-sm">
@@ -354,7 +356,7 @@ function SoulOptionTable({
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="so-snippet" className="text-red-600">
+                <Label htmlFor="so-snippet" className={TONES.danger.text}>
                   Instruksi AI — Rahasia
                 </Label>
                 <Badge variant="outline" className="font-mono">
@@ -391,12 +393,18 @@ function SoulOptionTable({
               </div>
             </div>
             {kind === 'personality' && (
-              <div className="flex items-start justify-between rounded-md border border-amber-200 bg-amber-50/50 p-3">
+              <div
+                className={cn(
+                  'flex items-start justify-between rounded-md border p-3',
+                  TONES.warning.bg,
+                  TONES.warning.border,
+                )}
+              >
                 <div className="space-y-0.5">
-                  <Label className="text-amber-900">
+                  <Label className={TONES.warning.text}>
                     Khusus Tester (Soul Lab)
                   </Label>
-                  <p className="text-xs text-amber-800/70">
+                  <p className={cn('text-xs', TONES.warning.text)}>
                     Kalau aktif, kepribadian ini disembunyikan dari dropdown
                     SoulBuilder user. Hanya admin yang bisa pilih di Soul Lab
                     untuk simulasi efektivitas prompt.

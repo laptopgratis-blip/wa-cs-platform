@@ -272,7 +272,7 @@ export function FinanceManager() {
                         icon={StatusIcon}
                       />
                       {r.confirmer && r.status !== 'PENDING' && (
-                        <div className="text-muted-foreground mt-1 text-[10px]">
+                        <div className="text-muted-foreground mt-1 text-xs">
                           oleh {r.confirmer.name ?? r.confirmer.email}
                         </div>
                       )}

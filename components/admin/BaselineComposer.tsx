@@ -21,6 +21,8 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 
 interface TemplateVariant {
@@ -209,7 +211,7 @@ export function BaselineComposer({
                   <div className="min-w-[160px] flex-1">
                     <label
                       htmlFor={`bl-name-${d.localId}`}
-                      className="text-[10px] font-semibold uppercase tracking-wide text-warm-500"
+                      className="text-xs font-semibold uppercase tracking-wide text-warm-500"
                     >
                       Nama baseline
                     </label>
@@ -225,7 +227,7 @@ export function BaselineComposer({
                   <div>
                     <label
                       htmlFor={`bl-cat-${d.localId}`}
-                      className="text-[10px] font-semibold uppercase tracking-wide text-warm-500"
+                      className="text-xs font-semibold uppercase tracking-wide text-warm-500"
                     >
                       Kategori
                     </label>
@@ -237,7 +239,7 @@ export function BaselineComposer({
                           category: e.target.value as DraftCategory,
                         })
                       }
-                      className="mt-1 h-9 rounded-md border border-warm-200 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="mt-1 h-9 rounded-md border border-warm-200 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
                       {CATEGORY_OPTIONS.map((c) => (
                         <option key={c.value} value={c.value}>
@@ -252,15 +254,15 @@ export function BaselineComposer({
                     size="icon"
                     onClick={() => removeDraft(d.localId)}
                     aria-label={`Hapus baseline ${d.name || idx + 1}`}
-                    className="h-9 w-9 text-warm-400 hover:bg-red-50 hover:text-red-600"
+                    className="size-9 text-warm-400 hover:bg-destructive/10 hover:text-destructive"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-4" />
                   </Button>
                 </div>
                 <div className="mt-2">
                   <label
                     htmlFor={`bl-motion-${d.localId}`}
-                    className="text-[10px] font-semibold uppercase tracking-wide text-warm-500"
+                    className="text-xs font-semibold uppercase tracking-wide text-warm-500"
                   >
                     Motion script (prompt gerakan — editable)
                   </label>
@@ -273,10 +275,10 @@ export function BaselineComposer({
                     rows={7}
                     spellCheck={false}
                     placeholder="MOTION SCRIPT — deskripsikan gerakan host detik per detik (English lebih bagus untuk Kling)…"
-                    className="mt-1 w-full rounded-md border border-warm-200 bg-warm-50/40 px-3 py-2 font-mono text-[11px] leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="mt-1 w-full rounded-md border border-warm-200 bg-warm-50/40 px-3 py-2 font-mono text-xs leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   {tooShort ? (
-                    <p className="mt-1 text-[10px] text-red-600">
+                    <p className={cn('mt-1 text-xs', TONES.danger.text)}>
                       Motion script terlalu pendek (min 10 karakter).
                     </p>
                   ) : null}
@@ -289,12 +291,12 @@ export function BaselineComposer({
 
       {/* Add controls */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+        <span className="text-xs font-semibold uppercase tracking-wide text-warm-500">
           Tambah:
         </span>
         {templates === null ? (
-          <span className="inline-flex items-center gap-1 text-[10px] text-warm-500">
-            <Loader2 className="h-3 w-3 animate-spin" /> template…
+          <span className="inline-flex items-center gap-1 text-xs text-warm-500">
+            <Loader2 className="size-3 animate-spin" /> template…
           </span>
         ) : (
           templates.map((v) => (
@@ -304,9 +306,9 @@ export function BaselineComposer({
               variant="outline"
               size="sm"
               onClick={() => addFromTemplate(v)}
-              className="h-7 border-warm-300 px-2 text-[11px] text-warm-700 hover:border-orange-300 hover:bg-orange-50"
+              className="h-7 border-warm-300 px-2 text-xs text-warm-700 hover:border-primary-300 hover:bg-primary-50"
             >
-              <Wand2 className="mr-1 h-3 w-3 text-orange-500" />
+              <Wand2 className="mr-1 size-3 text-primary-500" />
               {v.name.replace(/^Baseline [A-C] — /, '')}
             </Button>
           ))
@@ -316,20 +318,20 @@ export function BaselineComposer({
           variant="outline"
           size="sm"
           onClick={addBlank}
-          className="h-7 border-warm-300 px-2 text-[11px] text-warm-700 hover:border-orange-300 hover:bg-orange-50"
+          className="h-7 border-warm-300 px-2 text-xs text-warm-700 hover:border-primary-300 hover:bg-primary-50"
         >
-          <Plus className="mr-1 h-3 w-3" /> Kosong
+          <Plus className="mr-1 size-3" /> Kosong
         </Button>
       </div>
 
-      <p className="text-[10px] text-warm-500">
+      <p className="text-xs text-warm-500">
         💡 Quality wrapper (kamera statis · silent · loop mulus) otomatis ditambahkan
         ke tiap prompt saat generate — kamu cukup atur gerakannya.
       </p>
 
       {/* Generate bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-warm-100 pt-3">
-        <div className="text-[11px] text-warm-600">
+        <div className="text-xs text-warm-600">
           <strong className="tabular-nums">{validDrafts.length}</strong> baseline siap
           · est. cost{' '}
           <strong className="tabular-nums">${cost.toFixed(2)}</strong>{' '}
@@ -341,15 +343,14 @@ export function BaselineComposer({
           type="button"
           onClick={handleGenerate}
           disabled={submitting || validDrafts.length === 0}
-          className="bg-orange-600 hover:bg-orange-700"
         >
           {submitting ? (
             <>
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Submitting…
+              <Loader2 className="mr-1.5 size-4 animate-spin" /> Submitting…
             </>
           ) : (
             <>
-              <Sparkles className="mr-1.5 h-4 w-4" /> Generate {validDrafts.length}{' '}
+              <Sparkles className="mr-1.5 size-4" /> Generate {validDrafts.length}{' '}
               baseline
             </>
           )}

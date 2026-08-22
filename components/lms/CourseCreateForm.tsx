@@ -101,11 +101,13 @@ export function CourseCreateForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="product">Link ke Produk (opsional, bisa nanti)</Label>
+            <Label htmlFor="product">
+              Link ke Produk (opsional, bisa nanti)
+            </Label>
             {availableProducts.length === 0 ? (
-              <p className="text-xs text-warm-500">
-                Belum ada produk available. Bikin produk dulu di /products,
-                lalu link course ke produk dari halaman edit.
+              <p className="text-warm-500 text-xs">
+                Belum ada produk available. Bikin produk dulu di /products, lalu
+                link course ke produk dari halaman edit.
               </p>
             ) : (
               <Select value={productId} onValueChange={setProductId}>
@@ -123,17 +125,13 @@ export function CourseCreateForm({
                 </SelectContent>
               </Select>
             )}
-            <p className="text-[11px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               Saat customer beli produk yang di-link, akses course aktif
               otomatis. Bisa di-set/ubah nanti dari halaman edit course.
             </p>
           </div>
 
-          <Button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-primary-500 text-white hover:bg-primary-600"
-          >
+          <Button type="submit" disabled={submitting} className="w-full">
             {submitting ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />

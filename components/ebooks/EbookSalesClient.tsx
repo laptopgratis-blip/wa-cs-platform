@@ -18,6 +18,9 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,6 +31,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { formatNumber } from '@/lib/format'
+import type { StatusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface EbookStatsItem {
   id: string
@@ -68,10 +74,11 @@ interface BuyerItem {
   lastDownload: { status: string; at: string } | null
 }
 
-const STATUS_CLS: Record<string, string> = {
-  ACTIVE: 'bg-emerald-100 text-emerald-800',
-  REVOKED: 'bg-rose-100 text-rose-800',
-  EXPIRED: 'bg-amber-100 text-amber-800',
+// Status akses e-book (EbookAccess.status) — label + tone dari registry.
+const ACCESS_STATUS_META: Record<string, StatusMeta> = {
+  ACTIVE: { label: 'ACTIVE', tone: 'success' },
+  REVOKED: { label: 'REVOKED', tone: 'danger' },
+  EXPIRED: { label: 'EXPIRED', tone: 'warning' },
 }
 
 function formatSize(bytes: number): string {
@@ -171,42 +178,38 @@ export function EbookSalesClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-extrabold text-warm-900">
-            E-Book
-          </h1>
-          <p className="text-sm text-warm-600">
-            Penjualan & akses pembeli e-book. Upload/edit e-book dari dialog
-            produk di halaman Produk.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void loadStats()}>
-          <RefreshCcw className="mr-1.5 size-3.5" />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        icon={BookOpen}
+        title="E-Book"
+        description="Penjualan & akses pembeli e-book. Upload/edit e-book dari dialog produk di halaman Produk."
+        actions={
+          <Button variant="outline" size="sm" onClick={() => void loadStats()}>
+            <RefreshCcw className="mr-1.5 size-3.5" />
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Stats strip total */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-warm-500">Terjual</p>
-            <p className="text-xl font-bold text-warm-900">{totals.sold}</p>
+            <p className="text-warm-500 text-xs">Terjual</p>
+            <p className="text-warm-900 text-xl font-semibold">{totals.sold}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-warm-500">Omzet</p>
-            <p className="text-xl font-bold text-warm-900">
+            <p className="text-warm-500 text-xs">Omzet</p>
+            <p className="text-warm-900 text-xl font-semibold">
               Rp {formatNumber(totals.revenueRp)}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 text-center">
-            <p className="text-xs text-warm-500">Download</p>
-            <p className="text-xl font-bold text-warm-900">
+            <p className="text-warm-500 text-xs">Download</p>
+            <p className="text-warm-900 text-xl font-semibold">
               {totals.downloads}
             </p>
           </CardContent>
@@ -214,18 +217,17 @@ export function EbookSalesClient() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-warm-500">
+        <div className="text-warm-500 flex items-center justify-center py-16">
           <Loader2 className="mr-2 size-5 animate-spin" /> Memuat…
         </div>
       ) : items.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center">
-            <BookOpen className="mx-auto mb-3 size-10 text-warm-300" />
-            <p className="font-semibold text-warm-700">Belum ada e-book</p>
-            <p className="mt-1 text-sm text-warm-500">
-              Buka halaman Produk → tambah/edit produk → bagian E-Book untuk
-              upload PDF/EPUB pertama kamu.
-            </p>
+          <CardContent>
+            <EmptyState
+              icon={BookOpen}
+              title="Belum ada e-book"
+              description="Buka halaman Produk → tambah/edit produk → bagian E-Book untuk upload PDF/EPUB pertama kamu."
+            />
           </CardContent>
         </Card>
       ) : (
@@ -240,19 +242,19 @@ export function EbookSalesClient() {
                     className="size-14 rounded-lg object-cover"
                   />
                 ) : (
-                  <div className="flex size-14 items-center justify-center rounded-lg bg-warm-100">
-                    <BookOpen className="size-6 text-warm-400" />
+                  <div className="bg-warm-100 flex size-14 items-center justify-center rounded-lg">
+                    <BookOpen className="text-warm-400 size-6" />
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-warm-900">{e.title}</p>
+                    <p className="text-warm-900 font-semibold">{e.title}</p>
                     {!e.isActive && <Badge variant="secondary">Off</Badge>}
                     <Badge variant="secondary">
                       {e.fileFormat} · {formatSize(e.fileSizeBytes)}
                     </Badge>
                   </div>
-                  <p className="mt-0.5 text-xs text-warm-500">
+                  <p className="text-warm-500 mt-0.5 text-xs">
                     {e.product
                       ? `Produk: ${e.product.name} (Rp ${formatNumber(e.product.price)})`
                       : 'Belum terhubung ke produk'}
@@ -265,20 +267,20 @@ export function EbookSalesClient() {
                 </div>
                 <div className="flex items-center gap-4 text-center text-sm">
                   <div>
-                    <p className="font-bold text-warm-900">{e.stats.sold}</p>
-                    <p className="text-[11px] text-warm-500">Terjual</p>
+                    <p className="text-warm-900 font-semibold">{e.stats.sold}</p>
+                    <p className="text-warm-500 text-xs">Terjual</p>
                   </div>
                   <div>
-                    <p className="font-bold text-warm-900">
+                    <p className="text-warm-900 font-semibold">
                       Rp {formatNumber(e.stats.revenueRp)}
                     </p>
-                    <p className="text-[11px] text-warm-500">Omzet</p>
+                    <p className="text-warm-500 text-xs">Omzet</p>
                   </div>
                   <div>
-                    <p className="font-bold text-warm-900">
+                    <p className="text-warm-900 font-semibold">
                       {e.stats.downloads}
                     </p>
-                    <p className="text-[11px] text-warm-500">Download</p>
+                    <p className="text-warm-500 text-xs">Download</p>
                   </div>
                 </div>
                 <Button
@@ -307,11 +309,11 @@ export function EbookSalesClient() {
             <DialogTitle>Pembeli — {buyersFor?.title}</DialogTitle>
           </DialogHeader>
           {buyersLoading ? (
-            <div className="flex items-center justify-center py-10 text-warm-500">
+            <div className="text-warm-500 flex items-center justify-center py-10">
               <Loader2 className="mr-2 size-5 animate-spin" /> Memuat…
             </div>
           ) : buyers.length === 0 ? (
-            <p className="py-8 text-center text-sm text-warm-500">
+            <p className="text-warm-500 py-8 text-center text-sm">
               Belum ada pembeli.
             </p>
           ) : (
@@ -323,18 +325,21 @@ export function EbookSalesClient() {
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-warm-900">
+                      <p className="text-warm-900 font-medium">
                         {b.buyerName ?? b.buyerPhone}
                       </p>
-                      <Badge className={`${STATUS_CLS[b.status]} hover:${STATUS_CLS[b.status]}`}>
-                        {b.status === 'ACTIVE'
-                          ? 'Aktif'
-                          : b.status === 'REVOKED'
-                            ? 'Dicabut'
-                            : 'Kedaluwarsa'}
-                      </Badge>
+                      <StatusBadge
+                        tone={ACCESS_STATUS_META[b.status]?.tone ?? 'neutral'}
+                        label={
+                          b.status === 'ACTIVE'
+                            ? 'Aktif'
+                            : b.status === 'REVOKED'
+                              ? 'Dicabut'
+                              : 'Kedaluwarsa'
+                        }
+                      />
                     </div>
-                    <p className="mt-0.5 text-xs text-warm-500">
+                    <p className="text-warm-500 mt-0.5 text-xs">
                       <span className="font-mono">{b.buyerPhone}</span>
                       {b.invoiceNumber && ` · ${b.invoiceNumber}`}
                       {b.purchaseCount > 1
@@ -343,13 +348,13 @@ export function EbookSalesClient() {
                           ? ` · Rp ${formatNumber(b.pricePaidRp)}`
                           : ''}
                     </p>
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-warm-500">
+                    <p className="text-warm-500 mt-0.5 flex items-center gap-1 text-xs">
                       <Download className="size-3" />
                       {b.downloadCount}/{b.maxDownloads}
                       {' · '}dibeli {formatDate(b.grantedAt)}
                       {b.expiresAt && ` · s.d. ${formatDate(b.expiresAt)}`}
                       {!b.accessNotifiedAt && b.status === 'ACTIVE' && (
-                        <span className="text-amber-600">
+                        <span className={TONES.warning.text}>
                           {' '}
                           · link belum terkirim
                         </span>
@@ -370,7 +375,7 @@ export function EbookSalesClient() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-rose-600 hover:text-rose-700"
+                        className={cn('hover:opacity-80', TONES.danger.text)}
                         disabled={actingId === b.id}
                         onClick={() => void buyerAction(b.id, 'REVOKE')}
                         title="Cabut akses"

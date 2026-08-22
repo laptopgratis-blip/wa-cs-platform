@@ -213,7 +213,14 @@ export function AiFeaturesManager() {
         }
       />
 
-      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+      <div
+        className={cn(
+          'rounded-md border p-3 text-xs',
+          TONES.warning.bg,
+          TONES.warning.border,
+          TONES.warning.text,
+        )}
+      >
         <strong>Cara hitung token charge per call (skema fair-pricing):</strong>
         <br />
         <code>

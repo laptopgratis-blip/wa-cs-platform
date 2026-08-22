@@ -5,20 +5,31 @@
 //   Step 2: Claude suggest scripts → user review/edit/approve per item
 //   Step 3: Confirm + fire bulk-generate, kembali ke library dengan polling
 
+import type { LucideIcon } from 'lucide-react'
 import {
   ArrowLeft,
   ArrowRight,
+  Bell,
+  Check,
+  MessageCircle,
   Loader2,
   Package,
   Pencil,
+  Pill,
   Rocket,
+  ShieldCheck,
+  ShoppingCart,
+  Smile,
   Sparkles,
+  Tag,
   Trash2,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -45,36 +56,40 @@ interface SuggestedScript {
 
 const CATEGORY_META: Record<
   string,
-  { emoji: string; label: string; color: string }
+  { icon: LucideIcon; label: string; color: string }
 > = {
   GREETING: {
-    emoji: '🔔',
+    icon: Bell,
     label: 'Sapaan',
     color: 'bg-primary-100 text-primary-700',
   },
   PRODUCT_DEMO: {
-    emoji: '💊',
+    icon: Pill,
     label: 'Demo Produk',
     color: 'bg-primary-100 text-primary-700',
   },
   PRICE: {
-    emoji: '💰',
+    icon: Tag,
     label: 'Harga',
     color: 'bg-primary-100 text-primary-700',
   },
   OBJECTION: {
-    emoji: '🛡️',
+    icon: ShieldCheck,
     label: 'Objection',
     color: 'bg-primary-100 text-primary-700',
   },
   CLOSING: {
-    emoji: '🛒',
+    icon: ShoppingCart,
     label: 'Closing',
     color: 'bg-primary-100 text-primary-700',
   },
-  GENERAL: { emoji: '💬', label: 'Umum', color: 'bg-warm-100 text-warm-700' },
+  GENERAL: {
+    icon: MessageCircle,
+    label: 'Umum',
+    color: 'bg-warm-100 text-warm-700',
+  },
   IDLE: {
-    emoji: '😊',
+    icon: Smile,
     label: 'Idle (diam)',
     color: 'bg-warm-100 text-warm-500',
   },
@@ -316,7 +331,7 @@ export function BulkGenerateModal({
                       : 'bg-warm-200 text-warm-500'
                   }`}
                 >
-                  {step > s ? '✓' : s}
+                  {step > s ? <Check className="size-3.5" aria-hidden /> : s}
                 </div>
                 {s < 3 ? (
                   <div
@@ -448,7 +463,7 @@ export function BulkGenerateModal({
                         <button
                           type="button"
                           onClick={() => removeBenefit(i)}
-                          className="border-warm-200 text-warm-600 rounded-md border px-2 hover:bg-red-50"
+                          className="border-warm-200 text-warm-600 rounded-md border px-2 hover:bg-destructive/10"
                         >
                           <Trash2 className="size-3" />
                         </button>
@@ -500,7 +515,7 @@ export function BulkGenerateModal({
                   >
                     <div className="font-semibold">{opt.label}</div>
                     <div className="text-warm-600 text-xs">{opt.desc}</div>
-                    <div className="mt-0.5 text-xs text-emerald-600">
+                    <div className={cn('mt-0.5 text-xs', TONES.success.text)}>
                       {opt.smoothness}
                     </div>
                   </button>
@@ -570,14 +585,20 @@ export function BulkGenerateModal({
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${meta.color}`}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.color}`}
                         >
-                          {meta.emoji} {meta.label}
+                          <meta.icon className="size-3" aria-hidden />
+                          {meta.label}
                         </span>
                         <span
-                          className={`text-xs ${overBudget ? 'font-semibold text-red-600' : 'text-warm-500'}`}
+                          className={cn(
+                            'text-xs',
+                            overBudget
+                              ? cn('font-semibold', TONES.danger.text)
+                              : 'text-warm-500',
+                          )}
                         >
-                          {s.charCount}/129 {overBudget ? '⚠️ over' : ''}
+                          {s.charCount}/129 {overBudget ? 'over' : ''}
                         </span>
                         {/* Trigger + kpi_goal disembunyikan — info AI internal, gak action-able buat owner */}
                       </div>
@@ -598,7 +619,7 @@ export function BulkGenerateModal({
                     <button
                       type="button"
                       onClick={() => removeScript(i)}
-                      className="text-warm-500 flex-shrink-0 self-start rounded p-1 hover:bg-red-50 hover:text-red-600"
+                      className="text-warm-500 flex-shrink-0 self-start rounded p-1 hover:bg-destructive/10 hover:text-destructive"
                       aria-label="Hapus"
                     >
                       <Trash2 className="size-3" />

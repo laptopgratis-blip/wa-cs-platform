@@ -5,7 +5,7 @@ import { History, Loader2, Sparkles, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,6 +15,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Version {
   id: string
@@ -31,10 +33,11 @@ const SOURCE_LABEL: Record<string, string> = {
   restore: 'Restore Action',
 }
 
-const SOURCE_COLOR: Record<string, string> = {
-  ai: 'bg-purple-100 text-purple-800',
-  manual: 'bg-blue-100 text-blue-800',
-  restore: 'bg-amber-100 text-amber-800',
+// Sumber versi (enum) → tone registry lib/ui-tones.ts.
+const SOURCE_TONE: Record<string, Tone> = {
+  ai: 'brand',
+  manual: 'neutral',
+  restore: 'warning',
 }
 
 interface Props {
@@ -79,7 +82,9 @@ export function VersionsDialog({ lpId, onRestored }: Props) {
         toast.error(j.error ?? 'Gagal restore')
         return
       }
-      toast.success('LP berhasil di-restore. State sebelumnya tersimpan di Riwayat.')
+      toast.success(
+        'LP berhasil di-restore. State sebelumnya tersimpan di Riwayat.',
+      )
       setOpen(false)
       onRestored?.()
     } catch {
@@ -100,19 +105,19 @@ export function VersionsDialog({ lpId, onRestored }: Props) {
         <DialogHeader>
           <DialogTitle>Riwayat Versi LP</DialogTitle>
           <DialogDescription>
-            Setiap apply AI optimization atau restore akan snapshot HTML lama
-            di sini. Maks 20 versi terakhir per LP.
+            Setiap apply AI optimization atau restore akan snapshot HTML lama di
+            sini. Maks 20 versi terakhir per LP.
           </DialogDescription>
         </DialogHeader>
 
         {loading && (
-          <div className="flex items-center justify-center py-8 text-warm-500">
-            <Loader2 className="mr-2 size-5 animate-spin" /> Memuat…
+          <div className="text-warm-500 flex items-center justify-center py-8">
+            <Loader2 className="mr-2 size-4 animate-spin" /> Memuat…
           </div>
         )}
 
         {!loading && versions.length === 0 && (
-          <div className="rounded-lg border border-dashed p-8 text-center text-sm text-warm-500">
+          <div className="text-warm-500 rounded-lg border border-dashed p-8 text-center text-sm">
             Belum ada versi tersimpan. Apply AI optimization atau restore versi
             akan create snapshot di sini.
           </div>
@@ -123,25 +128,24 @@ export function VersionsDialog({ lpId, onRestored }: Props) {
             {versions.map((v) => (
               <li
                 key={v.id}
-                className="flex items-start gap-3 rounded-lg border border-warm-200 p-3"
+                className="border-warm-200 flex items-start gap-3 rounded-lg border p-3"
               >
-                <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg bg-warm-100 text-warm-600">
+                <div className="bg-warm-100 text-warm-600 mt-1 flex size-8 shrink-0 items-center justify-center rounded-lg">
                   {v.source === 'ai' ? (
-                    <Sparkles className="size-4 text-purple-600" />
+                    <Sparkles className={cn('size-4', TONES.brand.text)} />
                   ) : v.source === 'restore' ? (
-                    <RotateCcw className="size-4 text-amber-600" />
+                    <RotateCcw className={cn('size-4', TONES.warning.text)} />
                   ) : (
                     <History className="size-4" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <Badge
-                      className={`${SOURCE_COLOR[v.source] ?? 'bg-warm-100'} text-xs`}
-                    >
-                      {SOURCE_LABEL[v.source] ?? v.source}
-                    </Badge>
-                    <span className="text-[11px] text-warm-500">
+                    <StatusBadge
+                      tone={SOURCE_TONE[v.source] ?? 'neutral'}
+                      label={SOURCE_LABEL[v.source] ?? v.source}
+                    />
+                    <span className="text-warm-500 text-xs">
                       {new Date(v.createdAt).toLocaleString('id-ID', {
                         dateStyle: 'medium',
                         timeStyle: 'short',
@@ -149,10 +153,10 @@ export function VersionsDialog({ lpId, onRestored }: Props) {
                     </span>
                   </div>
                   {v.note && (
-                    <p className="mt-1 text-xs text-warm-700">{v.note}</p>
+                    <p className="text-warm-700 mt-1 text-xs">{v.note}</p>
                   )}
                   {v.scoreSnapshot != null && (
-                    <p className="mt-0.5 text-[11px] text-warm-500">
+                    <p className="text-warm-500 mt-0.5 text-xs">
                       Score snapshot: <strong>{v.scoreSnapshot}</strong>/100
                     </p>
                   )}

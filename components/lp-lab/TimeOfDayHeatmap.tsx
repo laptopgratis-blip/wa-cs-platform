@@ -20,7 +20,7 @@ const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 export function TimeOfDayHeatmap({ cells }: Props) {
   if (cells.length === 0) {
     return (
-      <p className="rounded-md border border-dashed border-warm-200 bg-warm-50 px-3 py-4 text-center text-xs text-warm-500">
+      <p className="border-warm-200 bg-warm-50 text-warm-500 rounded-md border border-dashed px-3 py-4 text-center text-xs">
         Belum ada visit untuk dibreakdown by waktu.
       </p>
     )
@@ -42,7 +42,7 @@ export function TimeOfDayHeatmap({ cells }: Props) {
           {hourLabels.map((h) => (
             <div
               key={h}
-              className="flex-1 text-center text-[10px] tabular-nums text-warm-400"
+              className="text-warm-400 flex-1 text-center text-xs tabular-nums"
               style={{ minWidth: '14px' }}
             >
               {h % 3 === 0 ? h : ''}
@@ -52,7 +52,7 @@ export function TimeOfDayHeatmap({ cells }: Props) {
         {/* Rows per day */}
         {DAY_LABELS.map((label, dow) => (
           <div key={dow} className="flex items-center">
-            <div className="w-10 shrink-0 text-[11px] font-medium text-warm-500">
+            <div className="text-warm-500 w-10 shrink-0 text-xs font-medium">
               {label}
             </div>
             {hourLabels.map((h) => {
@@ -80,7 +80,7 @@ export function TimeOfDayHeatmap({ cells }: Props) {
           </div>
         ))}
         {/* Legend */}
-        <div className="mt-2 flex items-center gap-2 text-[10px] text-warm-500">
+        <div className="text-warm-500 mt-2 flex items-center gap-2 text-xs">
           <span>Sedikit</span>
           <div className="flex gap-0.5">
             {[0.15, 0.35, 0.55, 0.75, 1].map((i) => (
@@ -92,7 +92,7 @@ export function TimeOfDayHeatmap({ cells }: Props) {
             ))}
           </div>
           <span>Banyak</span>
-          <span className="ml-3 text-warm-400">Max: {max} visit</span>
+          <span className="text-warm-400 ml-3">Max: {max} visit</span>
         </div>
       </div>
     </div>

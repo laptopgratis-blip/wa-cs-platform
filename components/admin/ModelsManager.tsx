@@ -2,7 +2,16 @@
 
 // CRUD AI Models — list + sheet form (create/edit) + toggle aktif + delete.
 import type { AiProvider } from '@prisma/client'
-import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  BarChart3,
+  Bot,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -50,6 +59,7 @@ import {
   calcBreakdown,
   calcRecommendedTokens,
 } from '@/lib/pricing-settings'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface AiModelRow {
@@ -521,7 +531,7 @@ export function ModelsManager() {
                               ${m.inputPricePer1M.toFixed(2)} input / $
                               {m.outputPricePer1M.toFixed(2)} output / 1M tok
                             </div>
-                            <div className="text-[10px] opacity-75">
+                            <div className="text-xs opacity-75">
                               Update {m.daysSinceUpdate}h lalu
                               {m.lastUpdatedSource &&
                                 ` (${m.lastUpdatedSource})`}
@@ -571,8 +581,9 @@ export function ModelsManager() {
               const matched = findPresetByModelId(modelId)
               if (!matched) return null
               return (
-                <p className="text-muted-foreground text-[10px]">
-                  ℹ️ Harga diambil dari preset · Last update{' '}
+                <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                  <Info className="size-3 shrink-0" aria-hidden />
+                  Harga diambil dari preset · Last update{' '}
                   {matched.daysSinceUpdate} hari lalu
                   {matched.lastUpdatedSource &&
                     ` (${matched.lastUpdatedSource})`}
@@ -617,8 +628,9 @@ export function ModelsManager() {
                     Token per pesan (dipotong dari user)
                   </Label>
                   {costMode === 'AUTO' && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      🤖 Auto-set untuk margin {ps.marginTarget}%
+                    <Badge variant="secondary" className="gap-1 text-xs">
+                      <Bot className="size-3" aria-hidden />
+                      Auto-set untuk margin {ps.marginTarget}%
                     </Badge>
                   )}
                 </div>
@@ -637,9 +649,10 @@ export function ModelsManager() {
               </div>
 
               {/* Preview profitabilitas */}
-              <div className="bg-warm-50 dark:bg-warm-900/30 rounded-md p-3 text-xs">
-                <p className="text-warm-700 dark:text-warm-200 mb-1 font-semibold">
-                  📊 Estimasi per Pesan
+              <div className="bg-warm-50 rounded-md p-3 text-xs">
+                <p className="text-warm-700 mb-1 flex items-center gap-1 font-semibold">
+                  <BarChart3 className="size-3.5" aria-hidden />
+                  Estimasi per Pesan
                 </p>
                 <div className="space-y-0.5 font-mono">
                   <div className="flex justify-between">
@@ -658,28 +671,26 @@ export function ModelsManager() {
                     <span>Profit:</span>
                     <span
                       className={cn(
-                        preview.profitRp < 0 && 'font-semibold text-red-600',
+                        preview.profitRp < 0 && cn('font-semibold', TONES.danger.text),
                       )}
                     >
                       {formatRupiah(preview.profitRp)}
                     </span>
                   </div>
-                  <div className="border-warm-200 dark:border-warm-700 flex justify-between border-t pt-1">
+                  <div className="border-warm-200 flex justify-between border-t pt-1">
                     <span>Margin:</span>
                     <span
                       className={cn(
                         'font-semibold',
-                        preview.status === 'AMAN' && 'text-emerald-600',
-                        preview.status === 'TIPIS' && 'text-amber-600',
-                        preview.status === 'RUGI' && 'text-red-600',
+                        preview.status === 'AMAN' && TONES.success.text,
+                        preview.status === 'TIPIS' && TONES.warning.text,
+                        preview.status === 'RUGI' && TONES.danger.text,
                       )}
                     >
                       {Number.isFinite(preview.marginPct)
                         ? `${preview.marginPct.toFixed(1)}%`
                         : '—'}{' '}
-                      {preview.status === 'AMAN' && '🟢 AMAN'}
-                      {preview.status === 'TIPIS' && '🟡 TIPIS'}
-                      {preview.status === 'RUGI' && '🔴 RUGI'}
+                      {preview.status}
                     </span>
                   </div>
                 </div>

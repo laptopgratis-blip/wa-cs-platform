@@ -146,7 +146,7 @@ export function SettingsManager() {
             const dirty = values[f.key] !== savedSnapshot[f.key]
             const isSaving = savingKey === f.key
             return (
-              <Card key={f.key} className="border-warm-200 rounded-xl">
+              <Card key={f.key}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-warm-900 text-sm font-semibold">
                     {f.label}

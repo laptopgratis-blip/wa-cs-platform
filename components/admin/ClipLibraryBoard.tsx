@@ -13,10 +13,13 @@
 import {
   AlertTriangle,
   BarChart3,
+  Check,
   CheckCircle2,
+  Clapperboard,
   FlaskConical,
   Hourglass,
   ImageIcon,
+  Lightbulb,
   Loader2,
   Mic,
   Pause,
@@ -29,7 +32,7 @@ import {
   TreePine,
   Upload,
   Volume2,
-  X,
+  XCircle,
   Zap,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -49,12 +52,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import { liveClipStatusMeta, statusMeta } from '@/lib/status'
 import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Voice {
   voice_id: string
@@ -784,8 +789,9 @@ export function ClipLibraryBoard({
             <div className="grid gap-3 sm:grid-cols-2">
               {prepStatus?.sourceImageUrl ? (
                 <div>
-                  <div className="text-warm-500 mb-1 text-xs font-medium">
-                    🖼️ Source Image (Gemini)
+                  <div className="text-warm-500 mb-1 flex items-center gap-1 text-xs font-medium">
+                    <ImageIcon className="size-3" aria-hidden />
+                    Source Image (Gemini)
                   </div>
                   <img
                     src={prepStatus.sourceImageUrl}
@@ -796,8 +802,9 @@ export function ClipLibraryBoard({
               ) : null}
               {prepStatus?.baselineVideoUrl ? (
                 <div>
-                  <div className="text-warm-500 mb-1 text-xs font-medium">
-                    🎬 Baseline Silent Video (Kling) — sumber lipsync semua klip
+                  <div className="text-warm-500 mb-1 flex items-center gap-1 text-xs font-medium">
+                    <Clapperboard className="size-3" aria-hidden />
+                    Baseline Silent Video (Kling) — sumber lipsync semua klip
                   </div>
                   <video
                     src={prepStatus.baselineVideoUrl}
@@ -1257,14 +1264,14 @@ export function ClipLibraryBoard({
                         </div>
                       </div>
                       <div className="mt-1.5 flex flex-wrap gap-1">
-                        <button
+                        <Button
                           type="button"
+                          size="sm"
                           onClick={() => setAttachQuestion(q.question)}
-                          className="bg-primary-600 hover:bg-primary-700 inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-white"
                         >
-                          <Target className="size-3" aria-hidden />
+                          <Target aria-hidden />
                           Tunjuk klip yang udah ada
-                        </button>
+                        </Button>
                         <button
                           type="button"
                           onClick={() => {
@@ -2204,19 +2211,24 @@ function BrowseSharedVoicesModal({
                     ) : null}
                     {alreadyHave ? (
                       <span
-                        className={`rounded px-2 py-1 text-xs font-semibold ${TONES.success.bg} ${TONES.success.text}`}
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold',
+                          TONES.success.bg,
+                          TONES.success.text,
+                        )}
                       >
-                        ✓ Ada
+                        <Check className="size-3" aria-hidden />
+                        Ada
                       </span>
                     ) : (
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         onClick={() => void addVoice(v)}
                         disabled={adding === v.voice_id}
-                        className="bg-primary-500 hover:bg-primary-600 disabled:bg-warm-300 rounded px-2 py-1 text-xs font-semibold text-white"
                       >
                         {adding === v.voice_id ? '…' : '+ Add'}
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -2633,12 +2645,24 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
                       {result.chosen.matchMode}
                     </span>
                   ) : result.chosen.isFallback ? (
-                    <span className="rounded bg-amber-100 px-1.5 py-px text-xs font-semibold text-amber-700">
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-px text-xs font-semibold',
+                        TONES.warning.bg,
+                        TONES.warning.text,
+                      )}
+                    >
                       FALLBACK · di bawah threshold{' '}
                       {(result.threshold * 100).toFixed(0)}%
                     </span>
                   ) : (
-                    <span className="rounded bg-emerald-100 px-1.5 py-px text-xs font-semibold text-emerald-700">
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-px text-xs font-semibold',
+                        TONES.success.bg,
+                        TONES.success.text,
+                      )}
+                    >
                       AI MATCH
                     </span>
                   )}
@@ -2652,16 +2676,34 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
                   "{result.chosen.transcript.slice(0, 200)}"
                 </div>
                 {result.chosen.isFallback ? (
-                  <div className="mt-1 rounded bg-amber-50 p-1.5 text-xs text-amber-800">
-                    💡 Score terlalu rendah — tambahin keyword di klip yg mau
-                    dipakai, atau bikin klip baru khusus pertanyaan ini.
+                  <div
+                    className={cn(
+                      'mt-1 flex items-start gap-1 rounded p-1.5 text-xs',
+                      TONES.warning.bg,
+                      TONES.warning.text,
+                    )}
+                  >
+                    <Lightbulb className="mt-0.5 size-3 shrink-0" aria-hidden />
+                    <span>
+                      Score terlalu rendah — tambahin keyword di klip yg mau
+                      dipakai, atau bikin klip baru khusus pertanyaan ini.
+                    </span>
                   </div>
                 ) : null}
               </div>
             </div>
           ) : (
-            <div className="rounded bg-red-50 p-2 text-xs text-red-700">
-              ❌ Tidak ada klip yang cocok — bikin klip dulu untuk topik ini.
+            <div
+              className={cn(
+                'flex items-start gap-1 rounded p-2 text-xs',
+                TONES.danger.bg,
+                TONES.danger.text,
+              )}
+            >
+              <XCircle className="mt-0.5 size-3 shrink-0" aria-hidden />
+              <span>
+                Tidak ada klip yang cocok — bikin klip dulu untuk topik ini.
+              </span>
             </div>
           )}
           {result.top3.length > 1 ? (
@@ -2817,30 +2859,19 @@ function EditClipModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!o) onClose()
       }}
     >
-      <div className="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold">Edit Klip</h3>
-            <p className="text-muted-foreground text-xs">
-              Source: {clip.source} · {clip.useCount} dipakai
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Tutup"
-            className="hover:bg-warm-100 rounded-full p-1.5"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
+      <DialogContent className="max-h-[85vh] max-w-xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Klip</DialogTitle>
+          <DialogDescription>
+            Source: {clip.source} · {clip.useCount} dipakai
+          </DialogDescription>
+        </DialogHeader>
 
         {clip.videoUrl ? (
           <video
@@ -2936,8 +2967,9 @@ function EditClipModal({
           {/* ── Trigger Klip (Routing) ────────────────────────────────────── */}
           <div className="border-primary-200 bg-primary-50/60 space-y-3 rounded-md border-2 p-3">
             <div>
-              <h4 className="text-primary-900 text-sm font-semibold">
-                🎯 Trigger Klip — Kapan klip ini main?
+              <h4 className="text-primary-900 flex items-center gap-1 text-sm font-semibold">
+                <Target className="size-3.5" aria-hidden />
+                Trigger Klip — Kapan klip ini main?
               </h4>
               <p className="text-warm-700 mt-0.5 text-xs">
                 Customer ngomong frasa di bawah → klip ini auto-play. Pakai
@@ -3035,7 +3067,7 @@ function EditClipModal({
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>
@@ -3052,9 +3084,9 @@ function EditClipModal({
               'Simpan'
             )}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -3075,8 +3107,16 @@ function PrereqWarning({
       >
         ← Kembali
       </Link>
-      <div className="flex items-start gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
-        <AlertTriangle className="mt-0.5 size-5 flex-shrink-0 text-amber-600" />
+      <div
+        className={cn(
+          'flex items-start gap-3 rounded-xl border p-4',
+          TONES.warning.bg,
+          TONES.warning.border,
+        )}
+      >
+        <AlertTriangle
+          className={cn('mt-0.5 size-5 flex-shrink-0', TONES.warning.text)}
+        />
         <div>
           <div className="font-semibold">{title}</div>
           <p className="text-warm-700 mt-1 text-sm">{message}</p>

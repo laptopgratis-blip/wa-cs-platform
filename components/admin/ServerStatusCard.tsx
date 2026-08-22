@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { TONES } from '@/lib/ui-tones'
 
 interface ServerStatus {
   disk: {
@@ -33,11 +34,13 @@ interface ServerStatus {
   visits30d: number
 }
 
+// Tier paket = tone "brand" (lihat CLAUDE.md § Design System UI) — dibedakan
+// lewat tangga shade primary, bukan hue berbeda-beda.
 const TIER_COLOR: Record<string, string> = {
   FREE: 'bg-warm-200 text-warm-700',
-  STARTER: 'bg-blue-100 text-blue-700',
-  POPULAR: 'bg-amber-100 text-amber-700',
-  POWER: 'bg-purple-100 text-purple-700',
+  STARTER: 'bg-primary-50 text-primary-700',
+  POPULAR: 'bg-primary-100 text-primary-700',
+  POWER: 'bg-primary-200 text-primary-800',
 }
 
 export function ServerStatusCard() {
@@ -69,7 +72,9 @@ export function ServerStatusCard() {
       <Card>
         <CardHeader>
           <CardTitle>Server & Storage Status</CardTitle>
-          <CardDescription className="text-red-600">{error}</CardDescription>
+          <CardDescription className={TONES.danger.text}>
+            {error}
+          </CardDescription>
         </CardHeader>
       </Card>
     )

@@ -358,7 +358,7 @@ function ManualAddDialog({
               placeholder="cmoxxx... (copy dari /lms/courses URL)"
               className="font-mono text-xs"
             />
-            <p className="text-warm-500 text-[11px]">
+            <p className="text-warm-500 text-xs">
               Phase 1 — copy course ID dari URL halaman edit course. Phase 2
               dropdown picker.
             </p>

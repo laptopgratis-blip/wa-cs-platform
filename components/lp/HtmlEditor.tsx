@@ -25,7 +25,7 @@ interface Props {
 // Style yang HARUS identik antara textarea & mirror supaya wrapping persis sama.
 // Pakai konstanta supaya tidak ada drift kalau salah satu diubah.
 const MONO_TEXT_CLASSES =
-  'font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-words'
+  'font-mono text-xs leading-relaxed whitespace-pre-wrap break-words'
 const PADDING_CLASSES = 'px-4 py-3'
 
 // Format HTML sederhana via regex — bukan full prettifier.
@@ -87,7 +87,10 @@ function simpleFormatHtml(html: string): string {
   let result = out.join('\n')
 
   // Restore preserved blocks.
-  result = result.replace(/__PRESERVE_(\d+)__/g, (_, i) => placeholders[Number(i)] ?? '')
+  result = result.replace(
+    /__PRESERVE_(\d+)__/g,
+    (_, i) => placeholders[Number(i)] ?? '',
+  )
   return result
 }
 
@@ -108,7 +111,12 @@ function splitForMirror(
   }
 }
 
-export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props) {
+export function HtmlEditor({
+  value,
+  onChange,
+  onSaveNow,
+  highlightRange,
+}: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null)
   const mirrorRef = useRef<HTMLDivElement>(null)
 
@@ -146,7 +154,10 @@ export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props
     const cs = window.getComputedStyle(ta)
     const lh = parseFloat(cs.lineHeight)
     const lineHeight = Number.isFinite(lh) && lh > 0 ? lh : 19
-    const targetScroll = Math.max(0, lineIndex * lineHeight - ta.clientHeight / 3)
+    const targetScroll = Math.max(
+      0,
+      lineIndex * lineHeight - ta.clientHeight / 3,
+    )
     ta.scrollTop = targetScroll
     // Mirror akan sync via onScroll handler textarea.
     if (mirrorRef.current) mirrorRef.current.scrollTop = ta.scrollTop
@@ -163,13 +174,13 @@ export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-warm-200 bg-card px-4 py-2">
+      <div className="border-warm-200 bg-card flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
-          <Code2 className="size-4 text-warm-600" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Code2 className="text-warm-600 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             HTML Editor
           </span>
-          <span className="text-[10px] text-warm-500">
+          <span className="text-warm-500 text-xs">
             {value.length.toLocaleString('id-ID')} karakter
           </span>
         </div>
@@ -185,17 +196,13 @@ export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props
             <Wand2 className="mr-1.5 size-3" />
             Format
           </Button>
-          <Button
-            size="sm"
-            onClick={onSaveNow}
-            className="h-7 bg-primary-500 text-xs text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button size="sm" onClick={onSaveNow} className="h-7 text-xs">
             <Save className="mr-1.5 size-3" />
             Simpan
           </Button>
         </div>
       </div>
-      <div className="relative min-h-0 flex-1 bg-warm-900">
+      <div className="bg-warm-900 relative min-h-0 flex-1">
         {/* Mirror di belakang textarea: render konten yang sama tapi cuma untuk
             visual highlight (text transparent, <mark> dengan bg warna). Sync
             scroll via onScroll handler textarea. pointer-events: none supaya
@@ -208,7 +215,7 @@ export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props
           {segments ? (
             <>
               {segments.before}
-              <mark className="rounded-sm bg-amber-300/35 ring-2 ring-amber-400/70 text-transparent">
+              <mark className="bg-primary-300/35 ring-primary-400/70 rounded-sm text-transparent ring-2">
                 {segments.mid}
               </mark>
               {segments.after}
@@ -230,7 +237,7 @@ export function HtmlEditor({ value, onChange, onSaveNow, highlightRange }: Props
               ? ''
               : 'Generate HTML pakai AI di atas, atau paste HTML kamu di sini.'
           }
-          className={`relative block h-full w-full resize-none border-0 bg-transparent text-warm-100 placeholder:text-warm-500 focus:outline-none selection:bg-amber-400/40 selection:text-amber-50 ${MONO_TEXT_CLASSES} ${PADDING_CLASSES}`}
+          className={`text-warm-100 placeholder:text-warm-500 selection:bg-primary-400/40 selection:text-primary-50 relative block h-full w-full resize-none border-0 bg-transparent focus:outline-none ${MONO_TEXT_CLASSES} ${PADDING_CLASSES}`}
         />
       </div>
     </div>

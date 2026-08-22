@@ -460,7 +460,7 @@ function ProofPanel({ sub }: { sub: Sub }) {
 
   if (!invoice) {
     return (
-      <p className="text-muted-foreground py-4 text-sm">Memuat invoice...</p>
+      <p className="text-muted-foreground py-4 text-sm">Memuat invoice…</p>
     )
   }
 

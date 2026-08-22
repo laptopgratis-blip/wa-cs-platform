@@ -21,10 +21,15 @@ import { toast } from 'sonner'
 
 import { CarouselBuilder } from './CarouselBuilder'
 import { VisualBuilder } from './VisualBuilder'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { contentPieceStatusMeta, funnelStageMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Slide {
   id: string
@@ -95,19 +100,6 @@ const CHANNEL_LABEL: Record<string, string> = {
   TIKTOK_ADS: 'TikTok Ads',
 }
 
-const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
-  TOFU: { label: 'Awareness', cls: 'bg-blue-100 text-blue-700' },
-  MOFU: { label: 'Pertimbangan', cls: 'bg-amber-100 text-amber-700' },
-  BOFU: { label: 'Beli', cls: 'bg-emerald-100 text-emerald-700' },
-}
-
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: 'bg-warm-100 text-warm-700' },
-  READY: { label: 'Siap post', cls: 'bg-blue-100 text-blue-700' },
-  POSTED: { label: 'Sudah post', cls: 'bg-emerald-100 text-emerald-700' },
-  ARCHIVED: { label: 'Arsip', cls: 'bg-rose-100 text-rose-700' },
-}
-
 // Channel yg punya visual builder.
 const VISUAL_CHANNELS = new Set([
   'WA_STATUS',
@@ -121,7 +113,9 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
   const [status, setStatus] = useState(piece.status)
   const [scheduledFor, setScheduledFor] = useState(piece.scheduledFor)
   const [editing, setEditing] = useState(false)
-  const [editValue, setEditValue] = useState(JSON.stringify(piece.bodyJson, null, 2))
+  const [editValue, setEditValue] = useState(
+    JSON.stringify(piece.bodyJson, null, 2),
+  )
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -153,7 +147,9 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
       return
     }
     setStatus(newStatus)
-    toast.success(`Status: ${STATUS_LABEL[newStatus]?.label ?? newStatus}`)
+    toast.success(
+      `Status: ${contentPieceStatusMeta[newStatus]?.label ?? newStatus}`,
+    )
   }
 
   async function schedule() {
@@ -237,37 +233,39 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
     }
   }
 
-  const funnel = FUNNEL_LABEL[piece.funnelStage]
-  const statusInfo = STATUS_LABEL[status]
+  const funnel = funnelStageMeta[piece.funnelStage]
+  const statusInfo = contentPieceStatusMeta[status]
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="mb-2 flex flex-wrap gap-1.5">
-          <Badge className="bg-warm-100 text-xs text-warm-700">
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge className="bg-warm-100 text-warm-700 text-xs">
             {CHANNEL_LABEL[piece.channel] ?? piece.channel}
           </Badge>
-          {funnel && <Badge className={`text-xs ${funnel.cls}`}>{funnel.label}</Badge>}
+          {funnel && <StatusBadge tone={funnel.tone} label={funnel.label} />}
           {statusInfo && (
-            <Badge className={`text-xs ${statusInfo.cls}`}>{statusInfo.label}</Badge>
+            <StatusBadge tone={statusInfo.tone} label={statusInfo.label} />
           )}
         </div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl dark:text-warm-50">
-          {piece.title}
-        </h1>
-        {piece.brief && (
-          <p className="mt-1 text-xs text-warm-500">
-            Sumber: {piece.brief.lpTitle ?? piece.brief.manualTitle ?? '—'}
-          </p>
-        )}
+        <PageHeader
+          title={piece.title}
+          description={
+            piece.brief
+              ? `Sumber: ${piece.brief.lpTitle ?? piece.brief.manualTitle ?? '—'}`
+              : undefined
+          }
+        />
       </div>
 
       {/* Source idea */}
       {piece.sourceIdea && (
         <Card>
           <CardContent className="space-y-1 p-4 text-xs">
-            <div className="font-semibold text-warm-700">Sumber ide:</div>
-            <div className="italic text-warm-800">"{piece.sourceIdea.hook}"</div>
+            <div className="text-warm-700 font-semibold">Sumber ide:</div>
+            <div className="text-warm-800 italic">
+              "{piece.sourceIdea.hook}"
+            </div>
             <div className="text-warm-500">
               <strong>Method:</strong> {piece.sourceIdea.method} ·{' '}
               <strong>Kenapa works:</strong> {piece.sourceIdea.whyItWorks}
@@ -278,8 +276,14 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
 
       {/* Schedule indicator */}
       {scheduledFor && (
-        <div className="flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-3 text-sm">
-          <span className="flex items-center gap-1.5 text-blue-900">
+        <div
+          className={cn(
+            'flex items-center justify-between rounded-md border p-3 text-sm',
+            TONES.info.bg,
+            TONES.info.border,
+          )}
+        >
+          <span className={cn('flex items-center gap-1.5', TONES.info.text)}>
             <CalendarDays className="size-4 shrink-0" aria-hidden />
             Dijadwalkan{' '}
             <strong>
@@ -309,11 +313,7 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
           )}
         </Button>
         {status !== 'POSTED' && status !== 'ARCHIVED' && !scheduledFor && (
-          <Button
-            variant="outline"
-            onClick={schedule}
-            className="text-blue-700"
-          >
+          <Button variant="outline" onClick={schedule}>
             <CalendarPlus className="mr-1.5 size-4" /> Jadwalkan
           </Button>
         )}
@@ -321,7 +321,7 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
           <Button
             variant="outline"
             onClick={() => updateStatus('POSTED')}
-            className="text-emerald-700"
+            className={TONES.success.text}
           >
             <CheckCircle2 className="mr-1.5 size-4" /> Tandai sudah post
           </Button>
@@ -330,7 +330,7 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
           <Button
             variant="outline"
             onClick={() => updateStatus('ARCHIVED')}
-            className="text-rose-700"
+            className={TONES.danger.text}
           >
             <Archive className="mr-1.5 size-4" /> Arsip
           </Button>
@@ -364,14 +364,29 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
             </TabsTrigger>
           </TabsList>
           <TabsContent value="script" className="mt-4">
-            <BodyRenderer channel={piece.channel} body={body} slides={piece.slides} />
+            <BodyRenderer
+              channel={piece.channel}
+              body={body}
+              slides={piece.slides}
+            />
           </TabsContent>
           <TabsContent value="visual" className="mt-4">
-            <VisualSection channel={piece.channel} body={body} slides={piece.slides} pieceTitle={piece.title} />
+            <VisualSection
+              channel={piece.channel}
+              body={body}
+              slides={piece.slides}
+              pieceTitle={piece.title}
+            />
           </TabsContent>
         </Tabs>
       ) : (
-        !editing && <BodyRenderer channel={piece.channel} body={body} slides={piece.slides} />
+        !editing && (
+          <BodyRenderer
+            channel={piece.channel}
+            body={body}
+            slides={piece.slides}
+          />
+        )
       )}
 
       {/* Edit JSON raw */}
@@ -400,9 +415,9 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
             <textarea
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="h-96 w-full rounded-md border border-warm-300 bg-warm-50 p-3 font-mono text-xs"
+              className="border-warm-300 bg-warm-50 h-96 w-full rounded-md border p-3 font-mono text-xs"
             />
-            <p className="text-[11px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               Edit fields sesuai schema channel. Pastikan JSON valid sebelum
               simpan.
             </p>
@@ -415,8 +430,9 @@ export function PieceDetailClient({ piece }: { piece: PieceData }) {
         <MetricSection pieceId={piece.id} initial={piece.metrics} />
       )}
 
-      <p className="text-[11px] text-warm-400">
-        Token kepake bikin konten ini: {piece.tokensCharged.toLocaleString('id-ID')}
+      <p className="text-warm-400 text-xs">
+        Token kepake bikin konten ini:{' '}
+        {piece.tokensCharged.toLocaleString('id-ID')}
       </p>
     </div>
   )
@@ -448,17 +464,17 @@ function MetricSection({
     setSaving(true)
     try {
       const body: Record<string, number | null> = {}
-      ;(['reach', 'saves', 'shares', 'comments', 'dms', 'linkClicks'] as const).forEach(
-        (k) => {
-          const raw = m[k]
-          if (raw === '' || raw === null) {
-            body[k] = null
-          } else {
-            const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10)
-            body[k] = Number.isFinite(n) ? n : null
-          }
-        },
-      )
+      ;(
+        ['reach', 'saves', 'shares', 'comments', 'dms', 'linkClicks'] as const
+      ).forEach((k) => {
+        const raw = m[k]
+        if (raw === '' || raw === null) {
+          body[k] = null
+        } else {
+          const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10)
+          body[k] = Number.isFinite(n) ? n : null
+        }
+      })
       const res = await fetch(`/api/content/pieces/${pieceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -480,30 +496,55 @@ function MetricSection({
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-warm-900">
-            <BarChart3 className="size-4 text-primary-500" />
+          <h3 className="text-warm-900 flex items-center gap-1.5 text-sm font-semibold">
+            <BarChart3 className="text-primary-500 size-4" />
             Performa konten
           </h3>
           {updatedAt && (
-            <span className="text-[10px] text-warm-500">
-              Update: {new Date(updatedAt).toLocaleString('id-ID', {
+            <span className="text-warm-500 text-xs">
+              Update:{' '}
+              {new Date(updatedAt).toLocaleString('id-ID', {
                 dateStyle: 'medium',
                 timeStyle: 'short',
               })}
             </span>
           )}
         </div>
-        <p className="text-xs text-warm-500">
+        <p className="text-warm-500 text-xs">
           Catat metric setelah konten dipost — Hulao pakai data ini untuk
           rekomendasi konten serupa di masa depan.
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <MetricInput label="Reach" value={m.reach} onChange={(v) => patch('reach', v)} />
-          <MetricInput label="Saves" value={m.saves} onChange={(v) => patch('saves', v)} />
-          <MetricInput label="Shares" value={m.shares} onChange={(v) => patch('shares', v)} />
-          <MetricInput label="Comments" value={m.comments} onChange={(v) => patch('comments', v)} />
-          <MetricInput label="DM masuk" value={m.dms} onChange={(v) => patch('dms', v)} />
-          <MetricInput label="Klik link" value={m.linkClicks} onChange={(v) => patch('linkClicks', v)} />
+          <MetricInput
+            label="Reach"
+            value={m.reach}
+            onChange={(v) => patch('reach', v)}
+          />
+          <MetricInput
+            label="Saves"
+            value={m.saves}
+            onChange={(v) => patch('saves', v)}
+          />
+          <MetricInput
+            label="Shares"
+            value={m.shares}
+            onChange={(v) => patch('shares', v)}
+          />
+          <MetricInput
+            label="Comments"
+            value={m.comments}
+            onChange={(v) => patch('comments', v)}
+          />
+          <MetricInput
+            label="DM masuk"
+            value={m.dms}
+            onChange={(v) => patch('dms', v)}
+          />
+          <MetricInput
+            label="Klik link"
+            value={m.linkClicks}
+            onChange={(v) => patch('linkClicks', v)}
+          />
         </div>
         <Button onClick={save} disabled={saving} size="sm">
           {saving ? 'Menyimpan...' : 'Simpan metric'}
@@ -524,7 +565,7 @@ function MetricInput({
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-[10px] font-medium uppercase tracking-wide text-warm-500">
+      <label className="text-warm-500 text-xs font-medium tracking-wide uppercase">
         {label}
       </label>
       <input
@@ -533,7 +574,7 @@ function MetricInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
-        className="w-full rounded-md border border-warm-300 bg-white px-2 py-1.5 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-200"
+        className="border-warm-300 focus:border-primary-500 focus:ring-primary-200 w-full rounded-md border bg-white px-2 py-1.5 text-sm tabular-nums focus:ring-1 focus:outline-none"
       />
     </div>
   )
@@ -566,7 +607,7 @@ function VisualSection({
     const slideInputs = fromDb.length > 0 ? fromDb : fromBody
     if (slideInputs.length === 0) {
       return (
-        <div className="rounded-md border border-warm-200 bg-warm-50 p-4 text-sm text-warm-500">
+        <div className="border-warm-200 bg-warm-50 text-warm-500 rounded-md border p-4 text-sm">
           Slide kosong — tidak bisa generate visual.
         </div>
       )
@@ -579,9 +620,7 @@ function VisualSection({
   return (
     <VisualBuilder
       channel={c}
-      initialHeadline={
-        typeof body.hook === 'string' ? body.hook : undefined
-      }
+      initialHeadline={typeof body.hook === 'string' ? body.hook : undefined}
       initialBody={
         typeof body.body === 'string'
           ? body.body
@@ -613,27 +652,27 @@ function BodyRenderer({
         {/* Hook */}
         {typeof body.hook === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Hook
             </div>
-            <p className="font-semibold text-warm-900">{body.hook}</p>
+            <p className="text-warm-900 font-semibold">{body.hook}</p>
           </div>
         )}
 
         {/* Body */}
         {typeof body.body === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Isi
             </div>
-            <p className="whitespace-pre-wrap text-warm-800">{body.body}</p>
+            <p className="text-warm-800 whitespace-pre-wrap">{body.body}</p>
           </div>
         )}
 
         {/* Sticker (IG Story) */}
         {typeof body.stickerText === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Sticker text
             </div>
             <p className="text-warm-800">{body.stickerText}</p>
@@ -643,7 +682,7 @@ function BodyRenderer({
         {/* Slides (Carousel) */}
         {(slides.length > 0 || Array.isArray(body.slides)) && (
           <div>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-1 text-xs font-semibold tracking-wide uppercase">
               Slides
             </div>
             <div className="space-y-2">
@@ -656,13 +695,15 @@ function BodyRenderer({
               ).map((s, i) => (
                 <div
                   key={i}
-                  className="rounded-md border border-warm-200 bg-warm-50 p-3"
+                  className="border-warm-200 bg-warm-50 rounded-md border p-3"
                 >
-                  <div className="mb-0.5 text-[10px] font-semibold text-primary-700">
+                  <div className="text-primary-700 mb-0.5 text-xs font-semibold">
                     Slide {i + 1}
                   </div>
-                  <p className="font-semibold text-warm-900">{fmt(s.headline)}</p>
-                  <p className="mt-1 text-xs text-warm-700">{fmt(s.body)}</p>
+                  <p className="text-warm-900 font-semibold">
+                    {fmt(s.headline)}
+                  </p>
+                  <p className="text-warm-700 mt-1 text-xs">{fmt(s.body)}</p>
                 </div>
               ))}
             </div>
@@ -672,34 +713,39 @@ function BodyRenderer({
         {/* Scenes (Reels/TikTok) */}
         {Array.isArray(body.scenes) && (
           <div>
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-1 text-xs font-semibold tracking-wide uppercase">
               Storyboard ({(body.scenes as unknown[]).length} scene)
             </div>
             <div className="space-y-2">
-              {(body.scenes as { seconds?: string; narration?: string; visual?: string; broll?: string }[]).map(
-                (s, i) => (
-                  <div
-                    key={i}
-                    className="rounded-md border border-warm-200 bg-warm-50 p-3 text-xs"
-                  >
-                    <div className="mb-1 font-semibold text-primary-700">
-                      [{fmt(s.seconds)}]
-                    </div>
-                    <div className="mb-1">
-                      <strong className="text-warm-900">Narrasi:</strong>{' '}
-                      {fmt(s.narration)}
-                    </div>
-                    <div className="mb-1 text-warm-700">
-                      <strong>Visual:</strong> {fmt(s.visual)}
-                    </div>
-                    {s.broll && (
-                      <div className="text-warm-500">
-                        <strong>B-roll:</strong> {fmt(s.broll)}
-                      </div>
-                    )}
+              {(
+                body.scenes as {
+                  seconds?: string
+                  narration?: string
+                  visual?: string
+                  broll?: string
+                }[]
+              ).map((s, i) => (
+                <div
+                  key={i}
+                  className="border-warm-200 bg-warm-50 rounded-md border p-3 text-xs"
+                >
+                  <div className="text-primary-700 mb-1 font-semibold">
+                    [{fmt(s.seconds)}]
                   </div>
-                ),
-              )}
+                  <div className="mb-1">
+                    <strong className="text-warm-900">Narrasi:</strong>{' '}
+                    {fmt(s.narration)}
+                  </div>
+                  <div className="text-warm-700 mb-1">
+                    <strong>Visual:</strong> {fmt(s.visual)}
+                  </div>
+                  {s.broll && (
+                    <div className="text-warm-500">
+                      <strong>B-roll:</strong> {fmt(s.broll)}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -707,30 +753,30 @@ function BodyRenderer({
         {/* Caption */}
         {typeof body.caption === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Caption
             </div>
-            <p className="whitespace-pre-wrap text-warm-800">{body.caption}</p>
+            <p className="text-warm-800 whitespace-pre-wrap">{body.caption}</p>
           </div>
         )}
 
         {/* CTA */}
         {typeof body.cta === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               CTA
             </div>
-            <p className="font-medium text-primary-700">{body.cta}</p>
+            <p className="text-primary-700 font-medium">{body.cta}</p>
           </div>
         )}
 
         {/* Hashtags */}
         {Array.isArray(body.hashtags) && body.hashtags.length > 0 && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Hashtags
             </div>
-            <p className="text-xs text-blue-600">
+            <p className="text-primary-600 text-xs">
               {(body.hashtags as string[]).join(' ')}
             </p>
           </div>
@@ -739,24 +785,24 @@ function BodyRenderer({
         {/* Sound suggest */}
         {typeof body.soundSuggest === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Sound suggest
             </div>
-            <p className="text-xs text-warm-600">{body.soundSuggest}</p>
+            <p className="text-warm-600 text-xs">{body.soundSuggest}</p>
           </div>
         )}
 
         {/* Image hint */}
         {typeof body.imageHint === 'string' && (
           <div>
-            <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <div className="text-warm-500 mb-0.5 text-xs font-semibold tracking-wide uppercase">
               Visual hint (untuk dibuat manual)
             </div>
-            <p className="text-xs italic text-warm-600">{body.imageHint}</p>
+            <p className="text-warm-600 text-xs italic">{body.imageHint}</p>
           </div>
         )}
 
-        <p className="border-t border-warm-100 pt-2 text-[10px] text-warm-400">
+        <p className="border-warm-100 text-warm-400 border-t pt-2 text-xs">
           Channel: {channel}
         </p>
       </CardContent>
@@ -764,7 +810,10 @@ function BodyRenderer({
   )
 }
 
-function formatForClipboard(channel: string, body: Record<string, unknown>): string {
+function formatForClipboard(
+  channel: string,
+  body: Record<string, unknown>,
+): string {
   const lines: string[] = []
   if (typeof body.hook === 'string') lines.push(body.hook)
   if (typeof body.body === 'string') lines.push('', body.body)
@@ -772,7 +821,12 @@ function formatForClipboard(channel: string, body: Record<string, unknown>): str
   if (Array.isArray(body.slides)) {
     body.slides.forEach((s, i) => {
       const slide = s as { headline?: string; body?: string }
-      lines.push('', `─ Slide ${i + 1} ─`, slide.headline ?? '', slide.body ?? '')
+      lines.push(
+        '',
+        `─ Slide ${i + 1} ─`,
+        slide.headline ?? '',
+        slide.body ?? '',
+      )
     })
   }
   if (Array.isArray(body.scenes)) {
@@ -792,7 +846,8 @@ function formatForClipboard(channel: string, body: Record<string, unknown>): str
       )
     })
   }
-  if (typeof body.caption === 'string') lines.push('', '— Caption —', body.caption)
+  if (typeof body.caption === 'string')
+    lines.push('', '— Caption —', body.caption)
   if (typeof body.cta === 'string') lines.push('', body.cta)
   if (Array.isArray(body.hashtags)) {
     lines.push('', body.hashtags.join(' '))
@@ -806,7 +861,9 @@ function formatForClipboard(channel: string, body: Record<string, unknown>): str
   }
   if (Array.isArray(body.primaryTexts)) {
     lines.push('', '— Primary Text —')
-    body.primaryTexts.forEach((t, i) => lines.push(`${String.fromCharCode(65 + i)}. ${String(t)}`))
+    body.primaryTexts.forEach((t, i) =>
+      lines.push(`${String.fromCharCode(65 + i)}. ${String(t)}`),
+    )
   }
   if (typeof body.description === 'string' && body.description) {
     lines.push('', `Description: ${body.description}`)
@@ -854,32 +911,32 @@ function AdsBodyRenderer({
       <CardContent className="space-y-5 p-5 text-sm">
         {/* Visual brief */}
         <div>
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fuchsia-700">
+          <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
             🎨 Visual Brief
           </div>
-          <div className="space-y-1.5 rounded-md border border-fuchsia-200 bg-fuchsia-50 p-3 text-xs leading-relaxed">
+          <div className="border-primary-200 bg-primary-50 space-y-1.5 rounded-md border p-3 text-xs leading-relaxed">
             {vb.vibe && (
               <div>
-                <strong className="text-fuchsia-900">Vibe:</strong>{' '}
+                <strong className="text-primary-900">Vibe:</strong>{' '}
                 <span className="text-warm-800">{vb.vibe}</span>
               </div>
             )}
             {vb.colorPalette && (
               <div>
-                <strong className="text-fuchsia-900">Warna:</strong>{' '}
+                <strong className="text-primary-900">Warna:</strong>{' '}
                 <span className="text-warm-800">{vb.colorPalette}</span>
               </div>
             )}
             {vb.composition && (
               <div>
-                <strong className="text-fuchsia-900">Komposisi:</strong>{' '}
+                <strong className="text-primary-900">Komposisi:</strong>{' '}
                 <span className="text-warm-800">{vb.composition}</span>
               </div>
             )}
             {vb.keyVisuals.length > 0 && (
               <div>
-                <strong className="text-fuchsia-900">Elemen kunci:</strong>
-                <ul className="ml-4 list-disc text-warm-800">
+                <strong className="text-primary-900">Elemen kunci:</strong>
+                <ul className="text-warm-800 ml-4 list-disc">
                   {vb.keyVisuals.map((kv, i) => (
                     <li key={i}>{kv}</li>
                   ))}
@@ -888,8 +945,8 @@ function AdsBodyRenderer({
             )}
             {vb.overlayCopy && (
               <div>
-                <strong className="text-fuchsia-900">Overlay copy:</strong>{' '}
-                <span className="font-bold text-warm-900">
+                <strong className="text-primary-900">Overlay copy:</strong>{' '}
+                <span className="text-warm-900 font-semibold">
                   &ldquo;{vb.overlayCopy}&rdquo;
                 </span>
               </div>
@@ -900,7 +957,7 @@ function AdsBodyRenderer({
         {/* Storyboard — kalau VIDEO/CAROUSEL */}
         {storyboard.length > 0 && (
           <div>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fuchsia-700">
+            <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
               🎬 Storyboard ({adsFormat === 'CAROUSEL' ? 'cards' : 'scenes'},{' '}
               {storyboard.length} step)
             </div>
@@ -908,9 +965,10 @@ function AdsBodyRenderer({
               {storyboard.map((sRaw, i) => {
                 const s = {
                   seconds:
-                    typeof sRaw.seconds === 'string' ? sRaw.seconds : `${i + 1}`,
-                  visual:
-                    typeof sRaw.visual === 'string' ? sRaw.visual : '',
+                    typeof sRaw.seconds === 'string'
+                      ? sRaw.seconds
+                      : `${i + 1}`,
+                  visual: typeof sRaw.visual === 'string' ? sRaw.visual : '',
                   voiceover:
                     typeof sRaw.voiceover === 'string' ? sRaw.voiceover : '',
                   onScreenText:
@@ -921,9 +979,9 @@ function AdsBodyRenderer({
                 return (
                   <div
                     key={i}
-                    className="rounded-md border border-warm-200 bg-warm-50 p-3 text-xs"
+                    className="border-warm-200 bg-warm-50 rounded-md border p-3 text-xs"
                   >
-                    <div className="mb-1 font-mono font-semibold text-fuchsia-700">
+                    <div className="text-primary-700 mb-1 font-mono font-semibold">
                       [{s.seconds}]
                     </div>
                     {s.visual && (
@@ -933,14 +991,16 @@ function AdsBodyRenderer({
                       </div>
                     )}
                     {s.voiceover && (
-                      <div className="mb-1 text-warm-700">
+                      <div className="text-warm-700 mb-1">
                         <strong>Voiceover:</strong> {s.voiceover}
                       </div>
                     )}
                     {s.onScreenText && (
                       <div className="text-warm-600">
                         <strong>On-screen:</strong>{' '}
-                        <span className="font-bold">&ldquo;{s.onScreenText}&rdquo;</span>
+                        <span className="font-semibold">
+                          &ldquo;{s.onScreenText}&rdquo;
+                        </span>
                       </div>
                     )}
                   </div>
@@ -952,7 +1012,7 @@ function AdsBodyRenderer({
 
         <TargetingHintSection raw={body.targetingHint} />
 
-        <p className="border-t border-warm-100 pt-2 text-[10px] text-warm-400">
+        <p className="border-warm-100 text-warm-400 border-t pt-2 text-xs">
           Format: {adsFormat ?? '—'}
         </p>
       </CardContent>
@@ -972,10 +1032,10 @@ function TargetingHintSection({ raw }: { raw: unknown }) {
   if (interests.length === 0 && behavioral.length === 0) return null
   return (
     <div>
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-fuchsia-700">
+      <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
         🎯 Targeting Hint
       </div>
-      <div className="rounded-md border border-warm-200 bg-warm-50 p-3 text-xs leading-relaxed">
+      <div className="border-warm-200 bg-warm-50 rounded-md border p-3 text-xs leading-relaxed">
         {interests.length > 0 && (
           <div>
             <strong>Interests:</strong> {interests.join(', ')}
@@ -1026,7 +1086,9 @@ function AdVariantsSection({
       return
     }
     onVariantsChange(
-      variants.map((v) => (v.id === variantId ? { ...v, value: draftValue } : v)),
+      variants.map((v) =>
+        v.id === variantId ? { ...v, value: draftValue } : v,
+      ),
     )
     setEditingId(null)
     toast.success('Variant tersimpan')
@@ -1079,129 +1141,148 @@ function AdVariantsSection({
 
   return (
     <div className="space-y-4">
-      {(['HEADLINE', 'PRIMARY_TEXT', 'DESCRIPTION', 'CTA'] as const).map((type) => {
-        const list = grouped[type] ?? []
-        if (list.length === 0) return null
-        return (
-          <Card key={type}>
-            <CardContent className="space-y-2 p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-fuchsia-700">
-                {TYPE_LABEL[type]}
-              </h3>
-              <div className="space-y-2">
-                {list.map((v) => {
-                  const label =
-                    type === 'HEADLINE'
-                      ? `${v.order + 1}.`
-                      : type === 'PRIMARY_TEXT'
-                        ? `${String.fromCharCode(65 + v.order)}.`
-                        : ''
-                  return (
-                    <div
-                      key={v.id}
-                      className="rounded-md border border-warm-200 bg-warm-50 p-3 text-xs"
-                    >
-                      <div className="flex items-start gap-2">
-                        {label && (
-                          <span className="font-mono font-bold text-fuchsia-600">
-                            {label}
-                          </span>
-                        )}
-                        {editingId === v.id ? (
-                          <textarea
-                            value={draftValue}
-                            onChange={(e) => setDraftValue(e.target.value)}
-                            rows={Math.max(
-                              1,
-                              Math.ceil(draftValue.length / 80),
-                            )}
-                            className="flex-1 rounded border border-fuchsia-300 bg-white p-2 text-xs"
-                          />
-                        ) : (
-                          <p className="flex-1 leading-relaxed text-warm-900">
-                            {v.value}
-                          </p>
-                        )}
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <div className="flex gap-1.5">
+      {(['HEADLINE', 'PRIMARY_TEXT', 'DESCRIPTION', 'CTA'] as const).map(
+        (type) => {
+          const list = grouped[type] ?? []
+          if (list.length === 0) return null
+          return (
+            <Card key={type}>
+              <CardContent className="space-y-2 p-4">
+                <h3 className="text-primary-700 text-xs font-semibold tracking-wide uppercase">
+                  {TYPE_LABEL[type]}
+                </h3>
+                <div className="space-y-2">
+                  {list.map((v) => {
+                    const label =
+                      type === 'HEADLINE'
+                        ? `${v.order + 1}.`
+                        : type === 'PRIMARY_TEXT'
+                          ? `${String.fromCharCode(65 + v.order)}.`
+                          : ''
+                    return (
+                      <div
+                        key={v.id}
+                        className="border-warm-200 bg-warm-50 rounded-md border p-3 text-xs"
+                      >
+                        <div className="flex items-start gap-2">
+                          {label && (
+                            <span className="text-primary-600 font-mono font-semibold">
+                              {label}
+                            </span>
+                          )}
                           {editingId === v.id ? (
-                            <>
-                              <button
-                                onClick={() => saveValue(v.id)}
-                                className="text-[10px] font-medium text-emerald-700 hover:underline"
-                              >
-                                Simpan
-                              </button>
-                              <button
-                                onClick={() => setEditingId(null)}
-                                className="text-[10px] text-warm-500 hover:underline"
-                              >
-                                Batal
-                              </button>
-                            </>
+                            <textarea
+                              value={draftValue}
+                              onChange={(e) => setDraftValue(e.target.value)}
+                              rows={Math.max(
+                                1,
+                                Math.ceil(draftValue.length / 80),
+                              )}
+                              className="border-primary-300 flex-1 rounded border bg-white p-2 text-xs"
+                            />
                           ) : (
-                            <>
-                              <button
-                                onClick={() => copyVariant(v.value)}
-                                className="text-[10px] font-medium text-blue-600 hover:underline"
-                              >
-                                Copy
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingId(v.id)
-                                  setDraftValue(v.value)
-                                }}
-                                className="text-[10px] text-warm-500 hover:underline"
-                              >
-                                Edit
-                              </button>
-                            </>
+                            <p className="text-warm-900 flex-1 leading-relaxed">
+                              {v.value}
+                            </p>
                           )}
                         </div>
-                        {/* Metric per variant — hanya tampil untuk HEADLINE & PRIMARY_TEXT */}
-                        {(type === 'HEADLINE' || type === 'PRIMARY_TEXT') && (
-                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-warm-500">
-                            <MetricInline
-                              label="Impr"
-                              value={v.impressions}
-                              onSave={(val) => saveMetric(v.id, 'impressions', val)}
-                            />
-                            <MetricInline
-                              label="Klik"
-                              value={v.clicks}
-                              onSave={(val) => saveMetric(v.id, 'clicks', val)}
-                            />
-                            <MetricInline
-                              label="Conv"
-                              value={v.conversions}
-                              onSave={(val) => saveMetric(v.id, 'conversions', val)}
-                            />
-                            <MetricInline
-                              label="Spend"
-                              value={v.spendRp}
-                              onSave={(val) => saveMetric(v.id, 'spendRp', val)}
-                              isCurrency
-                            />
-                            {v.ctr !== null && (
-                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-700">
-                                CTR {(v.ctr * 100).toFixed(2)}%
-                              </span>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <div className="flex gap-1.5">
+                            {editingId === v.id ? (
+                              <>
+                                <button
+                                  onClick={() => saveValue(v.id)}
+                                  className={cn(
+                                    'text-xs font-medium hover:underline',
+                                    TONES.success.text,
+                                  )}
+                                >
+                                  Simpan
+                                </button>
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="text-warm-500 text-xs hover:underline"
+                                >
+                                  Batal
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => copyVariant(v.value)}
+                                  className="text-primary-600 text-xs font-medium hover:underline"
+                                >
+                                  Copy
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingId(v.id)
+                                    setDraftValue(v.value)
+                                  }}
+                                  className="text-warm-500 text-xs hover:underline"
+                                >
+                                  Edit
+                                </button>
+                              </>
                             )}
                           </div>
-                        )}
+                          {/* Metric per variant — hanya tampil untuk HEADLINE & PRIMARY_TEXT */}
+                          {(type === 'HEADLINE' || type === 'PRIMARY_TEXT') && (
+                            <div className="text-warm-500 flex flex-wrap items-center gap-1.5 text-xs">
+                              <MetricInline
+                                label="Impr"
+                                value={v.impressions}
+                                onSave={(val) =>
+                                  saveMetric(v.id, 'impressions', val)
+                                }
+                              />
+                              <MetricInline
+                                label="Klik"
+                                value={v.clicks}
+                                onSave={(val) =>
+                                  saveMetric(v.id, 'clicks', val)
+                                }
+                              />
+                              <MetricInline
+                                label="Conv"
+                                value={v.conversions}
+                                onSave={(val) =>
+                                  saveMetric(v.id, 'conversions', val)
+                                }
+                              />
+                              <MetricInline
+                                label="Spend"
+                                value={v.spendRp}
+                                onSave={(val) =>
+                                  saveMetric(v.id, 'spendRp', val)
+                                }
+                                isCurrency
+                              />
+                              {v.ctr !== null && (
+                                <span
+                                  className={cn(
+                                    'rounded px-1.5 py-0.5 font-semibold',
+                                    TONES.success.bg,
+                                    TONES.success.text,
+                                  )}
+                                >
+                                  CTR {(v.ctr * 100).toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )
-      })}
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )
+        },
+      )}
       {variants.length === 0 && (
-        <div className="rounded-md border border-dashed border-warm-200 bg-warm-50 p-4 text-center text-xs text-warm-500">
+        <div className="border-warm-200 bg-warm-50 text-warm-500 rounded-md border border-dashed p-4 text-center text-xs">
           Variant belum ada — re-generate ads piece untuk dapat 5 headline + 3
           primary text + CTA.
         </div>
@@ -1230,7 +1311,7 @@ function MetricInline({
           setDraft(value === null ? '' : String(value))
           setEditing(true)
         }}
-        className="rounded bg-white px-1.5 py-0.5 hover:bg-warm-100"
+        className="hover:bg-warm-100 rounded bg-white px-1.5 py-0.5"
       >
         {label}:{' '}
         <strong className="text-warm-700">
@@ -1264,7 +1345,7 @@ function MetricInline({
           }
           if (e.key === 'Escape') setEditing(false)
         }}
-        className="w-16 rounded border border-fuchsia-300 px-1 py-0.5 text-[10px]"
+        className="border-primary-300 w-16 rounded border px-1 py-0.5 text-xs"
       />
     </span>
   )

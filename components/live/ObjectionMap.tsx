@@ -1,6 +1,13 @@
 'use client'
 
-import { ArrowLeft, BarChart3, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import {
+  ArrowLeft,
+  BarChart3,
+  Lightbulb,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -39,18 +46,21 @@ const CATEGORY_LABEL: Record<Category, string> = {
   LAINNYA: 'Lainnya',
 }
 
-const CATEGORY_COLOR: Record<Category, string> = {
-  HARGA_MAHAL: 'bg-red-500',
-  RAGU_KUALITAS: 'bg-orange-500',
-  TAKUT_PENIPUAN: 'bg-rose-600',
-  BUTUH_IZIN: 'bg-amber-500',
-  NANTI_DULU: 'bg-yellow-500',
-  KURANG_PAHAM: 'bg-blue-500',
-  BANDING_KOMPETITOR: 'bg-violet-500',
-  TIDAK_BUTUH: 'bg-zinc-500',
-  MASALAH_TEKNIS: 'bg-pink-500',
-  TIDAK_COCOK: 'bg-teal-500',
-  LAINNYA: 'bg-slate-400',
+// Warna bar per kategori memakai palet chart design system (nilai CSS var,
+// bukan class Tailwind) — dipakai lewat style inline supaya konsisten dengan
+// chart lain di dashboard.
+const CATEGORY_CHART_COLOR: Record<Category, string> = {
+  HARGA_MAHAL: 'var(--chart-1)',
+  RAGU_KUALITAS: 'var(--chart-2)',
+  TAKUT_PENIPUAN: 'var(--chart-3)',
+  BUTUH_IZIN: 'var(--chart-4)',
+  NANTI_DULU: 'var(--chart-5)',
+  KURANG_PAHAM: 'var(--chart-1)',
+  BANDING_KOMPETITOR: 'var(--chart-2)',
+  TIDAK_BUTUH: 'var(--chart-3)',
+  MASALAH_TEKNIS: 'var(--chart-4)',
+  TIDAK_COCOK: 'var(--chart-5)',
+  LAINNYA: 'var(--chart-3)',
 }
 
 interface Example {
@@ -69,7 +79,11 @@ interface Example {
 
 interface Response {
   room: { id: string; name: string; slug: string }
-  categories: Array<{ category: Category; count: number; avgConfidence: number }>
+  categories: Array<{
+    category: Category
+    count: number
+    avgConfidence: number
+  }>
   examples: Example[]
   unanalyzedSessions: number
 }
@@ -78,7 +92,9 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
   const [data, setData] = useState<Response | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
+    null,
+  )
 
   const fetchData = useCallback(async () => {
     setRefreshing(true)
@@ -135,9 +151,9 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
       <div>
         <Link
           href={`/live-rooms/${roomId}/leads`}
-          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1 text-xs"
         >
-          <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
+          <ArrowLeft className="size-3" /> Kembali ke Leads
         </Link>
         <PageHeader
           title={`Peta Objection — ${data.room.name}`}
@@ -150,15 +166,17 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
                 onClick={() => void fetchData()}
                 disabled={refreshing}
               >
-                <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`mr-2 size-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                />
                 Refresh
               </Button>
               {data.unanalyzedSessions > 0 ? (
                 <Button size="sm" onClick={triggerAnalyze} disabled={analyzing}>
                   {analyzing ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="mr-2 size-3.5 animate-spin" />
                   ) : (
-                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                    <Sparkles className="mr-2 size-3.5" />
                   )}
                   Analisa {data.unanalyzedSessions} session
                 </Button>
@@ -187,7 +205,7 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
           {/* Bar chart */}
           <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              <div className="text-muted-foreground text-xs tracking-wide uppercase">
                 {totalTags} tag total dari {data.examples.length} session
               </div>
               <div className="space-y-1.5">
@@ -209,14 +227,21 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
                           <div className="w-44 truncate text-xs">
                             {CATEGORY_LABEL[c.category]}
                           </div>
-                          <div className="flex-1 h-6 rounded-md bg-warm-100 overflow-hidden">
+                          <div className="bg-warm-100 h-6 flex-1 overflow-hidden rounded-md">
                             <div
-                              className={`h-full ${CATEGORY_COLOR[c.category]} transition-all`}
-                              style={{ width: `${width}%` }}
+                              className="h-full transition-all"
+                              style={{
+                                width: `${width}%`,
+                                backgroundColor:
+                                  CATEGORY_CHART_COLOR[c.category],
+                              }}
                             />
                           </div>
-                          <div className="w-16 text-right text-xs font-mono tabular-nums">
-                            {c.count}× <span className="text-muted-foreground">({c.avgConfidence})</span>
+                          <div className="w-16 text-right font-mono text-xs tabular-nums">
+                            {c.count}×{' '}
+                            <span className="text-muted-foreground">
+                              ({c.avgConfidence})
+                            </span>
                           </div>
                         </div>
                       </button>
@@ -238,17 +263,25 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
 
           {/* Examples */}
           <div className="space-y-2">
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Contoh terbaru {selectedCategory ? `— ${CATEGORY_LABEL[selectedCategory]}` : ''}
+            <h2 className="font-display text-warm-900 text-xl font-semibold">
+              Contoh terbaru{' '}
+              {selectedCategory ? `— ${CATEGORY_LABEL[selectedCategory]}` : ''}
             </h2>
             {filteredExamples.slice(0, 20).map((ex) => (
               <Card key={ex.id}>
                 <CardContent className="space-y-2 p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className={`${CATEGORY_COLOR[ex.category]} text-white hover:${CATEGORY_COLOR[ex.category]}`}>
+                    <Badge variant="outline" className="gap-1.5">
+                      <span
+                        aria-hidden
+                        className="size-1.5 rounded-full"
+                        style={{
+                          backgroundColor: CATEGORY_CHART_COLOR[ex.category],
+                        }}
+                      />
                       {CATEGORY_LABEL[ex.category]}
                     </Badge>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       conf {ex.confidence.toFixed(2)} ·{' '}
                       {ex.liveSession.customerName ?? 'anonymous'} ·{' '}
                       {new Date(ex.createdAt).toLocaleString('id-ID', {
@@ -257,12 +290,18 @@ export function ObjectionMap({ roomId }: { roomId: string }) {
                       })}
                     </span>
                   </div>
-                  <div className="rounded-md bg-warm-50 p-2 text-sm italic">
+                  <div className="bg-warm-50 rounded-md p-2 text-sm italic">
                     "{ex.evidence}"
                   </div>
                   {ex.aiNotes ? (
-                    <div className="text-xs text-muted-foreground">
-                      💡 <strong>Saran AI:</strong> {ex.aiNotes}
+                    <div className="text-muted-foreground flex items-start gap-1 text-xs">
+                      <Lightbulb
+                        className="mt-0.5 size-3 shrink-0"
+                        aria-hidden
+                      />
+                      <span>
+                        <strong>Saran AI:</strong> {ex.aiNotes}
+                      </span>
                     </div>
                   ) : null}
                 </CardContent>

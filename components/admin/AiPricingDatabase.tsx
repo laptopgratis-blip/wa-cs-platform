@@ -40,6 +40,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -66,6 +67,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  pricingFreshnessMeta,
+  pricingResearchJobMeta,
+  statusMeta,
+} from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
@@ -130,12 +137,6 @@ const FRESHNESS_LABEL: Record<Freshness, string> = {
   verified: 'Verified',
   stale: 'Stale',
   outdated: 'Outdated',
-}
-
-const FRESHNESS_STYLE: Record<Freshness, string> = {
-  verified: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  stale: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-  outdated: 'bg-red-100 text-red-700 hover:bg-red-100',
 }
 
 const RESEARCH_STEPS = [
@@ -464,15 +465,13 @@ export function AiPricingDatabase() {
                         : '—'}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          FRESHNESS_STYLE[p.freshnessStatus],
-                        )}
-                      >
-                        {FRESHNESS_LABEL[p.freshnessStatus]}
-                      </Badge>
+                      <StatusBadge
+                        tone={
+                          statusMeta(pricingFreshnessMeta, p.freshnessStatus)
+                            .tone
+                        }
+                        label={FRESHNESS_LABEL[p.freshnessStatus]}
+                      />
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDistanceToNow(new Date(p.lastUpdatedAt), {
@@ -550,19 +549,10 @@ export function AiPricingDatabase() {
                       {l.triggeredBy.slice(0, 8)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          l.status === 'SUCCESS' &&
-                            'bg-emerald-100 text-emerald-700',
-                          l.status === 'FAILED' && 'bg-red-100 text-red-700',
-                          l.status === 'RUNNING' &&
-                            'bg-amber-100 text-amber-800',
-                        )}
-                      >
-                        {l.status}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingResearchJobMeta, l.status).tone}
+                        label={l.status}
+                      />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {l.modelsUpdated}
@@ -570,7 +560,9 @@ export function AiPricingDatabase() {
                     <TableCell className="text-right tabular-nums">
                       {l.modelsAdded}
                     </TableCell>
-                    <TableCell className="max-w-xs truncate text-xs text-red-600">
+                    <TableCell
+                      className={cn('max-w-xs truncate text-xs', TONES.danger.text)}
+                    >
                       {l.error ?? ''}
                     </TableCell>
                   </TableRow>
@@ -632,7 +624,7 @@ export function AiPricingDatabase() {
                     key={step}
                     className={cn(
                       'flex items-center gap-2',
-                      i < stepIdx && 'text-emerald-700',
+                      i < stepIdx && TONES.success.text,
                       i === stepIdx && 'font-medium',
                       i > stepIdx && 'text-muted-foreground',
                     )}
@@ -715,7 +707,7 @@ export function AiPricingDatabase() {
           {job?.status === 'FAILED' && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-red-600">
+                <DialogTitle className={TONES.danger.text}>
                   Research gagal
                 </DialogTitle>
                 <DialogDescription>{job.error}</DialogDescription>

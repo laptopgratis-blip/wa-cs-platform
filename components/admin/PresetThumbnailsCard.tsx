@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Status {
   total: number
@@ -101,8 +103,8 @@ export function PresetThumbnailsCard() {
     <Card className="border-dashed">
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-500/10">
-            <ImageIcon className="size-4 text-sky-600 dark:text-sky-300" aria-hidden />
+          <div className="bg-primary-50 flex size-9 shrink-0 items-center justify-center rounded-lg">
+            <ImageIcon className="text-primary-600 size-4" aria-hidden />
           </div>
           <div>
             <p className="text-sm font-semibold">
@@ -119,7 +121,7 @@ export function PresetThumbnailsCard() {
                 : 'Generate gambar thumbnail (Gemini) untuk picker visual hook & background di wizard Klip Live.'}
             </p>
             {running && (
-              <p className="mt-1 text-xs text-sky-600 dark:text-sky-300">
+              <p className={cn('mt-1 text-xs', TONES.warning.text)}>
                 Sedang generate{lastSlug ? ` — ${lastSlug}` : ''}… biarkan tab
                 terbuka. Bisa dihentikan & dilanjut kapan saja.
               </p>
@@ -145,7 +147,7 @@ export function PresetThumbnailsCard() {
                 Generate{status ? ` ${status.missing.length} thumbnail` : ''}
               </Button>
             )}
-            {running && <Loader2 className="size-4 animate-spin text-sky-500" />}
+            {running && <Loader2 className="size-4 animate-spin" />}
           </div>
         )}
       </CardContent>

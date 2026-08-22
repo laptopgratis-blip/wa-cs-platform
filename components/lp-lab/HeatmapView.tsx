@@ -148,7 +148,7 @@ export function HeatmapView({ lpId, slug }: Props) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium text-warm-600">Device:</span>
+          <span className="text-warm-600 text-xs font-medium">Device:</span>
           {(['DESKTOP', 'TABLET', 'MOBILE'] as Device[]).map((d) => (
             <Button
               key={d}
@@ -162,12 +162,12 @@ export function HeatmapView({ lpId, slug }: Props) {
             </Button>
           ))}
         </div>
-        <div className="text-xs text-warm-600">
+        <div className="text-warm-600 text-xs">
           {loading ? (
             <Loader2 className="size-3.5 animate-spin" />
           ) : (
             <>
-              <span className="font-semibold text-warm-900">{totalClicks}</span>{' '}
+              <span className="text-warm-900 font-semibold">{totalClicks}</span>{' '}
               klik total{' '}
               {bins.length > 0 && (
                 <span className="text-warm-500">
@@ -181,7 +181,7 @@ export function HeatmapView({ lpId, slug }: Props) {
 
       {bins.length === 0 && !loading && (
         <Card className="border-dashed">
-          <CardContent className="py-8 text-center text-sm text-warm-500">
+          <CardContent className="text-warm-500 py-8 text-center text-sm">
             Belum ada data heatmap untuk device <strong>{device}</strong>.
             Tracker akan capture coordinate setiap klik visitor — butuh min
             ~50-100 klik supaya pattern terlihat jelas.
@@ -190,7 +190,7 @@ export function HeatmapView({ lpId, slug }: Props) {
       )}
 
       {bins.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-warm-200 bg-warm-100 p-3">
+        <div className="border-warm-200 bg-warm-100 overflow-x-auto rounded-lg border p-3">
           <div
             className="relative mx-auto bg-white shadow-md"
             style={{ width: previewWidth }}
@@ -218,15 +218,15 @@ export function HeatmapView({ lpId, slug }: Props) {
               }}
             />
             {!iframeReady && (
-              <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                <Loader2 className="size-6 animate-spin text-warm-400" />
+              <div className="bg-card/80 absolute inset-0 flex items-center justify-center">
+                <Loader2 className="text-warm-400 size-6 animate-spin" />
               </div>
             )}
           </div>
-          <p className="mt-3 text-center text-[11px] text-warm-500">
+          <p className="text-warm-500 mt-3 text-center text-xs">
             Hot spot (merah) = banyak klik di area itu. Cool spot (kosong) =
-            sedikit/tidak ada klik. Pakai untuk identify CTA yang terlewat,
-            atau elemen yang dikira clickable padahal tidak.
+            sedikit/tidak ada klik. Pakai untuk identify CTA yang terlewat, atau
+            elemen yang dikira clickable padahal tidak.
           </p>
         </div>
       )}

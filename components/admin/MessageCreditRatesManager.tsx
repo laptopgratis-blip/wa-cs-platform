@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -170,9 +171,7 @@ export function MessageCreditRatesManager() {
                   <CardTitle className="flex items-center justify-between text-base">
                     {CATEGORY_LABEL[r.category].title}
                     {r.seeded && (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
-                        default
-                      </span>
+                      <StatusBadge tone="warning" label="default" />
                     )}
                   </CardTitle>
                   <CardDescription className="text-xs">{CATEGORY_LABEL[r.category].hint}</CardDescription>
@@ -205,7 +204,7 @@ export function MessageCreditRatesManager() {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {r.updatedAt ? `Diubah ${new Date(r.updatedAt).toLocaleString('id-ID')}` : 'Belum pernah diubah'}
                     </span>
                     <Button size="sm" onClick={() => save(r.category)} disabled={saving === r.category}>

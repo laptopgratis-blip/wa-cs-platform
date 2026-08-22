@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,6 +35,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface CostEstimate {
   htmlChars: number
@@ -62,6 +65,13 @@ interface Suggestion {
   title: string
   rationale: string
   impact: string
+}
+
+// Level impact saran (enum AI) → tone registry lib/ui-tones.ts.
+const IMPACT_TONE: Record<string, Tone> = {
+  high: 'danger',
+  medium: 'warning',
+  low: 'neutral',
 }
 
 interface OptimizationResult {
@@ -152,7 +162,9 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
   const needsAssets =
     result?.suggestions.some((s) => {
       const text = `${s.title} ${s.rationale}`.toLowerCase()
-      return /testimon|foto|gambar|image|screenshot|bukti|review|ulasan/i.test(text)
+      return /testimon|foto|gambar|image|screenshot|bukti|review|ulasan/i.test(
+        text,
+      )
     }) ?? false
 
   async function startEstimate() {
@@ -179,10 +191,9 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
   async function runOptimize() {
     setStep('running')
     try {
-      const res = await fetch(
-        `/api/lp/${encodeURIComponent(lpId)}/optimize`,
-        { method: 'POST' },
-      )
+      const res = await fetch(`/api/lp/${encodeURIComponent(lpId)}/optimize`, {
+        method: 'POST',
+      })
       const j = await res.json()
       if (!j.success) {
         toast.error(j.error ?? j.message ?? 'Gagal optimize')
@@ -231,7 +242,6 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
         size="sm"
         onClick={startEstimate}
         disabled={step !== 'idle'}
-        className="bg-purple-600 text-white shadow-sm hover:bg-purple-700"
       >
         {step === 'estimating' || step === 'running' ? (
           <Loader2 className="mr-1.5 size-4 animate-spin" />
@@ -251,7 +261,7 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              <Sparkles className="mr-1 inline size-5 text-purple-600" />
+              <Sparkles className="text-primary-600 mr-1 inline size-5" />
               Optimasi LP dengan AI
             </DialogTitle>
             <DialogDescription>
@@ -262,13 +272,16 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
 
           {estimate && (
             <div className="space-y-3">
-              <div className="rounded-lg border border-warm-200 bg-warm-50 p-3 text-sm">
-                <div className="font-semibold text-warm-900">Konteks input AI:</div>
-                <ul className="mt-1 space-y-0.5 text-xs text-warm-700">
+              <div className="border-warm-200 bg-warm-50 rounded-lg border p-3 text-sm">
+                <div className="text-warm-900 font-semibold">
+                  Konteks input AI:
+                </div>
+                <ul className="text-warm-700 mt-1 space-y-0.5 text-xs">
                   <li>
                     • HTML LP saat ini:{' '}
                     <strong>
-                      {(estimate.estimate.htmlChars / 1000).toFixed(1)}K karakter
+                      {(estimate.estimate.htmlChars / 1000).toFixed(1)}K
+                      karakter
                     </strong>
                     {(estimate.estimate.base64ImagesStripped ?? 0) > 0 && (
                       <span className="text-warm-500">
@@ -293,14 +306,23 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                   <li>
                     • Analytics:{' '}
                     <strong>
-                      {estimate.hasAnalytics ? '30 hari terakhir' : 'belum ada visit'}
+                      {estimate.hasAnalytics
+                        ? '30 hari terakhir'
+                        : 'belum ada visit'}
                     </strong>
                   </li>
                 </ul>
               </div>
 
               {estimate.estimate.exceedsContextLimit && (
-                <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+                <div
+                  className={cn(
+                    'flex items-start gap-2 rounded-lg border p-3 text-sm',
+                    TONES.danger.bg,
+                    TONES.danger.border,
+                    TONES.danger.text,
+                  )}
+                >
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
                   <div>
                     {estimate.estimate.contextLimitMessage ??
@@ -309,59 +331,84 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                 </div>
               )}
 
-              <div className="rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
+              <div className="border-primary-200 bg-primary-50 rounded-lg border p-3">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-purple-900">
+                  <div className="text-primary-900 text-sm font-semibold">
                     Perkiraan Biaya
                   </div>
                   {estimate.estimate.modelName && (
-                    <div className="rounded-full bg-purple-100 px-2 py-0.5 font-mono text-[10px] text-purple-800">
+                    <div className="bg-primary-100 text-primary-800 rounded-full px-2 py-0.5 font-mono text-xs">
                       {estimate.estimate.modelName}
                     </div>
                   )}
                 </div>
-                <div className="mt-2 rounded border bg-white p-2 text-xs">
-                  <div className="text-warm-500">Perkiraan token AI yang akan diproses</div>
-                  <div className="font-mono text-sm font-bold text-warm-900">
-                    ~{estimate.estimate.estimatedInputTokens.toLocaleString('id-ID')} input + ~{estimate.estimate.estimatedOutputTokens.toLocaleString('id-ID')} output
+                <div className="border-border bg-card mt-2 rounded-md border p-2 text-xs">
+                  <div className="text-warm-500">
+                    Perkiraan token AI yang akan diproses
+                  </div>
+                  <div className="text-warm-900 font-mono text-sm font-bold">
+                    ~
+                    {estimate.estimate.estimatedInputTokens.toLocaleString(
+                      'id-ID',
+                    )}{' '}
+                    input + ~
+                    {estimate.estimate.estimatedOutputTokens.toLocaleString(
+                      'id-ID',
+                    )}{' '}
+                    output
                   </div>
                 </div>
-                <div className="mt-2 rounded bg-purple-600 p-2.5 text-white">
-                  <div className="text-[11px] opacity-80">
+                <div className="bg-primary-600 mt-2 rounded-md p-2.5 text-white">
+                  <div className="text-xs opacity-80">
                     Perkiraan token yang akan dipotong:
                   </div>
                   <div className="font-mono text-lg font-bold">
-                    ~{estimate.estimate.platformTokensCharge.toLocaleString('id-ID')} token
+                    ~
+                    {estimate.estimate.platformTokensCharge.toLocaleString(
+                      'id-ID',
+                    )}{' '}
+                    token
                     <span className="ml-2 text-sm opacity-75">
                       (~Rp{' '}
-                      {Math.round(estimate.estimate.platformChargeRp).toLocaleString('id-ID')}
+                      {Math.round(
+                        estimate.estimate.platformChargeRp,
+                      ).toLocaleString('id-ID')}
                       )
                     </span>
                   </div>
                 </div>
-                <div className="mt-2 text-[11px] text-purple-800">
+                <div className="text-primary-800 mt-2 text-xs">
                   Saldo kamu sekarang:{' '}
                   <strong className="tabular-nums">
                     {estimate.currentBalance.toLocaleString('id-ID')}
                   </strong>{' '}
                   token. Estimasi setelah optimasi:{' '}
                   <strong className="tabular-nums">
-                    ~{(
-                      estimate.currentBalance - estimate.estimate.platformTokensCharge
+                    ~
+                    {(
+                      estimate.currentBalance -
+                      estimate.estimate.platformTokensCharge
                     ).toLocaleString('id-ID')}
                   </strong>{' '}
                   token.
                 </div>
-                <div className="mt-2 rounded bg-purple-100/60 p-2 text-[11px] leading-relaxed text-purple-900">
+                <div className="bg-primary-100/60 text-primary-900 mt-2 rounded-md p-2 text-xs leading-relaxed">
                   <strong>Catatan:</strong> ini hanya perkiraan. Biaya
                   sesungguhnya tergantung panjang prompt + output AI, dan akan
-                  ditampilkan setelah optimasi selesai. Bisa sedikit lebih
-                  besar atau lebih kecil dari estimasi.
+                  ditampilkan setelah optimasi selesai. Bisa sedikit lebih besar
+                  atau lebih kecil dari estimasi.
                 </div>
               </div>
 
               {!estimate.sufficientBalance && (
-                <div className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+                <div
+                  className={cn(
+                    'flex items-start gap-2 rounded-lg border p-3 text-sm',
+                    TONES.danger.bg,
+                    TONES.danger.border,
+                    TONES.danger.text,
+                  )}
+                >
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
                   <div>
                     Saldo tidak cukup. Top-up dulu sebelum lanjut.
@@ -376,14 +423,14 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
               )}
 
               {step === 'running' && (
-                <div className="flex flex-col items-center gap-2 rounded-lg border border-purple-200 bg-white p-4">
-                  <Loader2 className="size-6 animate-spin text-purple-600" />
-                  <div className="text-sm font-medium text-warm-900">
+                <div className="border-border bg-card flex flex-col items-center gap-2 rounded-lg border p-4">
+                  <Loader2 className="text-primary-600 size-4 animate-spin" />
+                  <div className="text-warm-900 text-sm font-medium">
                     AI sedang analisa & generate perbaikan…
                   </div>
-                  <div className="text-xs text-warm-500">
-                    {estimate.estimate.modelName ?? 'AI'} — biasanya 25-90
-                    detik (LP besar bisa lebih lama). Jangan tutup tab ini.
+                  <div className="text-warm-500 text-xs">
+                    {estimate.estimate.modelName ?? 'AI'} — biasanya 25-90 detik
+                    (LP besar bisa lebih lama). Jangan tutup tab ini.
                   </div>
                 </div>
               )}
@@ -401,7 +448,6 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                   !estimate?.sufficientBalance ||
                   estimate?.estimate.exceedsContextLimit
                 }
-                className="bg-purple-600 text-white hover:bg-purple-700"
               >
                 <Wand2 className="mr-1.5 size-4" />
                 Lanjutkan Optimasi
@@ -416,7 +462,11 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
         open={step === 'result' || step === 'applying'}
         onOpenChange={(o) => {
           if (!o && step === 'result') {
-            if (confirm('Discard hasil optimasi? Token sudah dipotong, tidak bisa di-undo.')) {
+            if (
+              confirm(
+                'Discard hasil optimasi? Token sudah dipotong, tidak bisa di-undo.',
+              )
+            ) {
               reset()
             }
           }
@@ -435,15 +485,27 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
             <div className="space-y-4">
               {/* Score before/after */}
               {result.scoreBefore != null && result.scoreAfter != null && (
-                <div className="flex items-center justify-center gap-6 rounded-lg border-2 border-emerald-200 bg-emerald-50 p-4">
-                  <ScoreBadge score={result.scoreBefore} label="Sekarang" color="warm" />
-                  <div className="text-2xl text-warm-400">→</div>
+                <div
+                  className={cn(
+                    'flex items-center justify-center gap-6 rounded-lg border p-4',
+                    TONES.success.bg,
+                    TONES.success.border,
+                  )}
+                >
+                  <ScoreBadge
+                    score={result.scoreBefore}
+                    label="Sekarang"
+                    color="warm"
+                  />
+                  <div className="text-warm-400 text-2xl">→</div>
                   <ScoreBadge
                     score={result.scoreAfter}
                     label="Estimasi setelah apply"
-                    color="emerald"
+                    color="success"
                   />
-                  <div className="text-sm font-bold text-emerald-700">
+                  <div
+                    className={cn('text-sm font-semibold', TONES.success.text)}
+                  >
                     +{result.scoreAfter - result.scoreBefore} point
                   </div>
                 </div>
@@ -452,7 +514,7 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
               {/* Focus areas */}
               {result.focusAreas.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs font-medium text-warm-500">
+                  <span className="text-warm-500 text-xs font-medium">
                     Focus:
                   </span>
                   {result.focusAreas.map((f) => (
@@ -465,32 +527,27 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
 
               {/* Suggestions */}
               <div>
-                <h3 className="mb-2 font-display text-sm font-semibold">
+                <h3 className="font-display mb-2 text-sm font-semibold">
                   Saran Perbaikan ({result.suggestions.length})
                 </h3>
                 <ul className="space-y-2">
                   {result.suggestions.map((s, i) => (
                     <li
                       key={i}
-                      className="rounded-lg border border-warm-200 p-3 text-sm"
+                      className="border-warm-200 rounded-lg border p-3 text-sm"
                     >
                       <div className="flex items-baseline justify-between gap-2">
-                        <div className="font-semibold text-warm-900">
+                        <div className="text-warm-900 font-semibold">
                           {i + 1}. {s.title}
                         </div>
-                        <Badge
-                          className={
-                            s.impact === 'high'
-                              ? 'bg-rose-100 text-rose-800 hover:bg-rose-100'
-                              : s.impact === 'medium'
-                                ? 'bg-amber-100 text-amber-800 hover:bg-amber-100'
-                                : 'bg-warm-100 text-warm-700 hover:bg-warm-100'
-                          }
-                        >
-                          {s.impact}
-                        </Badge>
+                        <StatusBadge
+                          tone={IMPACT_TONE[s.impact] ?? 'neutral'}
+                          label={s.impact}
+                        />
                       </div>
-                      <p className="mt-1 text-xs text-warm-600">{s.rationale}</p>
+                      <p className="text-warm-600 mt-1 text-xs">
+                        {s.rationale}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -498,20 +555,19 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
 
               {/* Asset upload section — auto-prominent kalau saran mention foto/testimoni */}
               <div
-                className={`rounded-lg border-2 p-3 ${
+                className={cn(
+                  'rounded-lg border p-3',
                   needsAssets
-                    ? 'border-amber-300 bg-amber-50'
-                    : 'border-warm-200 bg-warm-50/50'
-                }`}
+                    ? cn(TONES.warning.bg, TONES.warning.border)
+                    : 'border-warm-200 bg-warm-50/50',
+                )}
               >
                 <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <h3 className="flex items-center gap-1.5 font-display text-sm font-semibold text-warm-900">
-                    <ImagePlus className="size-4 text-amber-700" />
+                  <h3 className="font-display text-warm-900 flex items-center gap-1.5 text-sm font-semibold">
+                    <ImagePlus className="text-warm-600 size-4" />
                     Upload Aset (foto, testimoni, dll)
                     {needsAssets && (
-                      <Badge className="bg-amber-200 text-amber-900 hover:bg-amber-200">
-                        Disarankan
-                      </Badge>
+                      <StatusBadge tone="warning" label="Disarankan" />
                     )}
                   </h3>
                   <div className="flex gap-2">
@@ -531,9 +587,6 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                       variant={needsAssets ? 'default' : 'outline'}
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
-                      className={
-                        needsAssets ? 'bg-amber-600 text-white hover:bg-amber-700' : ''
-                      }
                     >
                       {uploading ? (
                         <Loader2 className="mr-1.5 size-4 animate-spin" />
@@ -542,23 +595,19 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                       )}
                       Upload Foto
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      asChild
-                    >
+                    <Button type="button" size="sm" variant="outline" asChild>
                       <Link
                         href={`/landing-pages/${lpId}/edit`}
                         target="_blank"
                         rel="noreferrer"
                       >
-                        <ExternalLink className="mr-1.5 size-3.5" /> Image Library
+                        <ExternalLink className="mr-1.5 size-3.5" /> Image
+                        Library
                       </Link>
                     </Button>
                   </div>
                 </div>
-                <p className="mb-2 text-xs text-warm-600">
+                <p className="text-warm-600 mb-2 text-xs">
                   {needsAssets
                     ? 'Saran AI mention testimoni/foto. Upload sekarang lalu salin URL-nya — paste ke HTML preview di bawah (atau edit setelah apply).'
                     : 'Optional — upload aset tambahan kalau perlu (max 8MB per file, JPG/PNG/WebP/GIF).'}
@@ -568,7 +617,7 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                     {uploadedAssets.map((a) => (
                       <li
                         key={a.id}
-                        className="flex items-center gap-2 rounded border border-warm-200 bg-white p-2 text-xs"
+                        className="border-warm-200 bg-card flex items-center gap-2 rounded-md border p-2 text-xs"
                       >
                         <img
                           src={a.url}
@@ -577,10 +626,10 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                           loading="lazy"
                         />
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-medium text-warm-900">
+                          <div className="text-warm-900 truncate font-medium">
                             {a.filename}
                           </div>
-                          <div className="truncate font-mono text-[10px] text-warm-500">
+                          <div className="text-warm-500 truncate font-mono text-xs">
                             {a.url}
                           </div>
                         </div>
@@ -601,10 +650,10 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
 
               {/* Preview iframe */}
               <div>
-                <h3 className="mb-2 font-display text-sm font-semibold">
+                <h3 className="font-display mb-2 text-sm font-semibold">
                   Preview HTML Baru
                 </h3>
-                <div className="rounded-lg border-2 border-warm-200 bg-warm-100 p-2">
+                <div className="border-warm-200 bg-warm-100 rounded-lg border p-2">
                   <iframe
                     srcDoc={result.rewrittenHtml}
                     className="h-[480px] w-full rounded bg-white"
@@ -615,22 +664,35 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
               </div>
 
               {/* Biaya aktual setelah AI selesai (vs estimasi sebelumnya) */}
-              <div className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900">
-                <div className="font-semibold">
-                  ✓ Biaya aktual (setelah AI selesai)
+              <div
+                className={cn(
+                  'rounded-lg border p-3 text-xs',
+                  TONES.success.bg,
+                  TONES.success.border,
+                  TONES.success.text,
+                )}
+              >
+                <div className="flex items-center gap-1 font-semibold">
+                  <Check className="size-3.5" aria-hidden />
+                  Biaya aktual (setelah AI selesai)
                 </div>
                 <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">
                   <div>
-                    <div className="text-[10px] text-emerald-700">Token AI diproses</div>
+                    <div className="text-xs opacity-80">Token AI diproses</div>
                     <div className="font-mono font-bold">
                       {result.cost.inputTokens.toLocaleString('id-ID')} in +{' '}
                       {result.cost.outputTokens.toLocaleString('id-ID')} out
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-emerald-700">Token dipotong dari saldo</div>
+                    <div className="text-xs opacity-80">
+                      Token dipotong dari saldo
+                    </div>
                     <div className="font-mono font-bold">
-                      {result.cost.platformTokensCharged.toLocaleString('id-ID')} token
+                      {result.cost.platformTokensCharged.toLocaleString(
+                        'id-ID',
+                      )}{' '}
+                      token
                     </div>
                   </div>
                 </div>
@@ -657,7 +719,6 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
             <Button
               onClick={() => void applyOptimization()}
               disabled={step === 'applying'}
-              className="bg-emerald-600 text-white hover:bg-emerald-700"
             >
               {step === 'applying' ? (
                 <Loader2 className="mr-1.5 size-4 animate-spin" />
@@ -680,16 +741,23 @@ function ScoreBadge({
 }: {
   score: number
   label: string
-  color: 'warm' | 'emerald'
+  color: 'warm' | 'success'
 }) {
   const c =
-    color === 'emerald' ? 'bg-emerald-600 text-white' : 'bg-warm-200 text-warm-900'
+    color === 'success' ? TONES.success.solid : 'bg-warm-200 text-warm-900'
   return (
     <div className="text-center">
-      <div className={`inline-flex size-14 items-center justify-center rounded-full ${c}`}>
-        <span className="font-display text-lg font-bold tabular-nums">{score}</span>
+      <div
+        className={cn(
+          'inline-flex size-14 items-center justify-center rounded-full',
+          c,
+        )}
+      >
+        <span className="font-display text-lg font-bold tabular-nums">
+          {score}
+        </span>
       </div>
-      <div className="mt-1 text-[11px] text-warm-600">{label}</div>
+      <div className="text-warm-600 mt-1 text-xs">{label}</div>
     </div>
   )
 }

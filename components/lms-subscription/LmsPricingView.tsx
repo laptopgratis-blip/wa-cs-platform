@@ -1,17 +1,13 @@
 'use client'
 
-import {
-  Check,
-  GraduationCap,
-  Sparkles,
-  TrendingUp,
-  X,
-} from 'lucide-react'
+import { Check, GraduationCap, Sparkles, TrendingUp, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-import { Badge } from '@/components/ui/badge'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -19,6 +15,7 @@ import {
   calculateSubscriptionPriceFull,
   convertIdrToTokens,
 } from '@/lib/subscription-pricing'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Pkg {
@@ -62,38 +59,37 @@ export function LmsPricingView({
   const [duration, setDuration] = useState(1)
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 md:p-8">
-      <header className="text-center">
-        <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary-100 px-3 py-1 text-xs font-semibold text-primary-700">
-          <GraduationCap className="size-3" />
-          LMS Pricing
-        </div>
-        <h1 className="font-display text-3xl font-extrabold text-warm-900">
-          Plan untuk LMS kamu
-        </h1>
-        <p className="mt-2 text-sm text-warm-600">
-          Bayar pakai saldo token. Aktivasi instan, tanpa upload bukti
-          transfer. Plan kamu sekarang:{' '}
-          <Badge className="bg-warm-100 text-warm-800">{currentTier}</Badge>
-        </p>
-        <p className="mt-1 text-xs text-warm-500">
-          Saldo:{' '}
-          <span className="font-mono font-semibold">
-            {currentBalance.toLocaleString('id-ID')} token
-          </span>
-          {' '}·{' '}
-          <Link
-            href="/billing"
-            className="text-primary-600 underline hover:text-primary-700"
-          >
-            top-up
-          </Link>
-        </p>
-      </header>
+    <PageContainer width="default">
+      <PageHeader
+        icon={GraduationCap}
+        title="Plan untuk LMS kamu"
+        description={
+          <>
+            <span className="inline-flex flex-wrap items-center gap-1">
+              Bayar pakai saldo token. Aktivasi instan, tanpa upload bukti
+              transfer. Plan kamu sekarang:
+              <StatusBadge tone="brand" label={currentTier} />
+            </span>
+            <span className="mt-1 block text-xs">
+              Saldo:{' '}
+              <span className="font-mono font-semibold">
+                {currentBalance.toLocaleString('id-ID')} token
+              </span>{' '}
+              ·{' '}
+              <Link
+                href="/billing"
+                className="text-primary-600 hover:text-primary-700 underline"
+              >
+                top-up
+              </Link>
+            </span>
+          </>
+        }
+      />
 
       {/* Duration selector */}
       <div className="flex justify-center">
-        <div className="inline-flex rounded-xl border border-warm-200 bg-card p-1">
+        <div className="border-warm-200 bg-card inline-flex rounded-xl border p-1">
           {DURATION_DISCOUNTS.map((d) => (
             <button
               key={d.months}
@@ -108,7 +104,7 @@ export function LmsPricingView({
             >
               {d.label}
               {d.discountPct > 0 && (
-                <span className="ml-1 text-[10px] opacity-80">
+                <span className="ml-1 text-xs opacity-80">
                   −{d.discountPct}%
                 </span>
               )}
@@ -119,7 +115,7 @@ export function LmsPricingView({
 
       {packages.length === 0 ? (
         <Card>
-          <CardContent className="py-16 text-center text-sm text-warm-500">
+          <CardContent className="text-warm-500 py-16 text-center text-sm">
             Belum ada plan LMS aktif. Admin perlu setup di /admin/lms-packages.
           </CardContent>
         </Card>
@@ -140,47 +136,49 @@ export function LmsPricingView({
               <Card
                 key={pkg.id}
                 className={cn(
-                  'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
-                  pkg.isPopular &&
-                    'scale-[1.02] border-2 border-primary-400 shadow-orange',
-                  isCurrent && 'ring-2 ring-emerald-300',
+                  'relative flex flex-col overflow-visible transition-all',
+                  pkg.isPopular && 'ring-primary-400 scale-[1.02] ring-2',
+                  // Plan aktif ditandai tint success + badge, bukan ring hue lepas.
+                  isCurrent && TONES.success.bg,
                 )}
               >
                 {pkg.isPopular && (
-                  <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+                  <span className="bg-primary-500 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
                     <Sparkles className="size-3" />
                     Paling Populer
                   </span>
                 )}
                 {isCurrent && (
-                  <Badge className="absolute -top-3 right-4 z-10 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                    Plan Kamu
-                  </Badge>
+                  <StatusBadge
+                    tone="success"
+                    label="Plan Kamu"
+                    className="absolute -top-3 right-4 z-10"
+                  />
                 )}
                 <CardContent className="flex flex-1 flex-col gap-4 p-5">
                   <div>
-                    <h3 className="font-display text-xl font-bold text-warm-900">
+                    <h3 className="font-display text-warm-900 text-lg font-semibold">
                       {pkg.name}
                     </h3>
                     {pkg.description && (
-                      <p className="mt-1 text-xs text-warm-600">
+                      <p className="text-warm-600 mt-1 text-xs">
                         {pkg.description}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <div className="font-display text-2xl font-extrabold tabular-nums text-warm-900">
+                    <div className="font-display text-warm-900 text-2xl font-semibold tabular-nums">
                       {calc.priceFinalTokens.toLocaleString('id-ID')} token
                     </div>
-                    <div className="text-xs text-warm-500">
-                      ≈ {monthlyTokens.toLocaleString('id-ID')}/bln · setara
-                      Rp {calc.priceFinal.toLocaleString('id-ID')} ({duration}{' '}
+                    <div className="text-warm-500 text-xs">
+                      ≈ {monthlyTokens.toLocaleString('id-ID')}/bln · setara Rp{' '}
+                      {calc.priceFinal.toLocaleString('id-ID')} ({duration}{' '}
                       bulan)
                     </div>
                   </div>
 
-                  <ul className="space-y-1.5 text-xs text-warm-700">
+                  <ul className="text-warm-700 space-y-1.5 text-xs">
                     <Feature on>
                       {fmtLimit(pkg.maxCourses)} course aktif
                     </Feature>
@@ -202,21 +200,15 @@ export function LmsPricingView({
                   </ul>
 
                   {!sufficient && !isCurrent && !isLower && (
-                    <Badge className="mt-auto bg-rose-100 text-[11px] text-rose-700">
-                      Kurang{' '}
-                      {(
-                        calc.priceFinalTokens - currentBalance
-                      ).toLocaleString('id-ID')}{' '}
-                      token
-                    </Badge>
+                    <StatusBadge
+                      tone="danger"
+                      className="mt-auto"
+                      label={`Kurang ${(calc.priceFinalTokens - currentBalance).toLocaleString('id-ID')} token`}
+                    />
                   )}
 
                   <Button
-                    className={cn(
-                      'mt-auto w-full',
-                      pkg.isPopular &&
-                        'bg-primary-500 text-white hover:bg-primary-600',
-                    )}
+                    className="mt-auto w-full"
                     variant={pkg.isPopular ? 'default' : 'outline'}
                     disabled={isCurrent || isLower}
                     onClick={() => {
@@ -248,23 +240,17 @@ export function LmsPricingView({
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
-function Feature({
-  on,
-  children,
-}: {
-  on: boolean
-  children: React.ReactNode
-}) {
+function Feature({ on, children }: { on: boolean; children: React.ReactNode }) {
   return (
     <li className="flex items-start gap-2">
       {on ? (
-        <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
+        <Check className={cn('mt-0.5 size-3.5 shrink-0', TONES.success.text)} />
       ) : (
-        <X className="mt-0.5 size-3.5 shrink-0 text-warm-300" />
+        <X className="text-warm-300 mt-0.5 size-3.5 shrink-0" />
       )}
       <span className={cn(!on && 'text-warm-400')}>{children}</span>
     </li>

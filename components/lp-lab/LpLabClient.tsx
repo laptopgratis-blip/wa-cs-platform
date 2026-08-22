@@ -18,17 +18,16 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 import { BreakdownList } from './BreakdownList'
 import { FunnelChart } from './FunnelChart'
@@ -146,16 +145,16 @@ export function LpLabClient({ lp, tier }: Props) {
 
   if (!isPower) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-12">
-        <Card className="border-amber-300 bg-amber-50">
-          <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
-            <div className="flex size-14 items-center justify-center rounded-full bg-amber-200 text-amber-900">
+      <PageContainer width="narrow">
+        <Card className="bg-primary-50">
+          <CardContent className="flex flex-col items-center gap-4 py-8 text-center">
+            <div className="bg-primary-100 text-primary-700 flex size-14 items-center justify-center rounded-full">
               <Sparkles className="size-7" />
             </div>
-            <h2 className="font-display text-2xl font-bold text-amber-900">
+            <h2 className="font-display text-warm-900 text-xl font-semibold">
               LP Lab Eksklusif Paket POWER
             </h2>
-            <p className="max-w-md text-sm text-amber-800">
+            <p className="text-warm-700 max-w-md text-sm">
               Analytics traffic, heatmap, signal customer dari chat, dan
               optimasi AI berdasarkan data — semua tools digital marketing pro
               ada di sini. Upgrade ke POWER untuk unlock.
@@ -166,27 +165,22 @@ export function LpLabClient({ lp, tier }: Props) {
                   <ArrowLeft className="mr-1 size-4" /> Kembali
                 </Link>
               </Button>
-              <Button
-                asChild
-                className="bg-amber-600 text-white hover:bg-amber-700"
-              >
-                <Link href="/pricing">
-                  Upgrade ke POWER
-                </Link>
+              <Button asChild>
+                <Link href="/pricing">Upgrade ke POWER</Link>
               </Button>
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="space-y-5">
+    <PageContainer width="wide">
       <div>
         <Link
           href={`/landing-pages/${lp.id}/edit`}
-          className="mb-1 inline-flex items-center gap-1 text-xs text-warm-500 hover:text-warm-700"
+          className="text-warm-500 hover:text-warm-700 mb-1 inline-flex items-center gap-1 text-xs"
         >
           <ArrowLeft className="size-3.5" /> Kembali ke editor
         </Link>
@@ -204,41 +198,41 @@ export function LpLabClient({ lp, tier }: Props) {
           }
           actions={
             <>
-          <PeriodSelector value={period} onChange={setPeriod} />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={refreshing}
-          >
-            {refreshing ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              'Refresh'
-            )}
-          </Button>
-          <OptimizationsHistoryDialog
-            lpId={lp.id}
-            onApplied={() => {
-              void load()
-              setScoreRefreshKey((k) => k + 1)
-            }}
-          />
-          <VersionsDialog
-            lpId={lp.id}
-            onRestored={() => {
-              void load()
-              setScoreRefreshKey((k) => k + 1)
-            }}
-          />
-          <OptimizeFlow
-            lpId={lp.id}
-            lpSlug={lp.slug}
-            onApplied={() => {
-              void load()
-              setScoreRefreshKey((k) => k + 1)
-            }}
-          />
+              <PeriodSelector value={period} onChange={setPeriod} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void load()}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  'Refresh'
+                )}
+              </Button>
+              <OptimizationsHistoryDialog
+                lpId={lp.id}
+                onApplied={() => {
+                  void load()
+                  setScoreRefreshKey((k) => k + 1)
+                }}
+              />
+              <VersionsDialog
+                lpId={lp.id}
+                onRestored={() => {
+                  void load()
+                  setScoreRefreshKey((k) => k + 1)
+                }}
+              />
+              <OptimizeFlow
+                lpId={lp.id}
+                lpSlug={lp.slug}
+                onApplied={() => {
+                  void load()
+                  setScoreRefreshKey((k) => k + 1)
+                }}
+              />
             </>
           }
         />
@@ -246,9 +240,7 @@ export function LpLabClient({ lp, tier }: Props) {
 
       {loading && <CardGridSkeleton count={4} />}
 
-      {!loading && data && data.kpi.visits === 0 && (
-        <EmptyState lp={lp} />
-      )}
+      {!loading && data && data.kpi.visits === 0 && <AnalyticsEmpty lp={lp} />}
 
       {!loading && data && data.kpi.visits > 0 && (
         <>
@@ -258,7 +250,7 @@ export function LpLabClient({ lp, tier }: Props) {
           <TabsSection data={data} lp={lp} scoreRefreshKey={scoreRefreshKey} />
         </>
       )}
-    </div>
+    </PageContainer>
   )
 }
 
@@ -275,7 +267,7 @@ function PeriodSelector({
 }) {
   const options: Period[] = ['24h', '7d', '30d', '90d']
   return (
-    <div className="flex items-center gap-0.5 rounded-md border border-warm-300 bg-white p-0.5 dark:bg-warm-900">
+    <div className="border-warm-300 bg-card flex items-center gap-0.5 rounded-md border p-0.5">
       {options.map((p) => (
         <button
           key={p}
@@ -284,7 +276,7 @@ function PeriodSelector({
           className={`rounded px-2.5 py-1 text-xs font-medium transition ${
             value === p
               ? 'bg-primary-500 text-white'
-              : 'text-warm-600 hover:bg-warm-100 dark:hover:bg-warm-800'
+              : 'text-warm-600 hover:bg-warm-100'
           }`}
         >
           {p}
@@ -294,13 +286,14 @@ function PeriodSelector({
   )
 }
 
-function EmptyState({ lp }: { lp: Lp }) {
+function AnalyticsEmpty({ lp }: { lp: Lp }) {
   return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <BarChart3 className="size-10 text-warm-400" />
-        <p className="font-medium text-warm-700">Belum ada data tracking</p>
-        <p className="max-w-md text-sm text-warm-500">
+    <EmptyState
+      bordered
+      icon={BarChart3}
+      title="Belum ada data tracking"
+      description={
+        <>
           Tracker JS sudah aktif — data akan masuk otomatis saat ada visitor.
           {!lp.isPublished && (
             <>
@@ -309,25 +302,23 @@ function EmptyState({ lp }: { lp: Lp }) {
               supaya bisa diakses publik dan track traffic.
             </>
           )}
-        </p>
+        </>
+      }
+      action={
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link href={`/landing-pages/${lp.id}/edit`}>Buka Editor</Link>
           </Button>
           {lp.isPublished && (
             <Button asChild>
-              <Link
-                href={`/p/${lp.slug}`}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <Link href={`/p/${lp.slug}`} target="_blank" rel="noreferrer">
                 Lihat LP Live
               </Link>
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      }
+    />
   )
 }
 
@@ -344,14 +335,14 @@ function KpiCards({ data }: { data: AnalyticsData }) {
       />
       <KpiCard
         icon={<MousePointer className="size-5" />}
-        accent="emerald"
+        accent="primary"
         label="CTA Click Rate"
         value={formatPct(k.ctaRate)}
         sub={`${formatNumber(k.ctaClickedCount)} visit klik`}
       />
       <KpiCard
         icon={<Sparkles className="size-5" />}
-        accent="purple"
+        accent="primary"
         label="Total Klik CTA"
         value={formatNumber(k.ctaClickEvents)}
         sub={
@@ -369,7 +360,7 @@ function KpiCards({ data }: { data: AnalyticsData }) {
       />
       <KpiCard
         icon={<TrendingDown className="size-5" />}
-        accent={k.bounceRate > 70 ? 'rose' : 'warm'}
+        accent={k.bounceRate > 70 ? 'danger' : 'warm'}
         label="Bounce Rate"
         value={formatPct(k.bounceRate)}
         sub={`${formatNumber(k.bouncedCount)} bounce`}
@@ -386,34 +377,33 @@ function KpiCard({
   sub,
 }: {
   icon: React.ReactNode
-  accent: 'primary' | 'emerald' | 'purple' | 'warm' | 'rose'
+  accent: 'primary' | 'warm' | 'danger'
   label: string
   value: string
   sub: string
 }) {
   const accentClass = {
     primary: 'bg-primary-50 text-primary-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    purple: 'bg-purple-50 text-purple-600',
     warm: 'bg-warm-100 text-warm-600',
-    rose: 'bg-rose-50 text-rose-600',
+    danger: cn(TONES.danger.bg, TONES.danger.text),
   }[accent]
   return (
-    <Card className="rounded-xl border-warm-200">
-      <CardContent className="flex items-center gap-3 p-4">
+    <Card>
+      <CardContent className="flex items-center gap-3">
         <div
-          className={`flex size-10 items-center justify-center rounded-lg ${accentClass}`}
+          className={cn(
+            'flex size-10 items-center justify-center rounded-lg',
+            accentClass,
+          )}
         >
           {icon}
         </div>
         <div className="min-w-0">
-          <div className="text-xs text-warm-500">{label}</div>
-          <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+          <div className="text-warm-500 text-xs">{label}</div>
+          <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
             {value}
           </div>
-          <div className="mt-0.5 truncate text-[11px] text-warm-500">
-            {sub}
-          </div>
+          <div className="text-warm-500 mt-0.5 truncate text-xs">{sub}</div>
         </div>
       </CardContent>
     </Card>
@@ -423,12 +413,12 @@ function KpiCard({
 function FunnelCard({ data }: { data: AnalyticsData }) {
   return (
     <Card>
-      <CardContent className="p-4">
+      <CardContent>
         <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="font-display text-sm font-semibold text-warm-900 dark:text-warm-50">
+          <h3 className="font-display text-warm-900 text-sm font-semibold">
             Funnel Konversi
           </h3>
-          <p className="text-xs text-warm-500">
+          <p className="text-warm-500 text-xs">
             Dari pengunjung sampai submit form
           </p>
         </div>
@@ -462,8 +452,8 @@ function TabsSection({
 
       <TabsContent value="ctas" className="mt-3">
         <Card>
-          <CardContent className="p-4">
-            <h3 className="mb-2 font-display text-sm font-semibold">
+          <CardContent>
+            <h3 className="font-display mb-2 text-sm font-semibold">
               Top Tombol CTA yang Diklik
             </h3>
             {data.ctas.length === 0 ? (
@@ -482,12 +472,12 @@ function TabsSection({
 
       <TabsContent value="heatmap" className="mt-3">
         <Card>
-          <CardContent className="p-4">
+          <CardContent>
             <div className="mb-3">
               <h3 className="font-display text-sm font-semibold">
                 Click Heatmap
               </h3>
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Posisi klik visitor di LP — merah = banyak klik, kosong = tidak
                 ada interaksi. Filter per device karena layout berbeda.
               </p>
@@ -554,8 +544,8 @@ function TabsSection({
 
       <TabsContent value="time" className="mt-3">
         <Card>
-          <CardContent className="p-4">
-            <h3 className="mb-2 font-display text-sm font-semibold">
+          <CardContent>
+            <h3 className="font-display mb-2 text-sm font-semibold">
               Kapan Visitor Datang (jam WIB)
             </h3>
             <TimeOfDayHeatmap cells={data.timeOfDay} />
@@ -565,10 +555,8 @@ function TabsSection({
 
       <TabsContent value="geo" className="mt-3">
         <Card>
-          <CardContent className="p-4">
-            <h3 className="mb-2 font-display text-sm font-semibold">
-              Country
-            </h3>
+          <CardContent>
+            <h3 className="font-display mb-2 text-sm font-semibold">Country</h3>
             {data.countries.length === 0 ? (
               <EmptyTab message="Geoip belum tersedia (server tidak set country header). Phase berikutnya akan integrate ip-api untuk data geografi." />
             ) : (
@@ -590,8 +578,8 @@ function SectionCard({
 }) {
   return (
     <Card>
-      <CardContent className="p-4">
-        <h4 className="mb-2 font-display text-sm font-semibold text-warm-900 dark:text-warm-50">
+      <CardContent>
+        <h4 className="font-display text-warm-900 mb-2 text-sm font-semibold">
           {title}
         </h4>
         {children}
@@ -602,7 +590,7 @@ function SectionCard({
 
 function EmptyTab({ message }: { message: string }) {
   return (
-    <p className="rounded-md border border-dashed border-warm-200 bg-warm-50 px-3 py-4 text-center text-xs text-warm-500">
+    <p className="border-warm-200 bg-warm-50 text-warm-500 rounded-md border border-dashed px-3 py-4 text-center text-xs">
       {message}
     </p>
   )

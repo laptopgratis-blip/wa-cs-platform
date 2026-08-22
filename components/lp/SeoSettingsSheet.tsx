@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 const META_TITLE_MAX = 60
 const META_DESC_MAX = 160
@@ -202,7 +204,10 @@ export function SeoSettingsSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md px-6">
+      <SheetContent
+        side="right"
+        className="w-full overflow-y-auto px-6 sm:max-w-md"
+      >
         <SheetHeader className="px-0">
           <SheetTitle>SEO &amp; Settings</SheetTitle>
           <SheetDescription>
@@ -218,8 +223,8 @@ export function SeoSettingsSheet({
               <span
                 className={
                   metaTitle.length > META_TITLE_MAX
-                    ? 'text-xs text-destructive'
-                    : 'text-xs text-warm-500'
+                    ? 'text-destructive text-xs'
+                    : 'text-warm-500 text-xs'
                 }
               >
                 {metaTitle.length}/{META_TITLE_MAX}
@@ -232,7 +237,7 @@ export function SeoSettingsSheet({
               placeholder="Mis. Sepatu Sneakers Wanita Brand Lokal"
               maxLength={META_TITLE_MAX + 20}
             />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Tampil di tab browser & hasil pencarian Google. Disarankan ≤ 60
               karakter.
             </p>
@@ -245,8 +250,8 @@ export function SeoSettingsSheet({
               <span
                 className={
                   metaDesc.length > META_DESC_MAX
-                    ? 'text-xs text-destructive'
-                    : 'text-xs text-warm-500'
+                    ? 'text-destructive text-xs'
+                    : 'text-warm-500 text-xs'
                 }
               >
                 {metaDesc.length}/{META_DESC_MAX}
@@ -260,7 +265,7 @@ export function SeoSettingsSheet({
               placeholder="Sneakers wanita ringan, nyaman, dan tahan lama. Cocok untuk gaya kasual sehari-hari. Pesan sekarang via WA."
               maxLength={META_DESC_MAX + 40}
             />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Tampil sebagai snippet di hasil pencarian Google. Disarankan ≤ 160
               karakter.
             </p>
@@ -270,7 +275,7 @@ export function SeoSettingsSheet({
           <div className="space-y-1.5">
             <Label htmlFor="lp-slug">Slug URL</Label>
             <div className="flex items-center gap-2">
-              <span className="shrink-0 text-sm text-warm-500">/p/</span>
+              <span className="text-warm-500 shrink-0 text-sm">/p/</span>
               <div className="relative flex-1">
                 <Input
                   id="lp-slug"
@@ -278,15 +283,16 @@ export function SeoSettingsSheet({
                   onChange={(e) => setSlug(slugify(e.target.value))}
                   className="pr-9"
                 />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                <span className="absolute top-1/2 right-2 -translate-y-1/2">
                   {slugStatus === 'checking' && (
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="text-muted-foreground size-4 animate-spin" />
                   )}
                   {slugStatus === 'available' && (
-                    <Check className="size-4 text-emerald-600" />
+                    <Check className={cn('size-4', TONES.success.text)} />
                   )}
-                  {(slugStatus === 'unavailable' || slugStatus === 'invalid') && (
-                    <X className="size-4 text-destructive" />
+                  {(slugStatus === 'unavailable' ||
+                    slugStatus === 'invalid') && (
+                    <X className="text-destructive size-4" />
                   )}
                 </span>
               </div>
@@ -295,22 +301,31 @@ export function SeoSettingsSheet({
               <p
                 className={
                   slugStatus === 'available'
-                    ? 'text-xs text-emerald-600'
-                    : 'text-xs text-destructive'
+                    ? cn('text-xs', TONES.success.text)
+                    : 'text-destructive text-xs'
                 }
               >
                 {slugMsg}
               </p>
             )}
-            <div className="rounded-md border border-warm-200 bg-warm-50 p-2 font-mono text-xs text-warm-700 break-all">
+            <div className="border-warm-200 bg-warm-50 text-warm-700 rounded-md border p-2 font-mono text-xs break-all">
               {previewUrl}
             </div>
             {slugChanged && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900">
+              <div
+                className={cn(
+                  'flex items-start gap-2 rounded-md border p-2.5 text-xs',
+                  TONES.warning.bg,
+                  TONES.warning.border,
+                  TONES.warning.text,
+                )}
+              >
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <div>
                   URL lama (
-                  <span className="font-mono font-semibold">/p/{initial.slug}</span>
+                  <span className="font-mono font-semibold">
+                    /p/{initial.slug}
+                  </span>
                   ) akan tidak aktif begitu setting ini disimpan. Update link di
                   iklan / sosmed kalau perlu.
                 </div>
@@ -319,10 +334,10 @@ export function SeoSettingsSheet({
           </div>
 
           {/* Publish toggle */}
-          <div className="flex items-center justify-between rounded-md border border-warm-200 p-3">
+          <div className="border-warm-200 flex items-center justify-between rounded-md border p-3">
             <div>
               <Label className="text-sm font-semibold">Publish</Label>
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Aktifkan supaya LP bisa diakses publik di URL di atas.
               </p>
             </div>
@@ -337,7 +352,6 @@ export function SeoSettingsSheet({
           <Button
             onClick={handleSave}
             disabled={isSaving || slugInvalid || slugStatus === 'checking'}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
           >
             {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Simpan Settings

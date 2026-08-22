@@ -5,17 +5,15 @@
 //
 // History line chart (mini) di sub-component — di tab terpisah supaya tidak
 // crowded di gauge utama.
-import {
-  Activity,
-  AlertTriangle,
-  Loader2,
-  RefreshCw,
-} from 'lucide-react'
+import { Activity, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface DimensionScore {
   score: number
@@ -59,27 +57,23 @@ const DIM_KEYS: Array<keyof ScoreData['breakdown']> = [
   'sentiment',
 ]
 
+// Bar per dimensi hanya perlu dibedakan satu sama lain, bukan menyandang
+// makna status — jadi pakai gradasi shade brand.
 const DIM_COLOR: Record<string, string> = {
-  traffic: 'bg-sky-500',
-  engagement: 'bg-violet-500',
-  conversion: 'bg-emerald-500',
-  content: 'bg-amber-500',
-  technical: 'bg-slate-500',
-  sentiment: 'bg-pink-500',
+  traffic: 'bg-primary-700',
+  engagement: 'bg-primary-600',
+  conversion: 'bg-primary-500',
+  content: 'bg-primary-400',
+  technical: 'bg-primary-300',
+  sentiment: 'bg-primary-200',
 }
 
-function scoreColor(score: number): string {
-  if (score >= 80) return 'text-emerald-600'
-  if (score >= 60) return 'text-amber-600'
-  if (score >= 40) return 'text-orange-600'
-  return 'text-rose-600'
-}
-
-function scoreBg(score: number): string {
-  if (score >= 80) return 'stroke-emerald-500'
-  if (score >= 60) return 'stroke-amber-500'
-  if (score >= 40) return 'stroke-orange-500'
-  return 'stroke-rose-500'
+// Tingkat keparahan score → tone registry (lib/ui-tones.ts).
+function scoreTone(score: number): Tone {
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'info'
+  if (score >= 40) return 'warning'
+  return 'danger'
 }
 
 function scoreLabel(score: number): string {
@@ -134,15 +128,17 @@ export function ScoreGauge({ lpId, refreshKey = 0 }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center rounded-lg border border-warm-200 bg-white py-8 text-warm-500">
-        <Loader2 className="mr-2 size-5 animate-spin" /> Menghitung score…
-      </div>
+      <Card>
+        <CardContent className="text-warm-500 flex items-center justify-center gap-2 py-8">
+          <Loader2 className="size-4 animate-spin" /> Menghitung score…
+        </CardContent>
+      </Card>
     )
   }
 
   if (!data) {
     return (
-      <div className="rounded-lg border border-dashed p-4 text-center text-sm text-warm-500">
+      <div className="text-warm-500 rounded-lg border border-dashed p-4 text-center text-sm">
         Score belum tersedia. Coba klik refresh.
       </div>
     )
@@ -151,29 +147,27 @@ export function ScoreGauge({ lpId, refreshKey = 0 }: Props) {
   const confidenceLow = data.sampleVisits < data.meta.confidenceThresholdVisits
 
   return (
-    <div className="rounded-xl border-2 border-warm-200 bg-gradient-to-br from-white to-warm-50 p-4 shadow-sm">
-      <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
+    <Card>
+      <CardContent className="flex flex-col items-center gap-4 md:flex-row md:items-start">
         {/* Radial gauge */}
         <div className="shrink-0">
           <RadialGauge score={data.total} />
-          <div className="mt-2 text-center">
-            <Badge
-              variant="outline"
-              className={`text-xs font-semibold ${scoreColor(data.total)}`}
-            >
-              {scoreLabel(data.total)}
-            </Badge>
+          <div className="mt-2 flex justify-center">
+            <StatusBadge
+              tone={scoreTone(data.total)}
+              label={scoreLabel(data.total)}
+            />
           </div>
         </div>
 
         {/* Breakdown bars */}
         <div className="flex-1 space-y-2 self-stretch">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-display text-sm font-semibold text-warm-900">
+            <h3 className="font-display text-warm-900 text-sm font-semibold">
               <Activity className="mr-1 inline size-4" /> LP Score Breakdown
             </h3>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-warm-500">
+              <span className="text-warm-500 text-xs">
                 {data.sampleVisits} visit · {data.periodDays}d
               </span>
               <Button
@@ -199,28 +193,35 @@ export function ScoreGauge({ lpId, refreshKey = 0 }: Props) {
             const label = data.meta.labels[key] ?? key
             return (
               <div key={key} title={dim.detail}>
-                <div className="mb-0.5 flex items-baseline justify-between text-[11px]">
-                  <span className="font-medium text-warm-700">{label}</span>
-                  <span className="tabular-nums text-warm-600">
-                    <span className="font-semibold text-warm-900">
+                <div className="mb-0.5 flex items-baseline justify-between text-xs">
+                  <span className="text-warm-700 font-medium">{label}</span>
+                  <span className="text-warm-600 tabular-nums">
+                    <span className="text-warm-900 font-semibold">
                       {dim.score}
                     </span>
                     /{dim.max}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-warm-100">
+                <div className="bg-warm-100 h-2 w-full overflow-hidden rounded-full">
                   <div
                     className={`h-full rounded-full ${DIM_COLOR[key]} transition-all`}
                     style={{ width: `${Math.max(2, pct)}%` }}
                   />
                 </div>
-                <p className="mt-0.5 text-[10px] text-warm-500">{dim.detail}</p>
+                <p className="text-warm-500 mt-0.5 text-xs">{dim.detail}</p>
               </div>
             )
           })}
 
           {confidenceLow && (
-            <div className="mt-2 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900">
+            <div
+              className={cn(
+                'mt-2 flex items-start gap-2 rounded-md border p-2 text-xs',
+                TONES.warning.bg,
+                TONES.warning.border,
+                TONES.warning.text,
+              )}
+            >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               <div>
                 Data minim ({data.sampleVisits} visit). Score belum reliable —
@@ -230,8 +231,8 @@ export function ScoreGauge({ lpId, refreshKey = 0 }: Props) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -265,7 +266,7 @@ function RadialGauge({ score }: { score: number }) {
           r={radius}
           fill="none"
           strokeWidth={stroke}
-          className={scoreBg(score)}
+          className={cn('stroke-current', TONES[scoreTone(score)].text)}
           strokeDasharray={`${arcLength} ${circumference}`}
           strokeDashoffset={offset}
           strokeLinecap="round"
@@ -274,11 +275,14 @@ function RadialGauge({ score }: { score: number }) {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center pt-1">
         <span
-          className={`font-display text-3xl font-extrabold tabular-nums ${scoreColor(score)}`}
+          className={cn(
+            'font-display text-3xl font-bold tabular-nums',
+            TONES[scoreTone(score)].text,
+          )}
         >
           {score}
         </span>
-        <span className="text-[10px] font-medium text-warm-500">/ 100</span>
+        <span className="text-warm-500 text-xs font-medium">/ 100</span>
       </div>
     </div>
   )

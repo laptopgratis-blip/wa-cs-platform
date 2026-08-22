@@ -1,6 +1,13 @@
 'use client'
 
-import { ArrowLeft, CheckCircle2, Loader2, RotateCcw, Sparkles, XCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Loader2,
+  RotateCcw,
+  Sparkles,
+  XCircle,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -9,9 +16,13 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { liveProposalStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 type TargetAsset = 'SYSTEM_PROMPT' | 'GREETING' | 'REBUTTAL_NOTE'
 type Status = 'PENDING' | 'APPROVED' | 'APPLIED' | 'REJECTED' | 'ROLLED_BACK'
@@ -32,7 +43,12 @@ interface Proposal {
 }
 
 interface Response {
-  room: { id: string; name: string; systemPrompt: string; greeting: string | null }
+  room: {
+    id: string
+    name: string
+    systemPrompt: string
+    greeting: string | null
+  }
   proposals: Proposal[]
 }
 
@@ -40,14 +56,6 @@ const TARGET_LABEL: Record<TargetAsset, string> = {
   SYSTEM_PROMPT: 'Persona host',
   GREETING: 'Greeting',
   REBUTTAL_NOTE: 'Catatan rebuttal',
-}
-
-const STATUS_BADGE: Record<Status, { label: string; cls: string }> = {
-  PENDING: { label: 'Menunggu approve', cls: 'bg-amber-100 text-amber-700' },
-  APPROVED: { label: 'Approved', cls: 'bg-emerald-100 text-emerald-700' },
-  APPLIED: { label: 'Aktif', cls: 'bg-emerald-200 text-emerald-800' },
-  REJECTED: { label: 'Ditolak', cls: 'bg-red-100 text-red-700' },
-  ROLLED_BACK: { label: 'Di-rollback', cls: 'bg-warm-100 text-warm-700' },
 }
 
 export function ImprovementBoard({ roomId }: { roomId: string }) {
@@ -96,21 +104,25 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
     }
   }
 
-  async function decide(propId: string, action: 'approve' | 'reject' | 'rollback') {
+  async function decide(
+    propId: string,
+    action: 'approve' | 'reject' | 'rollback',
+  ) {
     setActing(propId)
     try {
-      const res = await fetch(
-        `/api/live-rooms/${roomId}/proposals/${propId}`,
-        {
-          method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action }),
-        },
-      )
+      const res = await fetch(`/api/live-rooms/${roomId}/proposals/${propId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (json.success) {
         toast.success(
-          action === 'approve' ? 'Applied' : action === 'reject' ? 'Ditolak' : 'Rolled back',
+          action === 'approve'
+            ? 'Applied'
+            : action === 'reject'
+              ? 'Ditolak'
+              : 'Rolled back',
         )
         await fetchData()
       } else {
@@ -136,9 +148,9 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
       <div>
         <Link
           href={`/live-rooms/${roomId}/leads`}
-          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1 text-xs"
         >
-          <ArrowLeft className="h-3 w-3" /> Kembali ke Leads
+          <ArrowLeft className="size-3" /> Kembali ke Leads
         </Link>
         <PageHeader
           title={`Optimasi AI — ${data.room.name}`}
@@ -146,9 +158,9 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
           actions={
             <Button onClick={generate} disabled={generating}>
               {generating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-2 h-4 w-4" />
+                <Sparkles className="mr-2 size-4" />
               )}
               Minta Usul Baru
             </Button>
@@ -159,7 +171,7 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
       {/* PENDING */}
       {pending.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+          <h2 className="font-display text-warm-900 text-xl font-semibold">
             Menunggu keputusan ({pending.length})
           </h2>
           {pending.map((p) => (
@@ -188,7 +200,7 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
       {/* APPLIED */}
       {applied.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+          <h2 className="font-display text-warm-900 text-xl font-semibold">
             Sedang aktif ({applied.length})
           </h2>
           {applied.map((p) => (
@@ -205,7 +217,8 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
               acting={acting === p.id}
               onRollback={
                 p.targetAsset !== 'REBUTTAL_NOTE'
-                  ? () => setPendingDecision({ propId: p.id, action: 'rollback' })
+                  ? () =>
+                      setPendingDecision({ propId: p.id, action: 'rollback' })
                   : undefined
               }
             />
@@ -216,11 +229,16 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
       {/* OTHERS */}
       {others.length > 0 ? (
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-warm-600">
+          <h2 className="font-display text-warm-900 text-xl font-semibold">
             History ({others.length})
           </h2>
           {others.slice(0, 10).map((p) => (
-            <ProposalCard key={p.id} prop={p} currentValue={null} acting={false} />
+            <ProposalCard
+              key={p.id}
+              prop={p}
+              currentValue={null}
+              acting={false}
+            />
           ))}
         </section>
       ) : null}
@@ -263,7 +281,9 @@ export function ImprovementBoard({ roomId }: { roomId: string }) {
               ? 'Ya, Tolak'
               : 'Ya, Rollback'
         }
-        variant={pendingDecision?.action === 'approve' ? 'default' : 'destructive'}
+        variant={
+          pendingDecision?.action === 'approve' ? 'default' : 'destructive'
+        }
         onConfirm={() => {
           if (!pendingDecision) return
           const { propId, action } = pendingDecision
@@ -291,52 +311,60 @@ function ProposalCard({
   onRollback?: () => void
 }) {
   const [showDiff, setShowDiff] = useState(false)
-  const badge = STATUS_BADGE[prop.status]
+  const badge = statusMeta(liveProposalStatusMeta, prop.status)
   return (
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className={badge.cls}>{badge.label}</Badge>
+              <StatusBadge tone={badge.tone} label={badge.label} />
               <Badge variant="outline">{TARGET_LABEL[prop.targetAsset]}</Badge>
-              <span className="text-xs text-muted-foreground">
-                {new Date(prop.createdAt).toLocaleString('id-ID', { dateStyle: 'short' })}
+              <span className="text-muted-foreground text-xs">
+                {new Date(prop.createdAt).toLocaleString('id-ID', {
+                  dateStyle: 'short',
+                })}
               </span>
             </div>
             <h3 className="mt-1.5 text-base font-medium">{prop.title}</h3>
           </div>
         </div>
 
-        <div className="text-sm text-muted-foreground">{prop.rationale}</div>
+        <div className="text-muted-foreground text-sm">{prop.rationale}</div>
 
-        <div className="rounded-md border bg-warm-50 p-3 text-sm whitespace-pre-wrap">
+        <div className="bg-warm-50 rounded-md border p-3 text-sm whitespace-pre-wrap">
           {prop.proposalText}
         </div>
 
         {currentValue !== null && currentValue !== prop.proposalText ? (
           <details className="text-xs">
             <summary
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground cursor-pointer"
               onClick={() => setShowDiff((s) => !s)}
             >
               Lihat versi sekarang
             </summary>
-            <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 whitespace-pre-wrap">
+            <div
+              className={cn(
+                'mt-2 rounded-md border p-2 whitespace-pre-wrap',
+                TONES.danger.bg,
+                TONES.danger.border,
+              )}
+            >
               {currentValue || '(kosong)'}
             </div>
           </details>
         ) : null}
 
         {prop.evidenceSessionIds.length > 0 ? (
-          <div className="text-xs text-muted-foreground">
+          <div className="text-muted-foreground text-xs">
             <strong>Evidence sessions:</strong>{' '}
             {prop.evidenceSessionIds.map((s) => s.slice(-6)).join(', ')}
           </div>
         ) : null}
 
         {prop.decidedNote ? (
-          <div className="text-xs text-muted-foreground italic">
+          <div className="text-muted-foreground text-xs italic">
             Catatan: {prop.decidedNote}
           </div>
         ) : null}
@@ -345,24 +373,24 @@ function ProposalCard({
           <div className="flex flex-wrap gap-2 pt-1">
             {onApprove ? (
               <Button size="sm" onClick={onApprove}>
-                <CheckCircle2 className="mr-1 h-4 w-4" /> Approve & Apply
+                <CheckCircle2 className="mr-1 size-4" /> Approve & Apply
               </Button>
             ) : null}
             {onReject ? (
               <Button size="sm" variant="outline" onClick={onReject}>
-                <XCircle className="mr-1 h-4 w-4" /> Tolak
+                <XCircle className="mr-1 size-4" /> Tolak
               </Button>
             ) : null}
             {onRollback ? (
               <Button size="sm" variant="outline" onClick={onRollback}>
-                <RotateCcw className="mr-1 h-4 w-4" /> Rollback ke sebelumnya
+                <RotateCcw className="mr-1 size-4" /> Rollback ke sebelumnya
               </Button>
             ) : null}
           </div>
         ) : null}
         {acting ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> Memproses…
+          <div className="text-muted-foreground flex items-center gap-2 text-xs">
+            <Loader2 className="size-3 animate-spin" /> Memproses…
           </div>
         ) : null}
       </CardContent>

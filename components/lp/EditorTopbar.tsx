@@ -21,9 +21,10 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 export type Viewport = 'desktop' | 'mobile'
@@ -71,7 +72,7 @@ function StatusIndicator({
 }) {
   if (status === 'saving') {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-warm-500">
+      <span className="text-warm-500 flex items-center gap-1.5 text-xs">
         <Loader2 className="size-3.5 animate-spin" />
         Menyimpan…
       </span>
@@ -79,7 +80,9 @@ function StatusIndicator({
   }
   if (status === 'unsaved') {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-amber-600">
+      <span
+        className={cn('flex items-center gap-1.5 text-xs', TONES.warning.text)}
+      >
         <CircleAlert className="size-3.5" />
         Belum disimpan
       </span>
@@ -87,7 +90,7 @@ function StatusIndicator({
   }
   if (status === 'error') {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-destructive">
+      <span className="text-destructive flex items-center gap-1.5 text-xs">
         <CircleAlert className="size-3.5" />
         Gagal menyimpan
       </span>
@@ -95,7 +98,9 @@ function StatusIndicator({
   }
   // saved | idle
   return (
-    <span className="flex items-center gap-1.5 text-xs text-emerald-600">
+    <span
+      className={cn('flex items-center gap-1.5 text-xs', TONES.success.text)}
+    >
       <CheckCircle2 className="size-3.5" />
       Tersimpan{' '}
       <span className="text-warm-400">
@@ -245,14 +250,17 @@ function SlugInlineEditor({
 
   if (!editing) {
     return (
-      <div className="mt-0.5 flex items-center gap-1 px-2 text-xs text-warm-500">
+      <div className="text-warm-500 mt-0.5 flex items-center gap-1 px-2 text-xs">
         <Globe className="size-3" />
         {isPublished ? (
           <a
             href={livePath}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 truncate font-mono text-emerald-600 hover:underline"
+            className={cn(
+              'flex items-center gap-1 truncate font-mono hover:underline',
+              TONES.success.text,
+            )}
             title="Buka LP live di tab baru"
           >
             {livePath}
@@ -264,7 +272,7 @@ function SlugInlineEditor({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-warm-500 hover:bg-warm-100 hover:text-warm-800"
+          className="text-warm-500 hover:bg-warm-100 hover:text-warm-800 ml-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
           title="Edit permalink"
         >
           <Pencil className="size-3" />
@@ -277,8 +285,8 @@ function SlugInlineEditor({
   const slugChanged = draft !== slug
   return (
     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 px-2 text-xs">
-      <Globe className="size-3 text-warm-500" />
-      <span className="font-mono text-warm-500">/p/</span>
+      <Globe className="text-warm-500 size-3" />
+      <span className="text-warm-500 font-mono">/p/</span>
       <div className="relative">
         <Input
           ref={inputRef}
@@ -298,16 +306,16 @@ function SlugInlineEditor({
           maxLength={50}
           autoFocus
         />
-        <span className="absolute right-2 top-1/2 -translate-y-1/2">
+        <span className="absolute top-1/2 right-2 -translate-y-1/2">
           {slugChanged && status === 'checking' && (
-            <Loader2 className="size-3.5 animate-spin text-warm-400" />
+            <Loader2 className="text-warm-400 size-3.5 animate-spin" />
           )}
           {slugChanged && status === 'available' && (
-            <Check className="size-3.5 text-emerald-600" />
+            <Check className={cn('size-3.5', TONES.success.text)} />
           )}
           {slugChanged &&
             (status === 'unavailable' || status === 'invalid') && (
-              <X className="size-3.5 text-destructive" />
+              <X className="text-destructive size-3.5" />
             )}
         </span>
       </div>
@@ -320,7 +328,7 @@ function SlugInlineEditor({
           status === 'invalid' ||
           status === 'unavailable'
         }
-        className="h-7 bg-primary-500 px-2 text-[11px] text-white hover:bg-primary-600"
+        className="h-7 px-2 text-xs"
       >
         {saving ? (
           <Loader2 className="size-3 animate-spin" />
@@ -333,22 +341,22 @@ function SlugInlineEditor({
         variant="ghost"
         onClick={cancel}
         disabled={saving}
-        className="h-7 px-2 text-[11px]"
+        className="h-7 px-2 text-xs"
       >
         Batal
       </Button>
       {slugChanged && msg && (
         <span
           className={cn(
-            'ml-1 text-[10px]',
-            status === 'available' ? 'text-emerald-600' : 'text-destructive',
+            'ml-1 text-xs',
+            status === 'available' ? TONES.success.text : 'text-destructive',
           )}
         >
           {msg}
         </span>
       )}
       {slugChanged && isPublished && (
-        <span className="ml-1 text-[10px] text-amber-700">
+        <span className={cn('ml-1 text-xs', TONES.warning.text)}>
           URL lama akan tidak aktif setelah disimpan
         </span>
       )}
@@ -372,7 +380,7 @@ export function EditorTopbar({
   onSeoClick,
 }: Props) {
   return (
-    <header className="flex flex-col gap-2 border-b border-warm-200 bg-card px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+    <header className="border-warm-200 bg-card flex flex-col gap-2 border-b px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
       {/* Kiri: tombol kembali + judul + slug */}
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Button asChild variant="ghost" size="icon" className="shrink-0">
@@ -386,7 +394,7 @@ export function EditorTopbar({
             onChange={(e) => onTitleChange(e.target.value)}
             placeholder="Judul landing page"
             maxLength={120}
-            className="h-8 border-transparent bg-transparent px-2 font-display text-base font-bold text-warm-900 shadow-none focus-visible:bg-warm-50 focus-visible:ring-1"
+            className="font-display text-warm-900 focus-visible:bg-warm-50 h-8 border-transparent bg-transparent px-2 text-base font-bold shadow-none focus-visible:ring-1"
           />
           <SlugInlineEditor
             lpId={lpId}
@@ -398,14 +406,15 @@ export function EditorTopbar({
       </div>
 
       {/* Tengah: viewport toggle */}
-      <div className="flex shrink-0 items-center gap-1 rounded-lg border border-warm-200 bg-warm-50 p-0.5">
+      <div className="border-warm-200 bg-warm-50 flex shrink-0 items-center gap-1 rounded-lg border p-0.5">
         <Button
           variant={viewport === 'desktop' ? 'default' : 'ghost'}
           size="sm"
           onClick={() => onViewportChange('desktop')}
           className={cn(
             'h-7 gap-1.5 px-2.5 text-xs',
-            viewport === 'desktop' && 'bg-card text-warm-900 shadow-sm hover:bg-card',
+            viewport === 'desktop' &&
+              'bg-card text-warm-900 hover:bg-card shadow-sm',
           )}
           aria-pressed={viewport === 'desktop'}
         >
@@ -418,7 +427,8 @@ export function EditorTopbar({
           onClick={() => onViewportChange('mobile')}
           className={cn(
             'h-7 gap-1.5 px-2.5 text-xs',
-            viewport === 'mobile' && 'bg-card text-warm-900 shadow-sm hover:bg-card',
+            viewport === 'mobile' &&
+              'bg-card text-warm-900 hover:bg-card shadow-sm',
           )}
           aria-pressed={viewport === 'mobile'}
         >
@@ -453,30 +463,19 @@ export function EditorTopbar({
 
         <Button
           size="sm"
+          variant={isPublished ? 'outline' : 'default'}
           onClick={onPublishClick}
           disabled={saveStatus === 'saving'}
-          className={
-            isPublished
-              ? 'bg-warm-100 text-warm-700 hover:bg-warm-200'
-              : 'bg-emerald-600 text-white hover:bg-emerald-700'
-          }
         >
           {isPublished ? (
             <>
               Unpublish
-              <Badge
-                variant="outline"
-                className="ml-2 border-emerald-600 text-emerald-700"
-              >
-                Live
-              </Badge>
+              <StatusBadge tone="success" label="Live" className="ml-2" />
             </>
           ) : (
             <>
               Publish
-              <Badge variant="outline" className="ml-2">
-                Draft
-              </Badge>
+              <StatusBadge tone="neutral" label="Draft" className="ml-2" />
             </>
           )}
         </Button>

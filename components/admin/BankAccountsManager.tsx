@@ -174,7 +174,7 @@ export function BankAccountsManager() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {rows.map((b) => (
-            <Card key={b.id} className="transition-shadow hover:shadow-md">
+            <Card key={b.id}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="bg-primary-50 text-primary-600 flex size-10 items-center justify-center rounded-lg">

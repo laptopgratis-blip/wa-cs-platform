@@ -17,7 +17,8 @@ import type { Viewport } from '@/components/lp/EditorTopbar'
 const DEBOUNCE_MS = 800
 // Sandbox iframe — jalankan script & style halaman LP, tapi blokir top-navigation
 // & form submit ke parent. allow-popups untuk wa.me link buka tab baru.
-const IFRAME_SANDBOX = 'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms'
+const IFRAME_SANDBOX =
+  'allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms'
 
 interface Props {
   htmlContent: string
@@ -157,16 +158,16 @@ export function LivePreview({ htmlContent, viewport, onElementClick }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-warm-200 bg-card px-4 py-2">
+      <div className="border-warm-200 bg-card flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
-          <Eye className="size-4 text-warm-600" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Eye className="text-warm-600 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Preview
           </span>
-          <span className="hidden text-[10px] text-warm-500 sm:inline">
+          <span className="text-warm-500 hidden text-xs sm:inline">
             Klik bagian untuk lompat ke posisinya di HTML
           </span>
-          <span className="text-[10px] text-warm-500">
+          <span className="text-warm-500 text-xs">
             {isMobile ? 'Mobile · 375px' : 'Desktop · 100%'}
           </span>
         </div>
@@ -191,14 +192,14 @@ export function LivePreview({ htmlContent, viewport, onElementClick }: Props) {
         {/* Watermark "Preview" tipis di pojok kanan atas */}
         <div
           aria-hidden
-          className="pointer-events-none absolute right-6 top-6 z-10 select-none rounded-md bg-warm-900/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/80 backdrop-blur-sm"
+          className="bg-warm-900/40 pointer-events-none absolute top-6 right-6 z-10 rounded-md px-2 py-0.5 text-xs font-semibold tracking-wider text-white/80 uppercase backdrop-blur-sm select-none"
         >
           Preview
         </div>
 
         <div
           className={cn(
-            'h-full overflow-hidden rounded-md border border-warm-200 bg-card shadow-sm',
+            'border-warm-200 bg-card h-full overflow-hidden rounded-md border shadow-sm',
             isMobile ? 'w-[375px] flex-shrink-0' : 'w-full',
           )}
         >
@@ -212,9 +213,8 @@ export function LivePreview({ htmlContent, viewport, onElementClick }: Props) {
               className="h-full w-full border-0"
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-sm text-warm-500">
-              Preview kosong — generate HTML pakai AI atau ketik HTML di
-              editor.
+            <div className="text-warm-500 flex h-full items-center justify-center p-8 text-center text-sm">
+              Preview kosong — generate HTML pakai AI atau ketik HTML di editor.
             </div>
           )}
         </div>

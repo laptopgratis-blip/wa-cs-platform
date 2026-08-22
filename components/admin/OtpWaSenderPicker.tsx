@@ -10,6 +10,7 @@ import { Loader2, Plus, RefreshCw, Save, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -19,6 +20,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { AddWaModal } from '@/components/whatsapp/AddWaModal'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface ConnectedSession {
   id: string
@@ -224,7 +227,7 @@ export function OtpWaSenderPicker() {
   }
 
   return (
-    <Card className="border-warm-200 rounded-xl">
+    <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-warm-900 text-sm font-semibold">
           Pengiriman OTP (Login &amp; Signup)
@@ -363,20 +366,16 @@ export function OtpWaSenderPicker() {
                             <Smartphone className="text-warm-500 size-3.5" />
                             {s.displayName ?? s.phoneNumber ?? '(tanpa nama)'}
                             {s.user.role === 'ADMIN' && (
-                              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-amber-700 uppercase">
-                                Admin
-                              </span>
+                              <StatusBadge tone="warning" label="Admin" />
                             )}
                             {s.provider === 'CLOUD_API' && (
-                              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-emerald-700 uppercase">
-                                Cloud API
-                              </span>
+                              <StatusBadge tone="success" label="Cloud API" />
                             )}
                           </div>
                           <div className="text-warm-500 text-xs">
                             {s.phoneNumber ?? '—'} · pemilik {s.user.email}
                           </div>
-                          <div className="text-warm-400 font-mono text-[10px]">
+                          <div className="text-warm-400 font-mono text-xs">
                             id: {s.id}
                           </div>
                         </div>
@@ -388,9 +387,15 @@ export function OtpWaSenderPicker() {
             </div>
 
             {selectedIsCloud && (
-              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3">
+              <div
+                className={cn(
+                  'space-y-2 rounded-lg border p-3',
+                  TONES.success.bg,
+                  TONES.success.border,
+                )}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-emerald-900">
+                  <p className={cn('text-xs font-semibold', TONES.success.text)}>
                     Template platform (nomor Cloud API)
                   </p>
                   <Button
@@ -408,37 +413,37 @@ export function OtpWaSenderPicker() {
                     Siapkan template platform
                   </Button>
                 </div>
-                <p className="text-[11px] text-emerald-900/70">
+                <p className={cn('text-xs', TONES.success.text)}>
                   OTP di luar window 24 jam Meta hanya bisa lewat template
                   AUTHENTICATION yang disetujui. Siapkan sekali; status berubah
                   otomatis setelah review Meta.
                 </p>
                 {platformItems === null ? (
-                  <p className="text-[11px] text-emerald-900/60">
+                  <p className={cn('text-xs', TONES.success.text)}>
                     Memuat status…
                   </p>
                 ) : platformItems.length === 0 ? (
-                  <p className="text-[11px] text-emerald-900/60">
+                  <p className={cn('text-xs', TONES.success.text)}>
                     Belum ada template — klik Siapkan.
                   </p>
                 ) : (
-                  <ul className="space-y-1 text-[11px]">
+                  <ul className="space-y-1 text-xs">
                     {platformItems.map((it) => (
                       <li
                         key={it.purposeKey}
                         className="flex items-center justify-between gap-2"
                       >
-                        <span className="truncate text-emerald-900/80">
+                        <span className={cn('truncate', TONES.success.text)}>
                           {it.name} — {it.description}
                         </span>
                         <span
                           className={
                             it.status === 'APPROVED'
-                              ? 'font-semibold text-emerald-700'
+                              ? cn('font-semibold', TONES.success.text)
                               : it.status === 'REJECTED' ||
                                   it.status === 'PAUSED'
-                                ? 'font-semibold text-red-600'
-                                : 'font-semibold text-amber-700'
+                                ? cn('font-semibold', TONES.danger.text)
+                                : cn('font-semibold', TONES.warning.text)
                           }
                           title={it.rejectionReason ?? undefined}
                         >
@@ -453,7 +458,9 @@ export function OtpWaSenderPicker() {
 
             <div className="flex items-center justify-end gap-2">
               {dirty && !saving && (
-                <span className="text-xs text-amber-600">Belum disimpan</span>
+                <span className={cn('text-xs', TONES.warning.text)}>
+                  Belum disimpan
+                </span>
               )}
               <Button
                 size="sm"

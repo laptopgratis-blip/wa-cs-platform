@@ -25,6 +25,7 @@ import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { formatNumber } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface LpRow {
@@ -124,7 +126,9 @@ export function LpManager() {
     if (!deleteTarget) return
     setDeletingId(deleteTarget.id)
     try {
-      const res = await fetch(`/api/lp/${deleteTarget.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/lp/${deleteTarget.id}`, {
+        method: 'DELETE',
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal menghapus')
@@ -163,7 +167,10 @@ export function LpManager() {
         hintId="landing-pages"
         relevantFor={['SELL_LP']}
         matchMessage="LP yang convert = headline jelas + foto produk + tombol WA besar. Pakai AI generator untuk bikin draft 1 menit, baru tweak isinya."
-        matchCta={{ label: 'Bikin LP dengan AI', href: '/landing-pages?action=create' }}
+        matchCta={{
+          label: 'Bikin LP dengan AI',
+          href: '/landing-pages?action=create',
+        }}
         mismatchMessage="Landing Page jadi pintu masuk customer dari iklan/sosmed. Kalau jualan langsung di WA tanpa funnel, fitur ini opsional."
       />
       <PageHeader
@@ -172,9 +179,9 @@ export function LpManager() {
           <>
             Buat halaman promosi sendiri dengan editor visual.
             {quota && (
-              <span className="ml-1 text-warm-400">
-                · {quota.currentLp}/{quota.maxLp === 999 ? '∞' : quota.maxLp}{' '}
-                LP · {quota.storageUsedMB.toFixed(1)}/{quota.maxStorageMB} MB
+              <span className="text-warm-400 ml-1">
+                · {quota.currentLp}/{quota.maxLp === 999 ? '∞' : quota.maxLp} LP
+                · {quota.storageUsedMB.toFixed(1)}/{quota.maxStorageMB} MB
                 storage
               </span>
             )}
@@ -184,15 +191,11 @@ export function LpManager() {
           <>
             <Button asChild variant="outline">
               <Link href="/pricing">
-                <Sparkles className="mr-2 size-4 text-primary-500" />
+                <Sparkles className="text-primary-500 mr-2 size-4" />
                 Upgrade Paket
               </Link>
             </Button>
-            <Button
-              onClick={() => setCreateOpen(true)}
-              disabled={lpFull}
-              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-            >
+            <Button onClick={() => setCreateOpen(true)} disabled={lpFull}>
               <Plus className="mr-2 size-4" />
               Buat LP Baru
             </Button>
@@ -202,28 +205,24 @@ export function LpManager() {
 
       {/* Banner upgrade — muncul saat user FREE atau quota sudah penuh */}
       {quota && (quota.tier === 'FREE' || lpFull) && (
-        <Card className="rounded-xl border-amber-200 bg-amber-50">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="bg-primary-50">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+              <div className="bg-primary-100 text-primary-700 flex size-9 shrink-0 items-center justify-center rounded-lg">
                 <Sparkles className="size-4" />
               </div>
               <div>
-                <p className="font-display text-sm font-bold text-amber-900">
+                <p className="font-display text-warm-900 text-sm font-semibold">
                   {lpFull
                     ? `Kamu sudah menggunakan ${quota.currentLp} dari ${quota.maxLp === 999 ? '∞' : quota.maxLp} LP`
                     : 'Kamu di paket FREE'}
                 </p>
-                <p className="mt-0.5 text-xs text-amber-800">
+                <p className="text-warm-700 mt-0.5 text-xs">
                   Upgrade untuk lebih banyak LP dan storage gambar.
                 </p>
               </div>
             </div>
-            <Button
-              asChild
-              size="sm"
-              className="bg-amber-600 text-white hover:bg-amber-700"
-            >
+            <Button asChild size="sm">
               <Link href="/pricing">Upgrade Sekarang</Link>
             </Button>
           </CardContent>
@@ -239,40 +238,46 @@ export function LpManager() {
               : 'sm:grid-cols-3'
           }`}
         >
-          <Card className="rounded-xl border-warm-200">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+          <Card>
+            <CardContent className="flex items-center gap-3">
+              <div className="bg-primary-50 text-primary-600 flex size-10 items-center justify-center rounded-lg">
                 <Eye className="size-5" />
               </div>
               <div>
-                <div className="text-xs text-warm-500">Total Views</div>
-                <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+                <div className="text-warm-500 text-xs">Total Views</div>
+                <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
                   {formatNumber(totalViews)}
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-warm-200">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+          <Card>
+            <CardContent className="flex items-center gap-3">
+              <div
+                className={cn(
+                  'flex size-10 items-center justify-center rounded-lg',
+                  TONES.success.bg,
+                  TONES.success.text,
+                )}
+              >
                 <Globe className="size-5" />
               </div>
               <div>
-                <div className="text-xs text-warm-500">LP Live</div>
-                <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+                <div className="text-warm-500 text-xs">LP Live</div>
+                <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
                   {publishedCount} / {pages.length}
                 </div>
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-warm-200">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-warm-100 text-warm-600">
+          <Card>
+            <CardContent className="flex items-center gap-3">
+              <div className="bg-warm-100 text-warm-600 flex size-10 items-center justify-center rounded-lg">
                 <Layers className="size-5" />
               </div>
               <div>
-                <div className="text-xs text-warm-500">LP Draft</div>
-                <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+                <div className="text-warm-500 text-xs">LP Draft</div>
+                <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
                   {pages.length - publishedCount}
                 </div>
               </div>
@@ -280,24 +285,26 @@ export function LpManager() {
           </Card>
           {aiStats && aiStats.totalGenerations > 0 && (
             <Card
-              className="rounded-xl border-purple-200 bg-purple-50/40"
+              className="bg-primary-50/40"
               title={`Total ${aiStats.totalGenerations} kali AI generate untuk landing page kamu.`}
             >
-              <CardContent className="flex items-center gap-3 p-4">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-purple-100 text-purple-600">
+              <CardContent className="flex items-center gap-3">
+                <div className="bg-primary-100 text-primary-600 flex size-10 items-center justify-center rounded-lg">
                   <Sparkles className="size-5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs text-warm-500">
+                  <div className="text-warm-500 text-xs">
                     AI Generate · {aiStats.totalGenerations}×
                   </div>
-                  <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+                  <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
                     {formatNumber(aiStats.audited.platformTokensCharged)}
                   </div>
-                  <div className="mt-0.5 text-[10px] text-warm-500">
+                  <div className="text-warm-500 mt-0.5 text-xs">
                     token kepake total
                     {aiStats.legacy.count > 0 && (
-                      <span className="ml-0.5 text-amber-700">*</span>
+                      <span className={cn('ml-0.5', TONES.warning.text)}>
+                        *
+                      </span>
                     )}
                   </div>
                 </div>
@@ -307,32 +314,32 @@ export function LpManager() {
         </div>
       )}
       {aiStats && aiStats.legacy.count > 0 && (
-        <p className="-mt-2 text-[11px] text-warm-500">
-          *{aiStats.legacy.count} dari {aiStats.totalGenerations} generasi adalah
-          data lama (sebelum 2026-05-09) — token tidak tercatat per-call.
+        <p className="text-warm-500 -mt-2 text-xs">
+          *{aiStats.legacy.count} dari {aiStats.totalGenerations} generasi
+          adalah data lama (sebelum 2026-05-09) — token tidak tercatat per-call.
         </p>
       )}
 
       {/* Info Quota */}
       {quota && (
-        <Card className="rounded-xl border-warm-200">
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold text-warm-700">
+              <CardTitle className="text-warm-700 text-sm font-semibold">
                 Kuota Paket Kamu
               </CardTitle>
               <Badge variant="outline" className="font-semibold">
                 {TIER_LABEL[quota.tier]}
               </Badge>
             </div>
-            <CardDescription className="text-xs text-warm-500">
+            <CardDescription className="text-warm-500 text-xs">
               Beli paket token untuk upgrade kuota otomatis.
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 text-warm-500">
+                <div className="text-warm-500 flex items-center gap-1.5">
                   <Layers className="size-3.5" />
                   Landing Page
                 </div>
@@ -344,7 +351,7 @@ export function LpManager() {
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5 text-warm-500">
+                <div className="text-warm-500 flex items-center gap-1.5">
                   <HardDrive className="size-3.5" />
                   Storage
                 </div>
@@ -362,25 +369,18 @@ export function LpManager() {
       {isLoading ? (
         <CardGridSkeleton count={3} />
       ) : pages.length === 0 ? (
-        <Card>
-          <CardContent>
-            <EmptyState
-              icon={Globe}
-              title="Belum ada landing page"
-              description="Buat halaman pertamamu untuk promosi atau funnel."
-              action={
-                <Button
-                  onClick={() => setCreateOpen(true)}
-                  disabled={lpFull}
-                  className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-                >
-                  <Plus className="mr-2 size-4" />
-                  Buat LP Pertama
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={Globe}
+          title="Belum ada landing page"
+          description="Buat halaman pertamamu untuk promosi atau funnel."
+          action={
+            <Button onClick={() => setCreateOpen(true)} disabled={lpFull}>
+              <Plus className="mr-2 size-4" />
+              Buat LP Pertama
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {pages.map((lp) => {
@@ -390,43 +390,34 @@ export function LpManager() {
                 ? `${window.location.origin}${publicPath}`
                 : publicPath
             return (
-              <Card
-                key={lp.id}
-                className={cn(
-                  'flex flex-col rounded-xl border-warm-200 transition-shadow hover:shadow-md',
-                  lp.isPublished && 'ring-1 ring-emerald-200',
-                )}
-              >
-                <CardContent className="flex flex-1 flex-col gap-3 p-5">
+              <Card key={lp.id} className="flex flex-col">
+                <CardContent className="flex flex-1 flex-col gap-3">
                   <div className="flex items-start justify-between gap-3">
                     <div
                       className={cn(
                         'flex size-10 items-center justify-center rounded-lg',
                         lp.isPublished
-                          ? 'bg-emerald-50 text-emerald-600'
+                          ? cn(TONES.success.bg, TONES.success.text)
                           : 'bg-primary-50 text-primary-600',
                       )}
                     >
                       <Globe className="size-5" />
                     </div>
                     {lp.isPublished ? (
-                      <Badge className="gap-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                        <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                        Live
-                      </Badge>
+                      <StatusBadge tone="success" label="Live" pulse />
                     ) : (
-                      <Badge variant="outline">Draft</Badge>
+                      <StatusBadge tone="neutral" label="Draft" />
                     )}
                   </div>
                   <div className="flex-1">
-                    <div className="font-display text-base font-bold text-warm-900 dark:text-warm-50">
+                    <div className="font-display text-warm-900 text-base font-semibold">
                       {lp.title}
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-xs text-warm-500">
+                    <div className="text-warm-500 mt-0.5 truncate font-mono text-xs">
                       {publicPath}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-warm-500">
+                  <div className="text-warm-500 flex items-center gap-3 text-xs">
                     <span className="flex items-center gap-1">
                       <Eye className="size-3.5" />
                       {formatNumber(lp.viewCount)} views
@@ -440,7 +431,7 @@ export function LpManager() {
                       })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 border-t border-warm-100 pt-3">
+                  <div className="border-warm-100 flex items-center gap-1.5 border-t pt-3">
                     <Button
                       asChild
                       variant="outline"
@@ -478,11 +469,7 @@ export function LpManager() {
                     </Button>
                     {lp.isPublished && (
                       <>
-                        <Button
-                          asChild
-                          size="sm"
-                          className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
-                        >
+                        <Button asChild size="sm" className="flex-1">
                           <a
                             href={publicPath}
                             target="_blank"

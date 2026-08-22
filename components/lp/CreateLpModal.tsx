@@ -16,6 +16,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Props {
   open: boolean
@@ -169,7 +171,7 @@ export function CreateLpModal({ open, onOpenChange, onCreated }: Props) {
           <div className="space-y-2">
             <Label htmlFor="lp-slug">Slug (URL)</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-warm-500">/lp/</span>
+              <span className="text-warm-500 text-sm">/lp/</span>
               <div className="relative flex-1">
                 <Input
                   id="lp-slug"
@@ -181,15 +183,15 @@ export function CreateLpModal({ open, onOpenChange, onCreated }: Props) {
                   }}
                   className="pr-9"
                 />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                <span className="absolute top-1/2 right-2 -translate-y-1/2">
                   {status === 'checking' && (
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                    <Loader2 className="text-muted-foreground size-4 animate-spin" />
                   )}
                   {status === 'available' && (
-                    <Check className="size-4 text-emerald-600" />
+                    <Check className={cn('size-4', TONES.success.text)} />
                   )}
                   {(status === 'unavailable' || status === 'invalid') && (
-                    <X className="size-4 text-destructive" />
+                    <X className="text-destructive size-4" />
                   )}
                 </span>
               </div>
@@ -198,16 +200,16 @@ export function CreateLpModal({ open, onOpenChange, onCreated }: Props) {
               <p
                 className={
                   status === 'available'
-                    ? 'text-xs text-emerald-600'
+                    ? cn('text-xs', TONES.success.text)
                     : status === 'idle'
-                      ? 'text-xs text-muted-foreground'
-                      : 'text-xs text-destructive'
+                      ? 'text-muted-foreground text-xs'
+                      : 'text-destructive text-xs'
                 }
               >
                 {statusMsg}
               </p>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Hanya huruf kecil, angka, dan strip. 3–50 karakter.
             </p>
           </div>
@@ -223,7 +225,6 @@ export function CreateLpModal({ open, onOpenChange, onCreated }: Props) {
             <Button
               type="submit"
               disabled={isCreating || status !== 'available' || !title.trim()}
-              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
             >
               {isCreating && <Loader2 className="mr-2 size-4 animate-spin" />}
               Buat

@@ -1,12 +1,22 @@
 'use client'
 
-import { BarChart3, GraduationCap, Layers, Pencil, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  BarChart3,
+  GraduationCap,
+  Layers,
+  Pencil,
+  Users,
+} from 'lucide-react'
 import Link from 'next/link'
 
 import { EmptyState } from '@/components/shared/EmptyState'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatRupiah } from '@/lib/format'
+import { courseStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Course {
   id: string
@@ -16,12 +26,6 @@ interface Course {
   totalDurationSec: number
   product: { id: string; name: string; price: number } | null
   _count: { modules: number; enrollments: number }
-}
-
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: 'bg-warm-100 text-warm-700' },
-  PUBLISHED: { label: 'Tayang', cls: 'bg-emerald-100 text-emerald-700' },
-  ARCHIVED: { label: 'Arsip', cls: 'bg-rose-100 text-rose-700' },
 }
 
 function formatDuration(sec: number): string {
@@ -50,38 +54,35 @@ export function CoursesList({ courses }: { courses: Course[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {courses.map((c) => {
-        const status = STATUS_LABEL[c.status] ?? STATUS_LABEL.DRAFT
+        const status = statusMeta(courseStatusMeta, c.status)
         return (
-          <Card
-            key={c.id}
-            className="overflow-visible rounded-xl border-warm-200"
-          >
+          <Card key={c.id} className="overflow-visible">
             <CardContent className="space-y-3 p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
-                  <h3 className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+                  <h3 className="text-warm-900 text-lg font-semibold">
                     {c.title}
                   </h3>
-                  <p className="mt-0.5 text-xs text-warm-500">
+                  <p className="text-warm-500 mt-0.5 text-xs">
                     /belajar/{c.slug}
                   </p>
                 </div>
-                <Badge className={status.cls}>{status.label}</Badge>
+                <StatusBadge tone={status.tone} label={status.label} />
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs text-warm-600">
+              <div className="text-warm-600 grid grid-cols-3 gap-2 text-xs">
                 <div className="flex flex-col items-start">
-                  <Layers className="mb-1 size-3.5 text-primary-500" />
+                  <Layers className="text-primary-500 mb-1 size-3.5" />
                   <span className="font-semibold">{c._count.modules}</span>
                   <span className="text-warm-500">modul</span>
                 </div>
                 <div className="flex flex-col items-start">
-                  <Users className="mb-1 size-3.5 text-primary-500" />
+                  <Users className="text-primary-500 mb-1 size-3.5" />
                   <span className="font-semibold">{c._count.enrollments}</span>
                   <span className="text-warm-500">student</span>
                 </div>
                 <div className="flex flex-col items-start">
-                  <span className="mb-1 text-[10px] uppercase tracking-wide text-warm-400">
+                  <span className="text-warm-400 mb-1 text-xs tracking-wide uppercase">
                     Durasi
                   </span>
                   <span className="font-semibold">
@@ -91,29 +92,46 @@ export function CoursesList({ courses }: { courses: Course[] }) {
               </div>
 
               {c.product ? (
-                <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-900">
+                <div
+                  className={cn(
+                    'rounded-md border p-2 text-xs',
+                    TONES.success.bg,
+                    TONES.success.border,
+                    TONES.success.text,
+                  )}
+                >
                   Linked ke produk: <strong>{c.product.name}</strong>
                   {c.product.price > 0 && (
                     <> · {formatRupiah(c.product.price)}</>
                   )}
                 </div>
               ) : (
-                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                  ⚠️ Belum di-link ke produk — customer belum bisa beli akses.
+                <div
+                  className={cn(
+                    'flex items-start gap-1.5 rounded-md border p-2 text-xs',
+                    TONES.warning.bg,
+                    TONES.warning.border,
+                    TONES.warning.text,
+                  )}
+                >
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    Belum di-link ke produk — customer belum bisa beli akses.
+                  </span>
                 </div>
               )}
 
               <div className="flex justify-end gap-3">
                 <Link
                   href={`/lms/courses/${c.id}/analytics`}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-warm-600 hover:text-warm-900"
+                  className="text-warm-600 hover:text-warm-900 inline-flex items-center gap-1 text-xs font-medium"
                 >
                   <BarChart3 className="size-3.5" />
                   Analytics
                 </Link>
                 <Link
                   href={`/lms/courses/${c.id}/edit`}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+                  className="text-primary-600 hover:text-primary-700 inline-flex items-center gap-1 text-xs font-medium"
                 >
                   <Pencil className="size-3.5" />
                   Edit Course

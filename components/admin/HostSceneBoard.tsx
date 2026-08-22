@@ -300,12 +300,11 @@ export function HostSceneBoard({
                 </p>
               ) : null}
               {host.mode === 'NATIVE_LIBRARY' && host.sourceImageUrl ? (
-                <Link
-                  href={`/host-templates/${host.id}/clips`}
-                  className="bg-primary-500 hover:bg-primary-600 mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition"
-                >
-                  <Mic className="size-3.5" /> Buka Library Klip Live →
-                </Link>
+                <Button asChild size="sm" className="mt-2">
+                  <Link href={`/host-templates/${host.id}/clips`}>
+                    <Mic aria-hidden /> Buka Library Klip Live →
+                  </Link>
+                </Button>
               ) : null}
             </div>
             {host.errorMessage ? (
