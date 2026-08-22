@@ -20,9 +20,9 @@ export default async function RegisterPage() {
   const otpChannelMode = await getOtpChannelMode()
 
   return (
-    <Card className="rounded-xl border-warm-200 shadow-lg">
+    <Card>
       <CardHeader className="space-y-1.5">
-        <CardTitle className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50">
+        <CardTitle className="font-display text-warm-900 text-2xl font-bold">
           Buat Akun
         </CardTitle>
         <CardDescription className="text-warm-500">

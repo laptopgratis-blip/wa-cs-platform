@@ -79,7 +79,7 @@ export function MessageCreditSection({
     <section id="kredit-pesan" className="scroll-mt-6 space-y-4">
       <div>
         <h2 className="font-display text-warm-900 flex items-center gap-2 text-lg font-semibold">
-          <MessageCircle className="size-5 text-sky-600" /> Kredit Pesan WA
+          <MessageCircle className="text-primary-500 size-5" /> Kredit Pesan WA
           (Cloud API)
         </h2>
         <p className="text-warm-500 mt-1 text-sm">
@@ -90,14 +90,9 @@ export function MessageCreditSection({
         </p>
       </div>
 
-      <Card
-        className={cn(
-          'rounded-xl border-sky-200 bg-linear-to-br from-sky-50 via-white to-sky-50',
-          negative && 'border-destructive/40',
-        )}
-      >
+      <Card className={cn('bg-primary-50', negative && 'ring-destructive/40')}>
         <CardHeader className="pb-2">
-          <CardDescription className="text-xs font-medium tracking-wider text-sky-700 uppercase">
+          <CardDescription className="text-primary-700 text-xs font-medium tracking-wider uppercase">
             Saldo Kredit Pesan
           </CardDescription>
           <CardTitle
@@ -131,7 +126,7 @@ export function MessageCreditSection({
               <span>Marketing {formatRupiah(rates.MARKETING)}</span>
               <span>OTP {formatRupiah(rates.AUTHENTICATION)}</span>
             </div>
-            <div className="text-muted-foreground text-[11px]">
+            <div className="text-muted-foreground text-xs">
               Utility gratis bila dikirim saat window 24 jam customer masih
               terbuka. Lead dari Click-to-WhatsApp Ads gratis hingga 72 jam
               (Free Entry Point) — bila Meta tidak menagih, kredit yang
@@ -165,7 +160,7 @@ export function MessageCreditSection({
                 key={pkg.id}
                 className={cn(
                   'relative flex flex-col',
-                  isHighlight && 'border-2 border-sky-400',
+                  isHighlight && 'ring-primary-500 ring-2',
                 )}
               >
                 <CardHeader>
@@ -182,11 +177,11 @@ export function MessageCreditSection({
                   </div>
                   <ul className="text-warm-700 space-y-1.5 text-sm">
                     <li className="flex items-center gap-2">
-                      <Check className="size-3.5 text-sky-600" /> ±{' '}
+                      <Check className="text-primary-500 size-3.5" /> ±{' '}
                       {utilityCount.toLocaleString('id-ID')} pesan utility
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="size-3.5 text-sky-600" /> ±{' '}
+                      <Check className="text-primary-500 size-3.5" /> ±{' '}
                       {marketingCount.toLocaleString('id-ID')} pesan marketing
                     </li>
                   </ul>

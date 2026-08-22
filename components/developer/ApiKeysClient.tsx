@@ -114,7 +114,8 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
     try {
       const res = await fetch('/api/pengembang/api-keys')
       const json = await res.json()
-      if (!json.success) throw new Error(json.error ?? 'Gagal memuat daftar kunci')
+      if (!json.success)
+        throw new Error(json.error ?? 'Gagal memuat daftar kunci')
       setKeys(json.data.keys)
     } catch (err) {
       toast.error((err as Error).message)
@@ -151,7 +152,9 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
     if (!revokeTarget) return
     setRevoking(true)
     try {
-      const res = await fetch(`/api/pengembang/api-keys/${revokeTarget.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/pengembang/api-keys/${revokeTarget.id}`, {
+        method: 'DELETE',
+      })
       const json = await res.json()
       if (!json.success) throw new Error(json.error ?? 'Gagal mencabut kunci')
       toast.success(`Kunci "${revokeTarget.name}" dicabut`)
@@ -185,15 +188,16 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
   }
 
   return (
-    <Card className="rounded-xl border-warm-200">
+    <Card>
       <CardContent className="space-y-4 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+            <h2 className="font-display text-warm-900 text-lg font-semibold">
               Kunci API
             </h2>
-            <p className="text-sm text-warm-500">
-              {activeCount} dari {MAX_ACTIVE_KEYS_PER_USER} kunci aktif terpakai.
+            <p className="text-warm-500 text-sm">
+              {activeCount} dari {MAX_ACTIVE_KEYS_PER_USER} kunci aktif
+              terpakai.
             </p>
           </div>
           <Button
@@ -230,15 +234,19 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
                   return (
                     <TableRow key={k.id}>
                       <TableCell className="font-medium">{k.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{k.maskedKey}</TableCell>
-                      <TableCell className="text-sm text-warm-500">{fmtDate(k.createdAt)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {k.maskedKey}
+                      </TableCell>
+                      <TableCell className="text-warm-500 text-sm">
+                        {fmtDate(k.createdAt)}
+                      </TableCell>
                       <TableCell
-                        className="text-sm text-warm-500"
+                        className="text-warm-500 text-sm"
                         title="Diperbarui maksimal sekali tiap 5 menit"
                       >
                         {fmtDate(k.lastUsedAt)}
                       </TableCell>
-                      <TableCell className="text-sm text-warm-500">
+                      <TableCell className="text-warm-500 text-sm">
                         {k.expiresAt ? fmtDate(k.expiresAt) : 'Tidak pernah'}
                       </TableCell>
                       <TableCell>
@@ -249,11 +257,13 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                            className="text-destructive hover:bg-destructive/10"
                             onClick={() => setRevokeTarget(k)}
                           >
                             <Trash2 className="size-4" />
-                            <span className="sr-only">Cabut kunci {k.name}</span>
+                            <span className="sr-only">
+                              Cabut kunci {k.name}
+                            </span>
                           </Button>
                         )}
                       </TableCell>
@@ -266,32 +276,44 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
         )}
       </CardContent>
 
-      <Dialog open={dialogOpen} onOpenChange={(o) => (o ? openDialog() : closeDialog())}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(o) => (o ? openDialog() : closeDialog())}
+      >
         <DialogContent>
           {plainKey ? (
             <>
               <DialogHeader>
                 <DialogTitle>Kunci API berhasil dibuat</DialogTitle>
                 <DialogDescription>
-                  Salin sekarang — kunci ini tidak akan bisa dilihat lagi setelah dialog ditutup.
+                  Salin sekarang — kunci ini tidak akan bisa dilihat lagi
+                  setelah dialog ditutup.
                 </DialogDescription>
               </DialogHeader>
               <Alert variant="destructive">
                 <AlertTitle>Simpan di tempat aman</AlertTitle>
                 <AlertDescription>
-                  Siapa pun yang punya kunci ini bisa membaca data akunmu. Simpan di credential
-                  store (n8n/Zapier), jangan di URL atau kode publik.
+                  Siapa pun yang punya kunci ini bisa membaca data akunmu.
+                  Simpan di credential store (n8n/Zapier), jangan di URL atau
+                  kode publik.
                 </AlertDescription>
               </Alert>
               <div className="flex gap-2">
-                <Input readOnly value={plainKey} className="font-mono text-xs" />
+                <Input
+                  readOnly
+                  value={plainKey}
+                  className="font-mono text-xs"
+                />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={async () => {
                     const ok = await copyText(plainKey)
                     if (ok) toast.success('Kunci disalin')
-                    else toast.error('Gagal menyalin — pilih teksnya lalu salin manual')
+                    else
+                      toast.error(
+                        'Gagal menyalin — pilih teksnya lalu salin manual',
+                      )
                   }}
                 >
                   <Copy className="size-4" />
@@ -306,7 +328,8 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
               <DialogHeader>
                 <DialogTitle>Buat Kunci API</DialogTitle>
                 <DialogDescription>
-                  Beri nama sesuai tempat pemakaiannya supaya mudah dicabut kalau bocor.
+                  Beri nama sesuai tempat pemakaiannya supaya mudah dicabut
+                  kalau bocor.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
@@ -327,7 +350,9 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="null">Tidak pernah kedaluwarsa</SelectItem>
+                      <SelectItem value="null">
+                        Tidak pernah kedaluwarsa
+                      </SelectItem>
                       <SelectItem value="30">30 hari</SelectItem>
                       <SelectItem value="90">90 hari</SelectItem>
                       <SelectItem value="365">1 tahun</SelectItem>
@@ -336,10 +361,17 @@ export function ApiKeysClient({ initialKeys }: ApiKeysClientProps) {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={closeDialog} disabled={creating}>
+                <Button
+                  variant="outline"
+                  onClick={closeDialog}
+                  disabled={creating}
+                >
                   Batal
                 </Button>
-                <Button onClick={handleCreate} disabled={creating || name.trim().length < 2}>
+                <Button
+                  onClick={handleCreate}
+                  disabled={creating || name.trim().length < 2}
+                >
                   {creating && <Loader2 className="mr-2 size-4 animate-spin" />}
                   Buat Kunci
                 </Button>

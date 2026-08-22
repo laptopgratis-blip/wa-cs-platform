@@ -18,7 +18,7 @@ export function FaqList() {
               key={item.q}
               className="group rounded-xl border border-warm-200 bg-card p-4 transition-colors hover:border-warm-300 [&_summary::-webkit-details-marker]:hidden"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-warm-900 dark:text-warm-50">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-warm-900">
                 {item.q}
                 <ChevronDown
                   className="size-4 shrink-0 text-warm-400 transition-transform group-open:rotate-180"

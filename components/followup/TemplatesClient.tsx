@@ -3,14 +3,7 @@
 // Template Follow-Up Order System (POWER only).
 // Group templates by trigger, modal create/edit dengan variable buttons +
 // preview live + tombol test send ke nomor admin user.
-import {
-  Eye,
-  Loader2,
-  Pencil,
-  Plus,
-  Send,
-  Trash2,
-} from 'lucide-react'
+import { Eye, Loader2, Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -48,14 +41,22 @@ const TRIGGERS = [
   { value: 'DAYS_AFTER_ORDER', label: 'N Hari Setelah Order' },
   { value: 'DAYS_AFTER_PAID', label: 'N Hari Setelah Pembayaran' },
   { value: 'DAYS_AFTER_SHIPPED', label: 'N Hari Setelah Dikirim' },
-  { value: 'DAYS_AFTER_DELIVERED', label: 'N Hari Setelah Diterima (testimoni)' },
+  {
+    value: 'DAYS_AFTER_DELIVERED',
+    label: 'N Hari Setelah Diterima (testimoni)',
+  },
   {
     value: 'DAYS_AFTER_LIVE_LEAD',
     label: 'N Hari Setelah Lead Live (belum order)',
   },
 ] as const
 
-const PAYMENT_STATUSES = ['PENDING', 'WAITING_CONFIRMATION', 'PAID', 'CANCELLED']
+const PAYMENT_STATUSES = [
+  'PENDING',
+  'WAITING_CONFIRMATION',
+  'PAID',
+  'CANCELLED',
+]
 const DELIVERY_STATUSES = [
   'PENDING',
   'PROCESSING',
@@ -247,11 +248,12 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
   }
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    // Container halaman ada di app/(dashboard)/pesanan/templates/page.tsx
+    // supaya banner template Meta ikut di dalam wrapper yang sama.
+    <>
       <PageHeader
         title="Template Follow-Up"
         description="Atur isi pesan otomatis per event order — aktif/nonaktif per template."
-        className="mb-6"
         actions={
           <Button onClick={() => setCreating(true)}>
             <Plus className="mr-1 size-4" /> Tambah Template
@@ -269,12 +271,12 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
             const items = grouped.get(trigger.value) ?? []
             return (
               <section key={trigger.value}>
-                <h2 className="mb-2 flex items-center gap-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <h2 className="text-muted-foreground mb-2 flex items-center gap-3 text-sm font-semibold tracking-wide uppercase">
                   {trigger.label}
-                  <span className="h-px flex-1 bg-border" aria-hidden />
+                  <span className="bg-border h-px flex-1" aria-hidden />
                 </h2>
                 {items.length === 0 ? (
-                  <p className="text-sm italic text-muted-foreground">
+                  <p className="text-muted-foreground text-sm italic">
                     (belum ada — klik Tambah Template untuk buat)
                   </p>
                 ) : (
@@ -314,7 +316,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
                             </div>
                             {(t.applyOnPaymentStatus ||
                               t.applyOnDeliveryStatus) && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-muted-foreground text-xs">
                                 Hanya kalau:{' '}
                                 {t.applyOnPaymentStatus &&
                                   `payment=${t.applyOnPaymentStatus}`}
@@ -403,7 +405,7 @@ export function TemplatesClient({ forms }: { forms: FormItem[] }) {
         isLoading={actionId === deleteTarget?.id}
         onConfirm={confirmDelete}
       />
-    </div>
+    </>
   )
 }
 
@@ -532,7 +534,9 @@ function TemplateModal({
                 max={30}
                 value={delayDays}
                 onChange={(e) =>
-                  setDelayDays(Math.max(0, Math.min(30, Number(e.target.value))))
+                  setDelayDays(
+                    Math.max(0, Math.min(30, Number(e.target.value))),
+                  )
                 }
               />
             </div>
@@ -684,7 +688,7 @@ function TemplateModal({
           </div>
 
           {showPreview && (
-            <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded bg-muted p-3 text-xs">
+            <pre className="bg-muted max-h-60 overflow-auto rounded p-3 text-xs whitespace-pre-wrap">
               {previewMessage(message) || '(kosong)'}
             </pre>
           )}

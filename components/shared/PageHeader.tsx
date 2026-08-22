@@ -28,7 +28,7 @@ export function PageHeader({
       )}
     >
       <div>
-        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl dark:text-warm-50">
+        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl">
           {Icon && <Icon className="size-6 text-primary-500" aria-hidden />}
           {title}
         </h1>

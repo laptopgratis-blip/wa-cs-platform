@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { EbookSalesClient } from '@/components/ebooks/EbookSalesClient'
 import { UpgradeRequired } from '@/components/order-system/UpgradeRequired'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 
@@ -22,8 +23,8 @@ export default async function EbooksPage() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <EbookSalesClient />
-    </div>
+    </PageContainer>
   )
 }

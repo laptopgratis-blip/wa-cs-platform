@@ -9,7 +9,9 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -32,6 +34,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { formatNumber } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 import {
   type PickedDestination,
   DestinationPicker,
@@ -322,9 +325,8 @@ export function ShippingZonesClient({
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
-        className="mb-6"
         title="Zona Ongkir"
         description={
           <>
@@ -343,28 +345,27 @@ export function ShippingZonesClient({
         }
       />
 
-      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+      <div
+        className={`rounded-lg border p-3 text-sm ${TONES.info.border} ${TONES.info.bg} ${TONES.info.text}`}
+      >
         <strong>Cara kerja:</strong> Saat customer pilih alamat, sistem cek
         zona dengan priority tertinggi yang match dulu. Mis. zona &ldquo;Bandung&rdquo; (priority 10) lebih spesifik daripada &ldquo;Jawa Barat&rdquo; (priority
         5), jadi yang menang Bandung kalau alamat customer di Bandung.
       </div>
 
       {zones.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent>
-            <EmptyState
-              icon={MapPin}
-              title="Belum ada zona ongkir"
-              description="Buat aturan pertama untuk subsidi ongkir customer di kota tertentu."
-              action={
-                <Button onClick={openCreate}>
-                  <Plus className="mr-2 size-4" />
-                  Tambah Aturan Pertama
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={MapPin}
+          title="Belum ada zona ongkir"
+          description="Buat aturan pertama untuk subsidi ongkir customer di kota tertentu."
+          action={
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 size-4" />
+              Tambah Aturan Pertama
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {zones.map((z) => (
@@ -373,9 +374,7 @@ export function ShippingZonesClient({
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-warm-900">{z.name}</p>
-                    <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
-                      {describeSubsidy(z)}
-                    </Badge>
+                    <StatusBadge tone="info" label={describeSubsidy(z)} />
                     {z.priority > 0 && (
                       <Badge variant="secondary">P{z.priority}</Badge>
                     )}
@@ -539,7 +538,7 @@ export function ShippingZonesClient({
                     <Badge
                       key={`${name}-${idx}`}
                       variant="secondary"
-                      className="gap-1 bg-rose-100 pr-1 text-rose-800 hover:bg-rose-100"
+                      className={`gap-1 pr-1 ${TONES.danger.bg} ${TONES.danger.text}`}
                     >
                       {name}
                       <button
@@ -681,6 +680,6 @@ export function ShippingZonesClient({
         isLoading={isDeleting}
         onConfirm={handleDelete}
       />
-    </div>
+    </PageContainer>
   )
 }

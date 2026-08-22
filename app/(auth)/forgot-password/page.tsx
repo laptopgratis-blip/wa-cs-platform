@@ -17,13 +17,14 @@ export default async function ForgotPasswordPage() {
   if (session) redirect('/dashboard')
 
   return (
-    <Card className="rounded-xl border-warm-200 shadow-lg">
+    <Card>
       <CardHeader className="space-y-1.5">
-        <CardTitle className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50">
+        <CardTitle className="font-display text-warm-900 text-2xl font-bold">
           Lupa Password
         </CardTitle>
         <CardDescription className="text-warm-500">
-          Masukkan email akun kamu — kami kirim link untuk membuat password baru.
+          Masukkan email akun kamu — kami kirim link untuk membuat password
+          baru.
         </CardDescription>
       </CardHeader>
       <CardContent>

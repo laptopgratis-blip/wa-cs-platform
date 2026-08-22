@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { MetaTemplateBanner } from '@/components/followup/MetaTemplateBanner'
 import { TemplatesClient } from '@/components/followup/TemplatesClient'
 import { UpgradeRequired } from '@/components/order-system/UpgradeRequired'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
@@ -36,20 +37,25 @@ export default async function TemplatesPage() {
       orderBy: { name: 'asc' },
     }),
     prisma.whatsappSession.findMany({
-      where: { userId: session.user.id, provider: 'CLOUD_API', isActive: true, wabaId: { not: null } },
+      where: {
+        userId: session.user.id,
+        provider: 'CLOUD_API',
+        isActive: true,
+        wabaId: { not: null },
+      },
       select: { id: true, displayName: true, phoneNumber: true },
       orderBy: { updatedAt: 'desc' },
     }),
   ])
 
+  // Container halaman dipegang di sini (bukan di TemplatesClient) supaya banner
+  // template Meta + isi klien berbagi satu wrapper — tidak dobel padding.
   return (
-    <div className="space-y-4">
+    <PageContainer>
       {cloudSessions.length > 0 && (
-        <div className="mx-auto max-w-6xl px-4 pt-4 md:px-6">
-          <MetaTemplateBanner sessions={cloudSessions} />
-        </div>
+        <MetaTemplateBanner sessions={cloudSessions} />
       )}
       <TemplatesClient forms={forms} />
-    </div>
+    </PageContainer>
   )
 }

@@ -1,5 +1,6 @@
 // /live-rooms/[id]/objections — peta objection per kategori (Fase 3 brief).
 import { ObjectionMap } from '@/components/live/ObjectionMap'
+import { PageContainer } from '@/components/shared/PageContainer'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,8 +11,8 @@ export default async function ObjectionsPage({
 }) {
   const { id } = await params
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <ObjectionMap roomId={id} />
-    </div>
+    </PageContainer>
   )
 }

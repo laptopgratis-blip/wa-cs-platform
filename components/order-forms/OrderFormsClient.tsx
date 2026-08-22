@@ -21,6 +21,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -290,9 +291,8 @@ export function OrderFormsClient({
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
-        className="mb-6"
         title="Form Order"
         description={
           <>
@@ -318,7 +318,7 @@ export function OrderFormsClient({
 
       {products.length === 0 && (
         <div
-          className={`mb-4 rounded-lg border p-3 text-sm ${TONES.warning.border} ${TONES.warning.bg} ${TONES.warning.text}`}
+          className={`rounded-lg border p-3 text-sm ${TONES.warning.border} ${TONES.warning.bg} ${TONES.warning.text}`}
         >
           Kamu belum punya produk aktif. Tambahkan produk dulu di{' '}
           <a href="/products" className="font-semibold underline">
@@ -329,15 +329,12 @@ export function OrderFormsClient({
       )}
 
       {forms.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent>
-            <EmptyState
-              icon={FileText}
-              title="Belum ada form order"
-              description="Buat form pertama untuk dijual via link share ke customer."
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={FileText}
+          title="Belum ada form order"
+          description="Buat form pertama untuk dijual via link share ke customer."
+        />
       ) : (
         <div className="space-y-3">
           {forms.map((f) => {
@@ -944,6 +941,6 @@ export function OrderFormsClient({
         isLoading={isDeleting}
         onConfirm={confirmDelete}
       />
-    </div>
+    </PageContainer>
   )
 }

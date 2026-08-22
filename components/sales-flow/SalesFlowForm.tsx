@@ -271,14 +271,14 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
         <p className="text-xs text-muted-foreground">
           AI akan jalankan flow ini saat customer ucap kata-kata berikut.
         </p>
-        <div className="flex flex-wrap gap-1.5 rounded-lg border bg-warm-50/40 p-2 dark:bg-warm-950/20">
+        <div className="bg-warm-50/40 flex flex-wrap gap-1.5 rounded-lg border p-2">
           {keywords.map((kw) => (
             <Badge key={kw} variant="secondary" className="gap-1 font-normal">
               {kw}
               <button
                 type="button"
                 onClick={() => setKeywords((k) => k.filter((x) => x !== kw))}
-                className="rounded hover:bg-warm-200 dark:hover:bg-warm-800"
+                className="hover:bg-warm-200 rounded"
                 aria-label={`Hapus ${kw}`}
               >
                 <X className="size-3" />
@@ -468,14 +468,14 @@ export function SalesFlowForm({ mode, source, onDone }: Props) {
           />
           <p className="text-xs text-muted-foreground">
             Boleh pakai placeholder seperti{' '}
-            <code className="text-[10px]">{'{customerName}'}</code>,{' '}
-            <code className="text-[10px]">{'{customerAddress}'}</code> — diganti
+            <code className="text-xs">{'{customerName}'}</code>,{' '}
+            <code className="text-xs">{'{customerAddress}'}</code> — diganti
             otomatis dari jawaban customer.
           </p>
         </div>
 
         {showBankInfo && (
-          <div className="space-y-2 rounded-lg border bg-warm-50/40 p-3 dark:bg-warm-950/20">
+          <div className="bg-warm-50/40 space-y-2 rounded-lg border p-3">
             <Label className="text-sm">Info rekening transfer</Label>
             <div className="grid gap-2 sm:grid-cols-3">
               <Input

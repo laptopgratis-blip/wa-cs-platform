@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
@@ -94,9 +95,9 @@ export function FollowUpClient({
   hasTemplates: boolean
 }) {
   const [tab, setTab] = useState<Tab>('today')
-  const [items, setItems] = useState<
-    QueueItem[] | LogItem[] | BlacklistItem[]
-  >([])
+  const [items, setItems] = useState<QueueItem[] | LogItem[] | BlacklistItem[]>(
+    [],
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [enabling, setEnabling] = useState(false)
@@ -243,44 +244,40 @@ export function FollowUpClient({
   // Empty state — belum ada template.
   if (!hasTemplates) {
     return (
-      <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
-        <PageHeader title="Follow-Up Pesanan" className="mb-4" />
-        <Card>
-          <CardContent>
-            <EmptyState
-              icon={Sparkles}
-              title="Aktifkan Follow-Up Otomatis"
-              description={
-                <>
-                  Kirim pesan WhatsApp otomatis ke customer berdasarkan event
-                  order — order masuk, pembayaran diterima, pesanan dikirim,
-                  dan N hari setelah event.
-                  <span className="mt-2 block">
-                    Paket template default akan dibuat untuk Anda (reminder
-                    bayar, info kirim, nurture lead Live, testimoni, dll). Bisa
-                    di-edit kapan saja di /pesanan/templates.
-                  </span>
-                </>
-              }
-              action={
-                <Button onClick={handleEnable} disabled={enabling}>
-                  {enabling && <Loader2 className="mr-2 size-4 animate-spin" />}
-                  Aktifkan & Buat Template Default
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
+      <PageContainer>
+        <PageHeader title="Follow-Up Pesanan" />
+        <EmptyState
+          bordered
+          icon={Sparkles}
+          title="Aktifkan Follow-Up Otomatis"
+          description={
+            <>
+              Kirim pesan WhatsApp otomatis ke customer berdasarkan event order
+              — order masuk, pembayaran diterima, pesanan dikirim, dan N hari
+              setelah event.
+              <span className="mt-2 block">
+                Paket template default akan dibuat untuk Anda (reminder bayar,
+                info kirim, nurture lead Live, testimoni, dll). Bisa di-edit
+                kapan saja di /pesanan/templates.
+              </span>
+            </>
+          }
+          action={
+            <Button onClick={handleEnable} disabled={enabling}>
+              {enabling && <Loader2 className="mr-2 size-4 animate-spin" />}
+              Aktifkan & Buat Template Default
+            </Button>
+          }
+        />
+      </PageContainer>
     )
   }
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
         title="Follow-Up Pesanan"
         description="Pesan WA otomatis ke customer berdasarkan event order."
-        className="mb-4"
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/pesanan/templates">Kelola Template</Link>
@@ -289,7 +286,7 @@ export function FollowUpClient({
       />
 
       {!waConnected && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive">
           <AlertCircle className="size-4" />
           <AlertTitle>WhatsApp belum tersambung</AlertTitle>
           <AlertDescription>
@@ -347,11 +344,7 @@ export function FollowUpClient({
           />
         </TabsContent>
         <TabsContent value="history" className="mt-4">
-          <LogList
-            loading={loading}
-            error={error}
-            items={items as LogItem[]}
-          />
+          <LogList loading={loading} error={error} items={items as LogItem[]} />
         </TabsContent>
         <TabsContent value="blacklist" className="mt-4">
           <BlacklistList
@@ -406,8 +399,12 @@ export function FollowUpClient({
             <DialogTitle>Edit Pesan Follow-Up</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              Untuk: {editing?.order?.customerName ?? editing?.liveLead?.customerName ?? 'Lead Live'} ({editing?.customerPhone})
+            <p className="text-muted-foreground text-sm">
+              Untuk:{' '}
+              {editing?.order?.customerName ??
+                editing?.liveLead?.customerName ??
+                'Lead Live'}{' '}
+              ({editing?.customerPhone})
             </p>
             <Textarea
               rows={12}
@@ -431,7 +428,7 @@ export function FollowUpClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -476,9 +473,12 @@ function QueueList({
                   <Badge variant="outline">{item.template.trigger}</Badge>
                   <span className="font-semibold">{item.template.name}</span>
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {new Date(item.scheduledAt).toLocaleString('id-ID')} —{' '}
-                  {item.order?.customerName ?? item.liveLead?.customerName ?? '—'} ({item.customerPhone}) ·{' '}
+                  {item.order?.customerName ??
+                    item.liveLead?.customerName ??
+                    '—'}{' '}
+                  ({item.customerPhone}) ·{' '}
                   {item.order
                     ? (item.order.invoiceNumber ?? item.order.id.slice(0, 8))
                     : 'Lead Live (belum order)'}
@@ -510,7 +510,7 @@ function QueueList({
                 </Button>
               </div>
             </div>
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+            <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {item.resolvedMessage}
             </pre>
           </CardContent>
@@ -555,15 +555,15 @@ function LogList({
                   <Badge variant="outline">{log.source}</Badge>
                   <span className="text-sm">{log.customerPhone}</span>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {new Date(log.sentAt).toLocaleString('id-ID')}
                 </p>
               </div>
             </div>
             {log.errorMessage && (
-              <p className="text-xs text-destructive">{log.errorMessage}</p>
+              <p className="text-destructive text-xs">{log.errorMessage}</p>
             )}
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+            <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {log.message}
             </pre>
           </CardContent>
@@ -604,7 +604,7 @@ function BlacklistList({
           <CardContent className="flex flex-wrap items-center justify-between gap-2 p-4">
             <div>
               <p className="font-semibold">{item.customerPhone}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 {item.reason ?? 'Tanpa alasan'} · diblokir{' '}
                 {new Date(item.blockedAt).toLocaleString('id-ID')}
               </p>
