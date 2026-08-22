@@ -24,7 +24,7 @@ export function OrdersBulkActionBar({
   if (selectedCount === 0) return null
 
   return (
-    <div className="sticky bottom-2 z-20 mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border border-primary-300 bg-white p-3 shadow-lg dark:bg-warm-950">
+    <div className="border-primary-300 bg-card sticky bottom-2 z-20 mx-auto flex max-w-3xl flex-wrap items-center gap-2 rounded-xl border p-3 shadow-lg">
       <span className="text-sm font-medium">
         {busy && <Loader2 className="mr-1 inline size-3 animate-spin" />}
         {selectedCount} dipilih

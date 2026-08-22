@@ -2,7 +2,13 @@
 
 // Wrapper client untuk halaman /whatsapp — menampung daftar session,
 // modal tambah (QR Baileys / Cloud API resmi), dan refresh data.
-import { BadgeCheck, MessageCircle, Plus, QrCode, RefreshCw } from 'lucide-react'
+import {
+  BadgeCheck,
+  MessageCircle,
+  Plus,
+  QrCode,
+  RefreshCw,
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useState, useTransition } from 'react'
 
@@ -63,12 +69,20 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
         description="Hubungkan akun WhatsApp untuk mulai dilayani AI 24/7."
         actions={
           <>
-            <Button variant="outline" size="icon" aria-label="Segarkan daftar" onClick={refresh} disabled={isPending}>
-              <RefreshCw className={`size-4 ${isPending ? 'animate-spin' : ''}`} />
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Segarkan daftar"
+              onClick={refresh}
+              disabled={isPending}
+            >
+              <RefreshCw
+                className={`size-4 ${isPending ? 'animate-spin' : ''}`}
+              />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="bg-primary-500 text-white shadow-orange hover:bg-primary-600">
+                <Button>
                   <Plus className="mr-2 size-4" />
                   Tambah WhatsApp
                 </Button>
@@ -131,7 +145,11 @@ export function WhatsappList({ sessions, souls, models }: WhatsappListProps) {
         onConnected={refresh}
         existingSessionId={repairId}
       />
-      <AddWabaModal open={wabaOpen} onOpenChange={setWabaOpen} onConnected={refresh} />
+      <AddWabaModal
+        open={wabaOpen}
+        onOpenChange={setWabaOpen}
+        onConnected={refresh}
+      />
     </>
   )
 }

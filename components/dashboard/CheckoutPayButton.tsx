@@ -15,7 +15,7 @@ export function CheckoutPayButton({ paymentUrl }: CheckoutPayButtonProps) {
       onClick={() => {
         window.location.href = paymentUrl
       }}
-      className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+      className="w-full"
       size="lg"
     >
       Bayar Sekarang

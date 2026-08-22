@@ -53,11 +53,7 @@ export function BuyPackageButton({
     <Button
       onClick={handleBuy}
       disabled={isLoading}
-      className={
-        isPopular
-          ? 'w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600'
-          : 'w-full rounded-full border border-warm-200 bg-card font-semibold text-warm-800 hover:bg-warm-50'
-      }
+      className="w-full rounded-full"
       variant={isPopular ? 'default' : 'outline'}
       aria-label={`Beli paket ${packageName}`}
     >

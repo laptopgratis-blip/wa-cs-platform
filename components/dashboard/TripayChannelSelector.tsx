@@ -165,7 +165,7 @@ export function TripayChannelSelector({
 
                     {/* Info */}
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold text-warm-900 dark:text-warm-50">
+                      <div className="truncate text-sm font-semibold text-warm-900">
                         {ch.name}
                       </div>
                       <div className="mt-0.5 text-xs text-warm-500">

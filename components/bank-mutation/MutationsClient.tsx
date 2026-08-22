@@ -28,8 +28,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { formatRelativeTime } from '@/lib/format-time'
 import { formatRupiah } from '@/lib/format'
+import { bankMatchActionMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 
 interface MatchedOrder {
   id: string
@@ -81,28 +84,8 @@ const TYPE_FILTERS = [
 
 function actionBadge(action: string | null) {
   if (!action) return <Badge variant="outline">—</Badge>
-  switch (action) {
-    case 'AUTO_CONFIRMED':
-      return (
-        <Badge className="bg-emerald-600 hover:bg-emerald-700">
-          ✅ Auto-confirmed
-        </Badge>
-      )
-    case 'MULTIPLE_MATCH':
-      return <Badge variant="destructive">🟡 Multiple match</Badge>
-    case 'NO_MATCH':
-      return <Badge variant="outline">— No match</Badge>
-    case 'IGNORED':
-      return <Badge variant="outline">🚫 Ignored</Badge>
-    case 'MANUAL_RESOLVED':
-      return (
-        <Badge variant="outline" className="border-emerald-400 text-emerald-700">
-          ✅ Manual resolved
-        </Badge>
-      )
-    default:
-      return <Badge variant="outline">{action}</Badge>
-  }
+  const meta = statusMeta(bankMatchActionMeta, action)
+  return <StatusBadge tone={meta.tone} label={meta.label} />
 }
 
 export function MutationsClient() {
@@ -204,7 +187,7 @@ export function MutationsClient() {
       <div>
         <Link href="/integrations/bank-mutation">
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
-            <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
+            <ArrowLeft className="mr-1 size-4" /> Kembali
           </Button>
         </Link>
         <PageHeader
@@ -214,7 +197,13 @@ export function MutationsClient() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Select value={actionFilter} onValueChange={(v) => { setPage(1); setActionFilter(v) }}>
+        <Select
+          value={actionFilter}
+          onValueChange={(v) => {
+            setPage(1)
+            setActionFilter(v)
+          }}
+        >
           <SelectTrigger className="w-[200px]">
             <SelectValue />
           </SelectTrigger>
@@ -226,7 +215,13 @@ export function MutationsClient() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={(v) => { setPage(1); setTypeFilter(v) }}>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            setPage(1)
+            setTypeFilter(v)
+          }}
+        >
           <SelectTrigger className="w-[180px]">
             <SelectValue />
           </SelectTrigger>
@@ -254,11 +249,11 @@ export function MutationsClient() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40">
+                <thead className="bg-muted/40 border-b">
                   <tr className="text-left">
                     <th className="p-3 font-medium">Tanggal</th>
                     <th className="p-3 font-medium">Deskripsi</th>
-                    <th className="p-3 font-medium text-right">Jumlah</th>
+                    <th className="p-3 text-right font-medium">Jumlah</th>
                     <th className="p-3 font-medium">Tipe</th>
                     <th className="p-3 font-medium">Match</th>
                     <th className="p-3 font-medium">Order</th>
@@ -266,32 +261,34 @@ export function MutationsClient() {
                 </thead>
                 <tbody>
                   {items.map((m) => (
-                    <tr key={m.id} className="border-b hover:bg-muted/20">
+                    <tr key={m.id} className="hover:bg-muted/20 border-b">
                       <td className="p-3 whitespace-nowrap">
                         {new Date(m.mutationDate).toLocaleDateString('id-ID')}
                       </td>
-                      <td className="p-3 max-w-[280px] truncate" title={m.description}>
+                      <td
+                        className="max-w-[280px] truncate p-3"
+                        title={m.description}
+                      >
                         {m.description}
                       </td>
                       <td className="p-3 text-right font-mono">
                         {formatRupiah(m.amount)}
                       </td>
                       <td className="p-3">
-                        <Badge
-                          variant={m.mutationType === 'CR' ? 'default' : 'outline'}
-                          className={m.mutationType === 'CR' ? 'bg-emerald-600' : ''}
-                        >
-                          {m.mutationType}
-                        </Badge>
+                        <StatusBadge
+                          tone={m.mutationType === 'CR' ? 'success' : 'neutral'}
+                          label={m.mutationType}
+                        />
                       </td>
                       <td className="p-3">{actionBadge(m.matchAction)}</td>
                       <td className="p-3">
                         {m.matchedOrder ? (
                           <Link
                             href={`/pesanan/${m.matchedOrder.id}`}
-                            className="text-emerald-700 hover:underline font-mono text-xs"
+                            className={`font-mono text-xs hover:underline ${TONES.success.text}`}
                           >
-                            {m.matchedOrder.invoiceNumber || m.matchedOrder.id.slice(-8)}
+                            {m.matchedOrder.invoiceNumber ||
+                              m.matchedOrder.id.slice(-8)}
                           </Link>
                         ) : m.mutationType === 'CR' &&
                           (m.matchAction === 'MULTIPLE_MATCH' ||
@@ -327,7 +324,7 @@ export function MutationsClient() {
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
           </Button>
           <Button
             variant="outline"
@@ -335,7 +332,7 @@ export function MutationsClient() {
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           >
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="size-4" />
           </Button>
         </div>
       </div>
@@ -355,7 +352,9 @@ export function MutationsClient() {
             <DialogDescription>
               {resolveTarget && (
                 <>
-                  {new Date(resolveTarget.mutationDate).toLocaleDateString('id-ID')}
+                  {new Date(resolveTarget.mutationDate).toLocaleDateString(
+                    'id-ID',
+                  )}
                   {' — '}
                   <span className="font-mono">
                     {formatRupiah(resolveTarget.amount)}
@@ -367,31 +366,31 @@ export function MutationsClient() {
             </DialogDescription>
           </DialogHeader>
           {resolveLoading ? (
-            <div className="text-center py-6">
-              <Loader2 className="h-5 w-5 animate-spin inline" />
+            <div className="py-6 text-center">
+              <Loader2 className="inline size-5 animate-spin" />
             </div>
           ) : candidates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Tidak ada order PENDING dengan total yang cocok.
             </p>
           ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="max-h-[300px] space-y-2 overflow-y-auto">
               {candidates.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => submitResolve(c.id)}
-                  className="w-full text-left p-3 border rounded hover:bg-muted/40 flex justify-between items-center"
+                  className="hover:bg-muted/40 flex w-full items-center justify-between rounded border p-3 text-left"
                 >
                   <div>
                     <div className="font-mono text-xs">
                       {c.invoiceNumber || c.id.slice(-8)}
                     </div>
                     <div className="text-sm">{c.customerName}</div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="text-muted-foreground text-xs">
                       {formatRelativeTime(c.createdAt)}
                     </div>
                   </div>
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle2 className={`size-5 ${TONES.success.text}`} />
                 </button>
               ))}
             </div>

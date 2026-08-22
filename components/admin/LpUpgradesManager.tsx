@@ -41,6 +41,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 
 type Status = 'PENDING' | 'CONFIRMED' | 'REJECTED'
 type FilterValue = Status | 'ALL'
@@ -219,11 +220,13 @@ export function LpUpgradesManager() {
           {FILTER_TABS.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
-              {filter === t.value && t.value !== 'ALL' && counts[t.value] > 0 && (
-                <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700">
-                  {counts[t.value]}
-                </span>
-              )}
+              {filter === t.value &&
+                t.value !== 'ALL' &&
+                counts[t.value] > 0 && (
+                  <span className="bg-primary-100 text-primary-700 ml-1.5 rounded-full px-1.5 text-xs font-semibold">
+                    {counts[t.value]}
+                  </span>
+                )}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -268,7 +271,7 @@ export function LpUpgradesManager() {
                   <TableRow key={`${r.method}:${r.id}`}>
                     <TableCell>
                       <div className="font-medium">{r.user?.name ?? '—'}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         {r.user?.email ?? '—'}
                       </div>
                     </TableCell>
@@ -276,8 +279,9 @@ export function LpUpgradesManager() {
                       <div className="font-medium">
                         {r.package?.name ?? '—'}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {r.package?.tier} · {lpLabel} · {r.package?.maxStorageMB} MB
+                      <div className="text-muted-foreground text-xs">
+                        {r.package?.tier} · {lpLabel} ·{' '}
+                        {r.package?.maxStorageMB} MB
                       </div>
                     </TableCell>
                     <TableCell>
@@ -296,7 +300,7 @@ export function LpUpgradesManager() {
                         )}
                       </Badge>
                       {isManual && (
-                        <div className="mt-0.5 text-[10px] font-mono text-muted-foreground">
+                        <div className="text-muted-foreground mt-0.5 font-mono text-[10px]">
                           kode {r.uniqueCode}
                         </div>
                       )}
@@ -306,12 +310,12 @@ export function LpUpgradesManager() {
                         {formatRupiah(isManual ? r.totalAmount : r.amount)}
                       </div>
                       {!isManual && r.paymentMethod && (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-muted-foreground text-xs">
                           {r.paymentMethod}
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-xs">
                       {new Date(r.createdAt).toLocaleString('id-ID', {
                         day: '2-digit',
                         month: 'short',
@@ -328,7 +332,7 @@ export function LpUpgradesManager() {
                         {STATUS_LABEL[r.status]}
                       </Badge>
                       {isManual && r.confirmer && r.status !== 'PENDING' && (
-                        <div className="mt-1 text-[10px] text-muted-foreground">
+                        <div className="text-muted-foreground mt-1 text-[10px]">
                           oleh {r.confirmer.name ?? r.confirmer.email}
                         </div>
                       )}
@@ -350,7 +354,7 @@ export function LpUpgradesManager() {
                               <Button
                                 variant="default"
                                 size="sm"
-                                className="bg-emerald-600 hover:bg-emerald-700"
+                                className={TONES.success.solid}
                                 onClick={() => setConfirmTarget(r)}
                               >
                                 Konfirmasi
@@ -366,7 +370,7 @@ export function LpUpgradesManager() {
                           )}
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-muted-foreground text-xs">
                           auto via webhook
                         </span>
                       )}
@@ -394,7 +398,7 @@ export function LpUpgradesManager() {
           </DialogHeader>
           {proofTarget?.proofUrl ? (
             <div className="space-y-3">
-              <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border bg-warm-50">
+              <div className="bg-warm-50 relative h-[60vh] w-full overflow-hidden rounded-lg border">
                 <Image
                   src={proofTarget.proofUrl}
                   alt="Bukti transfer"
@@ -404,16 +408,18 @@ export function LpUpgradesManager() {
                 />
               </div>
               {proofTarget.proofNote && (
-                <div className="rounded-md border bg-warm-50 p-3 text-sm">
-                  <div className="text-xs font-semibold uppercase text-warm-500">
+                <div className="bg-warm-50 rounded-md border p-3 text-sm">
+                  <div className="text-warm-500 text-xs font-semibold uppercase">
                     Catatan user
                   </div>
-                  <div className="mt-1 text-warm-700">{proofTarget.proofNote}</div>
+                  <div className="text-warm-700 mt-1">
+                    {proofTarget.proofNote}
+                  </div>
                 </div>
               )}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               User belum mengupload bukti.
             </p>
           )}
@@ -433,7 +439,7 @@ export function LpUpgradesManager() {
             </DialogDescription>
           </DialogHeader>
           {confirmTarget && (
-            <div className="space-y-2 rounded-md border bg-warm-50 p-3 text-sm">
+            <div className="bg-warm-50 space-y-2 rounded-md border p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-warm-500">User</span>
                 <span className="font-medium">{confirmTarget.user.email}</span>
@@ -466,7 +472,7 @@ export function LpUpgradesManager() {
             <Button
               onClick={doConfirm}
               disabled={isActing}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className={TONES.success.solid}
             >
               {isActing && <Loader2 className="mr-2 size-4 animate-spin" />}
               Ya, Konfirmasi
@@ -489,8 +495,8 @@ export function LpUpgradesManager() {
           <DialogHeader>
             <DialogTitle>Tolak Pembayaran?</DialogTitle>
             <DialogDescription>
-              Status order menjadi REJECTED. User bisa lihat alasan di
-              dashboard checkout.
+              Status order menjadi REJECTED. User bisa lihat alasan di dashboard
+              checkout.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -513,7 +519,11 @@ export function LpUpgradesManager() {
             >
               Batal
             </Button>
-            <Button variant="destructive" onClick={doReject} disabled={isActing}>
+            <Button
+              variant="destructive"
+              onClick={doReject}
+              disabled={isActing}
+            >
               {isActing && <Loader2 className="mr-2 size-4 animate-spin" />}
               Ya, Tolak
             </Button>

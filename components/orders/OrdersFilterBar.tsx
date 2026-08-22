@@ -169,7 +169,7 @@ export function OrdersFilterBar({
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${
                 active
                   ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
-                  : 'border-warm-300 bg-white text-warm-700 hover:bg-warm-100 dark:bg-warm-900 dark:text-warm-200'
+                  : 'border-warm-300 text-warm-700 hover:bg-warm-100 bg-white'
               }`}
             >
               <ChipIcon
@@ -180,7 +180,7 @@ export function OrdersFilterBar({
               {showBadge && (
                 <Badge
                   variant={active ? 'secondary' : 'destructive'}
-                  className="h-4 px-1.5 text-[10px]"
+                  className="h-4 px-1.5 text-xs"
                 >
                   {urgentCount}
                 </Badge>
@@ -203,7 +203,7 @@ export function OrdersFilterBar({
       {/* Search + date + payment + view toggle */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -236,7 +236,9 @@ export function OrdersFilterBar({
           <SelectTrigger className="w-44">
             <SelectValue
               placeholder={
-                productOptions.length === 0 ? 'Belum ada produk' : 'Semua Produk'
+                productOptions.length === 0
+                  ? 'Belum ada produk'
+                  : 'Semua Produk'
               }
             />
           </SelectTrigger>
@@ -257,7 +259,7 @@ export function OrdersFilterBar({
             className="w-auto"
             aria-label="Dari tanggal"
           />
-          <span className="text-sm text-muted-foreground">—</span>
+          <span className="text-muted-foreground text-sm">—</span>
           <Input
             type="date"
             value={to}
@@ -266,7 +268,7 @@ export function OrdersFilterBar({
             aria-label="Sampai tanggal"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-warm-300 bg-white p-0.5 dark:bg-warm-900">
+        <div className="border-warm-300 flex items-center gap-1 rounded-md border bg-white p-0.5">
           <Button
             type="button"
             size="sm"

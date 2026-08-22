@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
+import { PageContainer } from '@/components/shared/PageContainer'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +31,7 @@ import {
   calculateSubscriptionPriceFull,
   convertIdrToTokens,
 } from '@/lib/subscription-pricing'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Pkg {
@@ -151,20 +153,20 @@ export function PricingView({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
+    <PageContainer>
       <header className="space-y-3 text-center">
-        <h1 className="font-display text-4xl font-extrabold tracking-tight md:text-5xl">
+        <h1 className="font-display text-4xl font-bold tracking-tight md:text-5xl">
           Pilih Plan untuk Bisnis Kamu
         </h1>
-        <p className="mx-auto max-w-2xl text-muted-foreground">
-          Bayar di muka bulanan, semakin lama durasinya, semakin hemat.
-          Cancel kapan saja, akses tetap sampai tanggal berakhir.
+        <p className="text-muted-foreground mx-auto max-w-2xl">
+          Bayar di muka bulanan, semakin lama durasinya, semakin hemat. Cancel
+          kapan saja, akses tetap sampai tanggal berakhir.
         </p>
       </header>
 
       {/* Toggle durasi */}
       <div className="flex justify-center">
-        <div className="inline-flex flex-wrap gap-1 rounded-full border bg-muted/30 p-1">
+        <div className="bg-muted/30 inline-flex flex-wrap gap-1 rounded-full border p-1">
           {DURATION_DISCOUNTS.map((d) => (
             <button
               key={d.months}
@@ -181,10 +183,10 @@ export function PricingView({
               {d.badge && (
                 <span
                   className={cn(
-                    'ml-2 rounded-full px-1.5 py-0.5 text-[10px]',
+                    'ml-2 rounded-full px-1.5 py-0.5 text-xs',
                     duration === d.months
                       ? 'bg-white/20 text-white'
-                      : 'bg-amber-100 text-amber-700',
+                      : 'bg-primary-100 text-primary-700',
                   )}
                 >
                   {d.badge}
@@ -206,7 +208,9 @@ export function PricingView({
           features={{
             'Landing Page': '1',
             Storage: '5 MB',
-            'Visitor / bulan': (visitorCap.FREE ?? 1000).toLocaleString('id-ID'),
+            'Visitor / bulan': (visitorCap.FREE ?? 1000).toLocaleString(
+              'id-ID',
+            ),
             'AI Generate': true,
             'Host AI (Live Shopping)': false,
           }}
@@ -261,12 +265,11 @@ export function PricingView({
               description={pkg.description ?? ''}
               tier={pkg.tier}
               features={{
-                'Landing Page':
-                  pkg.maxLp >= 999 ? 'Unlimited' : `${pkg.maxLp}`,
+                'Landing Page': pkg.maxLp >= 999 ? 'Unlimited' : `${pkg.maxLp}`,
                 Storage: `${pkg.maxStorageMB} MB`,
-                'Visitor / bulan': (
-                  visitorCap[pkg.tier] ?? 0
-                ).toLocaleString('id-ID'),
+                'Visitor / bulan': (visitorCap[pkg.tier] ?? 0).toLocaleString(
+                  'id-ID',
+                ),
                 'AI Generate': true,
                 // Host AI mulai paket Popular — samakan dgn gate di
                 // lib/host-gen-gate.ts (hostTierAllowed).
@@ -341,7 +344,7 @@ export function PricingView({
             </DialogDescription>
           </DialogHeader>
           {shortageInfo && (
-            <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="bg-muted/30 space-y-1.5 rounded-lg border p-3 text-sm">
               <div className="flex justify-between">
                 <span>
                   Biaya {shortageInfo.pkgName} {shortageInfo.durationLabel}
@@ -351,7 +354,7 @@ export function PricingView({
                 </span>
               </div>
               {shortageInfo.creditTokens > 0 && (
-                <div className="flex justify-between text-emerald-700">
+                <div className={cn('flex justify-between', TONES.success.text)}>
                   <span>Sudah termasuk kredit sisa plan aktif</span>
                   <span className="font-mono tabular-nums">
                     −{shortageInfo.creditTokens.toLocaleString('id-ID')}
@@ -364,7 +367,12 @@ export function PricingView({
                   {shortageInfo.balance.toLocaleString('id-ID')} token
                 </span>
               </div>
-              <div className="flex justify-between border-t pt-1.5 font-semibold text-rose-700">
+              <div
+                className={cn(
+                  'flex justify-between border-t pt-1.5 font-semibold',
+                  TONES.danger.text,
+                )}
+              >
                 <span>Kurang</span>
                 <span className="font-mono tabular-nums">
                   {shortageInfo.shortage.toLocaleString('id-ID')} token (~Rp{' '}
@@ -392,27 +400,27 @@ export function PricingView({
 
       {/* FAQ */}
       <section className="mx-auto max-w-3xl space-y-4 pt-6">
-        <h2 className="text-center font-display text-2xl font-bold">
+        <h2 className="font-display text-center text-2xl font-semibold">
           Pertanyaan Umum
         </h2>
         <div className="space-y-3">
           {FAQ.map((item) => (
             <details
               key={item.q}
-              className="group rounded-lg border bg-card p-4"
+              className="group bg-card rounded-lg border p-4"
             >
               <summary className="cursor-pointer list-none font-medium">
-                <span className="mr-2 text-primary-500 group-open:rotate-45 inline-block transition-transform">
+                <span className="text-primary-500 mr-2 inline-block transition-transform group-open:rotate-45">
                   +
                 </span>
                 {item.q}
               </summary>
-              <p className="mt-3 text-sm text-muted-foreground">{item.a}</p>
+              <p className="text-muted-foreground mt-3 text-sm">{item.a}</p>
             </details>
           ))}
         </div>
       </section>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -461,40 +469,36 @@ function PlanCard({
         // overflow-visible — base Card pakai overflow-hidden yg memotong badge
         // "Paling Populer" (positioning -top-3 keluar dari card border).
         'relative flex flex-col overflow-visible',
-        highlight && 'border-primary-500 shadow-orange ring-2 ring-primary-500/30',
+        highlight && 'border-primary-500 ring-primary-500/30 ring-2',
       )}
     >
       {highlight && (
         <div className="absolute -top-3 left-1/2 z-10 -translate-x-1/2">
-          <Badge className="bg-primary-500 text-white shadow-sm">
-            Paling Populer
-          </Badge>
+          <Badge>Paling Populer</Badge>
         </div>
       )}
       <CardHeader>
         <div className="flex items-center gap-2">
-          <Icon className="size-5 text-primary-500" />
+          <Icon className="text-primary-500 size-5" />
           <CardTitle>{name}</CardTitle>
         </div>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col">
         <div className="mb-4">
-          <div className="font-display text-3xl font-extrabold">
-            {priceLabel}
-          </div>
+          <div className="font-display text-3xl font-bold">{priceLabel}</div>
           {priceSubLabel && (
-            <div className="text-xs text-muted-foreground">{priceSubLabel}</div>
+            <div className="text-muted-foreground text-xs">{priceSubLabel}</div>
           )}
           {creditLabel && (
-            <div className="mt-1 text-xs font-medium text-emerald-700">
+            <div className={cn('mt-1 text-xs font-medium', TONES.success.text)}>
               {creditLabel}
             </div>
           )}
           {discountLabel && (
             <Badge
               variant="secondary"
-              className="mt-1 bg-amber-100 text-amber-700"
+              className="bg-primary-100 text-primary-700 mt-1"
             >
               {discountLabel}
             </Badge>
@@ -502,7 +506,7 @@ function PlanCard({
           {balanceStatus === 'sufficient' && (
             <Badge
               variant="secondary"
-              className="ml-2 mt-1 bg-emerald-100 text-emerald-700"
+              className={cn('mt-1 ml-2', TONES.success.bg, TONES.success.text)}
             >
               Saldo cukup
             </Badge>
@@ -510,7 +514,7 @@ function PlanCard({
           {balanceStatus === 'insufficient' && shortageTokens != null && (
             <Badge
               variant="secondary"
-              className="ml-2 mt-1 bg-rose-100 text-rose-700"
+              className={cn('mt-1 ml-2', TONES.danger.bg, TONES.danger.text)}
             >
               Kurang {shortageTokens.toLocaleString('id-ID')} token
             </Badge>
@@ -520,9 +524,11 @@ function PlanCard({
           {Object.entries(features).map(([key, value]) => (
             <li key={key} className="flex items-start gap-2">
               {value === false ? (
-                <X className="mt-0.5 size-4 shrink-0 text-muted-foreground/40" />
+                <X className="text-muted-foreground/40 mt-0.5 size-4 shrink-0" />
               ) : (
-                <Check className="mt-0.5 size-4 shrink-0 text-emerald-500" />
+                <Check
+                  className={cn('mt-0.5 size-4 shrink-0', TONES.success.text)}
+                />
               )}
               <span
                 className={cn(

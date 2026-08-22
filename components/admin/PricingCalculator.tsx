@@ -167,7 +167,8 @@ export function PricingCalculator({
     return models.map((m) => {
       // Biaya API per pesan dalam IDR.
       const apiCostUsd =
-        (a.inputTokens * m.inputPricePer1M + a.outputTokens * m.outputPricePer1M) /
+        (a.inputTokens * m.inputPricePer1M +
+          a.outputTokens * m.outputPricePer1M) /
         1_000_000
       const apiCostIdr = apiCostUsd * a.usdToIdr
 
@@ -181,7 +182,10 @@ export function PricingCalculator({
       const targetFrac = a.marginTarget / 100
       const recommendedTokens =
         a.pricePerToken > 0 && targetFrac < 1 && targetFrac >= 0
-          ? Math.max(1, Math.ceil(apiCostIdr / a.pricePerToken / (1 - targetFrac)))
+          ? Math.max(
+              1,
+              Math.ceil(apiCostIdr / a.pricePerToken / (1 - targetFrac)),
+            )
           : 0
 
       let status: StatusKind
@@ -209,14 +213,11 @@ export function PricingCalculator({
   async function applyRecommendation(modelId: string, recommended: number) {
     setApplyingId(modelId)
     try {
-      const res = await fetch(
-        `/api/admin/models/${modelId}/cost-per-message`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ costPerMessage: recommended }),
-        },
-      )
+      const res = await fetch(`/api/admin/models/${modelId}/cost-per-message`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ costPerMessage: recommended }),
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal apply rekomendasi')
@@ -370,7 +371,9 @@ export function PricingCalculator({
                 type="number"
                 min={0}
                 value={a.inputTokens}
-                onChange={(e) => setField('inputTokens', Number(e.target.value))}
+                onChange={(e) =>
+                  setField('inputTokens', Number(e.target.value))
+                }
               />
             </div>
             <div className="space-y-1">
@@ -380,7 +383,9 @@ export function PricingCalculator({
                 type="number"
                 min={0}
                 value={a.outputTokens}
-                onChange={(e) => setField('outputTokens', Number(e.target.value))}
+                onChange={(e) =>
+                  setField('outputTokens', Number(e.target.value))
+                }
               />
             </div>
             <div className="space-y-1">
@@ -442,7 +447,9 @@ export function PricingCalculator({
                   <TableHead className="text-right">Token sekarang</TableHead>
                   <TableHead className="text-right">Pendapatan</TableHead>
                   <TableHead className="text-right">Margin %</TableHead>
-                  <TableHead className="text-right">Token rekomendasi</TableHead>
+                  <TableHead className="text-right">
+                    Token rekomendasi
+                  </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -454,7 +461,10 @@ export function PricingCalculator({
                       <div className="flex items-center gap-2">
                         <Badge
                           variant="secondary"
-                          className={cn('font-normal', PROVIDER_COLOR[b.provider])}
+                          className={cn(
+                            'font-normal',
+                            PROVIDER_COLOR[b.provider],
+                          )}
                         >
                           {b.provider}
                         </Badge>
@@ -472,9 +482,10 @@ export function PricingCalculator({
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right tabular-nums font-medium',
+                        'text-right font-medium tabular-nums',
                         b.marginPct < 20 && 'text-red-600',
-                        b.marginPct >= 20 && b.marginPct < a.marginTarget &&
+                        b.marginPct >= 20 &&
+                          b.marginPct < a.marginTarget &&
                           'text-amber-700',
                         b.marginPct >= a.marginTarget && 'text-emerald-600',
                       )}
@@ -519,7 +530,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada model aktif.
                     </TableCell>
@@ -536,8 +547,8 @@ export function PricingCalculator({
         <CardHeader>
           <CardTitle>Simulasi Paket</CardTitle>
           <CardDescription>
-            Estimasi jumlah pesan AI yang user dapat per paket × model
-            (token paket ÷ <code>costPerMessage</code>).
+            Estimasi jumlah pesan AI yang user dapat per paket × model (token
+            paket ÷ <code>costPerMessage</code>).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -582,7 +593,7 @@ export function PricingCalculator({
                       return (
                         <TableCell
                           key={m.id}
-                          className="text-right tabular-nums text-sm"
+                          className="text-right text-sm tabular-nums"
                         >
                           {formatNumber(msgs)} pesan
                         </TableCell>
@@ -594,7 +605,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={3 + models.length}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada paket aktif.
                     </TableCell>
@@ -610,19 +621,18 @@ export function PricingCalculator({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wand2 className="size-5 text-primary-500" />
+            <Wand2 className="text-primary-500 size-5" />
             AI Features (Content Studio &amp; lainnya)
           </CardTitle>
           <CardDescription>
-            Pricing per feature pakai{' '}
-            <code>platformMargin</code> multiplier (1.3 = +30%). Tabel ini
-            preview margin pakai asumsi token di atas. Kalau ada yang
-            🔴 RUGI, naikkan margin di sini.
+            Pricing per feature pakai <code>platformMargin</code> multiplier
+            (1.3 = +30%). Tabel ini preview margin pakai asumsi token di atas.
+            Kalau ada yang 🔴 RUGI, naikkan margin di sini.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Bulk-margin control */}
-          <div className="rounded-lg border border-warm-200 bg-warm-50 p-3 dark:border-warm-700 dark:bg-warm-900/30">
+          <div className="border-warm-200 bg-warm-50 dark:border-warm-700 dark:bg-warm-900/30 rounded-lg border p-3">
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
               <div className="space-y-1">
                 <Label htmlFor="globalMargin" className="text-xs">
@@ -641,7 +651,7 @@ export function PricingCalculator({
                     )
                   }
                 />
-                <p className="text-[10px] text-warm-500">
+                <p className="text-warm-500 text-[10px]">
                   1.3 = +30% margin · 2.0 = +100% (2× cost API)
                 </p>
               </div>
@@ -663,7 +673,6 @@ export function PricingCalculator({
               <Button
                 onClick={() => setMarginConfirmOpen(true)}
                 disabled={applyingMargin || features.length === 0}
-                className="bg-primary-500 hover:bg-primary-600"
               >
                 {applyingMargin && (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -700,17 +709,17 @@ export function PricingCalculator({
                         {!b.isActive && (
                           <Badge
                             variant="secondary"
-                            className="bg-warm-100 text-[9px] font-normal text-warm-600"
+                            className="bg-warm-100 text-warm-600 text-[9px] font-normal"
                           >
                             disabled
                           </Badge>
                         )}
                       </div>
-                      <div className="font-mono text-[10px] text-muted-foreground">
+                      <div className="text-muted-foreground font-mono text-[10px]">
                         {b.featureKey}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground font-mono text-xs">
                       {b.modelName}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -727,7 +736,7 @@ export function PricingCalculator({
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right tabular-nums font-medium',
+                        'text-right font-medium tabular-nums',
                         b.marginPct < 20 && 'text-red-600',
                         b.marginPct >= 20 &&
                           b.marginPct < a.marginTarget &&
@@ -751,7 +760,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada AI feature config. Buat di /admin/ai-features.
                     </TableCell>
@@ -761,19 +770,13 @@ export function PricingCalculator({
             </Table>
           </div>
 
-          <p className="text-[11px] text-warm-500">
+          <p className="text-warm-500 text-[11px]">
             💡 Edit per-feature (margin, floor, cap) di{' '}
-            <a
-              href="/admin/ai-features"
-              className="text-primary-600 underline"
-            >
+            <a href="/admin/ai-features" className="text-primary-600 underline">
               /admin/ai-features
             </a>
             . Harga input/output otomatis sync dari{' '}
-            <a
-              href="/admin/ai-pricing"
-              className="text-primary-600 underline"
-            >
+            <a href="/admin/ai-pricing" className="text-primary-600 underline">
               /admin/ai-pricing
             </a>
             .

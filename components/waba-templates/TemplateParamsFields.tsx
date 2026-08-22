@@ -87,7 +87,7 @@ export function TemplateParamsFields({ template, value, onChange, placeholders, 
             type="button"
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[11px]"
+            className="h-6 px-2 text-xs"
             disabled={disabled}
             onClick={() => onInsert(p.value)}
           >

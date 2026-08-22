@@ -314,9 +314,10 @@ export function OrdersList() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    const json = (await res.json().catch(() => null)) as
-      | { success: boolean; error?: string }
-      | null
+    const json = (await res.json().catch(() => null)) as {
+      success: boolean
+      error?: string
+    } | null
     if (!res.ok || !json?.success) {
       toast.error(json?.error ?? 'Gagal memperbarui status')
       return
@@ -370,9 +371,10 @@ export function OrdersList() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ trackingNumber: value || null }),
     })
-    const json = (await res.json().catch(() => null)) as
-      | { success: boolean; error?: string }
-      | null
+    const json = (await res.json().catch(() => null)) as {
+      success: boolean
+      error?: string
+    } | null
     if (!res.ok || !json?.success) {
       toast.error(json?.error ?? 'Gagal update resi')
       return
@@ -473,7 +475,7 @@ export function OrdersList() {
             >
               <Columns className="mr-2 size-4" />
               Kolom
-              <span className="ml-1.5 rounded-full bg-warm-100 px-1.5 text-[10px] font-semibold text-warm-700 dark:bg-warm-800 dark:text-warm-200">
+              <span className="bg-warm-100 text-warm-700 ml-1.5 rounded-full px-1.5 text-xs font-semibold">
                 {viewPref.visibleColumns.length}
               </span>
             </Button>
@@ -579,11 +581,7 @@ export function OrdersList() {
 
       {nextCursor && (
         <div className="flex justify-center py-2">
-          <Button
-            variant="outline"
-            onClick={loadMore}
-            disabled={loadingMore}
-          >
+          <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
             {loadingMore && <Loader2 className="mr-2 size-4 animate-spin" />}
             Muat lebih banyak
           </Button>

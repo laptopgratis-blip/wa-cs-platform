@@ -63,7 +63,10 @@ export function PackagesManager() {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/packages')
-      const json = (await res.json()) as { success: boolean; data?: PackageRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: PackageRow[]
+      }
       if (json.success && json.data) setRows(json.data)
     } finally {
       setLoading(false)
@@ -166,10 +169,7 @@ export function PackagesManager() {
         title="Token Packages"
         description="Atur paket token yang bisa dibeli user."
         actions={
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" /> Tambah Paket
           </Button>
         }
@@ -214,19 +214,21 @@ export function PackagesManager() {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {p.kind === 'MESSAGE_CREDIT' ? formatRupiah(p.tokenAmount) : formatNumber(p.tokenAmount)}
+                    {p.kind === 'MESSAGE_CREDIT'
+                      ? formatRupiah(p.tokenAmount)
+                      : formatNumber(p.tokenAmount)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatRupiah(p.price)}
                   </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right text-xs">
                     {p.kind === 'MESSAGE_CREDIT'
                       ? `${Math.round((p.price / Math.max(p.tokenAmount, 1)) * 100)}%`
                       : p.tokenAmount > 0
                         ? formatRupiah(Math.round(p.price / p.tokenAmount))
                         : '—'}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right">
                     {p.sortOrder}
                   </TableCell>
                   <TableCell>
@@ -243,10 +245,18 @@ export function PackagesManager() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Switch checked={p.isActive} onCheckedChange={() => toggleActive(p)} />
+                    <Switch
+                      checked={p.isActive}
+                      onCheckedChange={() => toggleActive(p)}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" aria-label="Edit paket" onClick={() => openEdit(p)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Edit paket"
+                      onClick={() => openEdit(p)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -267,31 +277,43 @@ export function PackagesManager() {
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md px-6">
+        <SheetContent side="right" className="w-full px-6 sm:max-w-md">
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Paket' : 'Tambah Paket'}</SheetTitle>
-            <SheetDescription>Atur paket token yang muncul di halaman Billing.</SheetDescription>
+            <SheetDescription>
+              Atur paket token yang muncul di halaman Billing.
+            </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 py-3">
             <div className="space-y-1.5">
               <Label htmlFor="p-name">Nama</Label>
-              <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="p-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-kind">Jenis paket</Label>
               <select
                 id="p-kind"
-                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                className="bg-background h-9 w-full rounded-md border px-2 text-sm"
                 value={kind}
                 onChange={(e) => setKind(e.target.value as PackageKind)}
               >
                 <option value="TOKEN">Token AI</option>
-                <option value="MESSAGE_CREDIT">Kredit Pesan WA (Rp, untuk template Meta)</option>
+                <option value="MESSAGE_CREDIT">
+                  Kredit Pesan WA (Rp, untuk template Meta)
+                </option>
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="p-tok">{kind === 'MESSAGE_CREDIT' ? 'Kredit diterima (Rp)' : 'Jumlah Token'}</Label>
+                <Label htmlFor="p-tok">
+                  {kind === 'MESSAGE_CREDIT'
+                    ? 'Kredit diterima (Rp)'
+                    : 'Jumlah Token'}
+                </Label>
                 <Input
                   id="p-tok"
                   type="number"
@@ -350,8 +372,8 @@ export function PackagesManager() {
         title="Hapus paket ini?"
         description={
           <>
-            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
-            bisa dibatalkan.
+            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini
+            tidak bisa dibatalkan.
           </>
         }
         isLoading={isDeleting}

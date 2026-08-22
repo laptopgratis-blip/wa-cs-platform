@@ -30,16 +30,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  formatChatDateLabel,
-  formatChatTime,
-} from '@/lib/format-time'
+import { formatChatDateLabel, formatChatTime } from '@/lib/format-time'
 import {
   getSocket,
   subscribeWaSession,
   type InboxMessagePayload,
   type InboxStatusPayload,
 } from '@/lib/socket-client'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 import { SendTemplateDialog } from './SendTemplateDialog'
@@ -63,7 +61,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   const [isDownloading, setDownloading] = useState(false)
   // Dialog kirim template Meta (sesi Cloud API, window 24 jam tutup).
   const [templateOpen, setTemplateOpen] = useState(false)
-  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null)
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(
+    null,
+  )
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch detail tiap kali contactId berubah.
@@ -195,7 +195,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
         if (res.status === 409 && json.code === 'WINDOW_CLOSED') {
           setTemplateSessionId(json.sessionId ?? null)
           setTemplateOpen(true)
-          toast.info('Window 24 jam Meta sudah tutup — kirim lewat template yang disetujui.')
+          toast.info(
+            'Window 24 jam Meta sudah tutup — kirim lewat template yang disetujui.',
+          )
           return
         }
         toast.error(json.error || 'Gagal kirim pesan')
@@ -237,7 +239,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setDownloading(true)
     try {
       const url =
-        type === 'single' ? `/api/inbox/${contactId}/export` : `/api/inbox/export-all`
+        type === 'single'
+          ? `/api/inbox/${contactId}/export`
+          : `/api/inbox/export-all`
       const res = await fetch(url)
       if (!res.ok) {
         // Server pakai JSON envelope { success, error } untuk error path —
@@ -279,7 +283,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       a.remove()
       URL.revokeObjectURL(objectUrl)
       toast.success(
-        type === 'single' ? 'Percakapan didownload' : 'Semua percakapan didownload',
+        type === 'single'
+          ? 'Percakapan didownload'
+          : 'Semua percakapan didownload',
       )
     } catch (err) {
       console.error('[downloadChat] gagal:', err)
@@ -309,9 +315,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
 
   if (isLoading || !contact) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         <Loader2 className="mr-2 size-5 animate-spin" />
-        Memuat percakapan...
+        Memuat percakapan…
       </div>
     )
   }
@@ -326,23 +332,28 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
             <button
               type="button"
               onClick={onBack}
-              className="flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-warm-100 md:hidden"
+              className="hover:bg-warm-100 flex size-9 shrink-0 items-center justify-center rounded-md md:hidden"
               aria-label="Kembali"
             >
               <ArrowLeft className="size-5" />
             </button>
           )}
           <Avatar className="size-10 shrink-0">
-            {contact.avatar && <AvatarImage src={contact.avatar} alt={contact.name ?? ''} />}
+            {contact.avatar && (
+              <AvatarImage src={contact.avatar} alt={contact.name ?? ''} />
+            )}
             <AvatarFallback>
               {(contact.name || contact.phoneNumber).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate font-medium">{contact.name || `+${contact.phoneNumber}`}</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate font-medium">
+              {contact.name || `+${contact.phoneNumber}`}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
               +{contact.phoneNumber}
-              {contact.waSession?.displayName && ` · via ${contact.waSession.displayName}`}
+              {contact.waSession?.displayName &&
+                ` · via ${contact.waSession.displayName}`}
             </p>
           </div>
         </div>
@@ -416,12 +427,12 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-muted/20">
+      <div ref={scrollRef} className="bg-muted/20 flex-1 overflow-y-auto">
         <div className="flex flex-col gap-2 p-4">
           {grouped.map((group) => (
             <div key={group.date} className="flex flex-col gap-2">
               <div className="my-2 flex justify-center">
-                <span className="rounded-full bg-background px-3 py-1 text-[11px] text-muted-foreground shadow-sm">
+                <span className="bg-background text-muted-foreground rounded-full px-3 py-1 text-xs shadow-sm">
                   {formatChatDateLabel(group.messages[0]!.createdAt)}
                 </span>
               </div>
@@ -436,8 +447,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       {/* Composer */}
       <div className="border-t p-3">
         {!contact.aiPaused && (
-          <p className="mb-2 text-xs text-muted-foreground">
-            AI sedang aktif untuk kontak ini. Klik <strong>Ambil Alih</strong> untuk balas manual.
+          <p className="text-muted-foreground mb-2 text-xs">
+            AI sedang aktif untuk kontak ini. Klik <strong>Ambil Alih</strong>{' '}
+            untuk balas manual.
           </p>
         )}
         <div className="flex items-end gap-2">
@@ -532,7 +544,8 @@ function Bubble({
   const showCost =
     isAdmin &&
     message.role === 'AI' &&
-    (message.apiCostRp !== null && message.apiCostRp !== undefined)
+    message.apiCostRp !== null &&
+    message.apiCostRp !== undefined
   // Bubble AGENT pakai warna hijau muda supaya gampang dibedakan dari AI
   // (primary). Outgoing tapi non-AGENT/AI tetap pakai warna primary.
   const bubbleClass = !isOutgoing
@@ -551,24 +564,29 @@ function Bubble({
         )}
       >
         {message.role === 'AI' && (
-          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase opacity-80">
+          <div className="mb-1 flex items-center gap-1 text-xs uppercase opacity-80">
             <Bot className="size-3" /> AI
           </div>
         )}
         {isAgent && (
-          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase opacity-80">
+          <div className="mb-1 flex items-center gap-1 text-xs uppercase opacity-80">
             <Hand className="size-3" /> {agentLabel}
           </div>
         )}
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <p className="break-words whitespace-pre-wrap">{message.content}</p>
         {isOutgoing && message.status === 'FAILED' && (
-          <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-red-600">
+          <div
+            className={cn(
+              'mt-1 flex items-center gap-1 text-xs font-medium',
+              TONES.danger.text,
+            )}
+          >
             <AlertTriangle className="size-3" /> Gagal terkirim ke WhatsApp
           </div>
         )}
         <p
           className={cn(
-            'mt-1 text-right text-[10px]',
+            'mt-1 text-right text-xs',
             isOutgoing ? 'opacity-70' : 'text-muted-foreground',
           )}
         >
@@ -577,17 +595,15 @@ function Bubble({
         {showCost && (
           <details
             className={cn(
-              'mt-1 cursor-pointer text-[10px]',
+              'mt-1 cursor-pointer text-xs',
               isOutgoing ? 'opacity-80' : 'text-muted-foreground',
             )}
           >
-            <summary className="flex select-none items-center gap-1">
+            <summary className="flex items-center gap-1 select-none">
               <BarChart3 className="size-3" aria-hidden /> Cost detail
             </summary>
             <div className="mt-1 space-y-0.5 font-mono">
-              {message.modelName && (
-                <div>Model: {message.modelName}</div>
-              )}
+              {message.modelName && <div>Model: {message.modelName}</div>}
               <div>
                 Token: {message.apiInputTokens ?? '—'} in /{' '}
                 {message.apiOutputTokens ?? '—'} out
@@ -603,9 +619,7 @@ function Bubble({
                 })}
               </div>
               <div
-                className={cn(
-                  (message.profitRp ?? 0) < 0 && 'font-semibold',
-                )}
+                className={cn((message.profitRp ?? 0) < 0 && 'font-semibold')}
               >
                 Profit: Rp{' '}
                 {(message.profitRp ?? 0).toLocaleString('id-ID', {

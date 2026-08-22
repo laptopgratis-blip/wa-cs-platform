@@ -19,6 +19,8 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Settings {
   WA_ADMIN: string
@@ -144,12 +146,12 @@ export function SettingsManager() {
             const dirty = values[f.key] !== savedSnapshot[f.key]
             const isSaving = savingKey === f.key
             return (
-              <Card key={f.key} className="rounded-xl border-warm-200">
+              <Card key={f.key} className="border-warm-200 rounded-xl">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-warm-900">
+                  <CardTitle className="text-warm-900 text-sm font-semibold">
                     {f.label}
                   </CardTitle>
-                  <CardDescription className="text-xs text-warm-500">
+                  <CardDescription className="text-warm-500 text-xs">
                     {f.helper}
                   </CardDescription>
                 </CardHeader>
@@ -176,7 +178,7 @@ export function SettingsManager() {
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     {dirty && !isSaving && (
-                      <span className="text-xs text-amber-600">
+                      <span className={cn('text-xs', TONES.warning.text)}>
                         Belum disimpan
                       </span>
                     )}
@@ -184,7 +186,6 @@ export function SettingsManager() {
                       size="sm"
                       onClick={() => handleSave(f.key)}
                       disabled={!dirty || isSaving}
-                      className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
                     >
                       {isSaving ? (
                         <Loader2 className="mr-1.5 size-3.5 animate-spin" />

@@ -89,7 +89,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
     title: initial?.title ?? '',
     textContent: initial?.textContent ?? '',
     fileUrl: initial?.fileUrl ?? '',
-    fileName: initial?.fileUrl ? initial.fileUrl.split('/').pop() ?? '' : '',
+    fileName: initial?.fileUrl ? (initial.fileUrl.split('/').pop() ?? '') : '',
     linkUrl: initial?.linkUrl ?? '',
     caption: initial?.caption ?? '',
     keywords: initial?.triggerKeywords ?? [],
@@ -138,9 +138,11 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
         method: 'POST',
         body: fd,
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; data?: { url: string }; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        data?: { url: string }
+        error?: string
+      } | null
       if (!res.ok || !json?.success || !json.data) {
         toast.error(json?.error ?? 'Gagal mengunggah file')
         return
@@ -173,22 +175,23 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
           existingKeywords: state.keywords,
         }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | {
-            success: boolean
-            data?: {
-              keywords: string[]
-              charge?: { tokensCharged: number; modelName: string }
-            }
-            error?: string
-          }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        data?: {
+          keywords: string[]
+          charge?: { tokensCharged: number; modelName: string }
+        }
+        error?: string
+      } | null
       if (!res.ok || !json?.success || !json.data) {
         toast.error(json?.error ?? 'Gagal panggil AI')
         return
       }
       const next = Array.from(
-        new Set([...state.keywords, ...json.data.keywords.map((k) => k.toLowerCase())]),
+        new Set([
+          ...state.keywords,
+          ...json.data.keywords.map((k) => k.toLowerCase()),
+        ]),
       ).slice(0, 20)
       update('keywords', next)
       const tokenInfo = json.data.charge
@@ -271,9 +274,10 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menyimpan pengetahuan')
         return
@@ -294,9 +298,10 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
       const res = await fetch(`/api/knowledge/${initial.id}`, {
         method: 'DELETE',
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menghapus pengetahuan')
         return
@@ -313,7 +318,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
   if (!isEdit && !contentType) {
     return (
       <div className="flex flex-col gap-3 py-2">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Pilih jenis pengetahuan yang mau ditambah:
         </p>
         <div className="grid gap-3">
@@ -324,12 +329,12 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
                 key={opt.type}
                 type="button"
                 onClick={() => setContentType(opt.type)}
-                className="flex items-start gap-3 rounded-lg border border-warm-200 p-4 text-left transition hover:border-primary-500 hover:bg-primary-50/40 dark:border-warm-800 dark:hover:bg-primary-950/20"
+                className="border-warm-200 hover:border-primary-500 hover:bg-primary-50/40 flex items-start gap-3 rounded-lg border p-4 text-left transition"
               >
-                <Icon className="mt-0.5 size-5 text-primary-500" />
+                <Icon className="text-primary-500 mt-0.5 size-5" />
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{opt.label}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     {opt.description}
                   </p>
                 </div>
@@ -370,7 +375,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
             value={state.textContent}
             onChange={(e) => update('textContent', e.target.value)}
           />
-          <p className="text-right text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-right text-xs">
             {state.textContent.length} / 2000
           </p>
         </div>
@@ -381,7 +386,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
           <Label>{contentType === 'IMAGE' ? 'Gambar' : 'File'}</Label>
           {state.fileUrl ? (
             <div className="flex items-center gap-2 rounded-lg border p-3">
-              <FileText className="size-4 text-primary-500" />
+              <FileText className="text-primary-500 size-4" />
               <span className="flex-1 truncate text-sm">
                 {state.fileName || state.fileUrl}
               </span>
@@ -423,9 +428,9 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
                 ) : (
                   <Upload className="mr-2 size-4" />
                 )}
-                {isUploading ? 'Mengunggah...' : 'Pilih file'}
+                {isUploading ? 'Mengunggah…' : 'Pilih file'}
               </Button>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="text-muted-foreground mt-1 text-xs">
                 {contentType === 'IMAGE'
                   ? 'JPG / PNG / WebP / GIF, maks. 5 MB'
                   : 'PDF / Word / Excel / TXT / CSV, maks. 10 MB'}
@@ -476,10 +481,10 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <Label>Kata kunci pemicu</Label>
-            <p className="text-xs text-muted-foreground">
-              AI akan kirim info ini saat customer tanya tentang kata-kata berikut.
-              Klik <strong>Optimasi AI</strong> untuk perluas variasi (sinonim, slang,
-              typo) supaya trigger tidak gampang luput.
+            <p className="text-muted-foreground text-xs">
+              AI akan kirim info ini saat customer tanya tentang kata-kata
+              berikut. Klik <strong>Optimasi AI</strong> untuk perluas variasi
+              (sinonim, slang, typo) supaya trigger tidak gampang luput.
             </p>
           </div>
           <Button
@@ -498,18 +503,14 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
           </Button>
         </div>
 
-        <div className="flex flex-wrap gap-1.5 rounded-lg border bg-warm-50/40 p-2 dark:bg-warm-950/20">
+        <div className="bg-warm-50/40 flex flex-wrap gap-1.5 rounded-lg border p-2">
           {state.keywords.map((kw) => (
-            <Badge
-              key={kw}
-              variant="secondary"
-              className="gap-1 font-normal"
-            >
+            <Badge key={kw} variant="secondary" className="gap-1 font-normal">
               {kw}
               <button
                 type="button"
                 onClick={() => removeKeyword(kw)}
-                className="rounded hover:bg-warm-200 dark:hover:bg-warm-800"
+                className="hover:bg-warm-200 rounded"
                 aria-label={`Hapus ${kw}`}
               >
                 <X className="size-3" />
@@ -517,7 +518,7 @@ export function KnowledgeForm({ initial, onDone }: KnowledgeFormProps) {
             </Badge>
           ))}
           {state.keywords.length === 0 && (
-            <span className="px-1 text-xs text-muted-foreground">
+            <span className="text-muted-foreground px-1 text-xs">
               Belum ada kata kunci
             </span>
           )}

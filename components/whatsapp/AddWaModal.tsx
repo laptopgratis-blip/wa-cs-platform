@@ -265,8 +265,8 @@ export function AddWaModal({
               <Loader2 className="size-8 animate-spin" />
               <span>
                 {status === 'CONNECTING'
-                  ? 'Menghubungkan ke WhatsApp...'
-                  : 'Menyiapkan QR...'}
+                  ? 'Menghubungkan ke WhatsApp…'
+                  : 'Menyiapkan QR…'}
               </span>
             </div>
           )}

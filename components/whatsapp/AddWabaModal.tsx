@@ -6,7 +6,13 @@
 // baru/khusus dipilih langsung di wizard Meta. Alur state di useEmbeddedSignup.
 
 import { useState } from 'react'
-import { AlertTriangle, Loader2, Monitor, Smartphone, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  Loader2,
+  Monitor,
+  Smartphone,
+  ShieldCheck,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -19,6 +25,8 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 import { useEmbeddedSignup } from './useEmbeddedSignup'
 import { WabaConnectResult } from './WabaConnectResult'
@@ -29,19 +37,24 @@ interface AddWabaModalProps {
   onConnected: () => void
 }
 
-export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalProps) {
+export function AddWabaModal({
+  open,
+  onOpenChange,
+  onConnected,
+}: AddWabaModalProps) {
   const { phase, error, result, launch, retryRegister, reset, retryPrepare } =
     useEmbeddedSignup(open)
   const [pin, setPin] = useState('')
 
-  const busy = phase === 'preparing' || phase === 'meta' || phase === 'exchanging'
+  const busy =
+    phase === 'preparing' || phase === 'meta' || phase === 'exchanging'
   const buttonText =
     phase === 'preparing'
-      ? 'Menyiapkan...'
+      ? 'Menyiapkan…'
       : phase === 'meta'
-        ? 'Menunggu proses di jendela Meta...'
+        ? 'Menunggu proses di jendela Meta…'
         : phase === 'exchanging'
-          ? 'Menghubungkan nomor...'
+          ? 'Menghubungkan nomor…'
           : 'Lanjutkan dengan Meta'
 
   async function handleLaunch() {
@@ -77,8 +90,9 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
         <DialogHeader>
           <DialogTitle>Hubungkan WhatsApp Business API</DialogTitle>
           <DialogDescription>
-            Jalur resmi Meta (Cloud API) — tanpa scan QR, tanpa risiko banned. Kamu
-            akan login Facebook lalu memilih cara menghubungkan nomor di jendela Meta.
+            Jalur resmi Meta (Cloud API) — tanpa scan QR, tanpa risiko banned.
+            Kamu akan login Facebook lalu memilih cara menghubungkan nomor di
+            jendela Meta.
           </DialogDescription>
         </DialogHeader>
 
@@ -91,27 +105,59 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
           />
         ) : (
           <div className="space-y-4">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-              <p className="flex items-center gap-2 font-medium text-emerald-900">
-                <Smartphone className="size-4" /> Direkomendasikan: nomor tetap dipakai di HP
+            <div
+              className={cn(
+                'rounded-xl border p-3 text-sm',
+                TONES.success.bg,
+                TONES.success.border,
+              )}
+            >
+              <p
+                className={cn(
+                  'flex items-center gap-2 font-medium',
+                  TONES.success.text,
+                )}
+              >
+                <Smartphone className="size-4" /> Direkomendasikan: nomor tetap
+                dipakai di HP
               </p>
-              <ul className="mt-1.5 space-y-1 text-xs text-emerald-900/80">
-                <li>• Di jendela Meta pilih <b>&ldquo;Hubungkan Aplikasi WhatsApp Business&rdquo;</b> lalu scan QR dari HP.</li>
-                <li>• Chat tetap masuk ke HP; CS bisa balas dari HP maupun dari hulao — semuanya tercatat di inbox.</li>
-                <li>• Kontak & riwayat chat (≤ 6 bulan) ikut disinkronkan ke hulao.</li>
-                <li>• Syarat: nomor terpasang di <b>WhatsApp Business App</b> (bukan WhatsApp biasa) versi terbaru.</li>
+              <ul
+                className={cn('mt-1.5 space-y-1 text-xs', TONES.success.text)}
+              >
+                <li>
+                  • Di jendela Meta pilih{' '}
+                  <b>&ldquo;Hubungkan Aplikasi WhatsApp Business&rdquo;</b> lalu
+                  scan QR dari HP.
+                </li>
+                <li>
+                  • Chat tetap masuk ke HP; CS bisa balas dari HP maupun dari
+                  hulao — semuanya tercatat di inbox.
+                </li>
+                <li>
+                  • Kontak & riwayat chat (≤ 6 bulan) ikut disinkronkan ke
+                  hulao.
+                </li>
+                <li>
+                  • Syarat: nomor terpasang di <b>WhatsApp Business App</b>{' '}
+                  (bukan WhatsApp biasa) versi terbaru.
+                </li>
               </ul>
             </div>
 
-            <div className="text-xs text-muted-foreground">
+            <div className="text-muted-foreground text-xs">
               <p className="flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5" /> Alternatif: nomor baru/khusus (tidak terpasang di aplikasi WA mana pun) — pilih &ldquo;Tambahkan nomor&rdquo; di jendela Meta.
+                <ShieldCheck className="size-3.5" /> Alternatif: nomor
+                baru/khusus (tidak terpasang di aplikasi WA mana pun) — pilih
+                &ldquo;Tambahkan nomor&rdquo; di jendela Meta.
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="waba-pin" className="text-xs">
-                PIN verifikasi dua langkah <span className="text-muted-foreground">(opsional — hanya nomor baru/khusus yang sudah punya PIN)</span>
+                PIN verifikasi dua langkah{' '}
+                <span className="text-muted-foreground">
+                  (opsional — hanya nomor baru/khusus yang sudah punya PIN)
+                </span>
               </Label>
               <Input
                 id="waba-pin"
@@ -119,13 +165,15 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
                 maxLength={6}
                 placeholder="Kosongkan bila tidak punya — akan dibuatkan otomatis"
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) =>
+                  setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                }
                 disabled={busy}
               />
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
+              <div className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 rounded-lg border p-2.5 text-xs">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                 <div className="space-y-1">
                   <p>{error}</p>
@@ -142,17 +190,14 @@ export function AddWabaModal({ open, onOpenChange, onConnected }: AddWabaModalPr
               </div>
             )}
 
-            <Button
-              onClick={handleLaunch}
-              disabled={busy}
-              className="w-full bg-primary-500 text-white hover:bg-primary-600"
-            >
+            <Button onClick={handleLaunch} disabled={busy} className="w-full">
               {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
               {buttonText}
             </Button>
 
-            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <Monitor className="size-3" /> Disarankan dari laptop/desktop; izinkan popup untuk situs ini.
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              <Monitor className="size-3" /> Disarankan dari laptop/desktop;
+              izinkan popup untuk situs ini.
             </p>
           </div>
         )}

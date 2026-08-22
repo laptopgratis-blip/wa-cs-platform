@@ -108,7 +108,9 @@ export function TagPickerDialog({
         return
       }
       const created: TagOption = data.data
-      setAllTags((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+      setAllTags((prev) =>
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name)),
+      )
       setSelectedIds((prev) => new Set(prev).add(created.id))
       setNewName('')
       setNewColor(PRESET_COLORS[0])
@@ -150,18 +152,18 @@ export function TagPickerDialog({
         {/* Existing tags list */}
         <div className="max-h-60 space-y-1 overflow-y-auto rounded-md border p-2">
           {loading ? (
-            <div className="flex items-center justify-center py-6 text-warm-500">
+            <div className="text-warm-500 flex items-center justify-center py-6">
               <Loader2 className="size-4 animate-spin" />
             </div>
           ) : allTags.length === 0 ? (
-            <p className="px-2 py-3 text-center text-xs text-warm-500">
+            <p className="text-warm-500 px-2 py-3 text-center text-xs">
               Belum ada tag. Buat di bawah.
             </p>
           ) : (
             allTags.map((tag) => (
               <label
                 key={tag.id}
-                className="flex cursor-pointer items-center gap-2 rounded p-1.5 hover:bg-warm-50 dark:hover:bg-warm-900/40"
+                className="hover:bg-warm-50 flex cursor-pointer items-center gap-2 rounded p-1.5"
               >
                 <Checkbox
                   checked={selectedIds.has(tag.id)}
@@ -174,7 +176,7 @@ export function TagPickerDialog({
                   {tag.name}
                 </span>
                 {typeof tag.orderCount === 'number' && (
-                  <span className="ml-auto text-[10px] text-warm-500">
+                  <span className="text-warm-500 ml-auto text-xs">
                     {tag.orderCount}× dipakai
                   </span>
                 )}
@@ -184,8 +186,8 @@ export function TagPickerDialog({
         </div>
 
         {/* Create new tag */}
-        <div className="rounded-md border bg-warm-50 p-3 dark:bg-warm-900/40">
-          <p className="mb-2 text-xs font-semibold text-warm-600">
+        <div className="bg-warm-50 rounded-md border p-3">
+          <p className="text-warm-600 mb-2 text-xs font-semibold">
             + Buat tag baru
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -194,7 +196,7 @@ export function TagPickerDialog({
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               maxLength={40}
-              className="h-9 flex-1 min-w-[150px]"
+              className="h-9 min-w-[150px] flex-1"
             />
             <div className="flex gap-1">
               {PRESET_COLORS.map((c) => (
@@ -204,7 +206,7 @@ export function TagPickerDialog({
                   aria-label={`Pilih warna ${c}`}
                   onClick={() => setNewColor(c)}
                   className={`size-6 rounded-full border-2 ${
-                    newColor === c ? 'border-warm-900 dark:border-white' : 'border-transparent'
+                    newColor === c ? 'border-warm-900' : 'border-transparent'
                   }`}
                   style={{ backgroundColor: c }}
                 />
@@ -225,7 +227,7 @@ export function TagPickerDialog({
         </div>
 
         <DialogFooter className="flex flex-row items-center justify-between sm:justify-between">
-          <span className="text-xs text-warm-500">
+          <span className="text-warm-500 text-xs">
             {selectedIds.size} tag dipilih
           </span>
           <div className="flex gap-2">

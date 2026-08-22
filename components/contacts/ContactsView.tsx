@@ -137,7 +137,9 @@ export function ContactsView({
         toast.error(json.error || 'Gagal menghapus kontak')
         return
       }
-      toast.success(`Kontak ${deleteTarget.name || deleteTarget.phoneNumber} dihapus`)
+      toast.success(
+        `Kontak ${deleteTarget.name || deleteTarget.phoneNumber} dihapus`,
+      )
       setDeleteTarget(null)
       void fetchList()
     } finally {
@@ -154,7 +156,7 @@ export function ContactsView({
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[240px] flex-1">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             aria-label="Cari kontak"
             value={search}
@@ -194,7 +196,9 @@ export function ContactsView({
           disabled={tags.length === 0}
         >
           <SelectTrigger className="w-[180px]" aria-label="Filter tag">
-            <SelectValue placeholder={tags.length === 0 ? 'Belum ada tag' : 'Semua tag'} />
+            <SelectValue
+              placeholder={tags.length === 0 ? 'Belum ada tag' : 'Semua tag'}
+            />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY}>Semua tag</SelectItem>
@@ -205,8 +209,12 @@ export function ContactsView({
             ))}
           </SelectContent>
         </Select>
-        <span className="ml-auto text-sm text-muted-foreground">
-          {isLoading ? <Loader2 className="size-4 animate-spin" /> : `${total} kontak`}
+        <span className="text-muted-foreground ml-auto text-sm">
+          {isLoading ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            `${total} kontak`
+          )}
         </span>
       </div>
 
@@ -243,8 +251,10 @@ export function ContactsView({
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Avatar className="size-8">
-                        {c.avatar && <AvatarImage src={c.avatar} alt={c.name ?? ''} />}
-                        <AvatarFallback className="text-[10px]">
+                        {c.avatar && (
+                          <AvatarImage src={c.avatar} alt={c.name ?? ''} />
+                        )}
+                        <AvatarFallback className="text-xs">
                           {(c.name || c.phoneNumber).slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -252,17 +262,23 @@ export function ContactsView({
                         <p className="text-sm font-medium">
                           {c.name || `+${c.phoneNumber}`}
                         </p>
-                        <p className="text-xs text-muted-foreground">+{c.phoneNumber}</p>
+                        <p className="text-muted-foreground text-xs">
+                          +{c.phoneNumber}
+                        </p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {c.tags.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-muted-foreground text-xs">—</span>
                       ) : (
                         c.tags.slice(0, 3).map((t) => (
-                          <Badge key={t} variant="secondary" className="font-normal">
+                          <Badge
+                            key={t}
+                            variant="secondary"
+                            className="font-normal"
+                          >
                             {t}
                           </Badge>
                         ))
@@ -278,18 +294,18 @@ export function ContactsView({
                     <PipelineBadge stage={c.pipelineStage} />
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       {formatRelativeTime(c.lastMessageAt)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right text-sm text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right text-sm">
                     {formatRelativeTime(c.createdAt)}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="size-8 text-muted-foreground hover:text-destructive"
+                      className="text-muted-foreground hover:text-destructive size-8"
                       onClick={(e) => {
                         e.stopPropagation()
                         setDeleteTarget(c)
@@ -336,8 +352,11 @@ export function ContactsView({
             <AlertDialogTitle>Hapus kontak ini?</AlertDialogTitle>
             <AlertDialogDescription>
               Hapus kontak{' '}
-              <strong>{deleteTarget?.name || `+${deleteTarget?.phoneNumber}`}</strong>?
-              Semua percakapan akan ikut terhapus. Tindakan ini tidak bisa dibatalkan.
+              <strong>
+                {deleteTarget?.name || `+${deleteTarget?.phoneNumber}`}
+              </strong>
+              ? Semua percakapan akan ikut terhapus. Tindakan ini tidak bisa
+              dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -348,7 +367,7 @@ export function ContactsView({
                 void confirmDelete()
               }}
               disabled={isDeleting}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90 text-white"
             >
               {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
               Ya, Hapus

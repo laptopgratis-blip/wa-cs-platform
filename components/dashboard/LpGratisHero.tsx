@@ -10,15 +10,15 @@ import { Card } from '@/components/ui/card'
 
 export function LpGratisHero() {
   return (
-    <Card className="relative overflow-hidden rounded-2xl border-2 border-primary-300 bg-gradient-to-br from-primary-500 via-orange-500 to-amber-500 shadow-xl">
+    <Card className="border-primary-300 from-primary-500 via-primary-500 to-primary-400 relative overflow-hidden rounded-2xl border-2 bg-linear-to-br">
       {/* Decorative blobs */}
       <div
         aria-hidden
-        className="absolute -right-20 -top-20 size-56 rounded-full bg-white/10 blur-3xl"
+        className="absolute -top-20 -right-20 size-56 rounded-full bg-white/10 blur-3xl"
       />
       <div
         aria-hidden
-        className="absolute -bottom-16 -left-16 size-48 rounded-full bg-amber-200/20 blur-3xl"
+        className="bg-primary-200/20 absolute -bottom-16 -left-16 size-48 rounded-full blur-3xl"
       />
 
       <div className="relative flex flex-col gap-5 p-6 md:flex-row md:items-center md:gap-8 md:p-8">
@@ -27,10 +27,10 @@ export function LpGratisHero() {
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
+          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold tracking-wider text-white uppercase backdrop-blur-sm">
             <Sparkles className="size-3" /> Wizard Utama · Gratis
           </div>
-          <h2 className="font-display text-2xl font-extrabold leading-tight text-white drop-shadow md:text-3xl">
+          <h2 className="font-display text-2xl leading-tight font-semibold text-white drop-shadow md:text-3xl">
             Bikin Landing Page Gratis
           </h2>
           <p className="mt-1 text-sm text-white/90 md:text-base">
@@ -57,7 +57,7 @@ export function LpGratisHero() {
         <Button
           asChild
           size="lg"
-          className="shrink-0 bg-white px-6 py-6 text-base font-bold text-primary-700 shadow-lg hover:bg-warm-50 hover:text-primary-800"
+          className="text-primary-700 hover:bg-warm-50 hover:text-primary-800 shrink-0 bg-white px-6 py-6 text-base font-bold shadow-lg"
         >
           <Link href="/onboarding/lp-gratis">
             Mulai sekarang

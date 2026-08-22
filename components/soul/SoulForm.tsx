@@ -4,7 +4,7 @@
 // /api/soul/options — user hanya melihat name + description, snippet AI
 // disembunyikan (rahasia perusahaan, hanya admin yang bisa lihat).
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Trash2, TriangleAlert } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { useRouter } from 'next/navigation'
@@ -25,6 +25,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { LANGUAGES, type Language } from '@/lib/soul'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import { soulCreateSchema, type SoulCreateInput } from '@/lib/validations/soul'
 
 // id berisi cuid SoulPersonality / SoulStyle (atau enum legacy untuk Soul lama).
@@ -92,9 +94,10 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
     void (async () => {
       try {
         const res = await fetch('/api/soul/options')
-        const json = (await res.json().catch(() => null)) as
-          | { success: boolean; data?: { personalities: SoulOption[]; styles: SoulOption[] } }
-          | null
+        const json = (await res.json().catch(() => null)) as {
+          success: boolean
+          data?: { personalities: SoulOption[]; styles: SoulOption[] }
+        } | null
         if (!cancelled && json?.success && json.data) {
           setPersonalities(json.data.personalities)
           setStyles(json.data.styles)
@@ -112,7 +115,8 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
   // tetap tampilkan id-nya sebagai placeholder agar value Select tidak kosong.
   const personalityValue = watched.personality ?? NONE
   const isLegacyPersonality =
-    !!watched.personality && !personalities.some((p) => p.id === watched.personality)
+    !!watched.personality &&
+    !personalities.some((p) => p.id === watched.personality)
   const replyStyleValue = watched.replyStyle ?? NONE
   const isLegacyStyle =
     !!watched.replyStyle && !styles.some((s) => s.id === watched.replyStyle)
@@ -127,9 +131,10 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menyimpan soul')
         return
@@ -148,9 +153,10 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
     setDeleting(true)
     try {
       const res = await fetch(`/api/soul/${initial.id}`, { method: 'DELETE' })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menghapus soul')
         return
@@ -164,7 +170,11 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4 py-2" noValidate>
+    <form
+      onSubmit={form.handleSubmit(onSubmit)}
+      className="flex flex-col gap-4 py-2"
+      noValidate
+    >
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="name">Nama Soul</Label>
@@ -174,7 +184,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
             {...form.register('name')}
           />
           {form.formState.errors.name && (
-            <p className="text-sm text-destructive">
+            <p className="text-destructive text-sm">
               {form.formState.errors.name.message}
             </p>
           )}
@@ -199,7 +209,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
                 <SelectItem key={p.id} value={p.id}>
                   <span className="flex flex-col">
                     <span className="font-medium">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       {p.description}
                     </span>
                   </span>
@@ -233,7 +243,7 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
                 <SelectItem key={s.id} value={s.id}>
                   <span className="flex flex-col">
                     <span className="font-medium">{s.name}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       {s.description}
                     </span>
                   </span>
@@ -275,10 +285,10 @@ export function SoulForm({ initial, onDone }: SoulFormProps) {
             <span
               className={`text-xs tabular-nums ${
                 (watched.businessContext?.length ?? 0) > BUSINESS_CONTEXT_LIMIT
-                  ? 'font-semibold text-destructive'
+                  ? 'text-destructive font-semibold'
                   : (watched.businessContext?.length ?? 0) >
                       BUSINESS_CONTEXT_LIMIT * 0.85
-                    ? 'text-amber-600'
+                    ? TONES.warning.text
                     : 'text-muted-foreground'
               }`}
             >
@@ -294,11 +304,18 @@ Cleanoz 30ml — Rp 175.000. Versi hemat untuk pemakaian sebulan penuh.
 Pengiriman J&T/SiCepat dari Bandung.`}
             {...form.register('businessContext')}
           />
-          <div className="rounded-md border border-blue-200 bg-blue-50 p-2.5 text-xs text-blue-900">
+          <div
+            className={cn(
+              'rounded-md border p-2.5 text-xs',
+              TONES.info.bg,
+              TONES.info.border,
+              TONES.info.text,
+            )}
+          >
             <p className="font-semibold">
               Cuma info inti produk (harga, fitur singkat).
             </p>
-            <p className="mt-0.5 text-blue-800">
+            <p className="mt-0.5">
               FAQ, jam buka, alamat toko, kebijakan return, testimoni, link
               tokopedia/shopee, file panduan — simpan di{' '}
               <a
@@ -314,8 +331,21 @@ Pengiriman J&T/SiCepat dari Bandung.`}
             </p>
           </div>
           {(watched.businessContext?.length ?? 0) > BUSINESS_CONTEXT_LIMIT && (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
-              <span className="font-semibold">⚠️ Konteks terlalu panjang.</span>{' '}
+            <div
+              className={cn(
+                'rounded-md border p-2.5 text-xs',
+                TONES.warning.bg,
+                TONES.warning.border,
+                TONES.warning.text,
+              )}
+            >
+              <span className="font-semibold">
+                <TriangleAlert
+                  aria-hidden
+                  className="mr-1 inline size-3.5 align-[-2px]"
+                />
+                Konteks terlalu panjang.
+              </span>{' '}
               Pisahkan FAQ & info detail ke{' '}
               <a
                 href="/knowledge"
@@ -333,13 +363,15 @@ Pengiriman J&T/SiCepat dari Bandung.`}
         <div className="flex items-center justify-between rounded-lg border p-3">
           <div className="space-y-0.5">
             <Label>Jadikan default</Label>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               Soul default otomatis dipilih saat menambah WA baru.
             </p>
           </div>
           <Switch
             checked={watched.isDefault ?? false}
-            onCheckedChange={(v) => form.setValue('isDefault', v, { shouldDirty: true })}
+            onCheckedChange={(v) =>
+              form.setValue('isDefault', v, { shouldDirty: true })
+            }
           />
         </div>
       </div>

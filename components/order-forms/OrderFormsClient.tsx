@@ -38,6 +38,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 
 interface OrderForm {
   id: string
@@ -165,7 +166,9 @@ export function OrderFormsClient({
       socialProofShowTime: f.socialProofShowTime,
       socialProofSource: f.socialProofSource === 'ALL' ? 'ALL' : 'PAID',
       socialProofSoundEnabled: f.socialProofSoundEnabled,
-      socialProofSound: (['bell', 'ding', 'chime', 'pop'].includes(f.socialProofSound)
+      socialProofSound: (['bell', 'ding', 'chime', 'pop'].includes(
+        f.socialProofSound,
+      )
         ? f.socialProofSound
         : 'bell') as 'bell' | 'ding' | 'chime' | 'pop',
       enabledPixelIds: f.enabledPixelIds,
@@ -293,9 +296,9 @@ export function OrderFormsClient({
         title="Form Order"
         description={
           <>
-            Buat form publik untuk customer order — share link, mereka isi,
-            kamu dapat invoice otomatis.
-            <span className="ml-1 text-warm-500">
+            Buat form publik untuk customer order — share link, mereka isi, kamu
+            dapat invoice otomatis.
+            <span className="text-warm-500 ml-1">
               ({forms.length}/{limit ?? '∞'})
             </span>
           </>
@@ -303,7 +306,9 @@ export function OrderFormsClient({
         actions={
           <Button
             onClick={openCreate}
-            disabled={(limit !== null && forms.length >= limit) || products.length === 0}
+            disabled={
+              (limit !== null && forms.length >= limit) || products.length === 0
+            }
           >
             <Plus className="mr-2 size-4" />
             Buat Form Order
@@ -312,7 +317,9 @@ export function OrderFormsClient({
       />
 
       {products.length === 0 && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm ${TONES.warning.border} ${TONES.warning.bg} ${TONES.warning.text}`}
+        >
           Kamu belum punya produk aktif. Tambahkan produk dulu di{' '}
           <a href="/products" className="font-semibold underline">
             /products
@@ -335,39 +342,37 @@ export function OrderFormsClient({
         <div className="space-y-3">
           {forms.map((f) => {
             const linkedCount =
-              f.productIds.length === 0
-                ? products.length
-                : f.productIds.length
+              f.productIds.length === 0 ? products.length : f.productIds.length
             return (
               <Card key={f.id} className={f.isActive ? '' : 'opacity-60'}>
                 <CardContent className="flex flex-col gap-3 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-warm-900">{f.name}</p>
+                        <p className="text-warm-900 font-semibold">{f.name}</p>
                         {!f.isActive && <Badge variant="secondary">Off</Badge>}
                         {f.acceptCod && (
-                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                          <Badge className="bg-primary-100 text-primary-800 hover:bg-primary-100">
                             COD
                           </Badge>
                         )}
                         {f.acceptTransfer && (
-                          <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                          <Badge className="bg-primary-100 text-primary-800 hover:bg-primary-100">
                             Transfer
                           </Badge>
                         )}
                         {f.acceptTripay && (
-                          <Badge className="bg-violet-100 text-violet-800 hover:bg-violet-100">
+                          <Badge className="bg-primary-100 text-primary-800 hover:bg-primary-100">
                             Otomatis
                           </Badge>
                         )}
                       </div>
                       {f.description && (
-                        <p className="mt-1 line-clamp-2 text-sm text-warm-600">
+                        <p className="text-warm-600 mt-1 line-clamp-2 text-sm">
                           {f.description}
                         </p>
                       )}
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-warm-500">
+                      <div className="text-warm-500 mt-2 flex flex-wrap items-center gap-3 text-xs">
                         <span className="flex items-center gap-1">
                           <ShoppingBag className="size-3.5" />
                           {linkedCount} produk
@@ -387,11 +392,7 @@ export function OrderFormsClient({
                       >
                         <Copy className="mr-1 size-3.5" /> Salin Link
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        asChild
-                      >
+                      <Button size="sm" variant="outline" asChild>
                         <a
                           href={`/order/${f.slug}`}
                           target="_blank"
@@ -411,13 +412,15 @@ export function OrderFormsClient({
                         size="sm"
                         variant="outline"
                         className="text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget({ id: f.id, name: f.name })}
+                        onClick={() =>
+                          setDeleteTarget({ id: f.id, name: f.name })
+                        }
                       >
                         <Trash2 className="size-3.5" />
                       </Button>
                     </div>
                   </div>
-                  <div className="rounded-lg border bg-warm-50 px-3 py-2 font-mono text-xs text-warm-700">
+                  <div className="bg-warm-50 text-warm-700 rounded-lg border px-3 py-2 font-mono text-xs">
                     {typeof window !== 'undefined'
                       ? `${window.location.origin}/order/${f.slug}`
                       : `/order/${f.slug}`}
@@ -447,7 +450,9 @@ export function OrderFormsClient({
               <Input
                 id="of-name"
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
                 placeholder="Order Cleanoz"
               />
             </div>
@@ -469,14 +474,14 @@ export function OrderFormsClient({
               <Label>Produk yang Ditampilkan</Label>
               <div className="max-h-56 overflow-y-auto rounded-lg border">
                 {products.length === 0 ? (
-                  <p className="px-3 py-3 text-sm text-warm-500">
+                  <p className="text-warm-500 px-3 py-3 text-sm">
                     Belum ada produk aktif.
                   </p>
                 ) : (
                   <ul className="divide-y">
                     {products.map((p) => (
                       <li key={p.id}>
-                        <label className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-warm-50">
+                        <label className="hover:bg-warm-50 flex cursor-pointer items-center gap-3 px-3 py-2">
                           <Checkbox
                             checked={form.productIds.includes(p.id)}
                             onCheckedChange={() => toggleProduct(p.id)}
@@ -493,19 +498,19 @@ export function OrderFormsClient({
                   </ul>
                 )}
               </div>
-              <p className="text-xs text-warm-500">
-                Centang produk yang mau ditampilkan di form ini. Kosongkan
-                semua = tampilkan semua produk aktif.
+              <p className="text-warm-500 text-xs">
+                Centang produk yang mau ditampilkan di form ini. Kosongkan semua
+                = tampilkan semua produk aktif.
               </p>
             </div>
 
-            <div className="space-y-2 rounded-lg border bg-warm-50 p-3">
+            <div className="bg-warm-50 space-y-2 rounded-lg border p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <Label className="cursor-pointer text-sm">
                     Butuh alamat pengiriman
                   </Label>
-                  <p className="text-xs text-warm-500">
+                  <p className="text-warm-500 text-xs">
                     Matikan untuk produk digital (e-book, voucher, lisensi).
                     Customer tidak diminta alamat & ongkir di-skip.
                   </p>
@@ -520,7 +525,7 @@ export function OrderFormsClient({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
+              <label className="bg-warm-50 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2">
                 <Checkbox
                   checked={form.acceptCod}
                   onCheckedChange={(v) =>
@@ -531,13 +536,13 @@ export function OrderFormsClient({
                 <span className="text-sm font-medium">
                   Terima COD
                   {!form.requireShipping && (
-                    <span className="ml-1 text-xs font-normal text-warm-500">
+                    <span className="text-warm-500 ml-1 text-xs font-normal">
                       (tidak relevan untuk produk digital)
                     </span>
                   )}
                 </span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
+              <label className="bg-warm-50 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2">
                 <Checkbox
                   checked={form.acceptTransfer}
                   onCheckedChange={(v) =>
@@ -546,7 +551,7 @@ export function OrderFormsClient({
                 />
                 <span className="text-sm font-medium">Terima Transfer</span>
               </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2">
+              <label className="bg-warm-50 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2">
                 <Checkbox
                   checked={form.acceptTripay}
                   onCheckedChange={(v) =>
@@ -555,7 +560,7 @@ export function OrderFormsClient({
                 />
                 <span className="text-sm font-medium">
                   Terima Pembayaran Otomatis (VA/QRIS)
-                  <span className="ml-1 text-xs font-normal text-warm-500">
+                  <span className="text-warm-500 ml-1 text-xs font-normal">
                     — konfirmasi instan, biaya channel dibebankan ke pembeli
                   </span>
                 </span>
@@ -577,7 +582,7 @@ export function OrderFormsClient({
                     setForm((f) => ({ ...f, shippingFlatCod: e.target.value }))
                   }
                 />
-                <p className="text-xs text-warm-500">
+                <p className="text-warm-500 text-xs">
                   Banyak seller pakai flat untuk COD karena kurir COD beda.
                   Kosongkan kalau mau pakai ongkir RajaOngkir untuk semua
                   payment.
@@ -585,7 +590,7 @@ export function OrderFormsClient({
               </div>
             )}
 
-            <div className="space-y-2 rounded-lg border bg-warm-50 p-3">
+            <div className="bg-warm-50 space-y-2 rounded-lg border p-3">
               <div className="flex items-center justify-between">
                 <Label className="cursor-pointer text-sm">
                   Tampilkan counter Flash Sale
@@ -622,16 +627,16 @@ export function OrderFormsClient({
             </div>
 
             {/* Social Proof section */}
-            <div className="space-y-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 p-3">
+            <div className="border-primary-200 bg-primary-50 space-y-3 rounded-lg border-2 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <Label className="flex items-center gap-2 text-sm font-semibold text-emerald-900">
+                  <Label className="text-primary-900 flex items-center gap-2 text-sm font-semibold">
                     <MessageSquare className="size-4" />
                     Social Proof
                   </Label>
-                  <p className="mt-1 text-xs text-emerald-800">
-                    Tampilkan popup pembeli sebelumnya untuk meyakinkan
-                    customer (mis. &ldquo;Budi - Surabaya - telah melakukan
+                  <p className="text-primary-800 mt-1 text-xs">
+                    Tampilkan popup pembeli sebelumnya untuk meyakinkan customer
+                    (mis. &ldquo;Budi - Surabaya - telah melakukan
                     pembelian&rdquo;). Data otomatis dari order PAID.
                   </p>
                 </div>
@@ -646,7 +651,7 @@ export function OrderFormsClient({
               {form.socialProofEnabled && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-emerald-900">
+                    <Label className="text-primary-900 text-xs">
                       Posisi Popup
                     </Label>
                     <div className="grid grid-cols-2 gap-2">
@@ -657,8 +662,8 @@ export function OrderFormsClient({
                         }
                         className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                           form.socialProofPosition === 'top'
-                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
-                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                            ? 'border-primary-500 text-primary-900 bg-white font-semibold'
+                            : 'border-primary-200 text-primary-700 bg-white/60 hover:bg-white'
                         }`}
                       >
                         Atas
@@ -673,8 +678,8 @@ export function OrderFormsClient({
                         }
                         className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                           form.socialProofPosition === 'bottom'
-                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
-                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                            ? 'border-primary-500 text-primary-900 bg-white font-semibold'
+                            : 'border-primary-200 text-primary-700 bg-white/60 hover:bg-white'
                         }`}
                       >
                         Bawah
@@ -685,7 +690,7 @@ export function OrderFormsClient({
                   <div className="space-y-1.5">
                     <Label
                       htmlFor="of-sp-interval"
-                      className="text-xs text-emerald-900"
+                      className="text-primary-900 text-xs"
                     >
                       Kecepatan Tampil (detik antar popup)
                     </Label>
@@ -706,24 +711,24 @@ export function OrderFormsClient({
                         }))
                       }
                     />
-                    <p className="text-xs text-emerald-800">
+                    <p className="text-primary-800 text-xs">
                       Range 3-30 detik. Lebih kecil = lebih sering muncul.
                       Recommended: 6-10 detik supaya tidak mengganggu.
                     </p>
                   </div>
 
-                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2.5">
+                  <div className="border-primary-300 rounded-md border bg-white px-3 py-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-emerald-900">
+                        <p className="text-primary-900 text-sm font-medium">
                           Tampilkan waktu pembelian
                         </p>
-                        <p className="mt-0.5 text-xs text-emerald-800">
-                          Saat <strong>ON</strong>: popup tampil &quot;Adnan dari
-                          Bandung telah melakukan pembelian ·{' '}
+                        <p className="text-primary-800 mt-0.5 text-xs">
+                          Saat <strong>ON</strong>: popup tampil &quot;Adnan
+                          dari Bandung telah melakukan pembelian ·{' '}
                           <span className="font-mono">2 hari lalu</span>&quot;.
-                          Saat <strong>OFF</strong>: tanpa timestamp — cocok kalau
-                          pembeli terakhirnya sudah lama (supaya tidak
+                          Saat <strong>OFF</strong>: tanpa timestamp — cocok
+                          kalau pembeli terakhirnya sudah lama (supaya tidak
                           counter-productive untuk konversi).
                         </p>
                       </div>
@@ -737,13 +742,13 @@ export function OrderFormsClient({
                     </div>
                   </div>
 
-                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2.5">
+                  <div className="border-primary-300 rounded-md border bg-white px-3 py-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-emerald-900">
+                        <p className="text-primary-900 text-sm font-medium">
                           Sound notif popup
                         </p>
-                        <p className="mt-0.5 text-xs text-emerald-800">
+                        <p className="text-primary-800 mt-0.5 text-xs">
                           Bunyi pendek saat popup muncul — supaya customer
                           notice. Default OFF (banyak pengunjung tidak suka
                           sound otomatis di mobile).
@@ -761,8 +766,8 @@ export function OrderFormsClient({
                       />
                     </div>
                     {form.socialProofSoundEnabled && (
-                      <div className="mt-2 space-y-2 border-t border-emerald-100 pt-2">
-                        <Label className="text-xs text-emerald-900">
+                      <div className="border-primary-100 mt-2 space-y-2 border-t pt-2">
+                        <Label className="text-primary-900 text-xs">
                           Pilih nada
                         </Label>
                         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -789,15 +794,15 @@ export function OrderFormsClient({
                               }}
                               className={`rounded-md border px-2 py-1.5 text-xs transition-colors ${
                                 form.socialProofSound === opt.v
-                                  ? 'border-emerald-500 bg-emerald-50 font-semibold text-emerald-900'
-                                  : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50/50'
+                                  ? 'border-primary-500 bg-primary-50 text-primary-900 font-semibold'
+                                  : 'border-primary-200 text-primary-700 hover:bg-primary-50/50 bg-white'
                               }`}
                             >
                               {opt.label}
                             </button>
                           ))}
                         </div>
-                        <p className="text-[10px] text-emerald-700">
+                        <p className="text-primary-700 text-xs">
                           Klik untuk preview sound. Bunyi disintesis browser
                           (Web Audio API), tidak butuh download file.
                         </p>
@@ -806,7 +811,7 @@ export function OrderFormsClient({
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-emerald-900">
+                    <Label className="text-primary-900 text-xs">
                       Sumber Data Popup
                     </Label>
                     <div className="grid grid-cols-2 gap-2">
@@ -817,12 +822,12 @@ export function OrderFormsClient({
                         }
                         className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                           form.socialProofSource === 'PAID'
-                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
-                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                            ? 'border-primary-500 text-primary-900 bg-white font-semibold'
+                            : 'border-primary-200 text-primary-700 bg-white/60 hover:bg-white'
                         }`}
                       >
                         <span className="block">Hanya order lunas</span>
-                        <span className="mt-0.5 block text-[10px] font-normal text-emerald-700">
+                        <span className="text-primary-700 mt-0.5 block text-xs font-normal">
                           Paling jujur (recommended)
                         </span>
                       </button>
@@ -833,24 +838,24 @@ export function OrderFormsClient({
                         }
                         className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                           form.socialProofSource === 'ALL'
-                            ? 'border-emerald-500 bg-white font-semibold text-emerald-900'
-                            : 'border-emerald-200 bg-white/60 text-emerald-700 hover:bg-white'
+                            ? 'border-primary-500 text-primary-900 bg-white font-semibold'
+                            : 'border-primary-200 text-primary-700 bg-white/60 hover:bg-white'
                         }`}
                       >
                         <span className="block">Semua order</span>
-                        <span className="mt-0.5 block text-[10px] font-normal text-emerald-700">
+                        <span className="text-primary-700 mt-0.5 block text-xs font-normal">
                           Termasuk pending — cocok form baru
                         </span>
                       </button>
                     </div>
-                    <p className="text-xs text-emerald-800">
+                    <p className="text-primary-800 text-xs">
                       <strong>Hanya order lunas</strong>: cuma tampilkan pembeli
                       yang sudah bayar. <strong>Semua order</strong>: termasuk
                       yang belum bayar — popup punya konten meski form baru.
                     </p>
                   </div>
 
-                  <p className="rounded border border-dashed border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-800">
+                  <p className="border-primary-300 text-primary-800 rounded border border-dashed bg-white/70 px-3 py-2 text-xs">
                     Privacy: hanya nama depan + nama kota yang ditampilkan.
                     Order yang tampil: dari 60 hari terakhir, sesuai pilihan
                     sumber data di atas.
@@ -860,23 +865,23 @@ export function OrderFormsClient({
             </div>
 
             {/* Pixel Tracking section */}
-            <div className="space-y-2 rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
+            <div className="border-primary-200 bg-primary-50 space-y-2 rounded-lg border-2 p-3">
               <div className="flex items-center gap-2">
-                <Activity className="size-4 text-purple-700" />
-                <Label className="text-sm font-semibold text-purple-900">
+                <Activity className="text-primary-700 size-4" />
+                <Label className="text-primary-900 text-sm font-semibold">
                   Pixel Tracking
                 </Label>
               </div>
-              <p className="text-xs text-purple-800">
+              <p className="text-primary-800 text-xs">
                 Pilih pixel yang akan track form ini. Customer akan otomatis
                 ter-track di Meta/Google/TikTok yang kamu centang.
               </p>
               {pixels.length === 0 ? (
-                <div className="rounded-lg border border-dashed bg-white p-3 text-center text-sm text-warm-600">
+                <div className="text-warm-600 rounded-lg border border-dashed bg-white p-3 text-center text-sm">
                   Belum ada pixel.{' '}
                   <Link
                     href="/integrations/pixels"
-                    className="font-semibold text-primary-600 underline"
+                    className="text-primary-600 font-semibold underline"
                   >
                     Setup pixel di sini →
                   </Link>
@@ -885,7 +890,7 @@ export function OrderFormsClient({
                 <ul className="space-y-1">
                   {pixels.map((p) => (
                     <li key={p.id}>
-                      <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2 hover:bg-purple-100">
+                      <label className="hover:bg-primary-100 flex cursor-pointer items-center gap-2 rounded-lg bg-white px-3 py-2">
                         <Checkbox
                           checked={form.enabledPixelIds.includes(p.id)}
                           onCheckedChange={() => togglePixel(p.id)}
@@ -896,7 +901,7 @@ export function OrderFormsClient({
                           </span>{' '}
                           · <span className="font-medium">{p.displayName}</span>
                           {p.serverSideEnabled && (
-                            <Badge className="ml-1 bg-emerald-100 text-emerald-800 text-[10px] hover:bg-emerald-100">
+                            <Badge className="bg-primary-100 text-primary-800 hover:bg-primary-100 ml-1 text-xs">
                               CAPI
                             </Badge>
                           )}

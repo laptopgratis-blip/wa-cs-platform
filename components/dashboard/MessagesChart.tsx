@@ -22,7 +22,10 @@ export function MessagesChart({ data }: { data: ChartPoint[] }) {
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+        <BarChart
+          data={data}
+          margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
+        >
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis
             dataKey="label"
@@ -47,9 +50,19 @@ export function MessagesChart({ data }: { data: ChartPoint[] }) {
             cursor={{ fill: 'var(--muted)', opacity: 0.4 }}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          {/* Customer = orange-200 (light), AI = orange-500 (primary) */}
-          <Bar dataKey="USER" name="Customer" fill="#fed7aa" radius={[6, 6, 0, 0]} />
-          <Bar dataKey="AI" name="AI" fill="#f97316" radius={[6, 6, 0, 0]} />
+          {/* Customer = chart-2 (primary muda), AI = chart-1 (primary) */}
+          <Bar
+            dataKey="USER"
+            name="Customer"
+            fill="var(--chart-2)"
+            radius={[6, 6, 0, 0]}
+          />
+          <Bar
+            dataKey="AI"
+            name="AI"
+            fill="var(--chart-1)"
+            radius={[6, 6, 0, 0]}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>

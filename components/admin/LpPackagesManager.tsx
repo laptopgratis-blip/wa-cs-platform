@@ -84,7 +84,10 @@ export function LpPackagesManager() {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/lp-packages')
-      const json = (await res.json()) as { success: boolean; data?: LpPackageRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: LpPackageRow[]
+      }
       if (json.success && json.data) setRows(json.data)
     } finally {
       setLoading(false)
@@ -201,10 +204,7 @@ export function LpPackagesManager() {
         title="Paket Upgrade Landing Page"
         description="Atur paket yang user bisa beli untuk upgrade kuota LP & storage."
         actions={
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" /> Tambah Paket
           </Button>
         }
@@ -246,7 +246,7 @@ export function LpPackagesManager() {
                   <TableCell>
                     <div className="font-medium">{p.name}</div>
                     {p.description && (
-                      <div className="text-xs text-muted-foreground line-clamp-1">
+                      <div className="text-muted-foreground line-clamp-1 text-xs">
                         {p.description}
                       </div>
                     )}
@@ -283,7 +283,7 @@ export function LpPackagesManager() {
                       }}
                     />
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right">
                     {p.sortOrder}
                   </TableCell>
                   <TableCell>
@@ -306,7 +306,11 @@ export function LpPackagesManager() {
                     />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(p)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -328,10 +332,12 @@ export function LpPackagesManager() {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-md px-6"
+          className="w-full overflow-y-auto px-6 sm:max-w-md"
         >
           <SheetHeader className="px-0">
-            <SheetTitle>{editing ? 'Edit Paket LP' : 'Tambah Paket LP'}</SheetTitle>
+            <SheetTitle>
+              {editing ? 'Edit Paket LP' : 'Tambah Paket LP'}
+            </SheetTitle>
             <SheetDescription>
               Paket ini muncul di halaman /pricing (subscription LP via token).
             </SheetDescription>
@@ -426,7 +432,7 @@ export function LpPackagesManager() {
                 value={priceMonthly}
                 onChange={(e) => setPriceMonthly(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Basis harga di /pricing (dibayar token). 0 = paket tidak bisa
                 di-subscribe.
               </p>
@@ -434,7 +440,7 @@ export function LpPackagesManager() {
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <Label>Order System</Label>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Akses Produk, Form Order, Zona Ongkir, Rekening.
                 </p>
               </div>
@@ -472,8 +478,8 @@ export function LpPackagesManager() {
         title="Hapus paket ini?"
         description={
           <>
-            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
-            bisa dibatalkan.
+            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini
+            tidak bisa dibatalkan.
           </>
         }
         isLoading={isDeleting}

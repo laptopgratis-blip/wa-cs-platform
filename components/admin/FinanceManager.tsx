@@ -4,13 +4,7 @@
 // Filter tab: Semua / Menunggu / Dikonfirmasi / Ditolak.
 // Aksi per row: Lihat Bukti, Konfirmasi, Tolak.
 import type { ManualPaymentStatus } from '@prisma/client'
-import {
-  CheckCircle2,
-  Clock,
-  ImageIcon,
-  Loader2,
-  XCircle,
-} from 'lucide-react'
+import { CheckCircle2, Clock, ImageIcon, Loader2, XCircle } from 'lucide-react'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -42,6 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { manualPaymentMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 
 interface ManualPaymentRow {
   id: string
@@ -95,8 +90,12 @@ export function FinanceManager() {
   const [page, setPage] = useState(1)
 
   const [proofTarget, setProofTarget] = useState<ManualPaymentRow | null>(null)
-  const [confirmTarget, setConfirmTarget] = useState<ManualPaymentRow | null>(null)
-  const [rejectTarget, setRejectTarget] = useState<ManualPaymentRow | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<ManualPaymentRow | null>(
+    null,
+  )
+  const [rejectTarget, setRejectTarget] = useState<ManualPaymentRow | null>(
+    null,
+  )
   const [rejectReason, setRejectReason] = useState('')
   const [isActing, setActing] = useState(false)
 
@@ -128,9 +127,12 @@ export function FinanceManager() {
     if (!confirmTarget) return
     setActing(true)
     try {
-      const res = await fetch(`/api/admin/finance/${confirmTarget.id}/confirm`, {
-        method: 'POST',
-      })
+      const res = await fetch(
+        `/api/admin/finance/${confirmTarget.id}/confirm`,
+        {
+          method: 'POST',
+        },
+      )
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal mengkonfirmasi')
@@ -190,7 +192,7 @@ export function FinanceManager() {
             <TabsTrigger key={t.value} value={t.value}>
               {t.label}
               {filter === t.value && t.value !== 'ALL' && total > 0 && (
-                <span className="ml-1.5 rounded-full bg-primary-100 px-1.5 text-xs font-semibold text-primary-700">
+                <span className="bg-primary-100 text-primary-700 ml-1.5 rounded-full px-1.5 text-xs font-semibold">
                   {total}
                 </span>
               )}
@@ -232,13 +234,15 @@ export function FinanceManager() {
                   <TableRow key={r.id}>
                     <TableCell>
                       <div className="font-medium">{r.user.name ?? '—'}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-muted-foreground text-xs">
                         {r.user.email}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{r.package?.name ?? '—'}</div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="font-medium">
+                        {r.package?.name ?? '—'}
+                      </div>
+                      <div className="text-muted-foreground text-xs">
                         {formatNumber(r.tokenAmount)} token
                       </div>
                     </TableCell>
@@ -246,14 +250,14 @@ export function FinanceManager() {
                       <div className="font-semibold tabular-nums">
                         {formatRupiah(r.totalAmount)}
                       </div>
-                      <div className="text-xs text-muted-foreground tabular-nums">
+                      <div className="text-muted-foreground text-xs tabular-nums">
                         {formatRupiah(r.amount)} + {r.uniqueCode}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono tabular-nums">
                       {r.uniqueCode}
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-xs">
                       {new Date(r.createdAt).toLocaleString('id-ID', {
                         day: '2-digit',
                         month: 'short',
@@ -268,7 +272,7 @@ export function FinanceManager() {
                         icon={StatusIcon}
                       />
                       {r.confirmer && r.status !== 'PENDING' && (
-                        <div className="mt-1 text-[10px] text-muted-foreground">
+                        <div className="text-muted-foreground mt-1 text-[10px]">
                           oleh {r.confirmer.name ?? r.confirmer.email}
                         </div>
                       )}
@@ -289,7 +293,7 @@ export function FinanceManager() {
                             <Button
                               variant="default"
                               size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700"
+                              className={TONES.success.solid}
                               onClick={() => setConfirmTarget(r)}
                             >
                               Konfirmasi
@@ -339,7 +343,7 @@ export function FinanceManager() {
           </DialogHeader>
           {proofTarget?.proofUrl ? (
             <div className="space-y-3">
-              <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border bg-warm-50">
+              <div className="bg-warm-50 relative h-[60vh] w-full overflow-hidden rounded-lg border">
                 <Image
                   src={proofTarget.proofUrl}
                   alt="Bukti transfer"
@@ -349,16 +353,18 @@ export function FinanceManager() {
                 />
               </div>
               {proofTarget.proofNote && (
-                <div className="rounded-md border bg-warm-50 p-3 text-sm">
-                  <div className="text-xs font-semibold uppercase text-warm-500">
+                <div className="bg-warm-50 rounded-md border p-3 text-sm">
+                  <div className="text-warm-500 text-xs font-semibold uppercase">
                     Catatan user
                   </div>
-                  <div className="mt-1 text-warm-700">{proofTarget.proofNote}</div>
+                  <div className="text-warm-700 mt-1">
+                    {proofTarget.proofNote}
+                  </div>
                 </div>
               )}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground py-8 text-center text-sm">
               User belum mengupload bukti.
             </p>
           )}
@@ -374,18 +380,21 @@ export function FinanceManager() {
           <DialogHeader>
             <DialogTitle>Konfirmasi Pembayaran?</DialogTitle>
             <DialogDescription>
-              Token akan langsung ditambahkan ke saldo user dan tidak bisa dibatalkan.
+              Token akan langsung ditambahkan ke saldo user dan tidak bisa
+              dibatalkan.
             </DialogDescription>
           </DialogHeader>
           {confirmTarget && (
-            <div className="space-y-2 rounded-md border bg-warm-50 p-3 text-sm">
+            <div className="bg-warm-50 space-y-2 rounded-md border p-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-warm-500">User</span>
                 <span className="font-medium">{confirmTarget.user.email}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-warm-500">Paket</span>
-                <span className="font-medium">{confirmTarget.package?.name ?? '—'}</span>
+                <span className="font-medium">
+                  {confirmTarget.package?.name ?? '—'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-warm-500">Token akan ditambahkan</span>
@@ -408,7 +417,7 @@ export function FinanceManager() {
             <Button
               onClick={doConfirm}
               disabled={isActing}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className={TONES.success.solid}
             >
               {isActing && <Loader2 className="mr-2 size-4 animate-spin" />}
               Ya, Konfirmasi
@@ -454,7 +463,11 @@ export function FinanceManager() {
             >
               Batal
             </Button>
-            <Button variant="destructive" onClick={doReject} disabled={isActing}>
+            <Button
+              variant="destructive"
+              onClick={doReject}
+              disabled={isActing}
+            >
               {isActing && <Loader2 className="mr-2 size-4 animate-spin" />}
               Ya, Tolak
             </Button>

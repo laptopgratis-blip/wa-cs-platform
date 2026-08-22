@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Download,
   FlaskConical,
+  Hourglass,
+  Lightbulb,
   Loader2,
   Pencil,
   Play,
@@ -22,8 +24,10 @@ import {
   Search,
   Square,
   Trash2,
+  X,
   XCircle,
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -60,7 +64,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 // ─────────────────────────────────────────
@@ -300,7 +306,9 @@ export function SoulLabManager() {
     let timer: ReturnType<typeof setTimeout> | null = null
     async function tick() {
       try {
-        const res = await fetch(`/api/admin/soul-lab/simulations/${activeSimId}`)
+        const res = await fetch(
+          `/api/admin/soul-lab/simulations/${activeSimId}`,
+        )
         const json = await res.json()
         if (cancelled) return
         if (json.success) {
@@ -339,9 +347,12 @@ export function SoulLabManager() {
     if (!form.buyerStyleId) return 'Pilih Gaya Balas pembeli'
     if (!form.sellerModelId) return 'Pilih model penjual'
     if (!form.buyerModelId) return 'Pilih model pembeli'
-    if (form.sellerContext.trim().length < 10) return 'Konteks bisnis minimal 10 karakter'
-    if (form.buyerScenario.trim().length < 10) return 'Skenario pembeli minimal 10 karakter'
-    if (form.starterMessage.trim().length < 2) return 'Pesan pembuka terlalu pendek'
+    if (form.sellerContext.trim().length < 10)
+      return 'Konteks bisnis minimal 10 karakter'
+    if (form.buyerScenario.trim().length < 10)
+      return 'Skenario pembeli minimal 10 karakter'
+    if (form.starterMessage.trim().length < 2)
+      return 'Pesan pembuka terlalu pendek'
     if (form.totalRounds < 2 || form.totalRounds > 30) return 'Ronde 2–30'
     return null
   }
@@ -379,9 +390,12 @@ export function SoulLabManager() {
     if (!activeSimId) return
     setStopConfirmOpen(false)
     try {
-      const res = await fetch(`/api/admin/soul-lab/simulations/${activeSimId}/cancel`, {
-        method: 'POST',
-      })
+      const res = await fetch(
+        `/api/admin/soul-lab/simulations/${activeSimId}/cancel`,
+        {
+          method: 'POST',
+        },
+      )
       const json = await res.json()
       if (json.success) toast.success('Simulasi di-cancel')
       else toast.error(json.error || 'Gagal cancel')
@@ -422,7 +436,11 @@ export function SoulLabManager() {
       const res = await fetch('/api/admin/soul-lab/presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description: description || undefined, config: form }),
+        body: JSON.stringify({
+          name,
+          description: description || undefined,
+          config: form,
+        }),
       })
       const json = await res.json()
       if (json.success) {
@@ -477,7 +495,10 @@ export function SoulLabManager() {
 
       {/* Section B — Live View */}
       {activeSim && activeSim.status === 'RUNNING' && (
-        <LiveSection sim={activeSim} onCancel={() => setStopConfirmOpen(true)} />
+        <LiveSection
+          sim={activeSim}
+          onCancel={() => setStopConfirmOpen(true)}
+        />
       )}
 
       {/* Section C — Results */}
@@ -626,12 +647,20 @@ function SetupSection({
         </div>
 
         {sameAgents && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div
+            className={cn(
+              'flex items-start gap-2 rounded-lg border p-3 text-sm',
+              TONES.warning.border,
+              TONES.warning.bg,
+              TONES.warning.text,
+            )}
+          >
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <div>
-              Kepribadian + Gaya Balas penjual dan pembeli sama persis. Self-test biasanya
-              kurang akurat — dua agen akan saling mendukung. Lebih baik pilih Kepribadian
-              tester yang berbeda untuk pembeli (mis. &quot;Tester - Pembeli Ragu&quot;).
+              Kepribadian + Gaya Balas penjual dan pembeli sama persis.
+              Self-test biasanya kurang akurat — dua agen akan saling mendukung.
+              Lebih baik pilih Kepribadian tester yang berbeda untuk pembeli
+              (mis. &quot;Tester - Pembeli Ragu&quot;).
             </div>
           </div>
         )}
@@ -646,7 +675,7 @@ function SetupSection({
         />
 
         {/* Pengaturan */}
-        <div className="grid gap-4 rounded-lg border border-warm-200 bg-warm-50/50 p-4 md:grid-cols-3">
+        <div className="border-warm-200 bg-warm-50/50 grid gap-4 rounded-lg border p-4 md:grid-cols-3">
           <div>
             <Label htmlFor="rounds">Jumlah ronde</Label>
             <Input
@@ -655,10 +684,15 @@ function SetupSection({
               min={2}
               max={30}
               value={form.totalRounds}
-              onChange={(e) => setF('totalRounds', Math.max(2, Math.min(30, Number(e.target.value) || 2)))}
+              onChange={(e) =>
+                setF(
+                  'totalRounds',
+                  Math.max(2, Math.min(30, Number(e.target.value) || 2)),
+                )
+              }
               className="mt-1"
             />
-            <p className="mt-1 text-xs text-warm-500">2–30 ronde</p>
+            <p className="text-warm-500 mt-1 text-xs">2–30 ronde</p>
           </div>
           <div>
             <Label>Yang memulai</Label>
@@ -697,8 +731,8 @@ function SetupSection({
         </div>
 
         {/* Action bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-warm-200 pt-4">
-          <div className="text-sm text-warm-600">
+        <div className="border-warm-200 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <div className="text-warm-600 text-sm">
             {estimating ? (
               <span className="flex items-center gap-1.5">
                 <Loader2 className="size-3.5 animate-spin" /> Menghitung biaya…
@@ -706,18 +740,32 @@ function SetupSection({
             ) : estimateRp !== null ? (
               <span>
                 Estimasi biaya:{' '}
-                <strong className="text-warm-900">{formatRupiah(estimateRp)}</strong>
+                <strong className="text-warm-900">
+                  {formatRupiah(estimateRp)}
+                </strong>
               </span>
             ) : (
-              <span className="text-warm-400">Pilih model dulu untuk lihat estimasi.</span>
+              <span className="text-warm-400">
+                Pilih model dulu untuk lihat estimasi.
+              </span>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={onSavePreset} type="button">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onSavePreset}
+              type="button"
+            >
               <Save className="mr-1 size-4" />
               Simpan Preset
             </Button>
-            <Button variant="outline" size="sm" onClick={onLoadPreset} type="button">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onLoadPreset}
+              type="button"
+            >
               <Bookmark className="mr-1 size-4" />
               Load Preset
             </Button>
@@ -780,7 +828,7 @@ function AgentColumn({
     >
       <h3
         className={cn(
-          'mb-3 text-xs font-bold uppercase tracking-wider',
+          'mb-3 text-xs font-bold tracking-wider uppercase',
           accent === 'primary' ? 'text-primary-700' : 'text-warm-700',
         )}
       >
@@ -802,7 +850,7 @@ function AgentColumn({
             </SelectContent>
           </Select>
           {selectedPersonality && (
-            <p className="mt-1 text-[11px] text-warm-500">
+            <p className="text-warm-500 mt-1 text-xs">
               {selectedPersonality.description}
             </p>
           )}
@@ -822,7 +870,9 @@ function AgentColumn({
             </SelectContent>
           </Select>
           {selectedStyle && (
-            <p className="mt-1 text-[11px] text-warm-500">{selectedStyle.description}</p>
+            <p className="text-warm-500 mt-1 text-xs">
+              {selectedStyle.description}
+            </p>
           )}
         </div>
         <div>
@@ -849,7 +899,7 @@ function AgentColumn({
             placeholder={contextPlaceholder}
             className="mt-1"
           />
-          <p className="mt-1 text-[11px] text-warm-400">
+          <p className="text-warm-400 mt-1 text-xs">
             {context.length} / 8000 karakter
           </p>
         </div>
@@ -901,20 +951,21 @@ function KnowledgePicker({
   }
 
   return (
-    <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+    <div className="border-primary-200 bg-primary-50/40 rounded-lg border p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Label className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+          <Label className="text-primary-900 flex items-center gap-2 text-sm font-semibold">
             <BookOpen className="size-4" /> Knowledge Base (opsional)
           </Label>
-          <p className="mt-1 text-xs text-blue-800">
-            Pilih entry knowledge yang dipakai seller saat merespons. Engine akan
-            keyword-match ke pesan pembeli (sama dengan production behavior). Test
-            jadi lebih akurat karena seller punya info pendukung.
+          <p className="text-primary-800 mt-1 text-xs">
+            Pilih entry knowledge yang dipakai seller saat merespons. Engine
+            akan keyword-match ke pesan pembeli (sama dengan production
+            behavior). Test jadi lebih akurat karena seller punya info
+            pendukung.
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <span className="text-xs font-semibold text-blue-900">
+          <span className="text-primary-900 text-xs font-semibold">
             {selectedCount}/{KNOWLEDGE_LIMIT}
           </span>
           <Button
@@ -938,11 +989,11 @@ function KnowledgePicker({
               <Badge
                 key={id}
                 variant="secondary"
-                className="cursor-pointer bg-blue-100 text-blue-900 hover:bg-blue-200"
+                className="bg-primary-100 text-primary-900 hover:bg-primary-200 cursor-pointer"
                 onClick={() => toggle(id)}
                 title="Klik untuk hapus"
               >
-                {k.title} ✕
+                {k.title} <X className="size-3" aria-hidden />
               </Badge>
             )
           })}
@@ -952,7 +1003,7 @@ function KnowledgePicker({
       {expanded && (
         <div className="mt-3 space-y-2">
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-blue-700" />
+            <Search className="text-primary-700 absolute top-1/2 left-2 size-3.5 -translate-y-1/2" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -960,23 +1011,24 @@ function KnowledgePicker({
               className="h-8 pl-7 text-sm"
             />
           </div>
-          <div className="max-h-72 overflow-y-auto rounded border border-blue-200 bg-white">
+          <div className="border-primary-200 bg-card max-h-72 overflow-y-auto rounded border">
             {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-blue-700">
+              <p className="text-primary-700 px-3 py-4 text-center text-xs">
                 {knowledge.length === 0
                   ? 'Belum ada knowledge entry di sistem. Buat dulu via /knowledge.'
                   : 'Tidak ada match untuk query.'}
               </p>
             ) : (
-              <ul className="divide-y divide-blue-100">
+              <ul className="divide-primary-100 divide-y">
                 {filtered.slice(0, 100).map((k) => {
                   const checked = selectedSet.has(k.id)
-                  const disabled = !checked && selectedSet.size >= KNOWLEDGE_LIMIT
+                  const disabled =
+                    !checked && selectedSet.size >= KNOWLEDGE_LIMIT
                   return (
                     <li key={k.id}>
                       <label
                         className={cn(
-                          'flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-blue-50',
+                          'hover:bg-primary-50 flex cursor-pointer items-start gap-3 px-3 py-2',
                           disabled && 'cursor-not-allowed opacity-50',
                         )}
                       >
@@ -989,26 +1041,26 @@ function KnowledgePicker({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-baseline gap-2">
-                            <span className="text-sm font-medium text-warm-900">
+                            <span className="text-warm-900 text-sm font-medium">
                               {k.title}
                             </span>
                             <Badge
                               variant="outline"
-                              className="text-[10px] uppercase"
+                              className="text-xs uppercase"
                             >
                               {k.contentType}
                             </Badge>
                           </div>
-                          <p className="text-xs text-warm-500">
+                          <p className="text-warm-500 text-xs">
                             {k.user.email}
                           </p>
                           {k.triggerKeywords.length > 0 && (
-                            <p className="mt-0.5 truncate text-[11px] text-blue-700">
+                            <p className="text-primary-700 mt-0.5 truncate text-xs">
                               keywords: {k.triggerKeywords.join(', ')}
                             </p>
                           )}
                           {(k.textContent || k.caption) && (
-                            <p className="mt-0.5 line-clamp-2 text-xs text-warm-600">
+                            <p className="text-warm-600 mt-0.5 line-clamp-2 text-xs">
                               {(k.textContent || k.caption || '').slice(0, 200)}
                             </p>
                           )}
@@ -1020,9 +1072,9 @@ function KnowledgePicker({
               </ul>
             )}
             {filtered.length > 100 && (
-              <p className="border-t border-blue-100 px-3 py-2 text-center text-[11px] text-blue-700">
-                Menampilkan 100 dari {filtered.length} hasil — refine query untuk
-                lihat lainnya.
+              <p className="text-primary-700 border-primary-100 border-t px-3 py-2 text-center text-xs">
+                Menampilkan 100 dari {filtered.length} hasil — refine query
+                untuk lihat lainnya.
               </p>
             )}
           </div>
@@ -1036,7 +1088,13 @@ function KnowledgePicker({
 // Live section — chat bubble realtime
 // ─────────────────────────────────────────
 
-function LiveSection({ sim, onCancel }: { sim: Simulation; onCancel: () => void }) {
+function LiveSection({
+  sim,
+  onCancel,
+}: {
+  sim: Simulation
+  onCancel: () => void
+}) {
   const scrollRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (scrollRef.current) {
@@ -1072,13 +1130,13 @@ function LiveSection({ sim, onCancel }: { sim: Simulation; onCancel: () => void 
           <CardTitle className="text-base">
             Ronde {sim.currentRound} / {sim.totalRounds}
           </CardTitle>
-          <p className="text-xs text-warm-500">
+          <p className="text-warm-500 text-xs">
             {sellerLabel} ({sim.sellerModel.name}) vs {buyerLabel} (
             {sim.buyerModel.name})
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-warm-700">
+          <span className="text-warm-700 text-sm font-medium">
             {formatRupiah(Math.ceil(sim.totalCostRp))}
           </span>
           <Button variant="destructive" size="sm" onClick={onCancel}>
@@ -1110,26 +1168,23 @@ function ChatBubble({ turn }: { turn: ConversationTurn }) {
   })
   return (
     <div
-      className={cn(
-        'mb-2 flex',
-        isSeller ? 'justify-end' : 'justify-start',
-      )}
+      className={cn('mb-2 flex', isSeller ? 'justify-end' : 'justify-start')}
     >
       <div
         className={cn(
           'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
           isSeller
-            ? 'rounded-tr-sm bg-primary-500 text-white'
-            : 'rounded-tl-sm bg-white text-warm-900',
+            ? 'bg-primary-500 rounded-tr-sm text-white'
+            : 'text-warm-900 rounded-tl-sm bg-white',
         )}
       >
-        <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-70">
+        <div className="mb-0.5 text-xs font-semibold tracking-wide uppercase opacity-70">
           {isSeller ? 'Penjual' : 'Pembeli'}
         </div>
-        <div className="whitespace-pre-wrap break-words">{turn.content}</div>
+        <div className="break-words whitespace-pre-wrap">{turn.content}</div>
         <div
           className={cn(
-            'mt-1 text-right text-[10px]',
+            'mt-1 text-right text-xs',
             isSeller ? 'text-primary-100' : 'text-warm-400',
           )}
         >
@@ -1147,13 +1202,15 @@ function TypingIndicator({ role }: { role: 'SELLER' | 'BUYER' }) {
       <div
         className={cn(
           'rounded-2xl px-3 py-2 shadow-sm',
-          isSeller ? 'rounded-tr-sm bg-primary-500/70' : 'rounded-tl-sm bg-white/80',
+          isSeller
+            ? 'bg-primary-500/70 rounded-tr-sm'
+            : 'rounded-tl-sm bg-white/80',
         )}
       >
         <div className="flex gap-1">
-          <span className="size-1.5 animate-bounce rounded-full bg-warm-400 [animation-delay:-0.3s]" />
-          <span className="size-1.5 animate-bounce rounded-full bg-warm-400 [animation-delay:-0.15s]" />
-          <span className="size-1.5 animate-bounce rounded-full bg-warm-400" />
+          <span className="bg-warm-400 size-1.5 animate-bounce rounded-full [animation-delay:-0.3s]" />
+          <span className="bg-warm-400 size-1.5 animate-bounce rounded-full [animation-delay:-0.15s]" />
+          <span className="bg-warm-400 size-1.5 animate-bounce rounded-full" />
         </div>
       </div>
     </div>
@@ -1173,14 +1230,19 @@ function ResultSection({
 }) {
   if (sim.status === 'FAILED') {
     return (
-      <Card className="border-red-200">
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base text-red-700">
+          <CardTitle
+            className={cn(
+              'flex items-center gap-2 text-base',
+              TONES.danger.text,
+            )}
+          >
             <XCircle className="size-5" /> Simulasi Gagal
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-warm-700">
+          <p className="text-warm-700 text-sm">
             {sim.errorMessage || 'Error tidak diketahui'}
           </p>
           <div className="mt-4 flex gap-2">
@@ -1195,12 +1257,14 @@ function ResultSection({
   }
   if (sim.status === 'CANCELLED') {
     return (
-      <Card className="border-warm-300">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base text-warm-700">Simulasi di-Cancel</CardTitle>
+          <CardTitle className="text-warm-700 text-base">
+            Simulasi di-Cancel
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-warm-600">
+          <p className="text-warm-600 text-sm">
             Berhenti di ronde {sim.currentRound}/{sim.totalRounds}. Total cost:{' '}
             {formatRupiah(Math.ceil(sim.totalCostRp))}.
           </p>
@@ -1217,18 +1281,24 @@ function ResultSection({
 
   const evalData = sim.evaluationData
   const score = sim.evaluationScore ?? 0
-  const outcomeStyle =
+  const outcomeTone =
     sim.outcome === 'SOLD'
-      ? 'bg-emerald-100 text-emerald-700'
+      ? TONES.success
       : sim.outcome === 'REJECTED'
-        ? 'bg-red-100 text-red-700'
-        : 'bg-warm-100 text-warm-700'
+        ? TONES.danger
+        : TONES.neutral
+  const OutcomeIcon =
+    sim.outcome === 'SOLD'
+      ? CheckCircle2
+      : sim.outcome === 'REJECTED'
+        ? XCircle
+        : Hourglass
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <CheckCircle2 className="size-5 text-emerald-600" />
+          <CheckCircle2 className={cn('size-5', TONES.success.text)} />
           Hasil Penilaian
         </CardTitle>
       </CardHeader>
@@ -1237,26 +1307,35 @@ function ResultSection({
         <div>
           <div className="flex items-baseline justify-between">
             <div>
-              <span className="text-3xl font-bold text-warm-900">{score.toFixed(1)}</span>
-              <span className="ml-1 text-sm text-warm-400">/ 10</span>
+              <span className="text-warm-900 text-3xl font-bold">
+                {score.toFixed(1)}
+              </span>
+              <span className="text-warm-400 ml-1 text-sm">/ 10</span>
             </div>
-            <div className={cn('rounded-full px-3 py-1 text-xs font-bold', outcomeStyle)}>
+            <div
+              className={cn(
+                'flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold',
+                outcomeTone.bg,
+                outcomeTone.text,
+              )}
+            >
+              <OutcomeIcon className="size-3.5" aria-hidden />
               {sim.outcome === 'SOLD'
-                ? '✅ SOLD'
+                ? 'SOLD'
                 : sim.outcome === 'REJECTED'
-                  ? '❌ REJECTED'
-                  : '⏳ INCONCLUSIVE'}
+                  ? 'REJECTED'
+                  : 'INCONCLUSIVE'}
             </div>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-warm-200">
+          <div className="bg-warm-200 mt-2 h-2 overflow-hidden rounded-full">
             <div
               className={cn(
                 'h-full transition-all',
                 score >= 7
-                  ? 'bg-emerald-500'
+                  ? TONES.success.dot
                   : score >= 4
-                    ? 'bg-amber-500'
-                    : 'bg-red-500',
+                    ? TONES.warning.dot
+                    : TONES.danger.dot,
               )}
               style={{ width: `${(score / 10) * 100}%` }}
             />
@@ -1266,8 +1345,8 @@ function ResultSection({
         {/* Meta */}
         <div className="grid gap-3 text-sm md:grid-cols-3">
           {evalData?.closingRound != null && (
-            <div className="rounded border border-warm-200 bg-warm-50 p-2">
-              <div className="text-[11px] uppercase tracking-wide text-warm-500">
+            <div className="border-warm-200 bg-warm-50 rounded border p-2">
+              <div className="text-warm-500 text-xs tracking-wide uppercase">
                 Closing
               </div>
               <div className="font-semibold">
@@ -1276,23 +1355,25 @@ function ResultSection({
             </div>
           )}
           {evalData?.mainObjection && (
-            <div className="rounded border border-warm-200 bg-warm-50 p-2">
-              <div className="text-[11px] uppercase tracking-wide text-warm-500">
+            <div className="border-warm-200 bg-warm-50 rounded border p-2">
+              <div className="text-warm-500 text-xs tracking-wide uppercase">
                 Keberatan utama
               </div>
               <div className="font-medium">{evalData.mainObjection}</div>
             </div>
           )}
-          <div className="rounded border border-warm-200 bg-warm-50 p-2">
-            <div className="text-[11px] uppercase tracking-wide text-warm-500">
+          <div className="border-warm-200 bg-warm-50 rounded border p-2">
+            <div className="text-warm-500 text-xs tracking-wide uppercase">
               Total cost
             </div>
-            <div className="font-semibold">{formatRupiah(Math.ceil(sim.totalCostRp))}</div>
+            <div className="font-semibold">
+              {formatRupiah(Math.ceil(sim.totalCostRp))}
+            </div>
           </div>
         </div>
 
         {evalData?.summary && (
-          <blockquote className="border-l-4 border-primary-300 bg-primary-50/50 px-4 py-2 text-sm italic text-warm-700">
+          <blockquote className="border-primary-300 bg-primary-50/50 text-warm-700 border-l-4 px-4 py-2 text-sm italic">
             {evalData.summary}
           </blockquote>
         )}
@@ -1300,29 +1381,29 @@ function ResultSection({
         {evalData && (
           <div className="grid gap-4 md:grid-cols-3">
             <EvalList
-              icon="✅"
+              icon={CheckCircle2}
               title="Kekuatan"
               items={evalData.strengths}
-              accent="emerald"
+              accent="success"
             />
             <EvalList
-              icon="⚠️"
+              icon={AlertTriangle}
               title="Kelemahan"
               items={evalData.weaknesses}
-              accent="amber"
+              accent="warning"
             />
             <EvalList
-              icon="💡"
+              icon={Lightbulb}
               title="Saran"
               items={evalData.suggestions}
-              accent="primary"
+              accent="brand"
             />
           </div>
         )}
 
         {/* Conversation preview (collapsible) */}
-        <details className="rounded-lg border border-warm-200">
-          <summary className="cursor-pointer px-4 py-2 text-sm font-medium hover:bg-warm-50">
+        <details className="border-warm-200 rounded-lg border">
+          <summary className="hover:bg-warm-50 cursor-pointer px-4 py-2 text-sm font-medium">
             Lihat percakapan ({sim.conversation.length} pesan)
           </summary>
           <div className="max-h-72 space-y-2 overflow-y-auto bg-[#e5ddd5] p-4">
@@ -1333,10 +1414,10 @@ function ResultSection({
         </details>
 
         {/* Actions */}
-        <div className="flex flex-wrap gap-2 border-t border-warm-200 pt-4">
+        <div className="border-warm-200 flex flex-wrap gap-2 border-t pt-4">
           <a
             href={`/api/admin/soul-lab/simulations/${sim.id}/export`}
-            className="inline-flex items-center gap-1 rounded-md border border-warm-300 px-3 py-1.5 text-sm hover:bg-warm-50"
+            className="border-warm-300 hover:bg-warm-50 inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm"
           >
             <Download className="size-4" /> Download .md
           </a>
@@ -1345,7 +1426,7 @@ function ResultSection({
           </Button>
           <a
             href="/admin/soul-settings"
-            className="inline-flex items-center gap-1 rounded-md border border-warm-300 px-3 py-1.5 text-sm hover:bg-warm-50"
+            className="border-warm-300 hover:bg-warm-50 inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm"
           >
             <Pencil className="size-4" /> Edit Soul Settings
           </a>
@@ -1356,30 +1437,25 @@ function ResultSection({
 }
 
 function EvalList({
-  icon,
+  icon: Icon,
   title,
   items,
   accent,
 }: {
-  icon: string
+  icon: LucideIcon
   title: string
   items: string[]
-  accent: 'emerald' | 'amber' | 'primary'
+  accent: 'success' | 'warning' | 'brand'
 }) {
-  const accentClass =
-    accent === 'emerald'
-      ? 'border-emerald-200 bg-emerald-50/40'
-      : accent === 'amber'
-        ? 'border-amber-200 bg-amber-50/40'
-        : 'border-primary-200 bg-primary-50/40'
+  const tone = TONES[accent]
   return (
-    <div className={cn('rounded-lg border p-3', accentClass)}>
-      <h4 className="mb-2 text-sm font-semibold">
-        <span className="mr-1">{icon}</span>
+    <div className={cn('rounded-lg border p-3', tone.border, tone.bg)}>
+      <h4 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+        <Icon className={cn('size-4', tone.text)} aria-hidden />
         {title}
       </h4>
       {items.length === 0 ? (
-        <p className="text-xs text-warm-500">—</p>
+        <p className="text-warm-500 text-xs">—</p>
       ) : (
         <ul className="space-y-1.5 text-sm">
           {items.map((item, i) => (
@@ -1414,7 +1490,9 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
       const params = new URLSearchParams()
       if (statusFilter !== 'ALL') params.set('status', statusFilter)
       params.set('page', String(page))
-      const res = await fetch(`/api/admin/soul-lab/simulations?${params.toString()}`)
+      const res = await fetch(
+        `/api/admin/soul-lab/simulations?${params.toString()}`,
+      )
       const json = await res.json()
       if (json.success) {
         setItems(json.data.items)
@@ -1443,7 +1521,10 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
               setPage(1)
             }}
           >
-            <SelectTrigger className="h-8 w-36" aria-label="Filter status simulasi">
+            <SelectTrigger
+              className="h-8 w-36"
+              aria-label="Filter status simulasi"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1462,12 +1543,14 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
       <CardContent className="px-0">
         {loading ? (
           <div className="flex h-32 items-center justify-center">
-            <Loader2 className="size-5 animate-spin text-warm-500" />
+            <Loader2 className="text-warm-500 size-5 animate-spin" />
           </div>
         ) : items.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-warm-500">
-            Belum ada simulasi.
-          </p>
+          <EmptyState
+            icon={FlaskConical}
+            title="Belum ada simulasi"
+            description="Jalankan simulasi pertama lewat form Setup di atas."
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -1489,7 +1572,7 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
                   className="cursor-pointer"
                   onClick={() => setDetailOpen(s)}
                 >
-                  <TableCell className="text-xs text-warm-500">
+                  <TableCell className="text-warm-500 text-xs">
                     {new Date(s.createdAt).toLocaleString('id-ID', {
                       dateStyle: 'short',
                       timeStyle: 'short',
@@ -1513,7 +1596,9 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
                     {s.currentRound}/{s.totalRounds}
                   </TableCell>
                   <TableCell className="text-center text-sm font-semibold">
-                    {s.evaluationScore != null ? s.evaluationScore.toFixed(1) : '—'}
+                    {s.evaluationScore != null
+                      ? s.evaluationScore.toFixed(1)
+                      : '—'}
                   </TableCell>
                   <TableCell>
                     <StatusBadge sim={s} />
@@ -1525,7 +1610,7 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
                     <a
                       href={`/api/admin/soul-lab/simulations/${s.id}/export`}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-xs text-primary-600 hover:underline"
+                      className="text-primary-600 text-xs hover:underline"
                     >
                       .md
                     </a>
@@ -1550,7 +1635,10 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
       </CardContent>
 
       {/* Detail modal */}
-      <Dialog open={!!detailOpen} onOpenChange={(o) => !o && setDetailOpen(null)}>
+      <Dialog
+        open={!!detailOpen}
+        onOpenChange={(o) => !o && setDetailOpen(null)}
+      >
         <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detail Simulasi</DialogTitle>
@@ -1565,7 +1653,7 @@ function HistorySection({ refreshKey }: { refreshKey?: string }) {
 function StatusBadge({ sim }: { sim: Simulation }) {
   if (sim.status === 'RUNNING') {
     return (
-      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+      <Badge variant="secondary" className={cn(TONES.info.bg, TONES.info.text)}>
         <Loader2 className="mr-1 size-3 animate-spin" />
         Running
       </Badge>
@@ -1579,7 +1667,12 @@ function StatusBadge({ sim }: { sim: Simulation }) {
   }
   if (sim.outcome === 'SOLD') {
     return (
-      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">SOLD</Badge>
+      <Badge
+        variant="secondary"
+        className={cn(TONES.success.bg, TONES.success.text)}
+      >
+        SOLD
+      </Badge>
     )
   }
   if (sim.outcome === 'REJECTED') {
@@ -1612,7 +1705,7 @@ function DetailView({ sim }: { sim: Simulation }) {
         </div>
       </div>
       {sim.evaluationData && (
-        <div className="rounded-lg border border-warm-200 bg-warm-50 p-3">
+        <div className="border-warm-200 bg-warm-50 rounded-lg border p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-2xl font-bold">
               {sim.evaluationScore?.toFixed(1)}/10
@@ -1620,14 +1713,16 @@ function DetailView({ sim }: { sim: Simulation }) {
             <StatusBadge sim={sim} />
           </div>
           {sim.evaluationData.summary && (
-            <p className="italic text-warm-700">{sim.evaluationData.summary}</p>
+            <p className="text-warm-700 italic">{sim.evaluationData.summary}</p>
           )}
           <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
             {sim.evaluationData.strengths.length > 0 && (
               <div>
                 <strong>Kekuatan:</strong>
                 <ul className="ml-3 list-disc">
-                  {sim.evaluationData.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                  {sim.evaluationData.strengths.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -1635,7 +1730,9 @@ function DetailView({ sim }: { sim: Simulation }) {
               <div>
                 <strong>Kelemahan:</strong>
                 <ul className="ml-3 list-disc">
-                  {sim.evaluationData.weaknesses.map((s, i) => <li key={i}>{s}</li>)}
+                  {sim.evaluationData.weaknesses.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -1643,7 +1740,9 @@ function DetailView({ sim }: { sim: Simulation }) {
               <div>
                 <strong>Saran:</strong>
                 <ul className="ml-3 list-disc">
-                  {sim.evaluationData.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                  {sim.evaluationData.suggestions.map((s, i) => (
+                    <li key={i}>{s}</li>
+                  ))}
                 </ul>
               </div>
             )}
@@ -1657,7 +1756,7 @@ function DetailView({ sim }: { sim: Simulation }) {
       </div>
       <a
         href={`/api/admin/soul-lab/simulations/${sim.id}/export`}
-        className="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline"
+        className="text-primary-600 inline-flex items-center gap-1 text-xs hover:underline"
       >
         <Download className="size-3" />
         Download .md
@@ -1697,9 +1796,19 @@ function ConfirmStartDialog({
           </DialogDescription>
         </DialogHeader>
         {sameAgents && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            ⚠️ Kepribadian + Gaya Balas penjual dan pembeli sama persis. Self-test biasanya
-            kurang akurat.
+          <div
+            className={cn(
+              'flex items-start gap-2 rounded-lg border p-3 text-sm',
+              TONES.warning.border,
+              TONES.warning.bg,
+              TONES.warning.text,
+            )}
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>
+              Kepribadian + Gaya Balas penjual dan pembeli sama persis.
+              Self-test biasanya kurang akurat.
+            </span>
           </div>
         )}
         <DialogFooter>
@@ -1734,36 +1843,44 @@ function PresetsDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Load Preset</DialogTitle>
-          <DialogDescription>Pilih preset untuk auto-fill setup.</DialogDescription>
+          <DialogDescription>
+            Pilih preset untuk auto-fill setup.
+          </DialogDescription>
         </DialogHeader>
         <div className="max-h-96 space-y-2 overflow-y-auto">
           {presets.length === 0 ? (
-            <p className="py-8 text-center text-sm text-warm-500">Belum ada preset.</p>
+            <p className="text-warm-500 py-8 text-center text-sm">
+              Belum ada preset.
+            </p>
           ) : (
             presets.map((p) => (
               <div
                 key={p.id}
-                className="flex items-start justify-between gap-3 rounded-lg border border-warm-200 p-3 hover:bg-warm-50"
+                className="border-warm-200 hover:bg-warm-50 flex items-start justify-between gap-3 rounded-lg border p-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{p.name}</div>
                   {p.description && (
-                    <div className="text-xs text-warm-500">{p.description}</div>
+                    <div className="text-warm-500 text-xs">{p.description}</div>
                   )}
-                  <div className="mt-1 text-[11px] text-warm-400">
+                  <div className="text-warm-400 mt-1 text-xs">
                     oleh {p.creator?.name || p.creator?.email || '?'} ·{' '}
                     {new Date(p.createdAt).toLocaleDateString('id-ID')}
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button size="sm" variant="outline" onClick={() => onApply(p)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onApply(p)}
+                  >
                     Pakai
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => onDelete(p.id)}
-                    className="text-red-600 hover:bg-red-50"
+                    className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -1851,4 +1968,3 @@ function SavePresetForm({
     </>
   )
 }
-

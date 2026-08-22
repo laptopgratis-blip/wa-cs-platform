@@ -9,9 +9,18 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 // Channel yang pakai REDIRECT flow.
-const REDIRECT_CHANNELS = new Set(['QRIS', 'QRISC', 'QRIS2', 'SHOPEEPAY', 'OVO', 'DANA'])
+const REDIRECT_CHANNELS = new Set([
+  'QRIS',
+  'QRISC',
+  'QRIS2',
+  'SHOPEEPAY',
+  'OVO',
+  'DANA',
+])
 
 interface PaymentInfoCardProps {
   paymentMethod: string | null
@@ -31,7 +40,9 @@ export function PaymentInfoCard({
   expiredAt,
 }: PaymentInfoCardProps) {
   const [copied, setCopied] = useState(false)
-  const isRedirect = paymentMethod ? REDIRECT_CHANNELS.has(paymentMethod) : false
+  const isRedirect = paymentMethod
+    ? REDIRECT_CHANNELS.has(paymentMethod)
+    : false
 
   // Normalize QRIS variants.
   const displayName = paymentMethod?.startsWith('QRIS')
@@ -53,23 +64,26 @@ export function PaymentInfoCard({
   if (isRedirect && paymentUrl) {
     return (
       <div className="space-y-3">
-        <div className="rounded-xl border border-warm-200 bg-warm-50/50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
+        <div className="border-warm-200 bg-warm-50/50 rounded-xl border p-4">
+          <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
             {displayName}
           </div>
-          <p className="mt-2 text-sm text-warm-600">
-            Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan transaksi.
+          <p className="text-warm-600 mt-2 text-sm">
+            Anda akan diarahkan ke halaman pembayaran untuk menyelesaikan
+            transaksi.
           </p>
           <div className="mt-3 flex items-baseline justify-between">
-            <span className="text-sm text-warm-500">Total pembayaran</span>
-            <span className="font-display text-xl font-extrabold text-warm-900 tabular-nums">
+            <span className="text-warm-500 text-sm">Total pembayaran</span>
+            <span className="font-display text-warm-900 text-xl font-bold tabular-nums">
               {formatRupiah(amount)}
             </span>
           </div>
         </div>
         <Button
-          onClick={() => { window.location.href = paymentUrl }}
-          className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+          onClick={() => {
+            window.location.href = paymentUrl
+          }}
+          className="w-full"
           size="lg"
         >
           Bayar Sekarang
@@ -83,16 +97,16 @@ export function PaymentInfoCard({
   if (payCode) {
     return (
       <div className="space-y-3">
-        <div className="rounded-xl border border-warm-200 bg-warm-50/50 p-4">
-          <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
+        <div className="border-warm-200 bg-warm-50/50 rounded-xl border p-4">
+          <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
             {displayName}
           </div>
 
           {/* Pay code */}
-          <div className="mt-3 flex items-center justify-between rounded-lg border border-warm-200 bg-white p-3">
+          <div className="border-warm-200 bg-card mt-3 flex items-center justify-between rounded-lg border p-3">
             <div>
-              <div className="text-xs text-warm-400">Kode Bayar / Nomor VA</div>
-              <div className="mt-0.5 font-mono text-lg font-bold tracking-wider text-warm-900">
+              <div className="text-warm-400 text-xs">Kode Bayar / Nomor VA</div>
+              <div className="text-warm-900 mt-0.5 font-mono text-lg font-bold tracking-wider">
                 {payCode}
               </div>
             </div>
@@ -103,18 +117,20 @@ export function PaymentInfoCard({
               className="shrink-0"
             >
               {copied ? (
-                <Check className="size-4 text-emerald-500" />
+                <Check className={cn('size-4', TONES.success.text)} />
               ) : (
-                <Copy className="size-4 text-warm-500" />
+                <Copy className="text-warm-500 size-4" />
               )}
             </Button>
           </div>
 
           {/* Amount */}
-          <div className="mt-3 flex items-center justify-between rounded-lg border border-warm-200 bg-white p-3">
+          <div className="border-warm-200 bg-card mt-3 flex items-center justify-between rounded-lg border p-3">
             <div>
-              <div className="text-xs text-warm-400">Jumlah yang harus dibayar</div>
-              <div className="mt-0.5 font-display text-lg font-extrabold text-warm-900 tabular-nums">
+              <div className="text-warm-400 text-xs">
+                Jumlah yang harus dibayar
+              </div>
+              <div className="font-display text-warm-900 mt-0.5 text-lg font-bold tabular-nums">
                 {formatRupiah(amount)}
               </div>
             </div>
@@ -125,9 +141,9 @@ export function PaymentInfoCard({
               className="shrink-0"
             >
               {copied ? (
-                <Check className="size-4 text-emerald-500" />
+                <Check className={cn('size-4', TONES.success.text)} />
               ) : (
-                <Copy className="size-4 text-warm-500" />
+                <Copy className="text-warm-500 size-4" />
               )}
             </Button>
           </div>
@@ -140,8 +156,10 @@ export function PaymentInfoCard({
   if (paymentUrl) {
     return (
       <Button
-        onClick={() => { window.location.href = paymentUrl }}
-        className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+        onClick={() => {
+          window.location.href = paymentUrl
+        }}
+        className="w-full"
         size="lg"
       >
         Bayar Sekarang

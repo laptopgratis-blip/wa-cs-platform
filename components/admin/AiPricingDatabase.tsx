@@ -105,7 +105,11 @@ interface JobStatus {
   status: 'RUNNING' | 'SUCCESS' | 'FAILED'
   modelsAdded: number
   modelsUpdated: number
-  diff: { added: DiffEntry[]; updated: DiffEntry[]; unchanged: DiffEntry[] } | null
+  diff: {
+    added: DiffEntry[]
+    updated: DiffEntry[]
+    unchanged: DiffEntry[]
+  } | null
   error: string | null
   startedAt: string
   completedAt: string | null
@@ -198,7 +202,8 @@ export function AiPricingDatabase() {
 
   const filtered = useMemo(() => {
     return presets.filter((p) => {
-      if (filterProvider !== 'ALL' && p.provider !== filterProvider) return false
+      if (filterProvider !== 'ALL' && p.provider !== filterProvider)
+        return false
       if (filterFreshness !== 'ALL' && p.freshnessStatus !== filterFreshness)
         return false
       return true
@@ -208,7 +213,16 @@ export function AiPricingDatabase() {
   // ── Research flow ──────────────────────────────────────────────────
   async function startResearch() {
     setConfirmOpen(false)
-    setJob({ id: '', status: 'RUNNING', modelsAdded: 0, modelsUpdated: 0, diff: null, error: null, startedAt: new Date().toISOString(), completedAt: null })
+    setJob({
+      id: '',
+      status: 'RUNNING',
+      modelsAdded: 0,
+      modelsUpdated: 0,
+      diff: null,
+      error: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    })
     setStepIdx(0)
     try {
       const res = await fetch('/api/admin/ai-pricing/research', {
@@ -239,7 +253,10 @@ export function AiPricingDatabase() {
     const tick = async () => {
       try {
         const res = await fetch(`/api/admin/ai-pricing/research/${jobId}`)
-        const json = (await res.json()) as { success: boolean; data?: JobStatus }
+        const json = (await res.json()) as {
+          success: boolean
+          data?: JobStatus
+        }
         if (json.success && json.data) {
           setJob(json.data)
           if (json.data.status !== 'RUNNING') {
@@ -280,17 +297,14 @@ export function AiPricingDatabase() {
     if (!job || job.status !== 'SUCCESS') return
     setApplying(true)
     try {
-      const res = await fetch(
-        '/api/admin/ai-pricing/presets/apply-changes',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jobId: job.id,
-            modelIds: Array.from(reviewSelected),
-          }),
-        },
-      )
+      const res = await fetch('/api/admin/ai-pricing/presets/apply-changes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId: job.id,
+          modelIds: Array.from(reviewSelected),
+        }),
+      })
       const json = (await res.json()) as {
         success: boolean
         data?: { applied: number }
@@ -363,7 +377,6 @@ export function AiPricingDatabase() {
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={Boolean(job && job.status === 'RUNNING')}
-            className="bg-primary-500 text-white hover:bg-primary-600"
           >
             <Sparkles className="mr-2 size-4" />
             Update via AI
@@ -435,7 +448,7 @@ export function AiPricingDatabase() {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{p.displayName}</div>
-                      <div className="font-mono text-xs text-muted-foreground">
+                      <div className="text-muted-foreground font-mono text-xs">
                         {p.modelId}
                       </div>
                     </TableCell>
@@ -445,7 +458,7 @@ export function AiPricingDatabase() {
                     <TableCell className="text-right tabular-nums">
                       {formatPrice(p.outputPricePer1M)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-right tabular-nums">
                       {p.contextWindow
                         ? `${(p.contextWindow / 1000).toFixed(0)}K`
                         : '—'}
@@ -461,7 +474,7 @@ export function AiPricingDatabase() {
                         {FRESHNESS_LABEL[p.freshnessStatus]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-xs">
                       {formatDistanceToNow(new Date(p.lastUpdatedAt), {
                         addSuffix: true,
                         locale: idLocale,
@@ -485,7 +498,7 @@ export function AiPricingDatabase() {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-8 text-center text-sm"
                     >
                       Tidak ada preset cocok dengan filter.
                     </TableCell>
@@ -566,7 +579,7 @@ export function AiPricingDatabase() {
                   <TableRow>
                     <TableCell
                       colSpan={6}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-8 text-center text-sm"
                     >
                       Belum ada research log.
                     </TableCell>
@@ -659,7 +672,9 @@ export function AiPricingDatabase() {
                   </Section>
                 )}
                 {job.diff.updated.length > 0 && (
-                  <Section title={`📝 ${job.diff.updated.length} model berubah`}>
+                  <Section
+                    title={`📝 ${job.diff.updated.length} model berubah`}
+                  >
                     {job.diff.updated.map((d) => (
                       <DiffRow
                         key={d.modelId}
@@ -671,16 +686,17 @@ export function AiPricingDatabase() {
                   </Section>
                 )}
                 {job.diff.unchanged.length > 0 && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     {job.diff.unchanged.length} model tidak berubah
                     (auto-skipped)
                   </p>
                 )}
-                {job.diff.added.length === 0 && job.diff.updated.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Tidak ada perubahan harga.
-                  </p>
-                )}
+                {job.diff.added.length === 0 &&
+                  job.diff.updated.length === 0 && (
+                    <p className="text-muted-foreground text-sm">
+                      Tidak ada perubahan harga.
+                    </p>
+                  )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeJob}>
@@ -805,10 +821,9 @@ function DiffRow({
   checked: boolean
   onToggle: () => void
 }) {
-  const naik =
-    d.before && d.after.inputPricePer1M > d.before.inputPricePer1M
+  const naik = d.before && d.after.inputPricePer1M > d.before.inputPricePer1M
   return (
-    <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2 hover:bg-warm-50 dark:hover:bg-warm-900/30">
+    <label className="hover:bg-warm-50 flex cursor-pointer items-start gap-2 rounded-md border p-2">
       <Checkbox
         checked={checked}
         onCheckedChange={onToggle}
@@ -816,7 +831,7 @@ function DiffRow({
       />
       <div className="min-w-0 flex-1 text-sm">
         <p className="font-medium">{d.after.displayName}</p>
-        <p className="font-mono text-xs text-muted-foreground">
+        <p className="text-muted-foreground font-mono text-xs">
           {d.after.modelId}
         </p>
         <p className="mt-1 text-xs">

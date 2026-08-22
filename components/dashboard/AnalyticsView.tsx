@@ -6,16 +6,13 @@ import type { PipelineStage, WaStatus } from '@prisma/client'
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  CheckCircle2,
   Coins,
   Loader2,
   MessageSquare,
-  PauseCircle,
   Percent,
   RefreshCw,
   Smartphone,
   Users,
-  XCircle,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -35,6 +32,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import {
@@ -54,6 +52,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatNumber } from '@/lib/format'
+import {
+  pipelineStageMeta,
+  statusMeta,
+  waSessionStatusMeta,
+} from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Stats {
@@ -111,60 +115,15 @@ interface AnalyticsData {
   range: { sinceISO: string; days: number }
 }
 
-const PIPELINE_LABEL: Record<PipelineStage, string> = {
-  NEW: 'Baru',
-  PROSPECT: 'Prospek',
-  INTEREST: 'Tertarik',
-  NEGOTIATION: 'Negosiasi',
-  CLOSED_WON: 'Menang (Beli)',
-  CLOSED_LOST: 'Kalah (Tidak Jadi)',
-}
-
-const PIPELINE_COLOR: Record<PipelineStage, string> = {
-  NEW: 'bg-warm-300',
-  PROSPECT: 'bg-blue-400',
-  INTEREST: 'bg-amber-400',
-  NEGOTIATION: 'bg-violet-400',
-  CLOSED_WON: 'bg-emerald-500',
-  CLOSED_LOST: 'bg-rose-400',
-}
-
-const STATUS_LABEL: Record<WaStatus, string> = {
-  DISCONNECTED: 'Terputus',
-  CONNECTING: 'Menghubungkan',
-  WAITING_QR: 'Menunggu QR',
-  CONNECTED: 'Aktif',
-  PAUSED: 'Dijeda',
-  ERROR: 'Error',
-}
-
-function StatusBadge({ status }: { status: WaStatus }) {
-  if (status === 'CONNECTED') {
-    return (
-      <Badge className="gap-1 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-        <CheckCircle2 className="size-3" />
-        {STATUS_LABEL[status]}
-      </Badge>
-    )
-  }
-  if (status === 'PAUSED') {
-    return (
-      <Badge variant="secondary" className="gap-1 bg-amber-100 text-amber-700">
-        <PauseCircle className="size-3" />
-        {STATUS_LABEL[status]}
-      </Badge>
-    )
-  }
-  if (status === 'ERROR') {
-    return (
-      <Badge variant="destructive" className="gap-1">
-        <XCircle className="size-3" />
-        {STATUS_LABEL[status]}
-      </Badge>
-    )
-  }
-  return <Badge variant="outline">{STATUS_LABEL[status]}</Badge>
-}
+// Urutan tampil stage pipeline — label & tone dari registry lib/status.ts.
+const PIPELINE_ORDER: PipelineStage[] = [
+  'NEW',
+  'PROSPECT',
+  'INTEREST',
+  'NEGOTIATION',
+  'CLOSED_WON',
+  'CLOSED_LOST',
+]
 
 const TOOLTIP_STYLE = {
   background: 'var(--popover)',
@@ -184,7 +143,11 @@ export function AnalyticsView() {
     else setRefreshing(true)
     try {
       const res = await fetch('/api/analytics/user')
-      const json = (await res.json()) as { success: boolean; data?: AnalyticsData; error?: string }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: AnalyticsData
+        error?: string
+      }
       if (!res.ok || !json.success || !json.data) {
         toast.error(json.error || 'Gagal memuat analytics')
         return
@@ -244,8 +207,8 @@ export function AnalyticsView() {
           icon={ArrowDownLeft}
           label="Pesan Masuk"
           value={data.stats.totalIncoming}
-          color="text-blue-600"
-          bg="bg-blue-50"
+          color="text-primary-600"
+          bg="bg-primary-50"
         />
         <StatCard
           icon={ArrowUpRight}
@@ -258,28 +221,28 @@ export function AnalyticsView() {
           icon={Users}
           label="Total Kontak"
           value={data.stats.totalContacts}
-          color="text-emerald-600"
-          bg="bg-emerald-50"
+          color="text-primary-600"
+          bg="bg-primary-50"
         />
         <StatCard
           icon={Coins}
           label="Token Terpakai"
           value={data.stats.tokensUsed}
-          color="text-amber-600"
-          bg="bg-amber-50"
+          color="text-primary-600"
+          bg="bg-primary-50"
         />
         <StatCard
           icon={Percent}
           label="Response Rate"
           value={`${data.stats.responseRate}%`}
-          color="text-violet-600"
-          bg="bg-violet-50"
+          color="text-primary-600"
+          bg="bg-primary-50"
         />
       </div>
 
       {/* Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="rounded-xl border-warm-200">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">
               Pesan Masuk vs Balasan AI
@@ -295,7 +258,10 @@ export function AnalyticsView() {
                   data={data.dailySeries}
                   margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-border"
+                  />
                   <XAxis
                     dataKey="label"
                     tickLine={false}
@@ -317,13 +283,13 @@ export function AnalyticsView() {
                   <Bar
                     dataKey="USER"
                     name="Pesan Masuk"
-                    fill="#60a5fa"
+                    fill="var(--chart-2)"
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey="AI"
                     name="Balasan AI"
-                    fill="#f97316"
+                    fill="var(--chart-1)"
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
@@ -332,7 +298,7 @@ export function AnalyticsView() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl border-warm-200">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">
               Token Terpakai per Hari
@@ -348,7 +314,10 @@ export function AnalyticsView() {
                   data={data.dailySeries}
                   margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    className="stroke-border"
+                  />
                   <XAxis
                     dataKey="label"
                     tickLine={false}
@@ -367,7 +336,7 @@ export function AnalyticsView() {
                     type="monotone"
                     dataKey="tokens"
                     name="Token"
-                    stroke="#d97706"
+                    stroke="var(--chart-1)"
                     strokeWidth={2}
                     dot={{ r: 2 }}
                     activeDot={{ r: 5 }}
@@ -380,9 +349,11 @@ export function AnalyticsView() {
       </div>
 
       {/* Pipeline */}
-      <Card className="rounded-xl border-warm-200">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">Pipeline Kontak</CardTitle>
+          <CardTitle className="text-sm font-semibold">
+            Pipeline Kontak
+          </CardTitle>
           <CardDescription className="text-xs">
             Distribusi {formatNumber(totalPipeline)} kontak per stage
           </CardDescription>
@@ -395,20 +366,25 @@ export function AnalyticsView() {
             />
           ) : (
             <div className="space-y-3">
-              {(Object.keys(PIPELINE_LABEL) as PipelineStage[]).map((stage) => {
+              {PIPELINE_ORDER.map((stage) => {
                 const row = data.pipeline.find((p) => p.stage === stage)
                 const count = row?.count ?? 0
-                const pct = totalPipeline > 0 ? (count / totalPipeline) * 100 : 0
+                const pct =
+                  totalPipeline > 0 ? (count / totalPipeline) * 100 : 0
+                const meta = statusMeta(pipelineStageMeta, stage)
                 return (
                   <div key={stage} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <span
                           aria-hidden
-                          className={cn('size-2 rounded-full', PIPELINE_COLOR[stage])}
+                          className={cn(
+                            'size-2 rounded-full',
+                            TONES[meta.tone].dot,
+                          )}
                         />
-                        <span className="font-medium text-warm-700">
-                          {PIPELINE_LABEL[stage]}
+                        <span className="text-warm-700 font-medium">
+                          {meta.label}
                         </span>
                       </div>
                       <div className="text-warm-500 tabular-nums">
@@ -425,7 +401,7 @@ export function AnalyticsView() {
       </Card>
 
       {/* Per-session table */}
-      <Card className="rounded-xl border-warm-200">
+      <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">
             Performa WhatsApp Session
@@ -461,13 +437,13 @@ export function AnalyticsView() {
                   <TableRow key={s.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Smartphone className="size-3.5 text-warm-500" />
+                        <Smartphone className="text-warm-500 size-3.5" />
                         <div>
                           <div className="font-medium tabular-nums">
                             {s.phoneNumber ?? '—'}
                           </div>
                           {s.displayName && (
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-muted-foreground text-xs">
                               {s.displayName}
                             </div>
                           )}
@@ -475,7 +451,10 @@ export function AnalyticsView() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={s.status} />
+                      <StatusBadge
+                        tone={statusMeta(waSessionStatusMeta, s.status).tone}
+                        label={statusMeta(waSessionStatusMeta, s.status).label}
+                      />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatNumber(s.totalMessages)}
@@ -486,7 +465,7 @@ export function AnalyticsView() {
                     <TableCell className="text-right tabular-nums">
                       {formatNumber(s.totalContacts)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-amber-600">
+                    <TableCell className="text-primary-600 text-right tabular-nums">
                       ~{formatNumber(s.estimatedTokens)}
                     </TableCell>
                   </TableRow>
@@ -498,9 +477,11 @@ export function AnalyticsView() {
       </Card>
 
       {/* Recent contacts table */}
-      <Card className="rounded-xl border-warm-200">
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">Kontak Terbaru</CardTitle>
+          <CardTitle className="text-sm font-semibold">
+            Kontak Terbaru
+          </CardTitle>
           <CardDescription className="text-xs">
             10 kontak yang terakhir kirim/terima pesan
           </CardDescription>
@@ -510,7 +491,9 @@ export function AnalyticsView() {
             <TableHeader>
               <TableRow>
                 <TableHead>Kontak</TableHead>
-                <TableHead className="hidden md:table-cell">Pesan Terakhir</TableHead>
+                <TableHead className="hidden md:table-cell">
+                  Pesan Terakhir
+                </TableHead>
                 <TableHead>Pipeline</TableHead>
                 <TableHead className="text-right">Waktu</TableHead>
               </TableRow>
@@ -530,28 +513,28 @@ export function AnalyticsView() {
                   <TableRow key={c.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <MessageSquare className="size-3.5 text-warm-500" />
+                        <MessageSquare className="text-warm-500 size-3.5" />
                         <div>
                           <div className="font-medium">
                             {c.name ?? c.phoneNumber}
                           </div>
-                          <div className="text-xs text-muted-foreground tabular-nums">
+                          <div className="text-muted-foreground text-xs tabular-nums">
                             {c.phoneNumber}
                           </div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden max-w-md text-sm text-warm-600 md:table-cell">
+                    <TableCell className="text-warm-600 hidden max-w-md text-sm md:table-cell">
                       {c.lastMessage ? (
                         <div className="truncate">
                           <span
                             className={cn(
-                              'mr-1.5 inline-block rounded px-1.5 text-[10px] font-semibold',
+                              'mr-1.5 inline-block rounded px-1.5 text-xs font-semibold',
                               c.lastMessage.role === 'USER'
-                                ? 'bg-blue-100 text-blue-700'
+                                ? cn(TONES.info.bg, TONES.info.text)
                                 : c.lastMessage.role === 'AI'
-                                  ? 'bg-primary-100 text-primary-700'
-                                  : 'bg-warm-200 text-warm-700',
+                                  ? cn(TONES.brand.bg, TONES.brand.text)
+                                  : cn(TONES.neutral.bg, TONES.neutral.text),
                             )}
                           >
                             {c.lastMessage.role}
@@ -568,13 +551,16 @@ export function AnalyticsView() {
                           aria-hidden
                           className={cn(
                             'size-1.5 rounded-full',
-                            PIPELINE_COLOR[c.pipelineStage],
+                            TONES[
+                              statusMeta(pipelineStageMeta, c.pipelineStage)
+                                .tone
+                            ].dot,
                           )}
                         />
-                        {PIPELINE_LABEL[c.pipelineStage]}
+                        {statusMeta(pipelineStageMeta, c.pipelineStage).label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-right text-xs">
                       {c.lastMessageAt
                         ? new Date(c.lastMessageAt).toLocaleString('id-ID', {
                             day: '2-digit',
@@ -605,7 +591,7 @@ interface StatCardProps {
 
 function StatCard({ icon: Icon, label, value, color, bg }: StatCardProps) {
   return (
-    <Card className="rounded-xl border-warm-200">
+    <Card>
       <CardContent className="flex items-center gap-3 p-4">
         <div
           className={cn(
@@ -617,8 +603,8 @@ function StatCard({ icon: Icon, label, value, color, bg }: StatCardProps) {
           <Icon className="size-5" />
         </div>
         <div className="min-w-0">
-          <div className="text-xs text-warm-500">{label}</div>
-          <div className="font-display text-xl font-bold tabular-nums text-warm-900 dark:text-warm-50">
+          <div className="text-warm-500 text-xs">{label}</div>
+          <div className="font-display text-warm-900 text-xl font-bold tabular-nums">
             {typeof value === 'number' ? formatNumber(value) : value}
           </div>
         </div>

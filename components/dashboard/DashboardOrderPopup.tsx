@@ -20,6 +20,8 @@
 import { CheckCircle2, ShoppingBag, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import {
   attachAutoplayUnlocker,
   type NotificationSound,
@@ -48,7 +50,10 @@ function formatRupiah(n: number): string {
   return `Rp ${n.toLocaleString('id-ID')}`
 }
 
-export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps) {
+export function DashboardOrderPopup({
+  enabled,
+  sound,
+}: DashboardOrderPopupProps) {
   const [queue, setQueue] = useState<RecentOrder[]>([])
   const [active, setActive] = useState<RecentOrder | null>(null)
   const lastSeenRef = useRef<string | null>(null)
@@ -188,20 +193,24 @@ export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps
   if (!enabled || !active) return null
 
   const isPaid = active.status === 'PAID'
-  const statusBadge = isPaid ? '💰 Pembayaran masuk' : '🛒 Order baru'
-  const badgeColor = isPaid
-    ? 'bg-emerald-100 text-emerald-700'
-    : 'bg-amber-100 text-amber-700'
+  const statusBadge = isPaid ? 'Pembayaran masuk' : 'Order baru'
+  const badgeTone = isPaid ? TONES.success : TONES.warning
   const Icon = isPaid ? CheckCircle2 : ShoppingBag
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed right-4 top-4 z-[60] w-[calc(100vw-2rem)] max-w-sm animate-[slide-down_0.35s_ease-out] sm:right-6 sm:top-6"
+      className="fixed top-4 right-4 z-[60] w-[calc(100vw-2rem)] max-w-sm animate-[slide-down_0.35s_ease-out] sm:top-6 sm:right-6"
     >
-      <div className="overflow-hidden rounded-xl border border-warm-200 bg-white shadow-xl">
-        <div className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold ${badgeColor}`}>
+      <div className="border-warm-200 bg-card overflow-hidden rounded-xl border shadow-xl">
+        <div
+          className={cn(
+            'flex items-center gap-2 px-3 py-1.5 text-xs font-semibold',
+            badgeTone.bg,
+            badgeTone.text,
+          )}
+        >
           <Icon className="size-3.5" />
           <span className="flex-1">{statusBadge}</span>
           <button
@@ -214,16 +223,16 @@ export function DashboardOrderPopup({ enabled, sound }: DashboardOrderPopupProps
           </button>
         </div>
         <div className="space-y-1 px-3 py-2.5">
-          <p className="text-sm font-semibold text-warm-900">
+          <p className="text-warm-900 text-sm font-semibold">
             {active.name}
             {active.city && (
               <>
-                <span className="font-normal text-warm-500"> dari </span>
+                <span className="text-warm-500 font-normal"> dari </span>
                 {active.city}
               </>
             )}
           </p>
-          <p className="text-base font-bold text-warm-900">
+          <p className="text-warm-900 text-base font-bold">
             {formatRupiah(active.totalRp)}
           </p>
         </div>

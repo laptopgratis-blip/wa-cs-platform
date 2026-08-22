@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Textarea } from '@/components/ui/textarea'
+import { TONES } from '@/lib/ui-tones'
 
 interface Props {
   orderId: string
@@ -76,7 +77,7 @@ export function InlineNotesAdmin({ orderId, value, onSaved }: Props) {
             type="button"
             onClick={save}
             disabled={saving}
-            className="rounded p-1 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+            className={`rounded p-1 ${TONES.success.text} hover:bg-warm-100 disabled:opacity-50`}
             title="Simpan (Enter)"
           >
             {saving ? (
@@ -88,7 +89,7 @@ export function InlineNotesAdmin({ orderId, value, onSaved }: Props) {
           <button
             type="button"
             onClick={cancel}
-            className="rounded p-1 text-warm-500 hover:bg-warm-100"
+            className="text-warm-500 hover:bg-warm-100 rounded p-1"
             title="Batal (Esc)"
           >
             <X className="size-3" />
@@ -102,13 +103,13 @@ export function InlineNotesAdmin({ orderId, value, onSaved }: Props) {
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="group block w-full rounded px-1 py-0.5 text-left text-xs hover:bg-warm-100 dark:hover:bg-warm-800"
+      className="group hover:bg-warm-100 block w-full rounded px-1 py-0.5 text-left text-xs"
       title="Klik untuk edit"
     >
       {value ? (
         <span className="line-clamp-2 whitespace-pre-line">{value}</span>
       ) : (
-        <span className="inline-flex items-center gap-1 italic text-warm-400 group-hover:text-warm-600">
+        <span className="text-warm-400 group-hover:text-warm-600 inline-flex items-center gap-1 italic">
           <Pencil className="size-3" />
           Tambah catatan
         </span>

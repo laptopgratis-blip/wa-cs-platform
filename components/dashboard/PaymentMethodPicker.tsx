@@ -26,7 +26,14 @@ type PaymentMethod = 'tripay' | 'manual' | null
 type Step = 'method' | 'channel' // step 1: pilih metode, step 2: pilih channel Tripay
 
 // Channel yang pakai REDIRECT flow — user dikirim langsung ke Tripay.
-const REDIRECT_CHANNELS = new Set(['QRIS', 'QRISC', 'QRIS2', 'SHOPEEPAY', 'OVO', 'DANA'])
+const REDIRECT_CHANNELS = new Set([
+  'QRIS',
+  'QRISC',
+  'QRIS2',
+  'SHOPEEPAY',
+  'OVO',
+  'DANA',
+])
 
 interface ChannelData {
   code: string
@@ -48,7 +55,9 @@ export function PaymentMethodPicker({
   const router = useRouter()
   const [selected, setSelected] = useState<PaymentMethod>(null)
   const [step, setStep] = useState<Step>('method')
-  const [selectedChannel, setSelectedChannel] = useState<ChannelData | null>(null)
+  const [selectedChannel, setSelectedChannel] = useState<ChannelData | null>(
+    null,
+  )
   const [isLoading, setLoading] = useState(false)
 
   function estimateCustomerFee(): number {
@@ -101,7 +110,10 @@ export function PaymentMethodPicker({
       }
 
       // REDIRECT channels (QRIS, E-Wallet): langsung ke Tripay checkout.
-      if (REDIRECT_CHANNELS.has(selectedChannel!.code) && json.data.paymentUrl) {
+      if (
+        REDIRECT_CHANNELS.has(selectedChannel!.code) &&
+        json.data.paymentUrl
+      ) {
         window.location.href = json.data.paymentUrl
         return
       }
@@ -150,14 +162,17 @@ export function PaymentMethodPicker({
       <div className="space-y-4">
         <button
           type="button"
-          onClick={() => { setStep('method'); setSelectedChannel(null) }}
-          className="flex items-center gap-1.5 text-sm text-warm-500 transition-colors hover:text-warm-700"
+          onClick={() => {
+            setStep('method')
+            setSelectedChannel(null)
+          }}
+          className="text-warm-500 hover:text-warm-700 flex items-center gap-1.5 text-sm transition-colors"
         >
           <ArrowLeft className="size-3.5" />
           Kembali pilih metode
         </button>
 
-        <h2 className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+        <h2 className="font-display text-warm-900 text-lg font-semibold">
           Pilih Channel Pembayaran
         </h2>
 
@@ -169,20 +184,24 @@ export function PaymentMethodPicker({
 
         {/* Fee summary */}
         {selectedChannel && (
-          <div className="rounded-lg border border-warm-200 bg-warm-50/50 p-3 text-sm">
+          <div className="border-warm-200 bg-warm-50/50 rounded-lg border p-3 text-sm">
             <div className="flex justify-between">
               <span className="text-warm-500">Harga paket</span>
-              <span className="font-medium tabular-nums">{formatRupiah(packagePrice)}</span>
+              <span className="font-medium tabular-nums">
+                {formatRupiah(packagePrice)}
+              </span>
             </div>
             {customerFee > 0 && (
               <div className="flex justify-between">
                 <span className="text-warm-500">Biaya layanan</span>
-                <span className="font-medium tabular-nums">{formatRupiah(customerFee)}</span>
+                <span className="font-medium tabular-nums">
+                  {formatRupiah(customerFee)}
+                </span>
               </div>
             )}
-            <div className="mt-1.5 flex justify-between border-t border-warm-200 pt-1.5 text-base">
-              <span className="font-semibold text-warm-700">Total</span>
-              <span className="font-display font-extrabold text-warm-900 tabular-nums">
+            <div className="border-warm-200 mt-1.5 flex justify-between border-t pt-1.5 text-base">
+              <span className="text-warm-700 font-semibold">Total</span>
+              <span className="font-display text-warm-900 font-bold tabular-nums">
                 {formatRupiah(packagePrice + customerFee)}
               </span>
             </div>
@@ -192,7 +211,7 @@ export function PaymentMethodPicker({
         <Button
           onClick={handleConfirm}
           disabled={!selectedChannel || isLoading}
-          className="w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600 disabled:opacity-50"
+          className="w-full rounded-full"
           size="lg"
           aria-label={`Bayar paket ${packageName} via ${selectedChannel?.name ?? 'Payment Gateway'}`}
         >
@@ -208,7 +227,7 @@ export function PaymentMethodPicker({
   // ─── STEP 1: Method selection ───
   return (
     <div className="space-y-4">
-      <h2 className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+      <h2 className="font-display text-warm-900 text-lg font-semibold">
         Metode Pembayaran
       </h2>
 
@@ -218,14 +237,14 @@ export function PaymentMethodPicker({
           className={cn(
             'cursor-pointer rounded-xl border-2 transition-all hover:shadow-md',
             selected === 'tripay'
-              ? 'border-primary-500 bg-primary-50/50 shadow-md ring-1 ring-primary-200'
+              ? 'border-primary-500 bg-primary-50/50 ring-primary-200 shadow-md ring-1'
               : 'border-warm-200 hover:border-primary-300',
           )}
           onClick={() => handleMethodSelect('tripay')}
         >
           <CardContent className="flex flex-col gap-3 p-5">
             <div className="flex items-center justify-between">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary-100 text-primary-600">
+              <div className="bg-primary-100 text-primary-600 flex size-10 items-center justify-center rounded-lg">
                 <CreditCard className="size-5" />
               </div>
               <div
@@ -242,14 +261,14 @@ export function PaymentMethodPicker({
               </div>
             </div>
             <div>
-              <div className="font-display text-base font-bold text-warm-900 dark:text-warm-50">
+              <div className="font-display text-warm-900 text-base font-semibold">
                 Payment Gateway
               </div>
-              <p className="mt-1 text-xs text-warm-500">
+              <p className="text-warm-500 mt-1 text-xs">
                 QRIS, Virtual Account, E-Wallet, dan lainnya
               </p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-primary-600">
+            <div className="text-primary-600 flex items-center gap-1.5 text-xs">
               <Zap className="size-3.5" />
               <span>Otomatis &amp; instan</span>
             </div>
@@ -261,14 +280,14 @@ export function PaymentMethodPicker({
           className={cn(
             'cursor-pointer rounded-xl border-2 transition-all hover:shadow-md',
             selected === 'manual'
-              ? 'border-primary-500 bg-primary-50/50 shadow-md ring-1 ring-primary-200'
+              ? 'border-primary-500 bg-primary-50/50 ring-primary-200 shadow-md ring-1'
               : 'border-warm-200 hover:border-primary-300',
           )}
           onClick={() => handleMethodSelect('manual')}
         >
           <CardContent className="flex flex-col gap-3 p-5">
             <div className="flex items-center justify-between">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+              <div className="bg-primary-100 text-primary-600 flex size-10 items-center justify-center rounded-lg">
                 <Banknote className="size-5" />
               </div>
               <div
@@ -285,14 +304,14 @@ export function PaymentMethodPicker({
               </div>
             </div>
             <div>
-              <div className="font-display text-base font-bold text-warm-900 dark:text-warm-50">
+              <div className="font-display text-warm-900 text-base font-semibold">
                 Transfer Manual
               </div>
-              <p className="mt-1 text-xs text-warm-500">
+              <p className="text-warm-500 mt-1 text-xs">
                 Transfer ke rekening bank, lalu upload bukti untuk verifikasi
               </p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-amber-600">
+            <div className="text-primary-600 flex items-center gap-1.5 text-xs">
               <ShieldCheck className="size-3.5" />
               <span>Diverifikasi admin (maks 1×24 jam)</span>
             </div>
@@ -306,7 +325,7 @@ export function PaymentMethodPicker({
           else if (selected === 'manual') handleConfirm()
         }}
         disabled={!selected || isLoading}
-        className="w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600 disabled:opacity-50"
+        className="w-full rounded-full"
         size="lg"
         aria-label={`Lanjutkan pembayaran paket ${packageName}`}
       >

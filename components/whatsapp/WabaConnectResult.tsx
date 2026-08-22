@@ -5,13 +5,22 @@
 // coexistence, dan jalur pulih untuk register gagal karena PIN.
 
 import { useState } from 'react'
-import { AlertTriangle, CheckCircle2, Copy, Loader2, RefreshCw, Smartphone } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Loader2,
+  RefreshCw,
+  Smartphone,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 import type { ExchangeResult } from './useEmbeddedSignup'
 
@@ -22,11 +31,17 @@ interface WabaConnectResultProps {
   onDone: () => void
 }
 
-export function WabaConnectResult({ result, error, onRetryRegister, onDone }: WabaConnectResultProps) {
+export function WabaConnectResult({
+  result,
+  error,
+  onRetryRegister,
+  onDone,
+}: WabaConnectResultProps) {
   const [pin, setPin] = useState('')
   const [isRetrying, setRetrying] = useState(false)
   const pinRetryable =
-    result.warningCode === 'PIN_MISMATCH' || result.warningCode === 'PIN_RATE_LIMIT'
+    result.warningCode === 'PIN_MISMATCH' ||
+    result.warningCode === 'PIN_RATE_LIMIT'
 
   async function copyPin() {
     if (!result.generatedPin) return
@@ -52,23 +67,32 @@ export function WabaConnectResult({ result, error, onRetryRegister, onDone }: Wa
     }
   }
 
-  const label = result.displayName || (result.phoneNumber ? `+${result.phoneNumber}` : 'Nomor WhatsApp')
+  const label =
+    result.displayName ||
+    (result.phoneNumber ? `+${result.phoneNumber}` : 'Nomor WhatsApp')
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-xl border border-warm-200 bg-warm-50 p-3">
+      <div className="border-warm-200 bg-warm-50 flex items-start gap-3 rounded-xl border p-3">
         {result.warning ? (
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <AlertTriangle
+            className={cn('mt-0.5 size-5 shrink-0', TONES.warning.text)}
+          />
         ) : (
-          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
+          <CheckCircle2
+            className={cn('mt-0.5 size-5 shrink-0', TONES.success.text)}
+          />
         )}
         <div className="min-w-0">
           <p className="font-medium">{label}</p>
-          <p className="text-xs text-muted-foreground">
-            {result.phoneNumber && result.displayName ? `+${result.phoneNumber} · ` : ''}
+          <p className="text-muted-foreground text-xs">
+            {result.phoneNumber && result.displayName
+              ? `+${result.phoneNumber} · `
+              : ''}
             {result.mode === 'COEXISTENCE' ? (
               <span className="inline-flex items-center gap-1">
-                <Smartphone className="size-3" /> Coexistence — nomor tetap aktif di HP
+                <Smartphone className="size-3" /> Coexistence — nomor tetap
+                aktif di HP
               </span>
             ) : (
               'Nomor khusus Cloud API'
@@ -82,16 +106,22 @@ export function WabaConnectResult({ result, error, onRetryRegister, onDone }: Wa
           <AlertTitle>Simpan PIN verifikasi dua langkah nomor ini</AlertTitle>
           <AlertDescription>
             <div className="mt-1 flex items-center gap-2">
-              <code className="rounded bg-muted px-2 py-1 font-mono text-lg tracking-widest">
+              <code className="bg-muted rounded px-2 py-1 font-mono text-lg tracking-widest">
                 {result.generatedPin}
               </code>
-              <Button type="button" size="sm" variant="outline" onClick={copyPin}>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={copyPin}
+              >
                 <Copy className="mr-1 size-3.5" /> Salin
               </Button>
             </div>
             <p className="mt-2 text-xs">
-              PIN ini dibuat otomatis dan <b>hanya ditampilkan sekali</b>. Diperlukan bila
-              nomor ini nanti dipindahkan atau dihubungkan ulang.
+              PIN ini dibuat otomatis dan <b>hanya ditampilkan sekali</b>.
+              Diperlukan bila nomor ini nanti dipindahkan atau dihubungkan
+              ulang.
             </p>
           </AlertDescription>
         </Alert>
@@ -116,7 +146,9 @@ export function WabaConnectResult({ result, error, onRetryRegister, onDone }: Wa
               maxLength={6}
               placeholder="6 digit"
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(e) =>
+                setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+              }
             />
             <Button type="button" onClick={retry} disabled={isRetrying}>
               {isRetrying ? (
@@ -127,18 +159,18 @@ export function WabaConnectResult({ result, error, onRetryRegister, onDone }: Wa
               Daftar ulang
             </Button>
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-destructive text-xs">{error}</p>}
         </div>
       )}
 
       {result.syncScheduled && (
-        <p className="text-xs text-muted-foreground">
-          Sinkronisasi kontak & riwayat chat (≤ 6 bulan) dari HP dimulai di latar belakang —
-          progresnya bisa dilihat di kartu nomor.
+        <p className="text-muted-foreground text-xs">
+          Sinkronisasi kontak & riwayat chat (≤ 6 bulan) dari HP dimulai di
+          latar belakang — progresnya bisa dilihat di kartu nomor.
         </p>
       )}
 
-      <Button onClick={onDone} className="w-full bg-primary-500 text-white hover:bg-primary-600">
+      <Button onClick={onDone} className="w-full">
         Selesai
       </Button>
     </div>

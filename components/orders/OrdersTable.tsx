@@ -26,6 +26,7 @@ import { useState } from 'react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { TONES } from '@/lib/ui-tones'
 import { TableSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -96,15 +97,19 @@ export function OrdersTable({
   const totalColCount = cols.length + 2
 
   return (
-    <div className="rounded-lg border bg-white dark:bg-warm-950">
+    <div className="bg-card rounded-lg border">
       <div className="overflow-x-auto">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-warm-50 dark:bg-warm-900">
+          <TableHeader className="bg-warm-50 sticky top-0 z-10">
             <TableRow>
               <TableHead className="w-10">
                 <Checkbox
                   checked={
-                    allChecked ? true : partiallyChecked ? 'indeterminate' : false
+                    allChecked
+                      ? true
+                      : partiallyChecked
+                        ? 'indeterminate'
+                        : false
                   }
                   onCheckedChange={onToggleSelectAll}
                   aria-label="Pilih semua"
@@ -125,7 +130,7 @@ export function OrdersTable({
                     <button
                       type="button"
                       onClick={() => onToggleSort(col.key)}
-                      className="inline-flex items-center gap-1 hover:text-warm-900 dark:hover:text-warm-50"
+                      className="hover:text-warm-900 inline-flex items-center gap-1"
                     >
                       {col.label}
                       <SortIndicator
@@ -184,11 +189,11 @@ function SortIndicator({
   active: boolean
   direction: 'asc' | 'desc' | null
 }) {
-  if (!active) return <ArrowUpDown className="size-3 text-warm-400" />
+  if (!active) return <ArrowUpDown className="text-warm-400 size-3" />
   return direction === 'asc' ? (
-    <ArrowUp className="size-3 text-primary-600" />
+    <ArrowUp className="text-primary-600 size-3" />
   ) : (
-    <ArrowDown className="size-3 text-primary-600" />
+    <ArrowDown className="text-primary-600 size-3" />
   )
 }
 
@@ -225,9 +230,9 @@ function OrderRow({
 
   return (
     <TableRow
-      className={`${selected ? 'bg-primary-50 dark:bg-primary-950/30' : ''} ${
+      className={`${selected ? 'bg-primary-50' : ''} ${
         isCancelled ? 'opacity-60' : ''
-      } cursor-pointer hover:bg-warm-50 dark:hover:bg-warm-900/50`}
+      } hover:bg-warm-50 cursor-pointer`}
       onClick={onOpenDetail}
     >
       <TableCell onClick={(e) => e.stopPropagation()} className="w-10">
@@ -265,10 +270,7 @@ function OrderRow({
           })}
         </TableCell>
       ))}
-      <TableCell
-        onClick={(e) => e.stopPropagation()}
-        className="text-right"
-      >
+      <TableCell onClick={(e) => e.stopPropagation()} className="text-right">
         <div className="flex flex-wrap items-center justify-end gap-1">
           {isUnpaid && (
             <Button
@@ -276,8 +278,8 @@ function OrderRow({
               variant="outline"
               className={
                 isWaitingConf
-                  ? 'h-7 border-emerald-300 bg-emerald-50 px-2 text-[11px] text-emerald-800'
-                  : 'h-7 px-2 text-[11px]'
+                  ? `h-7 px-2 text-xs ${TONES.success.border} ${TONES.success.bg} ${TONES.success.text}`
+                  : 'h-7 px-2 text-xs'
               }
               onClick={() => onQuickAction(order, 'mark_paid')}
               title={isWaitingConf ? 'Konfirmasi Bayar' : 'Tandai Lunas'}
@@ -289,7 +291,7 @@ function OrderRow({
             <Button
               size="sm"
               variant="outline"
-              className="h-7 px-2 text-[11px]"
+              className="h-7 px-2 text-xs"
               onClick={() => onQuickAction(order, 'mark_shipped')}
               title="Tandai Dikirim"
             >
@@ -300,7 +302,7 @@ function OrderRow({
             <Button
               size="sm"
               variant="outline"
-              className="h-7 px-2 text-[11px]"
+              className="h-7 px-2 text-xs"
               onClick={() => onQuickAction(order, 'mark_delivered')}
               title="Tandai Selesai"
             >
@@ -311,7 +313,7 @@ function OrderRow({
             <Button
               size="sm"
               variant="ghost"
-              className="h-7 px-1 text-[11px] text-destructive hover:bg-destructive/10"
+              className="text-destructive hover:bg-destructive/10 h-7 px-1 text-xs"
               onClick={() => onQuickAction(order, 'reject')}
               title="Tolak"
             >
@@ -372,7 +374,7 @@ function renderCell(
     case 'flash-sale-discount': {
       const v = getNumberValue(order, col.key)
       if (!v) return <DashCell />
-      return <span className="text-orange-600">-{formatRupiah(v)}</span>
+      return <span className="text-primary-600">-{formatRupiah(v)}</span>
     }
     case 'badge-payment-status':
       return <PaymentBadge status={order.paymentStatus} />
@@ -380,7 +382,7 @@ function renderCell(
       return <DeliveryBadge status={order.deliveryStatus} />
     case 'badge-payment-method':
       return (
-        <Badge variant="outline" className="text-[10px]">
+        <Badge variant="outline" className="text-xs">
           {order.paymentMethod}
         </Badge>
       )
@@ -400,7 +402,9 @@ function renderCell(
       return <PixelStatusCell order={order} />
     case 'utm':
       return getStringValue(order, col.key) ? (
-        <span className="font-mono text-xs">{getStringValue(order, col.key)}</span>
+        <span className="font-mono text-xs">
+          {getStringValue(order, col.key)}
+        </span>
       ) : (
         <DashCell />
       )
@@ -431,7 +435,7 @@ function renderCell(
     case 'warehouse':
       return order.originSnapshot?.name ? (
         <span className="inline-flex items-center gap-1 text-xs">
-          <Warehouse className="size-3.5 shrink-0 text-warm-500" />
+          <Warehouse className="text-warm-500 size-3.5 shrink-0" />
           {order.originSnapshot.name}
         </span>
       ) : (
@@ -484,7 +488,7 @@ function formatDateTime(iso: string | null): React.ReactNode {
           year: 'numeric',
         })}
       </div>
-      <div className="text-[10px] text-warm-500">
+      <div className="text-warm-500 text-xs">
         {d.toLocaleTimeString('id-ID', {
           hour: '2-digit',
           minute: '2-digit',
@@ -500,19 +504,20 @@ function DashCell() {
 
 function InvoiceCell({ order }: { order: OrderListItem }) {
   const [renderTime] = useState(() => Date.now())
-  const isNew = renderTime - new Date(order.createdAt).getTime() < 60 * 60 * 1000
+  const isNew =
+    renderTime - new Date(order.createdAt).getTime() < 60 * 60 * 1000
   return (
     <div className="space-y-0.5">
       {order.invoiceNumber ? (
         <p className="font-mono text-xs font-medium">{order.invoiceNumber}</p>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {order.flowName ?? '—'}
-        </p>
+        <p className="text-muted-foreground text-xs">{order.flowName ?? '—'}</p>
       )}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         {isNew && (
-          <span className="mr-1 rounded bg-emerald-500 px-1 py-0.5 text-[9px] font-bold text-white">
+          <span
+            className={`mr-1 rounded px-1 py-0.5 text-xs font-bold ${TONES.success.solid}`}
+          >
             BARU
           </span>
         )}
@@ -526,11 +531,9 @@ function CustomerCell({ order }: { order: OrderListItem }) {
   return (
     <div className="space-y-0.5">
       <p className="line-clamp-1 text-sm font-medium">{order.customerName}</p>
-      <p className="text-[11px] text-muted-foreground">
-        {order.customerPhone}
-      </p>
+      <p className="text-muted-foreground text-xs">{order.customerPhone}</p>
       {(order.shippingCityName || order.customerAddress) && (
-        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <p className="text-muted-foreground flex items-center gap-1 text-xs">
           <MapPin className="size-3 shrink-0" aria-hidden />
           <span className="line-clamp-1">
             {formatShippingArea(order) ?? order.customerAddress}
@@ -549,7 +552,7 @@ function AddressCell({ order }: { order: OrderListItem }) {
     <div className="text-xs">
       <p className="line-clamp-2">{addr}</p>
       {(area || order.shippingProvinceName) && (
-        <p className="text-[10px] text-warm-500">
+        <p className="text-warm-500 text-xs">
           {[area, order.shippingProvinceName].filter(Boolean).join(', ')}
         </p>
       )}
@@ -570,7 +573,7 @@ function TagsCell({
       {tags.map((t) => (
         <span
           key={t.id}
-          className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
+          className="rounded-full px-2 py-0.5 text-xs font-medium text-white"
           style={{ backgroundColor: t.color }}
         >
           {t.name}
@@ -579,7 +582,7 @@ function TagsCell({
       <button
         type="button"
         onClick={onOpenPicker}
-        className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-warm-300 px-1.5 py-0.5 text-[10px] text-warm-500 hover:bg-warm-50"
+        className="border-warm-300 text-warm-500 hover:bg-warm-50 inline-flex items-center gap-0.5 rounded-full border border-dashed px-1.5 py-0.5 text-xs"
       >
         <Tag className="size-2.5" />
         {tags.length === 0 ? 'Tag' : ''}
@@ -596,7 +599,7 @@ function AutoConfirmCell({ order }: { order: OrderListItem }) {
     MANUAL: 'Manual',
   }
   return (
-    <Badge variant="outline" className="text-[10px]">
+    <Badge variant="outline" className="text-xs">
       {map[order.autoConfirmedBy] ?? order.autoConfirmedBy}
     </Badge>
   )
@@ -607,14 +610,14 @@ function PixelStatusCell({ order }: { order: OrderListItem }) {
   const purchase = !!order.pixelPurchaseFiredAt
   if (!lead && !purchase) return <DashCell />
   return (
-    <div className="space-y-0.5 text-[10px]">
+    <div className="space-y-0.5 text-xs">
       {lead && (
-        <div className="flex items-center gap-0.5 text-emerald-700">
+        <div className={`flex items-center gap-0.5 ${TONES.success.text}`}>
           <Check className="size-2.5" aria-hidden /> Lead
         </div>
       )}
       {purchase && (
-        <div className="flex items-center gap-0.5 text-emerald-700">
+        <div className={`flex items-center gap-0.5 ${TONES.success.text}`}>
           <Check className="size-2.5" aria-hidden /> Purchase
         </div>
       )}
@@ -640,7 +643,7 @@ function TrackingCell({
   const [saving, setSaving] = useState(false)
 
   if (!editable && !value) {
-    return <span className="text-[11px] text-muted-foreground">—</span>
+    return <span className="text-muted-foreground text-xs">—</span>
   }
 
   if (editing) {
@@ -666,7 +669,11 @@ function TrackingCell({
           placeholder="No. resi"
         />
         <Button type="submit" size="sm" className="h-7 px-2" disabled={saving}>
-          {saving ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+          {saving ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <Check className="size-3" />
+          )}
         </Button>
         <Button
           type="button"
@@ -688,20 +695,22 @@ function TrackingCell({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="block w-full rounded px-1 py-0.5 text-left text-xs hover:bg-warm-100 dark:hover:bg-warm-800"
+      className="hover:bg-warm-100 block w-full rounded px-1 py-0.5 text-left text-xs"
       title="Klik untuk edit"
     >
       {value ? (
         <>
           <p className="line-clamp-1 font-mono">{value}</p>
           {courier && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {courier.toUpperCase()}
             </p>
           )}
         </>
       ) : (
-        <span className="text-[11px] italic text-amber-700">+ Tambah resi</span>
+        <span className={`text-xs italic ${TONES.warning.text}`}>
+          + Tambah resi
+        </span>
       )}
     </button>
   )

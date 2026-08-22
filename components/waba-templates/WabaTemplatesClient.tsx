@@ -280,7 +280,7 @@ export function WabaTemplatesClient({ sessions, initialSessionId }: Props) {
                     </DropdownMenu>
                   </div>
 
-                  <p className="line-clamp-3 text-sm text-warm-700 dark:text-warm-200">
+                  <p className="line-clamp-3 text-sm text-warm-700">
                     {t.category === 'AUTHENTICATION' ? '(Kode OTP — body dibuat Meta)' : t.bodyText}
                   </p>
 
@@ -296,7 +296,7 @@ export function WabaTemplatesClient({ sessions, initialSessionId }: Props) {
                       <StatusBadge tone={STATUS_TONE[t.status]} label={STATUS_LABEL[t.status]} />
                     )}
                     {t.qualityScore && t.qualityScore !== 'UNKNOWN' && (
-                      <Badge variant="outline" className="text-[10px]">Kualitas {t.qualityScore}</Badge>
+                      <Badge variant="outline" className="text-xs">Kualitas {t.qualityScore}</Badge>
                     )}
                   </div>
                 </CardContent>

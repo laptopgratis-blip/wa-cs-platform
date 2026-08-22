@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
@@ -195,10 +196,7 @@ export function LmsPackagesManager() {
                 Seed Default Tier
               </Button>
             )}
-            <Button
-              onClick={openCreate}
-              className="bg-primary-500 text-white hover:bg-primary-600"
-            >
+            <Button onClick={openCreate}>
               <Plus className="mr-2 size-4" />
               Tambah Plan
             </Button>
@@ -206,7 +204,7 @@ export function LmsPackagesManager() {
         }
       />
 
-      <div className="rounded-xl border border-warm-200 bg-card">
+      <div className="border-warm-200 bg-card rounded-xl border">
         {loading ? (
           <div className="p-4">
             <CardGridSkeleton count={2} />
@@ -237,7 +235,7 @@ export function LmsPackagesManager() {
                   <TableCell>
                     <div className="font-semibold">{p.name}</div>
                     {p.isPopular && (
-                      <Badge className="mt-0.5 bg-amber-100 text-[10px] text-amber-700">
+                      <Badge className="bg-primary-100 text-primary-700 mt-0.5 text-xs">
                         Populer
                       </Badge>
                     )}
@@ -258,15 +256,10 @@ export function LmsPackagesManager() {
                     {p.priceMonthly === 0 ? '—' : formatRupiah(p.priceMonthly)}
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      className={
-                        p.isActive
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-warm-100 text-warm-600'
-                      }
-                    >
-                      {p.isActive ? 'Aktif' : 'Nonaktif'}
-                    </Badge>
+                    <StatusBadge
+                      tone={p.isActive ? 'success' : 'neutral'}
+                      label={p.isActive ? 'Aktif' : 'Nonaktif'}
+                    />
                   </TableCell>
                   <TableCell>
                     <Button
@@ -324,7 +317,7 @@ export function LmsPackagesManager() {
                 </SelectContent>
               </Select>
               {editing && (
-                <p className="text-[11px] text-warm-500">
+                <p className="text-warm-500 text-xs">
                   Tier tidak bisa diubah karena terkait quota user existing.
                 </p>
               )}
@@ -427,7 +420,7 @@ export function LmsPackagesManager() {
                   setForm({ ...form, priceMonthly: Number(e.target.value) })
                 }
               />
-              <p className="text-[11px] text-warm-500">
+              <p className="text-warm-500 text-xs">
                 0 = belum bisa di-checkout. Set &gt; 0 supaya muncul di
                 /pricing-lms.
               </p>
@@ -448,28 +441,21 @@ export function LmsPackagesManager() {
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={form.isPopular}
-                    onCheckedChange={(v) =>
-                      setForm({ ...form, isPopular: v })
-                    }
+                    onCheckedChange={(v) => setForm({ ...form, isPopular: v })}
                   />
                   <Label>Populer</Label>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={form.isActive}
-                    onCheckedChange={(v) =>
-                      setForm({ ...form, isActive: v })
-                    }
+                    onCheckedChange={(v) => setForm({ ...form, isActive: v })}
                   />
                   <Label>Aktif</Label>
                 </div>
               </div>
             </div>
 
-            <Button
-              onClick={save}
-              className="w-full bg-primary-500 text-white hover:bg-primary-600"
-            >
+            <Button onClick={save} className="w-full">
               Simpan
             </Button>
           </div>

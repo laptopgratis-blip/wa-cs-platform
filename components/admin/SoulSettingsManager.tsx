@@ -120,7 +120,10 @@ function SoulOptionTable({
     setLoading(true)
     try {
       const res = await fetch(ENDPOINTS[kind])
-      const json = (await res.json()) as { success: boolean; data?: SoulOptionRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: SoulOptionRow[]
+      }
       if (json.success && json.data) setRows(json.data)
     } finally {
       setLoading(false)
@@ -176,7 +179,9 @@ function SoulOptionTable({
         toast.error(json.error || 'Gagal menyimpan')
         return
       }
-      toast.success(editing ? `${labelSingular} diperbarui` : `${labelSingular} dibuat`)
+      toast.success(
+        editing ? `${labelSingular} diperbarui` : `${labelSingular} dibuat`,
+      )
       setOpen(false)
       void load()
     } finally {
@@ -223,10 +228,7 @@ function SoulOptionTable({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-end">
-        <Button
-          onClick={openCreate}
-          className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-        >
+        <Button onClick={openCreate}>
           <Plus className="mr-2 size-4" /> Tambah {labelSingular}
         </Button>
       </div>
@@ -260,12 +262,15 @@ function SoulOptionTable({
                   <TableCell className="font-medium">
                     {r.name}
                     {r.isTester && (
-                      <Badge variant="outline" className="ml-2 border-amber-300 bg-amber-50 text-amber-700">
+                      <Badge
+                        variant="outline"
+                        className="ml-2 border-amber-300 bg-amber-50 text-amber-700"
+                      >
                         Tester
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-md text-sm text-muted-foreground">
+                  <TableCell className="text-muted-foreground max-w-md text-sm">
                     <span className="line-clamp-2">{r.description}</span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -274,10 +279,17 @@ function SoulOptionTable({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Switch checked={r.isActive} onCheckedChange={() => toggleActive(r)} />
+                    <Switch
+                      checked={r.isActive}
+                      onCheckedChange={() => toggleActive(r)}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(r)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(r)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -298,13 +310,17 @@ function SoulOptionTable({
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl px-6">
+        <SheetContent
+          side="right"
+          className="w-full overflow-y-auto px-6 sm:max-w-xl"
+        >
           <SheetHeader className="px-0">
             <SheetTitle>
               {editing ? `Edit ${labelSingular}` : `Tambah ${labelSingular}`}
             </SheetTitle>
             <SheetDescription>
-              Snippet ini akan disuntikkan ke system prompt setiap kali user pilih opsi ini.
+              Snippet ini akan disuntikkan ke system prompt setiap kali user
+              pilih opsi ini.
             </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 py-3">
@@ -314,12 +330,19 @@ function SoulOptionTable({
                 id="so-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={kind === 'personality' ? 'Misal: Sales Closing' : 'Misal: Closing dengan Pilihan'}
+                placeholder={
+                  kind === 'personality'
+                    ? 'Misal: Sales Closing'
+                    : 'Misal: Closing dengan Pilihan'
+                }
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="so-desc">
-                Deskripsi <span className="text-xs font-normal text-muted-foreground">(yang tampil ke user)</span>
+                Deskripsi{' '}
+                <span className="text-muted-foreground text-xs font-normal">
+                  (yang tampil ke user)
+                </span>
               </Label>
               <Textarea
                 id="so-desc"
@@ -346,8 +369,9 @@ function SoulOptionTable({
                 placeholder="Instruksi spesifik yang akan dimasukkan ke section ## Kepribadian / ## Gaya Balas di system prompt."
                 className="font-mono text-xs"
               />
-              <p className="text-xs text-muted-foreground">
-                Estimasi dihitung otomatis (panjang ÷ 4). Snippet ini TIDAK pernah dikirim ke client user — hanya muncul di endpoint admin.
+              <p className="text-muted-foreground text-xs">
+                Estimasi dihitung otomatis (panjang ÷ 4). Snippet ini TIDAK
+                pernah dikirim ke client user — hanya muncul di endpoint admin.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -369,10 +393,13 @@ function SoulOptionTable({
             {kind === 'personality' && (
               <div className="flex items-start justify-between rounded-md border border-amber-200 bg-amber-50/50 p-3">
                 <div className="space-y-0.5">
-                  <Label className="text-amber-900">Khusus Tester (Soul Lab)</Label>
+                  <Label className="text-amber-900">
+                    Khusus Tester (Soul Lab)
+                  </Label>
                   <p className="text-xs text-amber-800/70">
-                    Kalau aktif, kepribadian ini disembunyikan dari dropdown SoulBuilder user.
-                    Hanya admin yang bisa pilih di Soul Lab untuk simulasi efektivitas prompt.
+                    Kalau aktif, kepribadian ini disembunyikan dari dropdown
+                    SoulBuilder user. Hanya admin yang bisa pilih di Soul Lab
+                    untuk simulasi efektivitas prompt.
                   </p>
                 </div>
                 <Switch checked={isTester} onCheckedChange={setIsTester} />

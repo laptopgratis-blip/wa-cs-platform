@@ -29,6 +29,8 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface BankAccount {
   id: string
@@ -151,17 +153,17 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-xl border-warm-200 shadow-sm">
+      <Card>
         <CardContent className="space-y-5 p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
+              <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
                 Order Manual #{payment.id.slice(-8).toUpperCase()}
               </div>
-              <div className="mt-1 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+              <div className="font-display text-warm-900 mt-1 text-lg font-bold">
                 Paket {payment.packageName}
               </div>
-              <div className="text-xs text-warm-500">
+              <div className="text-warm-500 text-xs">
                 {payment.unitLabel && payment.unitLabel !== 'token'
                   ? `${payment.unitLabel} Rp ${formatNumber(payment.tokenAmount)}`
                   : `${formatNumber(payment.tokenAmount)} token`}
@@ -177,7 +179,14 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
           </div>
 
           {payment.status === 'PENDING' && (
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <div
+              className={cn(
+                'flex items-center justify-between rounded-lg border p-3 text-sm',
+                TONES.warning.border,
+                TONES.warning.bg,
+                TONES.warning.text,
+              )}
+            >
               <div className="flex items-center gap-2">
                 <Clock className="size-4" />
                 <span>Sisa waktu transfer</span>
@@ -188,12 +197,12 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
             </div>
           )}
 
-          <div className="rounded-lg border-2 border-dashed border-primary-300 bg-primary-50/50 p-4">
-            <div className="text-xs font-medium uppercase tracking-wider text-primary-700">
+          <div className="border-primary-300 bg-primary-50/50 rounded-lg border-2 border-dashed p-4">
+            <div className="text-primary-700 text-xs font-medium tracking-wider uppercase">
               Total Transfer (TEPAT)
             </div>
             <div className="mt-1 flex items-baseline gap-3">
-              <div className="font-display text-3xl font-extrabold text-primary-700 tabular-nums">
+              <div className="font-display text-primary-700 text-3xl font-bold tabular-nums">
                 {formatRupiah(payment.totalAmount)}
               </div>
               <Button
@@ -201,20 +210,25 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
                 variant="ghost"
                 className="text-primary-600 hover:bg-primary-100 hover:text-primary-700"
                 onClick={() =>
-                  copyToClipboard(String(payment.totalAmount), 'Nominal transfer')
+                  copyToClipboard(
+                    String(payment.totalAmount),
+                    'Nominal transfer',
+                  )
                 }
               >
                 <Copy className="mr-1.5 size-3.5" />
                 Salin
               </Button>
             </div>
-            <p className="mt-2 text-xs text-warm-700">
+            <p className="text-warm-700 mt-2 text-xs">
               Termasuk <span className="font-semibold">3 digit kode unik</span>{' '}
-              <span className="rounded bg-white px-1.5 py-0.5 font-mono font-semibold text-primary-700">
+              <span className="text-primary-700 bg-card rounded px-1.5 py-0.5 font-mono font-semibold">
                 {payment.uniqueCode}
               </span>{' '}
               untuk identifikasi otomatis. Transfer{' '}
-              <span className="font-semibold">tepat sebesar nominal di atas</span>{' '}
+              <span className="font-semibold">
+                tepat sebesar nominal di atas
+              </span>{' '}
               (jangan dibulatkan).
             </p>
           </div>
@@ -228,12 +242,14 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
             </div>
             <div className="flex justify-between">
               <span className="text-warm-500">Kode unik</span>
-              <span className="font-mono font-medium">+{payment.uniqueCode}</span>
+              <span className="font-mono font-medium">
+                +{payment.uniqueCode}
+              </span>
             </div>
             <Separator className="my-2" />
             <div className="flex justify-between text-base">
-              <span className="font-medium text-warm-700">Total</span>
-              <span className="font-display text-lg font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
+              <span className="text-warm-700 font-medium">Total</span>
+              <span className="font-display text-warm-900 text-lg font-bold tabular-nums">
                 {formatRupiah(payment.totalAmount)}
               </span>
             </div>
@@ -242,12 +258,12 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
       </Card>
 
       <div>
-        <h2 className="mb-3 font-display text-base font-bold text-warm-900 dark:text-warm-50">
+        <h2 className="font-display text-warm-900 mb-3 text-base font-semibold">
           Transfer ke salah satu rekening berikut
         </h2>
         {banks.length === 0 ? (
           <Card>
-            <CardContent className="flex items-center gap-2 p-4 text-sm text-destructive">
+            <CardContent className="text-destructive flex items-center gap-2 p-4 text-sm">
               <AlertCircle className="size-4" />
               Belum ada rekening aktif. Hubungi admin.
             </CardContent>
@@ -255,18 +271,18 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {banks.map((b) => (
-              <Card key={b.id} className="rounded-xl border-warm-200">
+              <Card key={b.id}>
                 <CardContent className="space-y-2 p-4">
                   <div className="flex items-center gap-2">
-                    <div className="flex size-8 items-center justify-center rounded-md bg-primary-50 text-primary-600">
+                    <div className="bg-primary-50 text-primary-600 flex size-8 items-center justify-center rounded-md">
                       <Building2 className="size-4" />
                     </div>
-                    <div className="font-display font-bold text-warm-900 dark:text-warm-50">
+                    <div className="font-display text-warm-900 font-semibold">
                       {b.bankName}
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-mono text-base font-semibold tracking-wider text-warm-800">
+                    <div className="text-warm-800 font-mono text-base font-semibold tracking-wider">
                       {b.accountNumber}
                     </div>
                     <Button
@@ -279,7 +295,9 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
                       <Copy className="size-3.5" />
                     </Button>
                   </div>
-                  <div className="text-xs text-warm-500">a.n. {b.accountName}</div>
+                  <div className="text-warm-500 text-xs">
+                    a.n. {b.accountName}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -288,9 +306,9 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
       </div>
 
       {payment.status === 'REJECTED' && payment.rejectionReason && (
-        <Card className="rounded-xl border-destructive/30 bg-destructive/5">
+        <Card className={TONES.danger.bg}>
           <CardContent className="space-y-1 p-4 text-sm">
-            <div className="flex items-center gap-2 font-semibold text-destructive">
+            <div className="text-destructive flex items-center gap-2 font-semibold">
               <XCircle className="size-4" />
               Pembayaran Ditolak
             </div>
@@ -300,22 +318,28 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
       )}
 
       {payment.status === 'CONFIRMED' && (
-        <Card className="rounded-xl border-emerald-200 bg-emerald-50">
-          <CardContent className="flex items-center gap-2 p-4 text-sm text-emerald-800">
+        <Card className={TONES.success.bg}>
+          <CardContent
+            className={cn(
+              'flex items-center gap-2 p-4 text-sm',
+              TONES.success.text,
+            )}
+          >
             <CheckCircle2 className="size-4" />
-            Pembayaran sudah dikonfirmasi — {payment.unitLabel ?? 'token'} sudah masuk ke akun kamu.
+            Pembayaran sudah dikonfirmasi — {payment.unitLabel ?? 'token'} sudah
+            masuk ke akun kamu.
           </CardContent>
         </Card>
       )}
 
       {payment.proofUrl && (
         <div>
-          <h2 className="mb-2 font-display text-base font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 mb-2 text-base font-semibold">
             Bukti transfer yang sudah diupload
           </h2>
-          <Card className="rounded-xl border-warm-200">
+          <Card>
             <CardContent className="space-y-3 p-4">
-              <div className="relative h-72 w-full overflow-hidden rounded-lg border border-warm-200 bg-warm-50">
+              <div className="border-warm-200 bg-warm-50 relative h-72 w-full overflow-hidden rounded-lg border">
                 <Image
                   src={payment.proofUrl}
                   alt="Bukti transfer"
@@ -325,7 +349,7 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
                 />
               </div>
               {payment.proofNote && (
-                <p className="text-xs text-warm-500">
+                <p className="text-warm-500 text-xs">
                   Catatan kamu: {payment.proofNote}
                 </p>
               )}
@@ -336,11 +360,13 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
 
       {canUploadOrReplace && (
         <form onSubmit={handleUpload} className="space-y-4">
-          <h2 className="font-display text-base font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 text-base font-semibold">
             {payment.proofUrl ? 'Upload ulang bukti' : 'Upload bukti transfer'}
           </h2>
           <div className="space-y-2">
-            <Label htmlFor="proof-file">File bukti (JPG/PNG/WebP, max 2 MB)</Label>
+            <Label htmlFor="proof-file">
+              File bukti (JPG/PNG/WebP, max 2 MB)
+            </Label>
             <Input
               id="proof-file"
               type="file"
@@ -359,12 +385,7 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
             />
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              type="submit"
-              disabled={isUploading || !file}
-              className="bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
-              size="lg"
-            >
+            <Button type="submit" disabled={isUploading || !file} size="lg">
               {isUploading ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
@@ -390,8 +411,8 @@ export function ManualCheckoutDetail({ payment, banks, user }: Props) {
       )}
 
       {expired && payment.status === 'PENDING' && (
-        <Card className="rounded-xl border-warm-200 bg-warm-50">
-          <CardContent className="p-4 text-sm text-warm-700">
+        <Card className={TONES.neutral.bg}>
+          <CardContent className="text-warm-700 p-4 text-sm">
             Order ini sudah expired (lewat 24 jam). Silakan buat order baru dari
             halaman Billing.
           </CardContent>

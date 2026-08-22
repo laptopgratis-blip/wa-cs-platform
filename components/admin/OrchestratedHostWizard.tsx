@@ -12,22 +12,51 @@
 // auto Gemini → admin balik ke list. Wizard ini cuma generate prompt + nama,
 // submit pipeline biasa.
 
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Mic,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { KlipLivePresetsPicker, type KlipLivePresetSelection } from './KlipLivePresetsPicker'
+import {
+  KlipLivePresetsPicker,
+  type KlipLivePresetSelection,
+} from './KlipLivePresetsPicker'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 
 type Gender = 'female' | 'male'
 type AgeRange = 'young' | 'adult' | 'mature'
-type Outfit = 'hijab_casual' | 'hijab_formal' | 'non_hijab_casual' | 'non_hijab_formal' | 'tshirt_jeans'
+type Outfit =
+  | 'hijab_casual'
+  | 'hijab_formal'
+  | 'non_hijab_casual'
+  | 'non_hijab_formal'
+  | 'tshirt_jeans'
 type Vibe = 'friendly' | 'professional' | 'energetic' | 'calm'
-type Background = 'studio_white' | 'studio_warm' | 'retail_shop' | 'home_cozy' | 'outdoor_bright' | 'gradient_soft'
+type Background =
+  | 'studio_white'
+  | 'studio_warm'
+  | 'retail_shop'
+  | 'home_cozy'
+  | 'outdoor_bright'
+  | 'gradient_soft'
 type MotionIntensity = 'subtle' | 'moderate' | 'energetic'
 type ArtStyle =
   | 'photoreal_natural'
@@ -95,7 +124,11 @@ const OPTION_GROUPS: Array<{
         desc: 'CGI Unreal Engine 5',
       },
       { value: 'anime_modern', label: 'Anime modern', desc: 'Korean webtoon' },
-      { value: 'painterly', label: 'Painterly', desc: 'watercolor illustration' },
+      {
+        value: 'painterly',
+        label: 'Painterly',
+        desc: 'watercolor illustration',
+      },
       { value: 'ghibli', label: 'Studio Ghibli', desc: 'watercolor anime' },
     ],
   },
@@ -195,10 +228,11 @@ export function OrchestratedHostWizard({
   const [step, setStep] = useState<1 | 2>(1)
   const [state, setState] = useState<Step1State>(DEFAULT_STATE)
   // Klip Live presets — visible cuma kalau mode=NATIVE_LIBRARY.
-  const [klipLivePresets, setKlipLivePresets] = useState<KlipLivePresetSelection>({
-    visualHookId: null,
-    backgroundId: null,
-  })
+  const [klipLivePresets, setKlipLivePresets] =
+    useState<KlipLivePresetSelection>({
+      visualHookId: null,
+      backgroundId: null,
+    })
   const [products, setProducts] = useState<ProductOption[] | null>(null)
   const [prompts, setPrompts] = useState<OrchestratedPrompts | null>(null)
   const [orchestrating, setOrchestrating] = useState(false)
@@ -209,12 +243,10 @@ export function OrchestratedHostWizard({
     if (products !== null) return
     void fetch('/api/products')
       .then((r) => r.json())
-      .then(
-        (j: { success: boolean; data?: { items?: ProductOption[] } }) => {
-          if (j.success && j.data?.items) setProducts(j.data.items)
-          else setProducts([])
-        },
-      )
+      .then((j: { success: boolean; data?: { items?: ProductOption[] } }) => {
+        if (j.success && j.data?.items) setProducts(j.data.items)
+        else setProducts([])
+      })
       .catch(() => setProducts([]))
   }, [products])
 
@@ -245,11 +277,18 @@ export function OrchestratedHostWizard({
           vibe: state.vibe,
           background: state.background,
           motionIntensity: state.motionIntensity,
-          productIds: state.productIds.length > 0 ? state.productIds : undefined,
+          productIds:
+            state.productIds.length > 0 ? state.productIds : undefined,
           extraNote: state.extraNote.trim() || undefined,
           // Sprint 5: Klip Live presets — orchestrator inject promptFragment dari DB
-          visualHookPresetId: mode === 'NATIVE_LIBRARY' ? klipLivePresets.visualHookId : undefined,
-          backgroundPresetId: mode === 'NATIVE_LIBRARY' ? klipLivePresets.backgroundId : undefined,
+          visualHookPresetId:
+            mode === 'NATIVE_LIBRARY'
+              ? klipLivePresets.visualHookId
+              : undefined,
+          backgroundPresetId:
+            mode === 'NATIVE_LIBRARY'
+              ? klipLivePresets.backgroundId
+              : undefined,
           // Sprint 5+: hostMode trigger ENERGETIC baseline motion untuk NATIVE_LIBRARY
           hostMode: mode,
         }),
@@ -299,34 +338,34 @@ export function OrchestratedHostWizard({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <Card className="max-h-[92vh] w-full max-w-3xl overflow-hidden">
-        <div className="flex items-center justify-between border-b p-4">
-          <div>
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-orange-500" /> Bikin Host AI
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {step === 1
-                ? 'Step 1 — pilih karakter. Claude akan susun prompt optimal.'
-                : 'Step 2 — review & approve prompt. Kalau pas, langsung generate.'}
-            </p>
-          </div>
-          <Button size="icon" variant="ghost" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <div className="border-b p-4">
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+            <Sparkles className="text-primary-500 size-5" /> Bikin Host AI
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            {step === 1
+              ? 'Step 1 — pilih karakter. Claude akan susun prompt optimal.'
+              : 'Step 2 — review & approve prompt. Kalau pas, langsung generate.'}
+          </DialogDescription>
         </div>
 
-        <CardContent className="max-h-[68vh] space-y-5 overflow-y-auto p-4">
+        <div className="max-h-[68vh] space-y-5 overflow-y-auto p-4">
           {step === 1 ? (
             <>
               {mode === 'NATIVE_LIBRARY' ? (
-                <div className="rounded-xl border-2 border-orange-200 bg-gradient-to-br from-orange-50/50 to-amber-50/50 p-4">
+                <div className="border-primary-200 bg-primary-50/50 rounded-xl border-2 p-4">
                   <div className="mb-3 flex items-center gap-2">
-                    <span className="rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
-                      🎙️ Klip Live
+                    <StatusBadge tone="brand" label="Klip Live" icon={Mic} />
+                    <span className="text-muted-foreground text-xs">
+                      Optimasi visual untuk lipsync clip library
                     </span>
-                    <span className="text-xs text-muted-foreground">Optimasi visual untuk lipsync clip library</span>
                   </div>
                   <KlipLivePresetsPicker
                     selection={klipLivePresets}
@@ -336,7 +375,7 @@ export function OrchestratedHostWizard({
               ) : null}
               {OPTION_GROUPS.map((grp) => (
                 <div key={grp.key}>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                  <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                     {grp.label}
                   </Label>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -347,11 +386,14 @@ export function OrchestratedHostWizard({
                           key={o.value}
                           type="button"
                           onClick={() =>
-                            setOpt(grp.key as keyof Step1State, o.value as never)
+                            setOpt(
+                              grp.key as keyof Step1State,
+                              o.value as never,
+                            )
                           }
                           className={`rounded-full px-3 py-1.5 text-xs transition ${
                             isActive
-                              ? 'bg-orange-500 text-white'
+                              ? 'bg-primary-500 text-white'
                               : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                           }`}
                         >
@@ -367,16 +409,17 @@ export function OrchestratedHostWizard({
               ))}
 
               <div>
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                   Produk yang dipegang/ditampilkan (opsional, max 8)
                 </Label>
                 {products === null ? (
-                  <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Loading produk…
+                  <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-xs">
+                    <Loader2 className="size-4 animate-spin" /> Memuat produk…
                   </div>
                 ) : products.length === 0 ? (
-                  <p className="mt-1.5 text-xs text-muted-foreground">
-                    Belum ada produk di /products. Skip — host akan tampil tanpa produk.
+                  <p className="text-muted-foreground mt-1.5 text-xs">
+                    Belum ada produk di /products. Skip — host akan tampil tanpa
+                    produk.
                   </p>
                 ) : (
                   <div className="mt-1.5 flex flex-wrap gap-2">
@@ -390,7 +433,7 @@ export function OrchestratedHostWizard({
                           onClick={() => toggleProduct(p.id)}
                           className={`relative overflow-hidden rounded-md border-2 transition ${
                             checked
-                              ? 'border-orange-500 ring-2 ring-orange-200'
+                              ? 'border-primary-500 ring-primary-200 ring-2'
                               : 'border-warm-200 hover:border-warm-400'
                           }`}
                         >
@@ -398,14 +441,14 @@ export function OrchestratedHostWizard({
                             <img
                               src={img}
                               alt={p.name}
-                              className="h-14 w-14 object-cover"
+                              className="size-14 object-cover"
                             />
                           ) : (
-                            <div className="h-14 w-14 bg-warm-100" />
+                            <div className="bg-warm-100 size-14" />
                           )}
                           {checked ? (
-                            <div className="absolute top-0.5 right-0.5 rounded-full bg-orange-500 p-0.5 text-white">
-                              <CheckCircle2 className="h-3 w-3" />
+                            <div className="bg-primary-500 absolute top-0.5 right-0.5 rounded-full p-0.5 text-white">
+                              <CheckCircle2 className="size-3" />
                             </div>
                           ) : null}
                         </button>
@@ -416,7 +459,7 @@ export function OrchestratedHostWizard({
               </div>
 
               <div>
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                   Catatan tambahan (opsional)
                 </Label>
                 <Input
@@ -433,19 +476,22 @@ export function OrchestratedHostWizard({
               {prompts ? (
                 <>
                   <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                       Nama host
                     </Label>
                     <Input
                       value={prompts.suggestedName}
                       onChange={(e) =>
-                        setPrompts({ ...prompts, suggestedName: e.target.value })
+                        setPrompts({
+                          ...prompts,
+                          suggestedName: e.target.value,
+                        })
                       }
                       className="mt-1.5"
                     />
                   </div>
                   <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                       Visual style (tag admin)
                     </Label>
                     <Input
@@ -457,56 +503,62 @@ export function OrchestratedHostWizard({
                     />
                   </div>
                   <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                       Prompt gambar (untuk Gemini)
                     </Label>
-                    <textarea
+                    <Textarea
                       value={prompts.promptImage}
                       onChange={(e) =>
                         setPrompts({ ...prompts, promptImage: e.target.value })
                       }
                       rows={6}
-                      className="mt-1.5 w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="mt-1.5"
                     />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Auto-include: centered medium shot, 9:16 vertical, photorealistic, looping-friendly background.
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Auto-include: centered medium shot, 9:16 vertical,
+                      photorealistic, looping-friendly background.
                     </p>
                   </div>
                   <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                       Prompt motion (untuk Kling)
                     </Label>
-                    <textarea
+                    <Textarea
                       value={prompts.promptVideo}
                       onChange={(e) =>
                         setPrompts({ ...prompts, promptVideo: e.target.value })
                       }
                       rows={4}
-                      className="mt-1.5 w-full rounded-md border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      className="mt-1.5"
                     />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Auto-include: kamera static, host return to starting pose, seamless loop.
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      Auto-include: kamera static, host return to starting pose,
+                      seamless loop.
                     </p>
                   </div>
                   <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <Label className="text-muted-foreground text-xs tracking-wide uppercase">
                       Greeting saran (untuk Live Room)
                     </Label>
                     <Input
                       value={prompts.suggestedGreeting}
                       onChange={(e) =>
-                        setPrompts({ ...prompts, suggestedGreeting: e.target.value })
+                        setPrompts({
+                          ...prompts,
+                          suggestedGreeting: e.target.value,
+                        })
                       }
                       className="mt-1.5"
                     />
-                    <p className="mt-1 text-[11px] text-muted-foreground">
+                    <p className="text-muted-foreground mt-1 text-xs">
                       Copy ini ke field Greeting saat bikin Live Room nanti.
                     </p>
                   </div>
                   {prompts.productImageUrls.length > 0 ? (
                     <div>
-                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Referensi gambar produk ({prompts.productImageUrls.length})
+                      <Label className="text-muted-foreground text-xs tracking-wide uppercase">
+                        Referensi gambar produk (
+                        {prompts.productImageUrls.length})
                       </Label>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {prompts.productImageUrls.map((u) => (
@@ -514,7 +566,7 @@ export function OrchestratedHostWizard({
                             key={u}
                             src={u}
                             alt="ref"
-                            className="h-12 w-12 rounded-md border object-cover"
+                            className="size-12 rounded-md border object-cover"
                           />
                         ))}
                       </div>
@@ -524,13 +576,13 @@ export function OrchestratedHostWizard({
               ) : null}
             </>
           )}
-        </CardContent>
+        </div>
 
         <div className="flex items-center justify-between gap-2 border-t p-3">
           <div>
             {step === 2 ? (
               <Button variant="ghost" size="sm" onClick={() => setStep(1)}>
-                <ArrowLeft className="mr-1 h-4 w-4" /> Kembali edit opsi
+                <ArrowLeft className="mr-1 size-4" /> Kembali edit opsi
               </Button>
             ) : null}
           </div>
@@ -539,11 +591,12 @@ export function OrchestratedHostWizard({
               <Button onClick={runOrchestrate} disabled={orchestrating}>
                 {orchestrating ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Claude lagi mikir…
+                    <Loader2 className="mr-2 size-4 animate-spin" /> Claude lagi
+                    mikir…
                   </>
                 ) : (
                   <>
-                    <Sparkles className="mr-2 h-4 w-4" /> Generate Prompt
+                    <Sparkles className="mr-2 size-4" /> Generate Prompt
                   </>
                 )}
               </Button>
@@ -556,20 +609,21 @@ export function OrchestratedHostWizard({
                   disabled={orchestrating}
                 >
                   {orchestrating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 size-4 animate-spin" />
                   ) : (
-                    <RefreshCw className="mr-2 h-4 w-4" />
+                    <RefreshCw className="mr-2 size-4" />
                   )}
                   Regenerate
                 </Button>
                 <Button onClick={submitCreate} disabled={submitting}>
                   {submitting ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generate gambar…
+                      <Loader2 className="mr-2 size-4 animate-spin" /> Generate
+                      gambar…
                     </>
                   ) : (
                     <>
-                      <ArrowRight className="mr-2 h-4 w-4" /> Bikin Host
+                      <ArrowRight className="mr-2 size-4" /> Bikin Host
                     </>
                   )}
                 </Button>
@@ -577,7 +631,7 @@ export function OrchestratedHostWizard({
             )}
           </div>
         </div>
-      </Card>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

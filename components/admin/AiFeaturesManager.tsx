@@ -8,7 +8,14 @@
 // harga API provider) saat preset di-update. Tombol "🔄 Sync dari preset" di
 // header untuk force-sync manual semua row sekaligus. Drift indicator
 // per-row kalau price config beda dari preset.
-import { AlertTriangle, Loader2, Plus, RefreshCw, Save, Sparkles } from 'lucide-react'
+import {
+  AlertTriangle,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Save,
+  Sparkles,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -16,11 +23,13 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface FeatureConfig {
   id: string
@@ -162,7 +171,9 @@ export function AiFeaturesManager() {
   const driftCount = Object.values(drift).filter(
     (d) => d.driftInput || d.driftOutput,
   ).length
-  const missingCount = Object.values(drift).filter((d) => d.presetMissing).length
+  const missingCount = Object.values(drift).filter(
+    (d) => d.presetMissing,
+  ).length
 
   return (
     <div className="space-y-6">
@@ -185,16 +196,18 @@ export function AiFeaturesManager() {
               Sync dari preset
             </Button>
             {driftCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
-                <AlertTriangle className="size-3" />
-                {driftCount} feature beda harga dari preset
-              </span>
+              <StatusBadge
+                tone="warning"
+                icon={AlertTriangle}
+                label={`${driftCount} feature beda harga dari preset`}
+              />
             )}
             {missingCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800">
-                <AlertTriangle className="size-3" />
-                {missingCount} model tidak ada di preset
-              </span>
+              <StatusBadge
+                tone="danger"
+                icon={AlertTriangle}
+                label={`${missingCount} model tidak ada di preset`}
+              />
             )}
           </div>
         }
@@ -204,8 +217,8 @@ export function AiFeaturesManager() {
         <strong>Cara hitung token charge per call (skema fair-pricing):</strong>
         <br />
         <code>
-          (inputTokens × inputPricePer1M + outputTokens × outputPricePer1M) /
-          1M × usdRate × platformMargin / pricePerToken → ceil
+          (inputTokens × inputPricePer1M + outputTokens × outputPricePer1M) / 1M
+          × usdRate × platformMargin / pricePerToken → ceil
         </code>
         <br />
         Default <strong>margin 2.0</strong> = user dipotong 2× cost provider.
@@ -259,42 +272,41 @@ export function AiFeaturesManager() {
                 <div className="flex items-baseline justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-display text-base font-bold text-warm-900">
+                      <h3 className="text-warm-900 text-lg font-semibold">
                         {f.displayName}
                       </h3>
-                      <Badge
-                        className={
-                          f.isActive
-                            ? 'bg-emerald-100 text-[10px] text-emerald-700'
-                            : 'bg-warm-100 text-[10px] text-warm-700'
-                        }
-                      >
-                        {f.isActive ? 'Active' : 'Disabled'}
-                      </Badge>
+                      <StatusBadge
+                        tone={f.isActive ? 'success' : 'neutral'}
+                        label={f.isActive ? 'Active' : 'Disabled'}
+                      />
                       {hasDrift && (
-                        <Badge
-                          className="bg-amber-100 text-[10px] text-amber-800"
+                        <span
                           title={`Preset: $${d.presetInput?.toFixed(2)} / $${d.presetOutput?.toFixed(2)} per 1M`}
                         >
-                          <AlertTriangle className="mr-1 size-3" />
-                          Drift dari preset
-                        </Badge>
+                          <StatusBadge
+                            tone="warning"
+                            icon={AlertTriangle}
+                            label="Drift dari preset"
+                          />
+                        </span>
                       )}
                       {presetMissing && (
-                        <Badge className="bg-rose-100 text-[10px] text-rose-800">
-                          Model tidak ada di preset
-                        </Badge>
+                        <StatusBadge
+                          tone="danger"
+                          label="Model tidak ada di preset"
+                        />
                       )}
                     </div>
-                    <p className="text-xs text-warm-500">
+                    <p className="text-warm-500 text-xs">
                       featureKey: <code>{f.featureKey}</code>
                     </p>
                     {hasDrift && (
-                      <p className="mt-1 text-[11px] text-amber-700">
-                        Preset harga: <strong>${d.presetInput?.toFixed(2)}</strong>{' '}
-                        input / <strong>${d.presetOutput?.toFixed(2)}</strong>{' '}
-                        output. Klik &ldquo;Sync dari preset&rdquo; di header
-                        untuk pakai harga preset.
+                      <p className={cn('mt-1 text-xs', TONES.warning.text)}>
+                        Preset harga:{' '}
+                        <strong>${d.presetInput?.toFixed(2)}</strong> input /{' '}
+                        <strong>${d.presetOutput?.toFixed(2)}</strong> output.
+                        Klik &ldquo;Sync dari preset&rdquo; di header untuk
+                        pakai harga preset.
                       </p>
                     )}
                   </div>
@@ -358,11 +370,13 @@ export function AiFeaturesManager() {
                     label="Floor min token charge (default 10)"
                     value={(draft?.floorTokens as number) ?? f.floorTokens}
                     step={1}
-                    onChange={(v) => patchEdit(f.id, 'floorTokens', Math.floor(v))}
+                    onChange={(v) =>
+                      patchEdit(f.id, 'floorTokens', Math.floor(v))
+                    }
                   />
                 </div>
 
-                <div className="border-t border-warm-100 pt-2 text-[11px] text-warm-400">
+                <div className="border-warm-100 text-warm-400 border-t pt-2 text-xs">
                   Updated: {new Date(f.updatedAt).toLocaleString('id-ID')}
                 </div>
               </CardContent>
@@ -479,7 +493,9 @@ function CreateFeatureForm({
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
-        <h3 className="font-display text-base font-bold">Tambah Feature Baru</h3>
+        <h3 className="font-display text-base font-bold">
+          Tambah Feature Baru
+        </h3>
         <div className="grid gap-3 md:grid-cols-2">
           <FieldText
             label="Feature key (UPPER_SNAKE)"

@@ -4,7 +4,7 @@
 // (pure) — error sama persis dengan server. Simpan draft lokal atau langsung
 // submit ke Meta. Edit template yang sudah di Meta → nama/bahasa terkunci,
 // hasil edit masuk review lagi (PENDING).
-import { AlertTriangle, Loader2, Upload } from 'lucide-react'
+import { AlertTriangle, Check, Loader2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -28,6 +28,8 @@ import {
   type TemplateDraftInput,
 } from '@/lib/services/waba/template-validate'
 import type { WabaTemplateButton } from '@/lib/services/waba/types'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 import { TemplateButtonsEditor } from './TemplateButtonsEditor'
 import { TemplatePreview } from './TemplatePreview'
@@ -351,7 +353,16 @@ export function TemplateEditorDialog({ open, onOpenChange, sessionId, template, 
                           {uploading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Upload className="mr-2 size-4" />}
                           {draft.headerMediaHandle ? 'Ganti file contoh' : 'Unggah file contoh'}
                         </Button>
-                        {draft.headerMediaHandle && <span className="self-center text-xs text-emerald-700">✓ file contoh siap</span>}
+                        {draft.headerMediaHandle && (
+                          <span
+                            className={cn(
+                              'flex items-center gap-1 self-center text-xs',
+                              TONES.success.text,
+                            )}
+                          >
+                            <Check aria-hidden className="size-3" /> file contoh siap
+                          </span>
+                        )}
                       </>
                     )}
                   </div>
@@ -379,7 +390,7 @@ export function TemplateEditorDialog({ open, onOpenChange, sessionId, template, 
                     onChange={(e) => set('bodyText', e.target.value)}
                     placeholder={'Halo {{1}}, pesanan {{2}} sudah kami terima. Balas pesan ini jika butuh bantuan.'}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Format WA: *tebal*, _miring_, ~coret~. Variabel berurutan {'{{1}}'}, {'{{2}}'}, … — tidak boleh di awal/akhir.
                   </p>
                 </div>
@@ -433,7 +444,7 @@ export function TemplateEditorDialog({ open, onOpenChange, sessionId, template, 
                   <p key={`e${i}`} className="text-destructive">• {e}</p>
                 ))}
                 {validation.warnings.map((w, i) => (
-                  <p key={`w${i}`} className="text-amber-700">• {w}</p>
+                  <p key={`w${i}`} className={TONES.warning.text}>• {w}</p>
                 ))}
               </div>
             )}

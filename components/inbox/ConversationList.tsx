@@ -1,7 +1,14 @@
 'use client'
 
 // Daftar percakapan di kolom kiri inbox. Filter tabs + search + item list.
-import { Bot, CheckCircle2, Hand, Search } from 'lucide-react'
+import {
+  Bot,
+  CheckCircle2,
+  Hand,
+  MessageCircle,
+  Search,
+  UserRound,
+} from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -78,7 +85,7 @@ export function ConversationList({
       <div className="space-y-3 border-b p-3">
         <h2 className="text-lg font-semibold tracking-tight">Inbox</h2>
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             aria-label="Cari percakapan"
             value={search}
@@ -87,13 +94,16 @@ export function ConversationList({
             className="pl-8"
           />
         </div>
-        <Tabs value={filter} onValueChange={(v) => onFilterChange(v as InboxFilter)}>
+        <Tabs
+          value={filter}
+          onValueChange={(v) => onFilterChange(v as InboxFilter)}
+        >
           <TabsList className="grid w-full grid-cols-4">
             {TAB_ITEMS.map((t) => (
               <TabsTrigger key={t.value} value={t.value} className="text-xs">
                 <span className="truncate">{t.label}</span>
                 {counts[t.value] > 0 && (
-                  <span className="ml-1 hidden rounded-full bg-muted-foreground/20 px-1.5 text-[10px] sm:inline">
+                  <span className="bg-muted-foreground/20 ml-1 hidden rounded-full px-1.5 text-xs sm:inline">
                     {counts[t.value]}
                   </span>
                 )}
@@ -109,9 +119,11 @@ export function ConversationList({
           overflow-hidden. min-h-0 bikin flex-1 menyusut ke ruang tersisa. */}
       <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">Memuat...</div>
+          <div className="text-muted-foreground p-4 text-center text-sm">
+            Memuat…
+          </div>
         ) : conversations.length === 0 ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">
+          <div className="text-muted-foreground p-8 text-center text-sm">
             Tidak ada percakapan di filter ini.
           </div>
         ) : (
@@ -122,12 +134,14 @@ export function ConversationList({
                   type="button"
                   onClick={() => onSelect(c.id)}
                   className={cn(
-                    'flex w-full items-start gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-muted/50',
+                    'hover:bg-muted/50 flex w-full items-start gap-3 border-b px-3 py-3 text-left transition-colors',
                     selectedId === c.id && 'bg-muted',
                   )}
                 >
                   <Avatar className="size-10 shrink-0">
-                    {c.avatar && <AvatarImage src={c.avatar} alt={c.name ?? ''} />}
+                    {c.avatar && (
+                      <AvatarImage src={c.avatar} alt={c.name ?? ''} />
+                    )}
                     <AvatarFallback>
                       {(c.name || c.phoneNumber).slice(0, 2).toUpperCase()}
                     </AvatarFallback>
@@ -137,17 +151,28 @@ export function ConversationList({
                       <p className="truncate text-sm font-medium">
                         {c.name || `+${c.phoneNumber}`}
                       </p>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="text-muted-foreground shrink-0 text-xs">
                         {formatRelativeTime(c.lastMessageAt)}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <p className="line-clamp-1 flex-1 text-xs text-muted-foreground">
-                        {c.lastMessage?.role === 'AI' && '🤖 '}
+                      <p className="text-muted-foreground line-clamp-1 flex-1 text-xs">
+                        {c.lastMessage?.role === 'AI' && (
+                          <Bot className="mr-1 inline size-3" aria-hidden />
+                        )}
                         {(c.lastMessage?.role === 'AGENT' ||
-                          c.lastMessage?.role === 'HUMAN') &&
-                          '👤 '}
-                        {c.lastMessage?.role === 'USER' && '💬 '}
+                          c.lastMessage?.role === 'HUMAN') && (
+                          <UserRound
+                            className="mr-1 inline size-3"
+                            aria-hidden
+                          />
+                        )}
+                        {c.lastMessage?.role === 'USER' && (
+                          <MessageCircle
+                            className="mr-1 inline size-3"
+                            aria-hidden
+                          />
+                        )}
                         {c.lastMessage?.content || 'Belum ada pesan'}
                       </p>
                       <ConvBadges
@@ -167,7 +192,7 @@ export function ConversationList({
                   type="button"
                   onClick={onLoadMore}
                   disabled={isLoadingMore}
-                  className="w-full px-3 py-3 text-center text-xs font-medium text-primary hover:bg-muted/50 disabled:opacity-60"
+                  className="text-primary hover:bg-muted/50 w-full px-3 py-3 text-center text-xs font-medium disabled:opacity-60"
                 >
                   {isLoadingMore ? 'Memuat…' : 'Muat lebih banyak'}
                 </button>
@@ -180,10 +205,16 @@ export function ConversationList({
   )
 }
 
-function ConvBadges({ aiPaused, isResolved }: { aiPaused: boolean; isResolved: boolean }) {
+function ConvBadges({
+  aiPaused,
+  isResolved,
+}: {
+  aiPaused: boolean
+  isResolved: boolean
+}) {
   if (isResolved) {
     return (
-      <Badge variant="outline" className="gap-1 px-1.5 text-[10px]">
+      <Badge variant="outline" className="gap-1 px-1.5 text-xs">
         <CheckCircle2 className="size-3" />
         Selesai
       </Badge>
@@ -191,14 +222,14 @@ function ConvBadges({ aiPaused, isResolved }: { aiPaused: boolean; isResolved: b
   }
   if (aiPaused) {
     return (
-      <Badge variant="secondary" className="gap-1 px-1.5 text-[10px]">
+      <Badge variant="secondary" className="gap-1 px-1.5 text-xs">
         <Hand className="size-3" />
         Manual
       </Badge>
     )
   }
   return (
-    <Badge variant="default" className="gap-1 px-1.5 text-[10px]">
+    <Badge variant="default" className="gap-1 px-1.5 text-xs">
       <Bot className="size-3" />
       AI
     </Badge>

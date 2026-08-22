@@ -94,9 +94,11 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
     ;(async () => {
       try {
         const res = await fetch(`/api/orders/${orderId}`)
-        const json = (await res.json().catch(() => null)) as
-          | { success: boolean; data?: OrderDetail; error?: string }
-          | null
+        const json = (await res.json().catch(() => null)) as {
+          success: boolean
+          data?: OrderDetail
+          error?: string
+        } | null
         if (cancelled) return
         if (!res.ok || !json?.success || !json.data) {
           toast.error(json?.error ?? 'Gagal memuat pesanan')
@@ -133,9 +135,10 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
           notes: notes.trim() || null,
         }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menyimpan perubahan')
         return
@@ -154,9 +157,10 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
     setDeleting(true)
     try {
       const res = await fetch(`/api/orders/${data.id}`, { method: 'DELETE' })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal menghapus pesanan')
         return
@@ -171,19 +175,19 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
   return (
     <Dialog open={orderId !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <DialogHeader>
           <DialogTitle>Detail Pesanan</DialogTitle>
           <DialogDescription>
             {data
               ? `${data.customerName} · ${new Date(data.createdAt).toLocaleString('id-ID')}`
-              : 'Memuat...'}
+              : 'Memuat…'}
           </DialogDescription>
         </DialogHeader>
 
         {loading && (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            <Loader2 className="text-muted-foreground size-6 animate-spin" />
           </div>
         )}
 
@@ -222,7 +226,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                 </p>
               )}
               {data.flowName && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Asal: {data.flowName}
                 </p>
               )}
@@ -266,7 +270,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                     href={data.paymentProofUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-primary-600 underline-offset-2 hover:underline"
+                    className="text-primary-600 text-xs underline-offset-2 hover:underline"
                   >
                     Buka ukuran asli ↗
                   </a>
@@ -281,7 +285,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                   <img
                     src={data.paymentProofUrl}
                     alt="Bukti transfer"
-                    className="max-h-72 w-full bg-warm-50 object-contain dark:bg-warm-950"
+                    className="bg-warm-50 max-h-72 w-full object-contain"
                     loading="lazy"
                   />
                 </a>
@@ -363,7 +367,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
             {/* Chat history */}
             {data.messages.length > 0 && (
-              <section className="space-y-2 rounded-lg border bg-warm-50/40 p-3 dark:bg-warm-950/20">
+              <section className="bg-warm-50/40 space-y-2 rounded-lg border p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium">
                     Pesan terakhir di chat ({data.messages.length})
@@ -378,8 +382,12 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                 <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
                   {data.messages.map((m) => (
                     <li key={m.id} className="flex gap-2">
-                      <span className="shrink-0 font-mono text-muted-foreground">
-                        {m.role === 'USER' ? '👤' : m.role === 'AI' ? '🤖' : '🧑‍💼'}
+                      <span className="text-muted-foreground shrink-0 font-mono">
+                        {m.role === 'USER'
+                          ? '👤'
+                          : m.role === 'AI'
+                            ? '🤖'
+                            : '🧑‍💼'}
                       </span>
                       <span className="line-clamp-2">{m.content}</span>
                     </li>

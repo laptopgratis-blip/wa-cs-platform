@@ -10,9 +10,18 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -133,7 +142,7 @@ export function AdminBankIntegrationsClient() {
               size="sm"
               onClick={() => setConfirmBlockAll(true)}
             >
-              <AlertTriangle className="h-4 w-4 mr-1" />
+              <AlertTriangle className="mr-1" />
               Block All
             </Button>
           </>
@@ -158,82 +167,76 @@ export function AdminBankIntegrationsClient() {
               description="Integrasi bank yang diaktifkan user bakal termonitor di sini."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3 font-medium">User</th>
-                    <th className="p-3 font-medium">Rekening</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 font-medium">Last sync</th>
-                    <th className="p-3 font-medium text-right">Mutasi</th>
-                    <th className="p-3 font-medium text-right">Auto-confirm</th>
-                    <th className="p-3 font-medium text-right">Fail</th>
-                    <th className="p-3 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((it) => (
-                    <tr key={it.id} className="border-b">
-                      <td className="p-3">
-                        <div className="font-medium">
-                          {it.userName || '—'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {it.userEmail}
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="font-mono text-xs">
-                          {it.accountNumber || '—'}
-                        </div>
-                        <div className="text-xs">
-                          {it.accountName || '—'}
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        {it.isAdminBlocked ? (
-                          <Badge variant="destructive">BLOCKED</Badge>
-                        ) : !it.isActive ? (
-                          <Badge variant="outline">PAUSED</Badge>
-                        ) : it.lastScrapeStatus === 'SUCCESS' ? (
-                          <Badge className="bg-emerald-600">ACTIVE</Badge>
-                        ) : it.lastScrapeStatus ? (
-                          <Badge variant="destructive">
-                            {it.lastScrapeStatus}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">PENDING</Badge>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs">
-                        {it.lastScrapedAt
-                          ? formatRelativeTime(it.lastScrapedAt)
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-right font-mono">
-                        {it.totalMutationsCaptured}
-                      </td>
-                      <td className="p-3 text-right font-mono">
-                        {it.totalAutoConfirmed}
-                      </td>
-                      <td className="p-3 text-right font-mono">
-                        {it.totalScrapeFailures}
-                      </td>
-                      <td className="p-3">
-                        <Button
-                          size="sm"
-                          variant={it.isAdminBlocked ? 'outline' : 'destructive'}
-                          onClick={() => toggleBlock(it)}
-                        >
-                          {it.isAdminBlocked ? 'Unblock' : 'Block'}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Rekening</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last sync</TableHead>
+                  <TableHead className="text-right">Mutasi</TableHead>
+                  <TableHead className="text-right">Auto-confirm</TableHead>
+                  <TableHead className="text-right">Fail</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((it) => (
+                  <TableRow key={it.id}>
+                    <TableCell>
+                      <div className="font-medium">{it.userName || '—'}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {it.userEmail}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-mono text-xs">
+                        {it.accountNumber || '—'}
+                      </div>
+                      <div className="text-xs">{it.accountName || '—'}</div>
+                    </TableCell>
+                    <TableCell>
+                      {it.isAdminBlocked ? (
+                        <Badge variant="destructive">BLOCKED</Badge>
+                      ) : !it.isActive ? (
+                        <Badge variant="outline">PAUSED</Badge>
+                      ) : it.lastScrapeStatus === 'SUCCESS' ? (
+                        <StatusBadge tone="success" label="ACTIVE" />
+                      ) : it.lastScrapeStatus ? (
+                        <Badge variant="destructive">
+                          {it.lastScrapeStatus}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline">PENDING</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {it.lastScrapedAt
+                        ? formatRelativeTime(it.lastScrapedAt)
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {it.totalMutationsCaptured}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {it.totalAutoConfirmed}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {it.totalScrapeFailures}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={it.isAdminBlocked ? 'outline' : 'destructive'}
+                        onClick={() => toggleBlock(it)}
+                      >
+                        {it.isAdminBlocked ? 'Unblock' : 'Block'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -244,8 +247,8 @@ export function AdminBankIntegrationsClient() {
             <DialogTitle>Block All — Emergency Stop</DialogTitle>
             <DialogDescription>
               Set isAdminBlocked = true untuk SEMUA integration. Cron tidak akan
-              trigger scraper sampai di-unblock. User existing tidak bisa
-              manual sync. Pakai kalau ada masalah BCA detection / insiden.
+              trigger scraper sampai di-unblock. User existing tidak bisa manual
+              sync. Pakai kalau ada masalah BCA detection / insiden.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -269,7 +272,10 @@ export function AdminBankIntegrationsClient() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmUnblockAll(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmUnblockAll(false)}
+            >
               Batal
             </Button>
             <Button onClick={unblockAll}>Unblock All</Button>
