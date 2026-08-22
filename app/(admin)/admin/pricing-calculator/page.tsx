@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { PricingCalculator } from '@/components/admin/PricingCalculator'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -29,7 +30,7 @@ export default async function AdminPricingCalculatorPage() {
   ])
 
   return (
-    <div className="mx-auto h-full max-w-7xl overflow-y-auto p-4 md:p-6">
+    <PageContainer width="wide">
       <PricingCalculator
         models={models.map((m) => ({
           id: m.id,
@@ -59,6 +60,6 @@ export default async function AdminPricingCalculatorPage() {
           isActive: f.isActive,
         }))}
       />
-    </div>
+    </PageContainer>
   )
 }

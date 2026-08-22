@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { WhatsappList } from '@/components/whatsapp/WhatsappList'
 import type {
   AiModelOption,
@@ -68,7 +69,10 @@ export default async function WhatsappPage() {
     lastError: r.lastError,
     coexSync: r.isCoexistence
       ? {
-          contact: { status: r.coexContactSyncStatus, count: r.coexContactsImported },
+          contact: {
+            status: r.coexContactSyncStatus,
+            count: r.coexContactsImported,
+          },
           history: {
             status: r.coexHistorySyncStatus,
             progress: r.coexHistorySyncProgress,
@@ -84,13 +88,13 @@ export default async function WhatsappPage() {
   const models: AiModelOption[] = modelRows
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <OnboardingHint
         hintId="whatsapp"
         relevantFor={['CS_AI', 'SELL_LP', 'SELL_WA', 'LMS']}
         matchMessage="Scan QR untuk menyambungkan WhatsApp bisnis. Pakai nomor yang sehari-hari aktif — jangan pakai nomor pribadi yang ke-blokir karena kebanyakan grup."
       />
       <WhatsappList sessions={sessions} souls={souls} models={models} />
-    </div>
+    </PageContainer>
   )
 }

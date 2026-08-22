@@ -15,6 +15,7 @@ import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -60,10 +61,7 @@ const MANUAL_STATUS_VARIANT: Record<
   REJECTED: 'destructive',
 }
 
-const MANUAL_STATUS_ICON: Record<
-  ManualPaymentStatus,
-  typeof Clock
-> = {
+const MANUAL_STATUS_ICON: Record<ManualPaymentStatus, typeof Clock> = {
   PENDING: Clock,
   CONFIRMED: CheckCircle2,
   REJECTED: XCircle,
@@ -174,37 +172,49 @@ export default async function BillingPage({
     prisma.whatsappSession.count({
       where: { userId: session.user.id, provider: 'CLOUD_API', isActive: true },
     }),
-    prisma.messageCreditTransaction.count({ where: { userId: session.user.id } }),
+    prisma.messageCreditTransaction.count({
+      where: { userId: session.user.id },
+    }),
   ])
   const showMessageCredit =
-    cloudSessionCount > 0 || creditTxCount > 0 || (tokenBalance?.messageCreditRp ?? 0) !== 0
+    cloudSessionCount > 0 ||
+    creditTxCount > 0 ||
+    (tokenBalance?.messageCreditRp ?? 0) !== 0
   const [creditRates, creditPackages, creditTx] = showMessageCredit
     ? await Promise.all([
         getMessageCreditRates(),
         prisma.tokenPackage.findMany({
           where: { isActive: true, kind: 'MESSAGE_CREDIT' },
           orderBy: { sortOrder: 'asc' },
-          select: { id: true, name: true, tokenAmount: true, price: true, isPopular: true },
+          select: {
+            id: true,
+            name: true,
+            tokenAmount: true,
+            price: true,
+            isPopular: true,
+          },
         }),
         prisma.messageCreditTransaction.findMany({
           where: { userId: session.user.id },
           orderBy: { createdAt: 'desc' },
           take: 20,
-          select: { id: true, amountRp: true, type: true, category: true, description: true, createdAt: true },
+          select: {
+            id: true,
+            amountRp: true,
+            type: true,
+            category: true,
+            description: true,
+            createdAt: true,
+          },
         }),
       ])
     : [null, [], []]
   const totalPages = Math.max(1, Math.ceil(txCount / PAGE_SIZE))
   const onboardingGoal = userMeta?.onboardingGoal as
-    | 'CS_AI'
-    | 'SELL_LP'
-    | 'SELL_WA'
-    | 'LMS'
-    | null
-    | undefined
+    'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS' | null | undefined
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
         title="Billing & Saldo Token"
         description="Saldo token kamu = bahan bakar semua fitur Hulao. Berlangganan paket, generate konten, balas WA pakai AI — semua potong dari saldo."
@@ -214,20 +224,24 @@ export default async function BillingPage({
 
       <OnboardingGoalCard currentGoal={onboardingGoal ?? null} />
 
-      <Card className="overflow-hidden rounded-xl border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-50">
+      <Card className="from-primary-50 to-primary-50 bg-linear-to-br via-white">
         <CardHeader className="pb-2">
-          <CardDescription className="font-medium uppercase tracking-wider text-primary-600 text-xs">
+          <CardDescription className="text-primary-600 text-xs font-medium tracking-wider uppercase">
             Saldo Token Saat Ini
           </CardDescription>
-          <CardTitle className="font-display text-4xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50 tabular-nums">
+          <CardTitle className="font-display text-warm-900 text-4xl font-semibold tracking-tight tabular-nums">
             {formatNumber(balance)}
-            <span className="ml-2 text-base font-medium text-warm-500">token</span>
+            <span className="text-warm-500 ml-2 text-base font-medium">
+              token
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 pt-2 text-sm sm:grid-cols-3">
           <div>
             <div className="text-muted-foreground">Total dibeli</div>
-            <div className="font-medium">{formatNumber(totalPurchased)} token</div>
+            <div className="font-medium">
+              {formatNumber(totalPurchased)} token
+            </div>
           </div>
           <div>
             <div className="text-muted-foreground">Total terpakai</div>
@@ -244,14 +258,14 @@ export default async function BillingPage({
 
       {manualPayments.length > 0 && (
         <div>
-          <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
             Transfer Manual
           </h2>
           <div className="space-y-3">
             {manualPayments.map((mp) => {
               const StatusIcon = MANUAL_STATUS_ICON[mp.status]
               return (
-                <Card key={mp.id} className="rounded-xl border-warm-200">
+                <Card key={mp.id}>
                   <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -262,25 +276,27 @@ export default async function BillingPage({
                           <StatusIcon className="size-3" />
                           {MANUAL_STATUS_LABEL[mp.status]}
                         </Badge>
-                        <span className="text-sm font-medium text-warm-700">
+                        <span className="text-warm-700 text-sm font-medium">
                           Paket {mp.package?.name ?? '—'}
                         </span>
-                        <span className="text-xs text-warm-500">
-                          ({mp.purpose === 'MESSAGE_CREDIT_PURCHASE'
+                        <span className="text-warm-500 text-xs">
+                          (
+                          {mp.purpose === 'MESSAGE_CREDIT_PURCHASE'
                             ? `kredit pesan ${formatRupiah(mp.tokenAmount)}`
-                            : `${formatNumber(mp.tokenAmount)} token`})
+                            : `${formatNumber(mp.tokenAmount)} token`}
+                          )
                         </span>
                       </div>
-                      <div className="text-sm text-warm-600">
+                      <div className="text-warm-600 text-sm">
                         Total transfer:{' '}
                         <span className="font-semibold tabular-nums">
                           {formatRupiah(mp.totalAmount)}
                         </span>{' '}
-                        <span className="text-xs text-warm-500">
+                        <span className="text-warm-500 text-xs">
                           (kode unik {mp.uniqueCode})
                         </span>
                       </div>
-                      <div className="text-xs text-warm-500">
+                      <div className="text-warm-500 text-xs">
                         Dibuat{' '}
                         {mp.createdAt.toLocaleString('id-ID', {
                           day: '2-digit',
@@ -292,7 +308,7 @@ export default async function BillingPage({
                         })}
                       </div>
                       {mp.status === 'REJECTED' && mp.rejectionReason && (
-                        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+                        <div className="border-destructive/30 bg-destructive/5 text-destructive rounded-md border p-2 text-xs">
                           <span className="font-semibold">Alasan ditolak:</span>{' '}
                           {mp.rejectionReason}
                         </div>
@@ -329,126 +345,135 @@ export default async function BillingPage({
       )}
 
       <div>
-        <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+        <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
           Riwayat Transaksi
         </h2>
         {transactions.length === 0 ? (
           <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            <CardContent className="text-muted-foreground py-10 text-center text-sm">
               Belum ada transaksi.
             </CardContent>
           </Card>
         ) : (
           <>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Tipe</TableHead>
-                  <TableHead>Keterangan</TableHead>
-                  <TableHead className="text-right">Jumlah</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transactions.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {/* timeZone eksplisit — server jalan di UTC; tanpa ini
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tanggal</TableHead>
+                    <TableHead>Tipe</TableHead>
+                    <TableHead>Keterangan</TableHead>
+                    <TableHead className="text-right">Jumlah</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {/* timeZone eksplisit — server jalan di UTC; tanpa ini
                           jam tampil selisih -7 dan transaksi 00:00-06:59 WIB
                           tampak bertanggal kemarin (keluhan user 2026-07-24). */}
-                      {t.createdAt.toLocaleString('id-ID', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        timeZone: 'Asia/Jakarta',
-                      })}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={TX_TYPE_VARIANT[t.type]} className="font-normal">
-                        {TX_TYPE_LABEL[t.type]}
-                      </Badge>
-                    </TableCell>
-                    {/* Label ramah user; deskripsi teknis asli tetap bisa
+                        {t.createdAt.toLocaleString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: 'Asia/Jakarta',
+                        })}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={TX_TYPE_VARIANT[t.type]}
+                          className="font-normal"
+                        >
+                          {TX_TYPE_LABEL[t.type]}
+                        </Badge>
+                      </TableCell>
+                      {/* Label ramah user; deskripsi teknis asli tetap bisa
                         dilihat via hover (title) untuk kebutuhan support. */}
-                    <TableCell className="text-sm" title={t.description ?? undefined}>
-                      {friendlyTokenDescription(t.description)}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        'text-right font-medium tabular-nums',
-                        t.amount < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400',
-                      )}
-                    >
-                      {t.amount > 0 ? '+' : ''}
-                      {formatNumber(t.amount)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-1 py-3">
-              <p className="text-xs text-warm-500">
-                Halaman {currentPage} dari {totalPages} ({txCount} transaksi)
-              </p>
-              <div className="flex gap-2">
-                {currentPage > 1 ? (
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/billing?page=${currentPage - 1}`}>
+                      <TableCell
+                        className="text-sm"
+                        title={t.description ?? undefined}
+                      >
+                        {friendlyTokenDescription(t.description)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'text-right font-medium tabular-nums',
+                          t.amount < 0
+                            ? 'text-destructive'
+                            : 'text-emerald-600',
+                        )}
+                      >
+                        {t.amount > 0 ? '+' : ''}
+                        {formatNumber(t.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-1 py-3">
+                <p className="text-warm-500 text-xs">
+                  Halaman {currentPage} dari {totalPages} ({txCount} transaksi)
+                </p>
+                <div className="flex gap-2">
+                  {currentPage > 1 ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/billing?page=${currentPage - 1}`}>
+                        <ChevronLeft className="mr-1 size-4" />
+                        Prev
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
                       <ChevronLeft className="mr-1 size-4" />
                       Prev
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" disabled>
-                    <ChevronLeft className="mr-1 size-4" />
-                    Prev
-                  </Button>
-                )}
-                {currentPage < totalPages ? (
-                  <Button asChild variant="outline" size="sm">
-                    <Link href={`/billing?page=${currentPage + 1}`}>
+                    </Button>
+                  )}
+                  {currentPage < totalPages ? (
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/billing?page=${currentPage + 1}`}>
+                        Next
+                        <ChevronRight className="ml-1 size-4" />
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" disabled>
                       Next
                       <ChevronRight className="ml-1 size-4" />
-                    </Link>
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" disabled>
-                    Next
-                    <ChevronRight className="ml-1 size-4" />
-                  </Button>
-                )}
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
           </>
         )}
       </div>
 
       <div>
-        <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+        <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
           Top-up Saldo Token
         </h2>
-        <p className="mb-4 text-sm text-warm-500">
-          Token = bahan bakar semua fitur Hulao. Saldo dipakai untuk berlangganan
-          paket Landing Page, Order System, AI konten, balas WA otomatis, dst.
-          Tanpa expired.
+        <p className="text-warm-500 mb-4 text-sm">
+          Token = bahan bakar semua fitur Hulao. Saldo dipakai untuk
+          berlangganan paket Landing Page, Order System, AI konten, balas WA
+          otomatis, dst. Tanpa expired.
         </p>
         {packages.length === 0 ? (
           <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            <CardContent className="text-muted-foreground py-10 text-center text-sm">
               Belum ada paket aktif. Hubungi admin.
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-3">
             {packages.map((pkg) => {
-              const pricePerToken = pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
+              const pricePerToken =
+                pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
               const valueUnits = computeValueUnits({
                 tokenAmount: pkg.tokenAmount,
                 pricePerToken: pricingSettings.pricePerToken,
@@ -459,19 +484,19 @@ export default async function BillingPage({
                 <Card
                   key={pkg.id}
                   className={cn(
-                    'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
+                    'relative flex flex-col overflow-visible transition-all',
                     isHighlight &&
-                      'scale-[1.02] border-2 border-primary-400 shadow-orange',
+                      'border-primary-400 shadow-orange scale-[1.02] border-2',
                   )}
                 >
                   {isHighlight && (
-                    <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+                    <span className="bg-primary-500 shadow-orange absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
                       <Sparkles className="size-3" />
                       Paling Hemat
                     </span>
                   )}
                   <CardHeader>
-                    <CardTitle className="font-display text-xl font-bold text-warm-900 dark:text-warm-50">
+                    <CardTitle className="font-display text-warm-900 text-xl font-semibold">
                       {pkg.name}
                     </CardTitle>
                     <CardDescription className="text-warm-500">
@@ -480,14 +505,14 @@ export default async function BillingPage({
                   </CardHeader>
                   <CardContent className="flex flex-1 flex-col gap-4">
                     <div>
-                      <div className="font-display text-3xl font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
+                      <div className="font-display text-warm-900 text-3xl font-semibold tabular-nums">
                         {formatRupiah(pkg.price)}
                       </div>
                       <div
                         className={cn(
                           'text-xs',
                           isHighlight
-                            ? 'font-semibold text-primary-600'
+                            ? 'text-primary-600 font-semibold'
                             : 'text-warm-500',
                         )}
                       >
@@ -497,22 +522,22 @@ export default async function BillingPage({
                     </div>
 
                     {valueUnits.length > 0 && (
-                      <div className="rounded-lg border border-warm-200 bg-warm-50/60 p-3">
-                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-warm-500">
+                      <div className="border-warm-200 bg-warm-50/60 rounded-lg border p-3">
+                        <div className="text-warm-500 mb-2 text-xs font-semibold tracking-wider uppercase">
                           Cukup buat
                         </div>
                         <ul className="space-y-1.5 text-sm">
                           {valueUnits.map((unit, idx) => (
                             <li
                               key={idx}
-                              className="flex items-start gap-2 text-warm-700"
+                              className="text-warm-700 flex items-start gap-2"
                             >
-                              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                              <span className="bg-primary-100 text-primary-600 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full">
                                 <Check className="size-3" strokeWidth={3} />
                               </span>
                               <span className="flex-1">
                                 {unit.label}
-                                <span className="ml-1 font-semibold text-warm-900">
+                                <span className="text-warm-900 ml-1 font-semibold">
                                   {unit.value}
                                 </span>
                               </span>
@@ -522,7 +547,7 @@ export default async function BillingPage({
                       </div>
                     )}
 
-                    <ul className="space-y-1.5 text-xs text-warm-500">
+                    <ul className="text-warm-500 space-y-1.5 text-xs">
                       <li className="flex items-start gap-2">
                         <span className="text-primary-500">·</span>
                         <span>Bisa dipakai untuk semua fitur Hulao</span>
@@ -536,11 +561,10 @@ export default async function BillingPage({
                     <div className="mt-auto pt-2">
                       <Button
                         asChild
-                        className={
-                          isHighlight
-                            ? 'w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600'
-                            : 'w-full rounded-full border border-warm-200 bg-card font-semibold text-warm-800 hover:bg-warm-50'
-                        }
+                        className={cn(
+                          'w-full rounded-full font-semibold',
+                          isHighlight && 'shadow-orange',
+                        )}
                         variant={isHighlight ? 'default' : 'outline'}
                       >
                         <Link href={`/checkout/select/${pkg.id}`}>
@@ -555,6 +579,6 @@ export default async function BillingPage({
           </div>
         )}
       </div>
-    </div>
+    </PageContainer>
   )
 }

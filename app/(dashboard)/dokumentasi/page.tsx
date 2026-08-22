@@ -16,9 +16,16 @@ import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
 import { getSetting, SETTING_KEYS } from '@/lib/settings'
 
@@ -40,25 +47,29 @@ const RESOURCES = [
   {
     icon: Code2,
     title: 'Dokumentasi API',
-    description: 'Buat kunci API, autentikasi Bearer, daftar endpoint, kode error, dan batas pemakaian.',
+    description:
+      'Buat kunci API, autentikasi Bearer, daftar endpoint, kode error, dan batas pemakaian.',
     href: '/pengembang/api',
   },
   {
     icon: Plug,
     title: 'Script Embed & Tracking',
-    description: 'Cara memasang widget Live AI dan LP Tracker di situsmu sendiri, plus otomasi via n8n/Zapier.',
+    description:
+      'Cara memasang widget Live AI dan LP Tracker di situsmu sendiri, plus otomasi via n8n/Zapier.',
     href: '/pengembang/integrasi',
   },
   {
     icon: Compass,
     title: 'Panduan Awal',
-    description: 'Langkah demi langkah menyiapkan akun: sambungkan WhatsApp, atur Soul, sampai order pertama.',
+    description:
+      'Langkah demi langkah menyiapkan akun: sambungkan WhatsApp, atur Soul, sampai order pertama.',
     href: '/onboarding/guide',
   },
   {
     icon: ShoppingBag,
     title: 'Cara Jualan',
-    description: 'Alur penjualan yang dipakai AI saat membalas customer — dari sapaan sampai closing.',
+    description:
+      'Alur penjualan yang dipakai AI saat membalas customer — dari sapaan sampai closing.',
     href: '/cara-jualan',
   },
 ]
@@ -73,7 +84,7 @@ export default async function DokumentasiPage() {
   const externalDocs = docsUrl.startsWith('https://') ? docsUrl : ''
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <PageHeader
         icon={BookMarked}
         title="Dokumentasi"
@@ -81,15 +92,16 @@ export default async function DokumentasiPage() {
       />
 
       {externalDocs ? (
-        <Card className="rounded-xl border-primary-200 bg-gradient-to-br from-primary-50 via-white to-primary-50">
+        <Card className="from-primary-50 to-primary-50 bg-linear-to-br via-white">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Dokumentasi lengkap</CardTitle>
             <CardDescription>
-              Panduan penuh beserta contoh kasus tersedia di situs dokumentasi terpisah.
+              Panduan penuh beserta contoh kasus tersedia di situs dokumentasi
+              terpisah.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="bg-primary-500 text-white hover:bg-primary-600">
+            <Button asChild>
               <a href={externalDocs} target="_blank" rel="noopener noreferrer">
                 Buka Dokumentasi <ExternalLink className="ml-2 size-4" />
               </a>
@@ -97,14 +109,15 @@ export default async function DokumentasiPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card className="rounded-xl border-dashed border-warm-300 bg-warm-50/40">
+        <Card className="border-warm-300 border border-dashed">
           <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold text-warm-800">
+              <p className="text-warm-800 text-sm font-semibold">
                 Situs dokumentasi lengkap sedang disiapkan
               </p>
-              <p className="text-xs text-warm-500">
-                Sementara ini pakai sumber di bawah, atau tanya langsung ke tim kami.
+              <p className="text-warm-500 text-xs">
+                Sementara ini pakai sumber di bawah, atau tanya langsung ke tim
+                kami.
               </p>
             </div>
             <Button asChild variant="outline" className="shrink-0">
@@ -121,21 +134,30 @@ export default async function DokumentasiPage() {
           const Icon = r.icon
           const inner = (
             <CardContent className="flex h-full flex-col gap-1.5 p-4">
-              <span className="flex items-center gap-2 text-sm font-semibold text-warm-900 dark:text-warm-50">
-                <Icon className="size-4 text-primary-500" aria-hidden />
+              <span className="text-warm-900 flex items-center gap-2 text-sm font-semibold">
+                <Icon className="text-primary-500 size-4" aria-hidden />
                 {r.title}
-                {r.external && <ExternalLink className="size-3 text-warm-400" aria-hidden />}
+                {r.external && (
+                  <ExternalLink className="text-warm-400 size-3" aria-hidden />
+                )}
               </span>
-              <span className="text-xs leading-relaxed text-warm-500">{r.description}</span>
+              <span className="text-warm-500 text-xs leading-relaxed">
+                {r.description}
+              </span>
             </CardContent>
           )
           return (
             <Card
               key={r.href}
-              className="rounded-xl border-warm-200 transition-colors hover:border-primary-300"
+              className="hover:ring-primary-300 transition-shadow"
             >
               {r.external ? (
-                <a href={r.href} target="_blank" rel="noopener noreferrer" className="block h-full">
+                <a
+                  href={r.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block h-full"
+                >
                   {inner}
                 </a>
               ) : (
@@ -147,6 +169,6 @@ export default async function DokumentasiPage() {
           )
         })}
       </div>
-    </div>
+    </PageContainer>
   )
 }

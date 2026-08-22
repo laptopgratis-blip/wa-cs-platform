@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation'
 
 import { ClipLibraryBoard } from '@/components/admin/ClipLibraryBoard'
 import { HostSceneBoard } from '@/components/admin/HostSceneBoard'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 
@@ -38,7 +39,7 @@ export default async function UserHostDetailPage({
 
   if (host.mode === 'NATIVE_LIBRARY') {
     return (
-      <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+      <PageContainer>
         <ClipLibraryBoard
           hostId={host.id}
           hostName={host.name}
@@ -48,18 +49,18 @@ export default async function UserHostDetailPage({
           isAdmin={session.user.role === 'ADMIN'}
           backHref="/host-templates"
         />
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <HostSceneBoard
         hostId={id}
         apiHostBase="/api/host-templates"
         apiSceneBase="/api/host-templates"
         backHref="/host-templates"
       />
-    </div>
+    </PageContainer>
   )
 }

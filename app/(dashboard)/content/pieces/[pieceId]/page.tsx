@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { PieceDetailClient } from '@/components/content/PieceDetailClient'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { getPieceForOwner } from '@/lib/services/content/library'
@@ -24,7 +25,7 @@ export default async function PieceDetailPage({ params }: Params) {
   if (!piece) notFound()
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <Button asChild variant="ghost" size="sm" className="-ml-2 self-start">
         <Link href="/content?tab=library">
           <ArrowLeft className="mr-2 size-4" />
@@ -89,6 +90,6 @@ export default async function PieceDetailPage({ params }: Params) {
             : null,
         }}
       />
-    </div>
+    </PageContainer>
   )
 }

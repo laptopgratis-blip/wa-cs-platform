@@ -8,9 +8,13 @@ import type {
   BroadcastListItem,
   SessionOption,
 } from '@/components/broadcast/types'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { BROADCAST_LIST_SELECT, serializeBroadcastRow } from '@/lib/services/broadcast/list-select'
+import {
+  BROADCAST_LIST_SELECT,
+  serializeBroadcastRow,
+} from '@/lib/services/broadcast/list-select'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +34,14 @@ export default async function BroadcastPage() {
     prisma.whatsappSession.findMany({
       where: { userId, isActive: true },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, displayName: true, phoneNumber: true, status: true, provider: true, wabaId: true },
+      select: {
+        id: true,
+        displayName: true,
+        phoneNumber: true,
+        status: true,
+        provider: true,
+        wabaId: true,
+      },
     }),
     prisma.contact.findMany({
       where: { userId },
@@ -50,12 +61,12 @@ export default async function BroadcastPage() {
   const sessionOptions: SessionOption[] = sessions
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <BroadcastView
         initialBroadcasts={initialBroadcasts}
         sessions={sessionOptions}
         availableTags={[...tagSet].sort()}
       />
-    </div>
+    </PageContainer>
   )
 }

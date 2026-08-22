@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 
 import { ApiDocsSection } from '@/components/developer/ApiDocsSection'
 import { ApiKeysClient } from '@/components/developer/ApiKeysClient'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { authOptions } from '@/lib/auth'
 import { publicBaseUrl } from '@/lib/review-token'
@@ -23,7 +24,7 @@ export default async function PengembangApiPage() {
   const keys = await listSellerApiKeys(session.user.id)
 
   return (
-    <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
         icon={Code2}
         title="API"
@@ -39,6 +40,6 @@ export default async function PengembangApiPage() {
         }))}
       />
       <ApiDocsSection baseUrl={publicBaseUrl()} />
-    </div>
+    </PageContainer>
   )
 }

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { ContentStudioClient } from '@/components/content/ContentStudioClient'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -52,7 +53,7 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
     : []
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
         title="Content Studio"
         description="Bikin ide & konten siap posting dari LP kamu — 15 ide dalam 1 klik, tinggal pilih yg mau di-bikin."
@@ -85,6 +86,6 @@ export default async function ContentStudioPage({ searchParams }: PageProps) {
           isFreePreview: i.isFreePreview,
         }))}
       />
-    </div>
+    </PageContainer>
   )
 }

@@ -11,6 +11,7 @@ import { Compass, TrendingDown, Users } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import {
   Card,
@@ -30,6 +31,8 @@ import {
 import { authOptions } from '@/lib/auth'
 import { getChecklistDefinition } from '@/lib/onboarding/checklists'
 import { prisma } from '@/lib/prisma'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -125,7 +128,7 @@ export default async function AdminOnboardingFunnelPage() {
   const noAction = Math.max(0, totalSignups - totalAnswered - wizardSkipped)
 
   return (
-    <div className="mx-auto flex min-h-full max-w-7xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="wide">
       <PageHeader
         title="Onboarding Funnel"
         description={
@@ -156,12 +159,12 @@ export default async function AdminOnboardingFunnelPage() {
           label="Skip Wizard"
           value={wizardSkipped}
           hint={`${pct(wizardSkipped, totalSignups)}% dari signup`}
-          tone="amber"
+          tone="warning"
         />
       </div>
 
       {/* Goal breakdown */}
-      <Card className="rounded-xl border-warm-200 shadow-sm">
+      <Card>
         <CardHeader>
           <CardTitle className="font-display">Distribusi Goal</CardTitle>
           <CardDescription>
@@ -183,7 +186,9 @@ export default async function AdminOnboardingFunnelPage() {
                 <TableHead className="text-right">
                   Selesai Semua ({PERIOD_DAYS}d)
                 </TableHead>
-                <TableHead className="text-right">Total user (snapshot)</TableHead>
+                <TableHead className="text-right">
+                  Total user (snapshot)
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -205,10 +210,20 @@ export default async function AdminOnboardingFunnelPage() {
                     <TableCell className="text-right tabular-nums">
                       {answered}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-amber-700">
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums',
+                        TONES.warning.text,
+                      )}
+                    >
                       {dis}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-emerald-700">
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums',
+                        TONES.success.text,
+                      )}
+                    >
                       {done}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -227,14 +242,14 @@ export default async function AdminOnboardingFunnelPage() {
         const def = getChecklistDefinition(goal)
         const goalStats = stepAgg.get(goal) ?? new Map<string, StepStat>()
         return (
-          <Card key={goal} className="rounded-xl border-warm-200 shadow-sm">
+          <Card key={goal}>
             <CardHeader>
               <CardTitle className="font-display text-base">
                 Drop-off — {GOAL_LABEL[goal]}
               </CardTitle>
               <CardDescription>
-                Berapa kali tiap step di-skip vs di-mark-selesai manual oleh user.
-                Step dengan rasio skip tinggi mungkin perlu di-rewording.
+                Berapa kali tiap step di-skip vs di-mark-selesai manual oleh
+                user. Step dengan rasio skip tinggi mungkin perlu di-rewording.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -258,28 +273,42 @@ export default async function AdminOnboardingFunnelPage() {
                     const skipPct = total === 0 ? 0 : (stat.skip / total) * 100
                     return (
                       <TableRow key={step.id}>
-                        <TableCell className="text-warm-500">{idx + 1}</TableCell>
+                        <TableCell className="text-warm-500">
+                          {idx + 1}
+                        </TableCell>
                         <TableCell>
                           <p className="font-medium">{step.title}</p>
-                          <p className="text-xs text-warm-500">
+                          <p className="text-warm-500 text-xs">
                             {step.id}
                             {step.optional ? ' · opsional' : ''}
                           </p>
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-amber-700">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            TONES.warning.text,
+                          )}
+                        >
                           {stat.skip}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-emerald-700">
+                        <TableCell
+                          className={cn(
+                            'text-right tabular-nums',
+                            TONES.success.text,
+                          )}
+                        >
                           {stat.complete}
                         </TableCell>
                         <TableCell
-                          className={`text-right tabular-nums font-medium ${
+                          className={cn(
+                            'text-right font-medium tabular-nums',
+                            // Rasio skip tinggi = sinyal bahaya, sedang = warning.
                             skipPct > 50
-                              ? 'text-rose-600'
+                              ? TONES.danger.text
                               : skipPct > 25
-                                ? 'text-amber-700'
-                                : 'text-warm-600'
-                          }`}
+                                ? TONES.warning.text
+                                : TONES.neutral.text,
+                          )}
                         >
                           {skipPct.toFixed(0)}%
                         </TableCell>
@@ -293,24 +322,24 @@ export default async function AdminOnboardingFunnelPage() {
         )
       })}
 
-      <Card className="rounded-xl border-warm-200 bg-warm-50 shadow-sm">
-        <CardContent className="flex flex-col gap-1 p-4 text-xs text-warm-600">
+      <Card className={TONES.neutral.bg}>
+        <CardContent className="text-warm-600 flex flex-col gap-1 p-4 text-xs">
           <p>
             <strong>Catatan:</strong> auto-check (mis. WA connected, produk
-            ditambahkan) <em>tidak</em> tercatat di tabel ini — hanya event manual.
-            Auto-check menjadikan step completed di UI, tapi user tidak harus
-            klik. Drop-off di sini = user yang sengaja klik "Lewati".
+            ditambahkan) <em>tidak</em> tercatat di tabel ini — hanya event
+            manual. Auto-check menjadikan step completed di UI, tapi user tidak
+            harus klik. Drop-off di sini = user yang sengaja klik "Lewati".
           </p>
           <p>
             Goal reset di window {PERIOD_DAYS}d:{' '}
-            <span className="font-semibold tabular-nums">{resets}</span> ·
-            User signup tanpa interaksi wizard:{' '}
-            <span className="font-semibold tabular-nums">{noAction}</span>{' '}
-            (~{pct(noAction, totalSignups)}%)
+            <span className="font-semibold tabular-nums">{resets}</span> · User
+            signup tanpa interaksi wizard:{' '}
+            <span className="font-semibold tabular-nums">{noAction}</span> (~
+            {pct(noAction, totalSignups)}%)
           </p>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -324,35 +353,36 @@ function MetricCard({
   label,
   value,
   hint,
-  tone = 'primary',
+  tone = 'brand',
 }: {
   icon: React.ReactNode
   label: string
   value: number
   hint?: string
-  tone?: 'primary' | 'amber'
+  /** Tone ikon — ambil dari registry lib/ui-tones, bukan palet mentah. */
+  tone?: Tone
 }) {
   return (
-    <Card className="rounded-xl border-warm-200 shadow-sm">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-xs font-medium uppercase tracking-wider text-warm-500">
+        <CardTitle className="text-warm-500 text-xs font-medium tracking-wider uppercase">
           {label}
         </CardTitle>
         <span
-          className={`flex size-9 items-center justify-center rounded-lg ${
-            tone === 'amber'
-              ? 'bg-amber-100 text-amber-700'
-              : 'bg-primary-100 text-primary-700'
-          }`}
+          className={cn(
+            'flex size-9 items-center justify-center rounded-lg',
+            TONES[tone].bg,
+            TONES[tone].text,
+          )}
         >
           {icon}
         </span>
       </CardHeader>
       <CardContent>
-        <div className="font-display text-3xl font-bold text-warm-900 tabular-nums">
+        <div className="font-display text-warm-900 text-3xl font-bold tabular-nums">
           {value.toLocaleString('id-ID')}
         </div>
-        {hint && <p className="mt-1 text-xs text-warm-500">{hint}</p>}
+        {hint && <p className="text-warm-500 mt-1 text-xs">{hint}</p>}
       </CardContent>
     </Card>
   )
