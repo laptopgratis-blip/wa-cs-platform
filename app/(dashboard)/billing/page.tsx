@@ -484,7 +484,10 @@ export default async function BillingPage({
                 <Card
                   key={pkg.id}
                   className={cn(
-                    'relative flex flex-col overflow-visible transition-all',
+                    // pt-4: badge "Paling Hemat/Populer" menggantung -top-3.5 dan
+                    // menimpa judul kartu (terukur 10px). Headroom dikasih ke
+                    // SEMUA kartu supaya judul antar-kartu tetap sejajar.
+                    'relative flex flex-col overflow-visible pt-8 transition-all',
                     isHighlight &&
                       'border-primary-400 shadow-orange scale-[1.02] border-2',
                   )}

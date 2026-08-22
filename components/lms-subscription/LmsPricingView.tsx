@@ -136,7 +136,10 @@ export function LmsPricingView({
               <Card
                 key={pkg.id}
                 className={cn(
-                  'relative flex flex-col overflow-visible transition-all',
+                  // pt-4: badge "Paling Hemat/Populer" menggantung -top-3.5 dan
+                // menimpa judul kartu (terukur 10px). Headroom dikasih ke
+                // SEMUA kartu supaya judul antar-kartu tetap sejajar.
+                'relative flex flex-col overflow-visible pt-8 transition-all',
                   pkg.isPopular && 'ring-primary-400 scale-[1.02] ring-2',
                   // Plan aktif ditandai tint success + badge, bukan ring hue lepas.
                   isCurrent && TONES.success.bg,
