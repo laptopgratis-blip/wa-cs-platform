@@ -2,7 +2,15 @@
 
 // Config panel Live AI Embed di LP — owner pilih LiveRoom, atur gate, position, dll.
 // Endpoint: GET/PUT/DELETE /api/lp/[lpId]/live-embed
-import { AlertTriangle, ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  AlignLeft,
+  ArrowLeft,
+  Loader2,
+  PictureInPicture2,
+  Save,
+  Trash2,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -427,15 +435,20 @@ export function LpLiveEmbedConfig({
                 key={p}
                 type="button"
                 onClick={() => setConfig((c) => ({ ...c, position: p }))}
-                className={`rounded-lg border p-2 text-xs ${
+                className={`flex items-center justify-center gap-1.5 rounded-lg border p-2 text-xs ${
                   config.position === p
                     ? 'border-primary-500 bg-primary-50 text-primary-700'
                     : 'border-warm-200 text-warm-600'
                 }`}
               >
+                {p === 'inline' ? (
+                  <AlignLeft className="size-4 shrink-0" aria-hidden />
+                ) : (
+                  <PictureInPicture2 className="size-4 shrink-0" aria-hidden />
+                )}
                 {p === 'inline'
-                  ? '📐 Inline'
-                  : `🪟 ${p.replace('floating-', '').toUpperCase()}`}
+                  ? 'Inline'
+                  : p.replace('floating-', '').toUpperCase()}
               </button>
             ))}
           </div>
@@ -576,18 +589,10 @@ export function LpLiveEmbedConfig({
         >
           Preview LP →
         </Link>
-        <button
-          onClick={handleSave}
-          disabled={saving || !config.liveRoomId}
-          className="bg-primary-500 hover:bg-primary-600 inline-flex items-center rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {saving ? (
-            <Loader2 className="mr-2 size-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 size-4" />
-          )}
+        <Button onClick={handleSave} disabled={saving || !config.liveRoomId}>
+          {saving ? <Loader2 className="animate-spin" /> : <Save />}
           {saving ? 'Menyimpan…' : 'Simpan konfigurasi'}
-        </button>
+        </Button>
       </div>
 
       <ConfirmDialog

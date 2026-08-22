@@ -12,6 +12,14 @@ import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatRelativeTime } from '@/lib/format-time'
 import { scrapeJobStatusMeta, statusMeta } from '@/lib/status'
 import { TONES } from '@/lib/ui-tones'
@@ -81,53 +89,49 @@ export function JobsClient() {
               description="Log muncul setelah scraper jalan (terjadwal atau manual)."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b">
-                  <tr className="text-left">
-                    <th className="p-3 font-medium">Waktu</th>
-                    <th className="p-3 font-medium">Trigger</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 text-right font-medium">Durasi</th>
-                    <th className="p-3 text-right font-medium">
-                      Mutasi (baru/total)
-                    </th>
-                    <th className="p-3 text-right font-medium">Auto-confirm</th>
-                    <th className="p-3 font-medium">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jobs.map((j) => (
-                    <tr key={j.id} className="border-b">
-                      <td className="p-3 whitespace-nowrap">
-                        {formatRelativeTime(j.createdAt)}
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline">{j.triggeredBy}</Badge>
-                      </td>
-                      <td className="p-3">{statusBadge(j.status)}</td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.durationMs !== null
-                          ? `${(j.durationMs / 1000).toFixed(1)}s`
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.newMutations}/{j.mutationsFound}
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.autoConfirmed}
-                      </td>
-                      <td
-                        className={`max-w-[300px] truncate p-3 text-xs ${TONES.danger.text}`}
-                        title={j.errorMessage ?? ''}
-                      >
-                        {j.errorMessage ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Waktu</TableHead>
+                  <TableHead>Trigger</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Durasi</TableHead>
+                  <TableHead className="text-right">
+                    Mutasi (baru/total)
+                  </TableHead>
+                  <TableHead className="text-right">Auto-confirm</TableHead>
+                  <TableHead>Error</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((j) => (
+                  <TableRow key={j.id}>
+                    <TableCell>{formatRelativeTime(j.createdAt)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{j.triggeredBy}</Badge>
+                    </TableCell>
+                    <TableCell>{statusBadge(j.status)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.durationMs !== null
+                        ? `${(j.durationMs / 1000).toFixed(1)}s`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.newMutations}/{j.mutationsFound}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.autoConfirmed}
+                    </TableCell>
+                    <TableCell
+                      className={`max-w-[300px] truncate text-xs ${TONES.danger.text}`}
+                      title={j.errorMessage ?? ''}
+                    >
+                      {j.errorMessage ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

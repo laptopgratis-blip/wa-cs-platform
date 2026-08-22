@@ -2,7 +2,14 @@
 
 // Modal detail pesanan: data customer + items + status edit + chat history.
 // Dibuka dari OrdersList saat user klik tombol "Detail" di card.
-import { Loader2, MessageCircle, Trash2 } from 'lucide-react'
+import {
+  Bot,
+  Headset,
+  Loader2,
+  MessageCircle,
+  Trash2,
+  User,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -382,12 +389,14 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
                 <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
                   {data.messages.map((m) => (
                     <li key={m.id} className="flex gap-2">
-                      <span className="text-muted-foreground shrink-0 font-mono">
-                        {m.role === 'USER'
-                          ? '👤'
-                          : m.role === 'AI'
-                            ? '🤖'
-                            : '🧑‍💼'}
+                      <span className="text-muted-foreground mt-0.5 shrink-0">
+                        {m.role === 'USER' ? (
+                          <User className="size-4" aria-hidden />
+                        ) : m.role === 'AI' ? (
+                          <Bot className="size-4" aria-hidden />
+                        ) : (
+                          <Headset className="size-4" aria-hidden />
+                        )}
                       </span>
                       <span className="line-clamp-2">{m.content}</span>
                     </li>

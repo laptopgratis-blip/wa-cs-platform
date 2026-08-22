@@ -11,8 +11,10 @@
 // Generate sinkron (max 2 menit) — show spinner sampai READY/FAILED.
 
 import {
+  AlertCircle,
   AlertTriangle,
   BarChart3,
+  Bell,
   Check,
   CheckCircle2,
   Clapperboard,
@@ -21,10 +23,15 @@ import {
   ImageIcon,
   Lightbulb,
   Loader2,
+  MessageCircle,
   Mic,
+  Package,
   Pause,
   Pencil,
   Plus,
+  Shield,
+  ShoppingCart,
+  Smile,
   Sparkles,
   Star,
   Target,
@@ -32,6 +39,7 @@ import {
   TreePine,
   Upload,
   Volume2,
+  Wallet,
   XCircle,
   Zap,
 } from 'lucide-react'
@@ -96,30 +104,51 @@ interface Clip {
   createdAt: string
 }
 
+// Kategori klip — `icon` dipakai di UI yang bisa render node (chip/grid cakupan);
+// <option> native cuma bisa string, jadi di sana label tampil polos.
 const CATEGORIES = [
   {
     value: 'GREETING',
-    label: '🔔 Greeting',
+    label: 'Greeting',
+    icon: Bell,
     hint: 'Sapaan saat customer masuk',
   },
   {
     value: 'PRODUCT_DEMO',
-    label: '💊 Product Demo',
+    label: 'Product Demo',
+    icon: Package,
     hint: 'Jelasin produk spesifik',
   },
-  { value: 'PRICE', label: '💰 Harga', hint: 'Jawab pertanyaan harga' },
+  {
+    value: 'PRICE',
+    label: 'Harga',
+    icon: Wallet,
+    hint: 'Jawab pertanyaan harga',
+  },
   {
     value: 'OBJECTION',
-    label: '🛡️ Objection',
+    label: 'Objection',
+    icon: Shield,
     hint: 'Handle keberatan customer',
   },
-  { value: 'CLOSING', label: '🛒 Closing', hint: 'Push checkout' },
+  {
+    value: 'CLOSING',
+    label: 'Closing',
+    icon: ShoppingCart,
+    hint: 'Push checkout',
+  },
   {
     value: 'IDLE',
-    label: '😊 Idle',
+    label: 'Idle',
+    icon: Smile,
     hint: 'Loop saat sepi (silent, no speech)',
   },
-  { value: 'GENERAL', label: '💬 General', hint: 'Umum / fallback' },
+  {
+    value: 'GENERAL',
+    label: 'General',
+    icon: MessageCircle,
+    hint: 'Umum / fallback',
+  },
 ] as const
 
 export function ClipLibraryBoard({
@@ -568,11 +597,12 @@ export function ClipLibraryBoard({
         >
           ← Kembali
         </Link>
-        <h1>
+        <h1 className="flex flex-wrap items-center gap-1.5">
+          <Mic className="text-primary-500 size-4 shrink-0" aria-hidden />
           <HostTitleEditable
             hostId={hostId}
             name={hostName}
-            prefix="🎙️ Klip Live — "
+            prefix="Klip Live — "
             className="font-display text-warm-900 text-xl font-semibold"
           />
         </h1>
@@ -610,11 +640,12 @@ export function ClipLibraryBoard({
         >
           ← Kembali
         </Link>
-        <h1>
+        <h1 className="flex flex-wrap items-center gap-1.5">
+          <Mic className="text-primary-500 size-4 shrink-0" aria-hidden />
           <HostTitleEditable
             hostId={hostId}
             name={hostName}
-            prefix="🎙️ Klip Live — "
+            prefix="Klip Live — "
             className="font-display text-warm-900 text-xl font-semibold"
           />
         </h1>
@@ -715,10 +746,23 @@ export function ClipLibraryBoard({
               </div>
             ) : (
               <div className="border-primary-200 bg-primary-50/40 rounded-lg border p-3">
-                <div className="text-primary-900 mb-2 text-xs font-semibold">
-                  {baselineStatus === 'FAILED'
-                    ? '⚠️ Baseline gagal — edit prompt & generate ulang:'
-                    : '🎬 Generate baseline pertama:'}
+                <div className="text-primary-900 mb-2 flex items-center gap-1.5 text-xs font-semibold">
+                  {baselineStatus === 'FAILED' ? (
+                    <>
+                      <AlertTriangle
+                        className={cn('size-3.5 shrink-0', TONES.danger.text)}
+                        aria-hidden
+                      />
+                      <span>
+                        Baseline gagal — edit prompt & generate ulang:
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Clapperboard className="size-3.5 shrink-0" aria-hidden />
+                      <span>Generate baseline pertama:</span>
+                    </>
+                  )}
                 </div>
                 <BaselineComposer
                   hostId={hostId}
@@ -727,8 +771,11 @@ export function ClipLibraryBoard({
               </div>
             )}
 
-            <div className="text-muted-foreground text-xs">
-              💡 Auto-refresh tiap 6dtk. Status update otomatis di halaman ini.
+            <div className="text-muted-foreground flex items-start gap-1.5 text-xs">
+              <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Auto-refresh tiap 6dtk. Status update otomatis di halaman ini.
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -746,11 +793,12 @@ export function ClipLibraryBoard({
           >
             ← Kembali ke host list
           </Link>
-          <h1 className="mt-1">
+          <h1 className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Mic className="text-primary-500 size-4 shrink-0" aria-hidden />
             <HostTitleEditable
               hostId={hostId}
               name={hostName}
-              prefix="🎙️ Klip Live — "
+              prefix="Klip Live — "
               className="text-xl font-semibold"
             />
           </h1>
@@ -895,9 +943,20 @@ export function ClipLibraryBoard({
               <div
                 className={`mt-1 space-y-2 rounded-md border p-3 ${TONES.warning.border} ${TONES.warning.bg}`}
               >
-                <div className={`text-xs font-semibold ${TONES.warning.text}`}>
-                  ⚠️ Belum ada baseline siap. Review & edit prompt gerakan di
-                  bawah, lalu generate.
+                <div
+                  className={cn(
+                    'flex items-start gap-1.5 text-xs font-semibold',
+                    TONES.warning.text,
+                  )}
+                >
+                  <AlertTriangle
+                    className="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden
+                  />
+                  <span>
+                    Belum ada baseline siap. Review & edit prompt gerakan di
+                    bawah, lalu generate.
+                  </span>
                 </div>
                 <BaselineComposer
                   hostId={hostId}
@@ -948,9 +1007,12 @@ export function ClipLibraryBoard({
                 })}
               </div>
             )}
-            <p className="text-warm-500 mt-1 text-xs">
-              💡 Klip lipsync inherit gerakan dari baseline ini. Pilih variant
-              yang cocok sama kategori klip.
+            <p className="text-warm-500 mt-1 flex items-start gap-1.5 text-xs">
+              <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Klip lipsync inherit gerakan dari baseline ini. Pilih variant
+                yang cocok sama kategori klip.
+              </span>
             </p>
             {/* Tambah baseline kapan pun, berapa pun — composer editable. */}
             {baselines && baselines.length > 0 ? (
@@ -1057,9 +1119,12 @@ export function ClipLibraryBoard({
                     })}
                 </div>
               )}
-              <p className="text-muted-foreground mt-1 text-xs">
-                💡 Klip IDLE = video silent (no suara). Loop saat tidak ada chat
-                customer.
+              <p className="text-muted-foreground mt-1 flex items-start gap-1.5 text-xs">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  Klip IDLE = video silent (no suara). Loop saat tidak ada chat
+                  customer.
+                </span>
               </p>
             </div>
           ) : (
@@ -1095,20 +1160,36 @@ export function ClipLibraryBoard({
                   <div className="mt-1.5 space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span
-                        className={
+                        className={cn(
+                          'inline-flex items-center gap-1',
                           overBudget
                             ? `font-semibold ${TONES.danger.text}`
-                            : 'text-warm-600'
-                        }
+                            : 'text-warm-600',
+                        )}
                       >
                         {overBudget ? (
                           <>
-                            ⚠️ Script terlalu panjang — audio {estSec}s, video
-                            cuma {baselineSec}s
+                            <AlertTriangle
+                              className="size-3 shrink-0"
+                              aria-hidden
+                            />
+                            <span>
+                              Script terlalu panjang — audio {estSec}s, video
+                              cuma {baselineSec}s
+                            </span>
                           </>
                         ) : (
                           <>
-                            ✓ Pas — audio {estSec}s, video {baselineSec}s
+                            <Check
+                              className={cn(
+                                'size-3 shrink-0',
+                                TONES.success.text,
+                              )}
+                              aria-hidden
+                            />
+                            <span>
+                              Pas — audio {estSec}s, video {baselineSec}s
+                            </span>
                           </>
                         )}
                       </span>
@@ -1168,8 +1249,9 @@ export function ClipLibraryBoard({
       </Card>
 
       {/* Test Match — simulate customer question, lihat klip mana yg play */}
+      {/* Card pakai ring (bukan border-width) — aksen lewat ring-*. */}
       {clips && clips.length > 0 ? (
-        <Card className="border-primary-200 bg-primary-50/30">
+        <Card className="ring-primary-200 bg-primary-50/30">
           <CardContent className="space-y-2 p-4">
             <TestMatchPanel hostId={hostId} clips={clips} />
           </CardContent>
@@ -1437,8 +1519,9 @@ export function ClipLibraryBoard({
                       }
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <span className="truncate text-xs font-semibold">
-                          {c.label}
+                        <span className="flex min-w-0 items-center gap-1 text-xs font-semibold">
+                          <c.icon className="size-3 shrink-0" aria-hidden />
+                          <span className="truncate">{c.label}</span>
                         </span>
                         <span
                           className={`text-xs font-semibold tabular-nums ${tone.text}`}
@@ -1450,9 +1533,15 @@ export function ClipLibraryBoard({
                   )
                 })}
               </div>
-              <p className="text-warm-500 mt-1 text-xs">
-                🔴 0 klip = customer tanya hal itu, host gak bisa jawab. Klik
-                kategori → langsung ke form generate.
+              <p className="text-warm-500 mt-1 flex items-start gap-1.5 text-xs">
+                <AlertCircle
+                  className={cn('mt-0.5 size-3.5 shrink-0', TONES.danger.text)}
+                  aria-hidden
+                />
+                <span>
+                  0 klip = customer tanya hal itu, host gak bisa jawab. Klik
+                  kategori → langsung ke form generate.
+                </span>
               </p>
             </div>
           ) : null}
@@ -1522,12 +1611,14 @@ export function ClipLibraryBoard({
                   </button>
                 ))}
               </div>
-              <p className="text-muted-foreground text-xs">
-                💡 <strong>Catatan</strong>: live sudah bisa tayang dengan 1
-                klip apa pun (dipakai sebagai loop sementara). Untuk hasil
-                terbaik, buat minimal 1 klip kategori <code>IDLE</code> atau
-                tandai <em>Default Idle</em> — jadi loop saat tidak ada
-                interaksi.
+              <p className="text-muted-foreground flex items-start gap-1.5 text-xs">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  <strong>Catatan</strong>: live sudah bisa tayang dengan 1 klip
+                  apa pun (dipakai sebagai loop sementara). Untuk hasil terbaik,
+                  buat minimal 1 klip kategori <code>IDLE</code> atau tandai{' '}
+                  <em>Default Idle</em> — jadi loop saat tidak ada interaksi.
+                </span>
               </p>
             </div>
           ) : (
@@ -1858,8 +1949,12 @@ function VoicePickerCard({
               <div>
                 <div className="text-sm font-semibold">Suara host</div>
                 <p className="text-muted-foreground mt-0.5 text-xs">
-                  Pilih suara untuk semua klip. Klik 🔊 dengar preview, atau
-                  ketik teks test di bawah.
+                  Pilih suara untuk semua klip. Klik{' '}
+                  <Volume2
+                    className="inline size-3 align-text-bottom"
+                    aria-hidden
+                  />{' '}
+                  dengar preview, atau ketik teks test di bawah.
                 </p>
               </div>
               <div className="flex flex-wrap gap-1">
@@ -1872,7 +1967,7 @@ function VoicePickerCard({
                       : 'bg-warm-100 text-warm-700'
                   }`}
                 >
-                  🇮🇩 ID ({idCount})
+                  ID ({idCount})
                 </button>
                 <button
                   type="button"
@@ -1883,7 +1978,7 @@ function VoicePickerCard({
                       : 'bg-warm-100 text-warm-700'
                   }`}
                 >
-                  🇺🇸 EN ({enCount})
+                  EN ({enCount})
                 </button>
                 <button
                   type="button"
@@ -1920,10 +2015,18 @@ function VoicePickerCard({
               <div
                 className={`mt-3 rounded-md p-3 text-xs ${TONES.warning.bg} ${TONES.warning.text}`}
               >
-                ⚠️ Tidak ada voice {filter === 'id' ? 'Indonesian' : 'English'}{' '}
-                di library kamu. Tambah voice dari ElevenLabs Voice Library
-                (filter language=Indonesian). Cahaya & Lunetta itu gratis untuk
-                subscriber.
+                <span className="flex items-start gap-1.5">
+                  <AlertTriangle
+                    className="mt-0.5 size-3.5 shrink-0"
+                    aria-hidden
+                  />
+                  <span>
+                    Tidak ada voice {filter === 'id' ? 'Indonesian' : 'English'}{' '}
+                    di library kamu. Tambah voice dari ElevenLabs Voice Library
+                    (filter language=Indonesian). Cahaya & Lunetta itu gratis
+                    untuk subscriber.
+                  </span>
+                </span>
               </div>
             ) : (
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
@@ -1947,7 +2050,16 @@ function VoicePickerCard({
                         <CheckCircle2 className="text-primary-600 absolute top-1.5 right-1.5 size-3.5" />
                       ) : null}
                       <div className="flex items-center gap-1">
-                        <span className="text-xs">{isId ? '🇮🇩' : '🇺🇸'}</span>
+                        {/* Penanda bahasa: kode teks, bukan bendera emoji. */}
+                        <span
+                          className={cn(
+                            'rounded px-1 text-xs font-semibold',
+                            isId ? TONES.brand.bg : TONES.neutral.bg,
+                            isId ? TONES.brand.text : TONES.neutral.text,
+                          )}
+                        >
+                          {isId ? 'ID' : 'EN'}
+                        </span>
                         <span className="line-clamp-1 text-xs font-semibold">
                           {v.name.split(' - ')[0]}
                         </span>
@@ -2134,8 +2246,8 @@ function BrowseSharedVoicesModal({
         <div className="flex gap-1.5">
           {[
             { val: '', label: 'Semua' },
-            { val: 'male', label: '🧑 Cowok' },
-            { val: 'female', label: '👩 Cewek' },
+            { val: 'male', label: 'Cowok' },
+            { val: 'female', label: 'Cewek' },
           ].map((g) => (
             <button
               key={g.val}
@@ -2353,9 +2465,12 @@ function AttachQuestionToClipModal({
               className="border-warm-300 mt-1 w-full rounded-md border bg-white px-3 py-2 font-mono text-sm"
               placeholder="frasa yg trigger klip ini"
             />
-            <p className="text-warm-600 mt-1 text-xs">
-              💡 Pendekin biar match juga ke variasi pertanyaan. Mis. dari
-              "berapa harga sih sis?" jadi "harga" atau "berapa".
+            <p className="text-warm-600 mt-1 flex items-start gap-1.5 text-xs">
+              <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Pendekin biar match juga ke variasi pertanyaan. Mis. dari
+                "berapa harga sih sis?" jadi "harga" atau "berapa".
+              </span>
             </p>
           </div>
 
@@ -2386,12 +2501,13 @@ function AttachQuestionToClipModal({
                       key={c.value}
                       type="button"
                       onClick={() => setCategoryFilter(c.value)}
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                         categoryFilter === c.value
                           ? 'bg-primary-500 text-white'
                           : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                       }`}
                     >
+                      <c.icon className="size-3 shrink-0" aria-hidden />
                       {c.label} ({cnt})
                     </button>
                   )
@@ -2475,9 +2591,13 @@ function AttachQuestionToClipModal({
                         ) : null}
                         {hasTriggerAlready ? (
                           <div
-                            className={`mt-0.5 text-xs ${TONES.success.text}`}
+                            className={cn(
+                              'mt-0.5 flex items-center gap-1 text-xs',
+                              TONES.success.text,
+                            )}
                           >
-                            ✓ Trigger ini sudah ada di klip ini
+                            <Check className="size-3 shrink-0" aria-hidden />
+                            <span>Trigger ini sudah ada di klip ini</span>
                           </div>
                         ) : null}
                       </div>
@@ -2584,7 +2704,8 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
         </h2>
         <p className="text-warm-600 text-xs">
           Ketik pertanyaan yang mungkin customer tanyakan → lihat klip mana yang
-          bakal play. Kalau salah klip → buka Edit di klip yang benar, klik ✨
+          bakal play. Kalau salah klip → buka Edit di klip yang benar, klik{' '}
+          <Sparkles className="inline size-3 align-text-bottom" aria-hidden />{' '}
           Optimasi AI atau tambah trigger manual.
         </p>
       </div>
@@ -2610,8 +2731,16 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
             <div
               className={`rounded p-2 text-xs ${TONES.warning.bg} ${TONES.warning.text}`}
             >
-              ⚠️ {result.embedWarning} — hasil di bawah hanya dari trigger
-              keyword.
+              <span className="flex items-start gap-1.5">
+                <AlertTriangle
+                  className="mt-0.5 size-3.5 shrink-0"
+                  aria-hidden
+                />
+                <span>
+                  {result.embedWarning} — hasil di bawah hanya dari trigger
+                  keyword.
+                </span>
+              </span>
             </div>
           ) : null}
           {result.chosen ? (
@@ -2973,8 +3102,15 @@ function EditClipModal({
               </h4>
               <p className="text-warm-700 mt-0.5 text-xs">
                 Customer ngomong frasa di bawah → klip ini auto-play. Pakai
-                tombol <strong>✨ AI</strong> buat dapet trigger relevan dari
-                isi script.
+                tombol{' '}
+                <strong>
+                  <Sparkles
+                    className="inline size-3 align-text-bottom"
+                    aria-hidden
+                  />{' '}
+                  AI
+                </strong>{' '}
+                buat dapet trigger relevan dari isi script.
               </p>
             </div>
             <div>
@@ -2997,9 +3133,7 @@ function EditClipModal({
                     <Sparkles className="mr-1 size-3" />
                   )}
                   <span className="text-xs">
-                    {triggerKeywordsInput.trim()
-                      ? 'Perluas AI'
-                      : '✨ Optimasi AI'}
+                    {triggerKeywordsInput.trim() ? 'Perluas AI' : 'Optimasi AI'}
                   </span>
                 </Button>
               </div>
@@ -3011,10 +3145,13 @@ function EditClipModal({
                 maxLength={1500}
                 className="border-warm-200 mt-1 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs"
               />
-              <p className="text-warm-500 mt-0.5 text-xs">
-                💡 Frasa per baris. Substring case-insensitive — "harga" trigger
-                oleh "berapa harga sih kak". AI bantu nemu frasa real customer
-                (typo, slang, keraguan).
+              <p className="text-warm-500 mt-0.5 flex items-start gap-1.5 text-xs">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  Frasa per baris. Substring case-insensitive — "harga" trigger
+                  oleh "berapa harga sih kak". AI bantu nemu frasa real customer
+                  (typo, slang, keraguan).
+                </span>
               </p>
             </div>
             <div>
@@ -3026,27 +3163,48 @@ function EditClipModal({
                 onChange={(e) => setMatchMode(e.target.value)}
                 className="border-warm-200 mt-1 w-full rounded-md border bg-white px-3 py-2 text-sm"
               >
+                {/* <option> native cuma terima string — ikon dipindah ke
+                    keterangan di bawah select. */}
                 <option value="COSINE">
-                  🤖 AI only (cosine) — default, no keyword check
+                  AI only (cosine) — default, no keyword check
                 </option>
                 <option value="KEYWORD_FIRST">
-                  🎯 Keywords prioritas, AI fallback (RECOMMENDED utk routing)
+                  Keywords prioritas, AI fallback (RECOMMENDED utk routing)
                 </option>
                 <option value="KEYWORD_ONLY">
-                  🔒 Cuma keywords (no AI fallback) — strict supervisor mode
+                  Cuma keywords (no AI fallback) — strict supervisor mode
                 </option>
                 <option value="BOOST">
-                  ⬆️ AI + boost (keyword nambah 0.15 ke cosine score)
+                  AI + boost (keyword nambah 0.15 ke cosine score)
                 </option>
               </select>
-              <p className="text-warm-500 mt-0.5 text-xs">
-                {matchMode === 'COSINE'
-                  ? 'Default: AI matching otomatis. Keywords gak dipakai.'
-                  : matchMode === 'KEYWORD_FIRST'
-                    ? '✅ Direkomendasikan: keyword exact match override AI. Kalau tidak ada keyword hit, fallback ke AI matching.'
-                    : matchMode === 'KEYWORD_ONLY'
-                      ? '⚠️ Hanya match kalau ada keyword hit — kalau tidak ada, klip ini gak akan dipilih sama sekali.'
-                      : 'Klip ini di-boost +0.15 saat ada keyword hit di cosine ranking (lebih halus dari KEYWORD_FIRST).'}
+              <p className="text-warm-500 mt-0.5 flex items-start gap-1.5 text-xs">
+                {matchMode === 'KEYWORD_FIRST' ? (
+                  <CheckCircle2
+                    className={cn(
+                      'mt-0.5 size-3.5 shrink-0',
+                      TONES.success.text,
+                    )}
+                    aria-hidden
+                  />
+                ) : matchMode === 'KEYWORD_ONLY' ? (
+                  <AlertTriangle
+                    className={cn(
+                      'mt-0.5 size-3.5 shrink-0',
+                      TONES.warning.text,
+                    )}
+                    aria-hidden
+                  />
+                ) : null}
+                <span>
+                  {matchMode === 'COSINE'
+                    ? 'Default: AI matching otomatis. Keywords gak dipakai.'
+                    : matchMode === 'KEYWORD_FIRST'
+                      ? 'Direkomendasikan: keyword exact match override AI. Kalau tidak ada keyword hit, fallback ke AI matching.'
+                      : matchMode === 'KEYWORD_ONLY'
+                        ? 'Hanya match kalau ada keyword hit — kalau tidak ada, klip ini gak akan dipilih sama sekali.'
+                        : 'Klip ini di-boost +0.15 saat ada keyword hit di cosine ranking (lebih halus dari KEYWORD_FIRST).'}
+                </span>
               </p>
             </div>
             {matchMode !== 'COSINE' ? (

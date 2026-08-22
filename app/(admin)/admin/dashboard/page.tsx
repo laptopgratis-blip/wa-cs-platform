@@ -7,6 +7,14 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 
@@ -104,53 +112,45 @@ export default async function AdminDashboardPage() {
               description="Transaksi token yang berhasil bakal tampil di sini."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-muted-foreground text-left text-xs">
-                  <tr className="border-b">
-                    <th className="py-2 pr-4 font-medium">Order ID</th>
-                    <th className="py-2 pr-4 font-medium">User</th>
-                    <th className="py-2 pr-4 font-medium">Token</th>
-                    <th className="py-2 pr-4 font-medium">Metode</th>
-                    <th className="py-2 pr-4 text-right font-medium">Jumlah</th>
-                    <th className="py-2 pr-4 text-right font-medium">
-                      Tanggal
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentPayments.map((p) => {
-                    const u = userMap.get(p.userId)
-                    return (
-                      <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-mono text-xs">
-                          {p.orderId}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {u?.name || u?.email || '—'}
-                        </td>
-                        <td className="py-2 pr-4">
-                          {formatNumber(p.tokenAmount)}
-                        </td>
-                        <td className="text-muted-foreground py-2 pr-4">
-                          {p.paymentMethod ?? '—'}
-                        </td>
-                        <td className="py-2 pr-4 text-right">
-                          {formatRupiah(p.amount)}
-                        </td>
-                        <td className="text-muted-foreground py-2 pr-4 text-right">
-                          {p.paidAt?.toLocaleDateString('id-ID', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          }) ?? '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Token</TableHead>
+                  <TableHead>Metode</TableHead>
+                  <TableHead className="text-right">Jumlah</TableHead>
+                  <TableHead className="text-right">Tanggal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentPayments.map((p) => {
+                  const u = userMap.get(p.userId)
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">
+                        {p.orderId}
+                      </TableCell>
+                      <TableCell>{u?.name || u?.email || '—'}</TableCell>
+                      <TableCell>{formatNumber(p.tokenAmount)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.paymentMethod ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatRupiah(p.amount)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-right">
+                        {p.paidAt?.toLocaleDateString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        }) ?? '—'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

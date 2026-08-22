@@ -7,10 +7,12 @@
 
 import type { LucideIcon } from 'lucide-react'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Bell,
   Check,
+  Lightbulb,
   MessageCircle,
   Loader2,
   Package,
@@ -28,7 +30,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
-import { TONES } from '@/lib/ui-tones'
+import { TONES, type Tone } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 import {
   Dialog,
@@ -95,35 +97,47 @@ const CATEGORY_META: Record<
   },
 }
 
+// Skala kualitas coverage. `smoothnessMarks` = berapa kali ikon centang diulang
+// (0 = tingkat terendah, ditandai ikon peringatan) — pengganti "✓/✓✓/✓✓✓".
 const COUNT_OPTIONS: Array<{
   value: 5 | 10 | 15 | 20
   label: string
   desc: string
   smoothness: string
+  smoothnessTone: Tone
+  smoothnessMarks: number
 }> = [
   {
     value: 5,
     label: '5 klip',
     desc: 'Starter — coverage minimum',
-    smoothness: '⚠️ Banyak fallback',
+    smoothness: 'Banyak fallback',
+    smoothnessTone: 'warning',
+    smoothnessMarks: 0,
   },
   {
     value: 10,
     label: '10 klip',
     desc: 'Balanced — siap live',
-    smoothness: '✓ OK responsive',
+    smoothness: 'OK responsive',
+    smoothnessTone: 'success',
+    smoothnessMarks: 1,
   },
   {
     value: 15,
     label: '15 klip',
     desc: 'Rich library — natural',
-    smoothness: '✓✓ Smooth',
+    smoothness: 'Smooth',
+    smoothnessTone: 'success',
+    smoothnessMarks: 2,
   },
   {
     value: 20,
     label: '20 klip',
     desc: 'Premium coverage',
-    smoothness: '✓✓✓ Very smooth',
+    smoothness: 'Very smooth',
+    smoothnessTone: 'success',
+    smoothnessMarks: 3,
   },
 ]
 
@@ -463,7 +477,7 @@ export function BulkGenerateModal({
                         <button
                           type="button"
                           onClick={() => removeBenefit(i)}
-                          className="border-warm-200 text-warm-600 rounded-md border px-2 hover:bg-destructive/10"
+                          className="border-warm-200 text-warm-600 hover:bg-destructive/10 rounded-md border px-2"
                         >
                           <Trash2 className="size-3" />
                         </button>
@@ -515,8 +529,30 @@ export function BulkGenerateModal({
                   >
                     <div className="font-semibold">{opt.label}</div>
                     <div className="text-warm-600 text-xs">{opt.desc}</div>
-                    <div className={cn('mt-0.5 text-xs', TONES.success.text)}>
-                      {opt.smoothness}
+                    <div
+                      className={cn(
+                        'mt-0.5 flex items-center gap-1 text-xs',
+                        TONES[opt.smoothnessTone].text,
+                      )}
+                    >
+                      {opt.smoothnessMarks > 0 ? (
+                        <span className="inline-flex shrink-0" aria-hidden>
+                          {Array.from({ length: opt.smoothnessMarks }).map(
+                            (_, i) => (
+                              <Check
+                                key={i}
+                                className="-ml-1.5 size-3 first:ml-0"
+                              />
+                            ),
+                          )}
+                        </span>
+                      ) : (
+                        <AlertTriangle
+                          className="size-3 shrink-0"
+                          aria-hidden
+                        />
+                      )}
+                      <span>{opt.smoothness}</span>
                     </div>
                   </button>
                 ))}
@@ -619,7 +655,7 @@ export function BulkGenerateModal({
                     <button
                       type="button"
                       onClick={() => removeScript(i)}
-                      className="text-warm-500 flex-shrink-0 self-start rounded p-1 hover:bg-destructive/10 hover:text-destructive"
+                      className="text-warm-500 hover:bg-destructive/10 hover:text-destructive flex-shrink-0 self-start rounded p-1"
                       aria-label="Hapus"
                     >
                       <Trash2 className="size-3" />
@@ -679,9 +715,12 @@ export function BulkGenerateModal({
                   </div>
                 </div>
               </div>
-              <div className="text-warm-600 mt-3 text-xs">
-                💡 Pipeline jalan di background. Klip akan muncul satu per satu
-                di Library bawah. Refresh halaman berkala (atau auto-poll).
+              <div className="text-warm-600 mt-3 flex items-start gap-1.5 text-xs">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  Pipeline jalan di background. Klip akan muncul satu per satu
+                  di Library bawah. Refresh halaman berkala (atau auto-poll).
+                </span>
               </div>
             </div>
 

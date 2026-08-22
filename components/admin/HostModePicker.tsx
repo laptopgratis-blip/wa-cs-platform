@@ -9,7 +9,7 @@
 // - Cost estimate inline jadi owner aware sebelum commit.
 // - "Coming Soon" badge buat Klip Live (Sprint 2 baru aktif full pipeline).
 
-import { Bot, Check, Sparkles, Mic, Lock, Minus } from 'lucide-react'
+import { Bot, Check, Lightbulb, Sparkles, Mic, Lock, Minus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { TONES } from '@/lib/ui-tones'
@@ -193,9 +193,12 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
           </button>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground">
-          💡 Bisa upgrade dari TTS Host → Klip Live nanti (re-use persona +
-          background).
+        <p className="text-muted-foreground flex items-center justify-center gap-1.5 text-center text-xs">
+          <Lightbulb className="size-3.5 shrink-0" aria-hidden />
+          <span>
+            Bisa upgrade dari TTS Host → Klip Live nanti (re-use persona +
+            background).
+          </span>
         </p>
       </DialogContent>
     </Dialog>

@@ -4,7 +4,13 @@
 // Tiap slide pilih template + edit text. Download per-slide PNG atau ZIP.
 //
 // Slide schema dari ContentSlide DB row OR dari bodyJson.slides array.
-import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Loader2,
+  Pencil,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -367,8 +373,9 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               terbaru selalu reflect state slide aktif (defensif terhadap
               edge-case React reconciliation pada controlled input). */}
           <section key={`fields-${activeIdx}`} className="space-y-2">
-            <Label className="text-primary-700 text-xs font-semibold tracking-wide uppercase">
-              ✏️ Edit slide {activeIdx + 1}
+            <Label className="text-primary-700 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+              <Pencil className="size-3.5 shrink-0" aria-hidden />
+              Edit slide {activeIdx + 1}
             </Label>
             <div className="space-y-1">
               <Label className="text-warm-600 text-xs">Headline</Label>

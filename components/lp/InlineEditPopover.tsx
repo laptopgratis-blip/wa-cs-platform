@@ -767,7 +767,7 @@ export function InlineEditPopover({
         <Button
           size="sm"
           onClick={handleSubmit}
-          className="bg-primary-500 hover:bg-primary-600 h-7 text-xs text-white"
+          className="h-7 text-xs"
         >
           <Save className="mr-1 size-3" />
           Simpan

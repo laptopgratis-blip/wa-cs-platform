@@ -2,6 +2,7 @@
 
 // Dashboard testimoni owner (/pesanan/testimoni). List + kurasi (approve) +
 // hapus. Data dari /api/reviews. POWER only (gating di page).
+import type { LucideIcon } from 'lucide-react'
 import { Check, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -106,7 +107,8 @@ export function TestimoniClient() {
           <StatCard label="Total" value={String(stats.total)} />
           <StatCard
             label="Rata-rata"
-            value={stats.avgRating ? `${stats.avgRating} ★` : '—'}
+            value={stats.avgRating ? String(stats.avgRating) : '—'}
+            icon={stats.avgRating ? Star : undefined}
           />
           <StatCard label="Disetujui" value={String(stats.approved)} />
         </div>
@@ -241,11 +243,22 @@ export function TestimoniClient() {
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  icon?: LucideIcon
+}) {
   return (
     <Card>
       <CardContent className="p-3 text-center">
-        <div className="text-lg font-semibold">{value}</div>
+        <div className="flex items-center justify-center gap-1 text-lg font-semibold">
+          {value}
+          {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+        </div>
         <div className="text-muted-foreground text-xs">{label}</div>
       </CardContent>
     </Card>

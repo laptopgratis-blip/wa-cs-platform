@@ -2,13 +2,14 @@
 
 // Daftar mutasi bank user. Filter by action & type. Klik MULTIPLE_MATCH atau
 // NO_MATCH (CR) → modal manual resolve: pilih order target atau IGNORE.
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Pagination } from '@/components/shared/Pagination'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,6 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { formatRelativeTime } from '@/lib/format-time'
 import { formatRupiah } from '@/lib/format'
@@ -247,95 +256,78 @@ export function MutationsClient() {
               description="Mutasi rekening hasil scrape otomatis bakal tampil di sini."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b">
-                  <tr className="text-left">
-                    <th className="p-3 font-medium">Tanggal</th>
-                    <th className="p-3 font-medium">Deskripsi</th>
-                    <th className="p-3 text-right font-medium">Jumlah</th>
-                    <th className="p-3 font-medium">Tipe</th>
-                    <th className="p-3 font-medium">Match</th>
-                    <th className="p-3 font-medium">Order</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((m) => (
-                    <tr key={m.id} className="hover:bg-muted/20 border-b">
-                      <td className="p-3 whitespace-nowrap">
-                        {new Date(m.mutationDate).toLocaleDateString('id-ID')}
-                      </td>
-                      <td
-                        className="max-w-[280px] truncate p-3"
-                        title={m.description}
-                      >
-                        {m.description}
-                      </td>
-                      <td className="p-3 text-right font-mono">
-                        {formatRupiah(m.amount)}
-                      </td>
-                      <td className="p-3">
-                        <StatusBadge
-                          tone={m.mutationType === 'CR' ? 'success' : 'neutral'}
-                          label={m.mutationType}
-                        />
-                      </td>
-                      <td className="p-3">{actionBadge(m.matchAction)}</td>
-                      <td className="p-3">
-                        {m.matchedOrder ? (
-                          <Link
-                            href={`/pesanan/${m.matchedOrder.id}`}
-                            className={`font-mono text-xs hover:underline ${TONES.success.text}`}
-                          >
-                            {m.matchedOrder.invoiceNumber ||
-                              m.matchedOrder.id.slice(-8)}
-                          </Link>
-                        ) : m.mutationType === 'CR' &&
-                          (m.matchAction === 'MULTIPLE_MATCH' ||
-                            m.matchAction === 'NO_MATCH') ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openResolve(m)}
-                          >
-                            Resolve
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Deskripsi</TableHead>
+                  <TableHead className="text-right">Jumlah</TableHead>
+                  <TableHead>Tipe</TableHead>
+                  <TableHead>Match</TableHead>
+                  <TableHead>Order</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      {new Date(m.mutationDate).toLocaleDateString('id-ID')}
+                    </TableCell>
+                    <TableCell
+                      className="max-w-[280px] truncate"
+                      title={m.description}
+                    >
+                      {m.description}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatRupiah(m.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge
+                        tone={m.mutationType === 'CR' ? 'success' : 'neutral'}
+                        label={m.mutationType}
+                      />
+                    </TableCell>
+                    <TableCell>{actionBadge(m.matchAction)}</TableCell>
+                    <TableCell>
+                      {m.matchedOrder ? (
+                        <Link
+                          href={`/pesanan/${m.matchedOrder.id}`}
+                          className={`font-mono text-xs hover:underline ${TONES.success.text}`}
+                        >
+                          {m.matchedOrder.invoiceNumber ||
+                            m.matchedOrder.id.slice(-8)}
+                        </Link>
+                      ) : m.mutationType === 'CR' &&
+                        (m.matchAction === 'MULTIPLE_MATCH' ||
+                          m.matchAction === 'NO_MATCH') ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openResolve(m)}
+                        >
+                          Resolve
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">
-          Halaman {page} dari {totalPages} · {total} total
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            <ArrowLeft className="size-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            <ArrowRight className="size-4" />
-          </Button>
-        </div>
-      </div>
+      <Pagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        isLoading={loading}
+        onPageChange={(p) => setPage(Math.min(totalPages, Math.max(1, p)))}
+        noun="mutasi"
+      />
 
       <Dialog
         open={!!resolveTarget}

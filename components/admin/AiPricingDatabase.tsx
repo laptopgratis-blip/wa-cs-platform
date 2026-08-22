@@ -7,12 +7,14 @@
 // Section D: log research terakhir
 import { formatDistanceToNow } from 'date-fns'
 import { id as idLocale } from 'date-fns/locale'
+import type { LucideIcon } from 'lucide-react'
 import {
   Check,
   ChevronDown,
   ChevronUp,
   Loader2,
   Pencil,
+  Plus,
   RefreshCw,
   Sparkles,
   X,
@@ -652,7 +654,10 @@ export function AiPricingDatabase() {
               </DialogHeader>
               <div className="max-h-[60vh] space-y-4 overflow-y-auto">
                 {job.diff.added.length > 0 && (
-                  <Section title={`🆕 ${job.diff.added.length} model baru`}>
+                  <Section
+                    icon={Plus}
+                    title={`${job.diff.added.length} model baru`}
+                  >
                     {job.diff.added.map((d) => (
                       <DiffRow
                         key={d.modelId}
@@ -665,7 +670,8 @@ export function AiPricingDatabase() {
                 )}
                 {job.diff.updated.length > 0 && (
                   <Section
-                    title={`📝 ${job.diff.updated.length} model berubah`}
+                    icon={Pencil}
+                    title={`${job.diff.updated.length} model berubah`}
                   >
                     {job.diff.updated.map((d) => (
                       <DiffRow
@@ -791,14 +797,20 @@ export function AiPricingDatabase() {
 
 function Section({
   title,
+  icon: Icon,
   children,
 }: {
   title: string
+  // Ikon judul section — lucide, bukan emoji (lihat CLAUDE.md § Design System UI).
+  icon?: LucideIcon
   children: React.ReactNode
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold">{title}</p>
+      <p className="flex items-center gap-1.5 text-sm font-semibold">
+        {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+        {title}
+      </p>
       <div className="space-y-1">{children}</div>
     </div>
   )

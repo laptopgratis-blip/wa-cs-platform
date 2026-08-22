@@ -8,12 +8,15 @@ import {
   CalendarDays,
   CalendarPlus,
   CheckCircle2,
+  Clapperboard,
   Clipboard,
   ClipboardCheck,
   Edit3,
   FileText,
   Image as ImageIcon,
+  Palette,
   Save,
+  Target,
   X,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -911,9 +914,10 @@ function AdsBodyRenderer({
       <CardContent className="space-y-5 p-5 text-sm">
         {/* Visual brief */}
         <div>
-          <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
-            🎨 Visual Brief
-          </div>
+          <h3 className="text-primary-700 mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+            <Palette className="size-3.5 shrink-0" aria-hidden />
+            Visual Brief
+          </h3>
           <div className="border-primary-200 bg-primary-50 space-y-1.5 rounded-md border p-3 text-xs leading-relaxed">
             {vb.vibe && (
               <div>
@@ -957,10 +961,11 @@ function AdsBodyRenderer({
         {/* Storyboard — kalau VIDEO/CAROUSEL */}
         {storyboard.length > 0 && (
           <div>
-            <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
-              🎬 Storyboard ({adsFormat === 'CAROUSEL' ? 'cards' : 'scenes'},{' '}
+            <h3 className="text-primary-700 mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+              <Clapperboard className="size-3.5 shrink-0" aria-hidden />
+              Storyboard ({adsFormat === 'CAROUSEL' ? 'cards' : 'scenes'},{' '}
               {storyboard.length} step)
-            </div>
+            </h3>
             <div className="space-y-2">
               {storyboard.map((sRaw, i) => {
                 const s = {
@@ -1032,9 +1037,10 @@ function TargetingHintSection({ raw }: { raw: unknown }) {
   if (interests.length === 0 && behavioral.length === 0) return null
   return (
     <div>
-      <div className="text-primary-700 mb-2 text-xs font-semibold tracking-wide uppercase">
-        🎯 Targeting Hint
-      </div>
+      <h3 className="text-primary-700 mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+        <Target className="size-3.5 shrink-0" aria-hidden />
+        Targeting Hint
+      </h3>
       <div className="border-warm-200 bg-warm-50 rounded-md border p-3 text-xs leading-relaxed">
         {interests.length > 0 && (
           <div>

@@ -389,7 +389,6 @@ export function PricingView({
               Pilih Durasi Lain
             </Button>
             <Button
-              className="bg-primary-500 hover:bg-primary-600"
               onClick={() => router.push('/billing')}
             >
               Top-up Token Sekarang
@@ -546,7 +545,6 @@ function PlanCard({
           <Button
             asChild
             disabled={ctaDisabled}
-            className={cn(highlight && 'bg-primary-500 hover:bg-primary-600')}
           >
             <Link href={ctaHref}>{ctaLabel}</Link>
           </Button>
@@ -554,7 +552,6 @@ function PlanCard({
           <Button
             onClick={onClick}
             disabled={ctaDisabled}
-            className={cn(highlight && 'bg-primary-500 hover:bg-primary-600')}
           >
             {ctaLabel}
           </Button>

@@ -34,6 +34,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { statusMeta, subscriptionStatusMeta } from '@/lib/status'
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
@@ -307,42 +315,40 @@ export function SubscriptionDashboard() {
               Belum ada subscription.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-muted-foreground text-left text-xs">
-                  <tr className="border-b">
-                    <th className="py-2 pr-3 font-medium">Tanggal</th>
-                    <th className="py-2 pr-3 font-medium">Plan</th>
-                    <th className="py-2 pr-3 font-medium">Durasi</th>
-                    <th className="py-2 pr-3 text-right font-medium">Harga</th>
-                    <th className="py-2 pr-3 font-medium">Status</th>
-                    <th className="py-2 pr-3 font-medium">Invoice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((s) => (
-                    <tr key={s.id} className="border-b last:border-0">
-                      <td className="text-muted-foreground py-2 pr-3">
-                        {formatDateId(s.createdAt)}
-                      </td>
-                      <td className="py-2 pr-3">{s.plan.name}</td>
-                      <td className="py-2 pr-3">
-                        {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        Rp {s.priceFinal.toLocaleString('id-ID')}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <SubStatusBadge status={s.status} />
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">
-                        {s.invoices[0]?.invoiceNumber ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Durasi</TableHead>
+                  <TableHead className="text-right">Harga</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Invoice</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateId(s.createdAt)}
+                    </TableCell>
+                    <TableCell>{s.plan.name}</TableCell>
+                    <TableCell>
+                      {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      Rp {s.priceFinal.toLocaleString('id-ID')}
+                    </TableCell>
+                    <TableCell>
+                      <SubStatusBadge status={s.status} />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {s.invoices[0]?.invoiceNumber ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

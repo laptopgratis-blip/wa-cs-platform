@@ -156,7 +156,7 @@ export function RegisterForm({
 
       <Button
         type="submit"
-        className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+        className="w-full"
         disabled={submitting}
       >
         {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}

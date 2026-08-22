@@ -5,7 +5,7 @@
 // (dengan tombol apply rekomendasi), C warning banner kalau ada surface rugi,
 // D simulasi paket, E section "AI Features" (Content Studio dst) dengan
 // breakdown margin & tombol "Set margin global" untuk apply ke semua sekaligus.
-import { AlertTriangle, Check, Loader2, Wand2 } from 'lucide-react'
+import { AlertTriangle, Check, Lightbulb, Loader2, Wand2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -750,16 +750,25 @@ export function PricingCalculator({
             </Table>
           </div>
 
-          <p className="text-warm-500 text-xs">
-            💡 Edit per-feature (margin, floor, cap) di{' '}
-            <a href="/admin/ai-features" className="text-primary-600 underline">
-              /admin/ai-features
-            </a>
-            . Harga input/output otomatis sync dari{' '}
-            <a href="/admin/ai-pricing" className="text-primary-600 underline">
-              /admin/ai-pricing
-            </a>
-            .
+          <p className="text-warm-500 flex items-start gap-1.5 text-xs">
+            <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              Edit per-feature (margin, floor, cap) di{' '}
+              <a
+                href="/admin/ai-features"
+                className="text-primary-600 underline"
+              >
+                /admin/ai-features
+              </a>
+              . Harga input/output otomatis sync dari{' '}
+              <a
+                href="/admin/ai-pricing"
+                className="text-primary-600 underline"
+              >
+                /admin/ai-pricing
+              </a>
+              .
+            </span>
           </p>
         </CardContent>
       </Card>

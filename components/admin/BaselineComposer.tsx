@@ -16,7 +16,7 @@
 //   1. Setup gate (host baru belum punya baseline) — defaultSeed=true.
 //   2. Panel "Tambah baseline" di board utama (collapsible) — defaultSeed=false.
 
-import { Loader2, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { Lightbulb, Loader2, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -324,9 +324,12 @@ export function BaselineComposer({
         </Button>
       </div>
 
-      <p className="text-xs text-warm-500">
-        💡 Quality wrapper (kamera statis · silent · loop mulus) otomatis ditambahkan
-        ke tiap prompt saat generate — kamu cukup atur gerakannya.
+      <p className="flex items-start gap-1.5 text-xs text-warm-500">
+        <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span>
+          Quality wrapper (kamera statis · silent · loop mulus) otomatis
+          ditambahkan ke tiap prompt saat generate — kamu cukup atur gerakannya.
+        </span>
       </p>
 
       {/* Generate bar */}

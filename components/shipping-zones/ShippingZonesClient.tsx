@@ -3,7 +3,8 @@
 // CRUD zona ongkir untuk Order System Phase 2.
 // Match type: ALL (semua wilayah), CITY (pilih kota), PROVINCE (pilih provinsi).
 // Subsidy type: NONE | FLAT_AMOUNT (rupiah) | PERCENT (%) | FREE (gratis ongkir).
-import { Edit3, MapPin, Plus, Trash2, X } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import { Edit3, Gift, MapPin, Plus, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -81,11 +82,17 @@ const EMPTY_FORM = {
 }
 
 function describeSubsidy(z: ShippingZone) {
-  if (z.subsidyType === 'FREE') return '🎁 Gratis Ongkir'
+  if (z.subsidyType === 'FREE') return 'Gratis Ongkir'
   if (z.subsidyType === 'FLAT_AMOUNT')
     return `Subsidi Rp ${formatNumber(z.subsidyValue)}`
   if (z.subsidyType === 'PERCENT') return `Subsidi ${z.subsidyValue}%`
   return 'Tidak ada subsidi'
+}
+
+// Ikon penanda badge subsidi — hanya zona gratis ongkir yang punya ikon,
+// sisanya pakai dot bawaan StatusBadge.
+function subsidyIcon(z: ShippingZone): LucideIcon | undefined {
+  return z.subsidyType === 'FREE' ? Gift : undefined
 }
 
 function describeMatch(z: ShippingZone) {
@@ -209,7 +216,9 @@ export function ShippingZonesClient({
   function removeExcludedProvince(idx: number) {
     setForm((f) => ({
       ...f,
-      excludedProvinceNames: f.excludedProvinceNames.filter((_, i) => i !== idx),
+      excludedProvinceNames: f.excludedProvinceNames.filter(
+        (_, i) => i !== idx,
+      ),
     }))
   }
 
@@ -332,7 +341,7 @@ export function ShippingZonesClient({
           <>
             Aturan subsidi ongkir per zona — Bandung, Jawa, Luar Jawa, atau
             gratis ongkir penuh.
-            <span className="ml-1 text-warm-500">
+            <span className="text-warm-500 ml-1">
               ({zones.length}/{limit})
             </span>
           </>
@@ -348,9 +357,11 @@ export function ShippingZonesClient({
       <div
         className={`rounded-lg border p-3 text-sm ${TONES.info.border} ${TONES.info.bg} ${TONES.info.text}`}
       >
-        <strong>Cara kerja:</strong> Saat customer pilih alamat, sistem cek
-        zona dengan priority tertinggi yang match dulu. Mis. zona &ldquo;Bandung&rdquo; (priority 10) lebih spesifik daripada &ldquo;Jawa Barat&rdquo; (priority
-        5), jadi yang menang Bandung kalau alamat customer di Bandung.
+        <strong>Cara kerja:</strong> Saat customer pilih alamat, sistem cek zona
+        dengan priority tertinggi yang match dulu. Mis. zona
+        &ldquo;Bandung&rdquo; (priority 10) lebih spesifik daripada &ldquo;Jawa
+        Barat&rdquo; (priority 5), jadi yang menang Bandung kalau alamat
+        customer di Bandung.
       </div>
 
       {zones.length === 0 ? (
@@ -371,33 +382,41 @@ export function ShippingZonesClient({
           {zones.map((z) => (
             <Card key={z.id} className={z.isActive ? '' : 'opacity-60'}>
               <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-warm-900">{z.name}</p>
-                    <StatusBadge tone="info" label={describeSubsidy(z)} />
+                    <p className="text-warm-900 font-semibold">{z.name}</p>
+                    <StatusBadge
+                      tone="info"
+                      label={describeSubsidy(z)}
+                      icon={subsidyIcon(z)}
+                    />
                     {z.priority > 0 && (
                       <Badge variant="secondary">P{z.priority}</Badge>
                     )}
                     {!z.isActive && <Badge variant="secondary">Off</Badge>}
                   </div>
-                  <p className="mt-1 text-sm text-warm-600">
+                  <p className="text-warm-600 mt-1 text-sm">
                     {describeMatch(z)}
                   </p>
                   {z.minimumOrder ? (
-                    <p className="text-xs text-warm-500">
+                    <p className="text-warm-500 text-xs">
                       Min order Rp {formatNumber(z.minimumOrder)}
                     </p>
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <div className="flex items-center gap-1.5 rounded-lg border bg-warm-50 px-2.5 py-1.5">
+                  <div className="bg-warm-50 flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5">
                     <Switch
                       checked={z.isActive}
                       onCheckedChange={(v) => handleToggleActive(z.id, v)}
                     />
-                    <span className="text-xs text-warm-600">Aktif</span>
+                    <span className="text-warm-600 text-xs">Aktif</span>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(z)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEdit(z)}
+                  >
                     <Edit3 className="mr-1 size-3.5" /> Edit
                   </Button>
                   <Button
@@ -465,7 +484,7 @@ export function ShippingZonesClient({
               <div className="space-y-1.5">
                 <Label>Pilih Kota</Label>
                 <DestinationPicker value={picker} onChange={setPicker} />
-                <p className="text-xs text-warm-500">
+                <p className="text-warm-500 text-xs">
                   Cari nama daerah, sistem ambil kotanya dari hasil.
                 </p>
 
@@ -480,7 +499,7 @@ export function ShippingZonesClient({
                       <button
                         type="button"
                         onClick={() => removeCity(idx)}
-                        className="rounded hover:bg-destructive/10"
+                        className="hover:bg-destructive/10 rounded"
                       >
                         <X className="size-3" />
                       </button>
@@ -494,9 +513,9 @@ export function ShippingZonesClient({
               <div className="space-y-1.5">
                 <Label>Pilih Provinsi</Label>
                 <ProvincePicker onPick={addProvince} />
-                <p className="text-xs text-warm-500">
-                  Daftar berisi provinsi saja — klik untuk menambah, bisa
-                  lebih dari satu.
+                <p className="text-warm-500 text-xs">
+                  Daftar berisi provinsi saja — klik untuk menambah, bisa lebih
+                  dari satu.
                 </p>
 
                 <div className="mt-2 flex flex-wrap gap-1.5">
@@ -510,7 +529,7 @@ export function ShippingZonesClient({
                       <button
                         type="button"
                         onClick={() => removeProvince(idx)}
-                        className="rounded hover:bg-destructive/10"
+                        className="hover:bg-destructive/10 rounded"
                       >
                         <X className="size-3" />
                       </button>
@@ -521,13 +540,13 @@ export function ShippingZonesClient({
             )}
 
             {(form.matchType === 'ALL' || form.matchType === 'PROVINCE') && (
-              <div className="space-y-1.5 rounded-lg border border-warm-200 bg-warm-50/60 p-3">
+              <div className="border-warm-200 bg-warm-50/60 space-y-1.5 rounded-lg border p-3">
                 <Label>Kecualikan Provinsi (opsional)</Label>
                 <ProvincePicker
                   onPick={addExcludedProvince}
                   placeholder="Cari provinsi yang mau dikecualikan…"
                 />
-                <p className="text-xs text-warm-500">
+                <p className="text-warm-500 text-xs">
                   Alamat customer di provinsi ini TIDAK kena aturan zona ini.
                   Contoh: pilih &ldquo;Semua wilayah&rdquo; lalu kecualikan
                   provinsi-provinsi Papua.
@@ -544,7 +563,7 @@ export function ShippingZonesClient({
                       <button
                         type="button"
                         onClick={() => removeExcludedProvince(idx)}
-                        className="rounded hover:bg-destructive/10"
+                        className="hover:bg-destructive/10 rounded"
                       >
                         <X className="size-3" />
                       </button>
@@ -562,10 +581,7 @@ export function ShippingZonesClient({
                   setForm((f) => ({
                     ...f,
                     subsidyType: v as
-                      | 'NONE'
-                      | 'FLAT_AMOUNT'
-                      | 'PERCENT'
-                      | 'FREE',
+                      'NONE' | 'FLAT_AMOUNT' | 'PERCENT' | 'FREE',
                   }))
                 }
               >
@@ -619,7 +635,7 @@ export function ShippingZonesClient({
                   setForm((f) => ({ ...f, minimumOrder: e.target.value }))
                 }
               />
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Subsidi hanya aktif kalau subtotal produk ≥ minimum order.
               </p>
             </div>
@@ -633,24 +649,23 @@ export function ShippingZonesClient({
                 max={1000}
                 value={form.priority}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, priority: Number(e.target.value) || 0 }))
+                  setForm((f) => ({
+                    ...f,
+                    priority: Number(e.target.value) || 0,
+                  }))
                 }
               />
-              <p className="text-xs text-warm-500">
-                Lebih tinggi = lebih spesifik. Mis. zona Bandung (10) menang
-                vs zona Jawa Barat (5).
+              <p className="text-warm-500 text-xs">
+                Lebih tinggi = lebih spesifik. Mis. zona Bandung (10) menang vs
+                zona Jawa Barat (5).
               </p>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
-              <Label className="cursor-pointer text-sm">
-                Aktif
-              </Label>
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label className="cursor-pointer text-sm">Aktif</Label>
               <Switch
                 checked={form.isActive}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, isActive: v }))
-                }
+                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
           </div>

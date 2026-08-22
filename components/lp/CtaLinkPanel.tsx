@@ -101,7 +101,7 @@ export function CtaLinkPanel({ html, onChange }: Props) {
             type="button"
             onClick={handleApply}
             disabled={!url.trim() || nonWaCount === 0}
-            className="bg-primary-500 hover:bg-primary-600 text-xs text-white"
+            className="text-xs"
           >
             Terapkan ke {nonWaCount} tombol non-WA
           </Button>

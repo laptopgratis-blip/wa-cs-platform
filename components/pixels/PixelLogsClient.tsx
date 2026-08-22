@@ -2,15 +2,7 @@
 
 // Pixel Event Logs viewer — tabel paginated dengan filter platform/event/
 // status/pixel. Click row → modal detail payload+response.
-import {
-  ArrowLeft,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  Loader2,
-  XCircle,
-} from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Filter, Loader2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -18,6 +10,7 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Pagination } from '@/components/shared/Pagination'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,6 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatRelativeTime } from '@/lib/format-time'
 import { TONES } from '@/lib/ui-tones'
 
@@ -82,6 +83,9 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  // pageSize ikut `limit` dari respons API (default server = 50) supaya teks
+  // "Menampilkan x–y dari N" di <Pagination> selalu sinkron dengan backend.
+  const [pageSize, setPageSize] = useState(50)
   const [totalPages, setTotalPages] = useState(1)
 
   const [platform, setPlatform] = useState<string>('')
@@ -112,6 +116,7 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
       }
       setItems(data.data.items)
       setTotal(data.data.pagination.total)
+      setPageSize(data.data.pagination.limit ?? 50)
       setTotalPages(data.data.pagination.totalPages)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
@@ -294,97 +299,82 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
               description="Tidak ada event yang cocok dengan filter."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-warm-50 text-warm-600 border-b text-xs tracking-wider uppercase">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Waktu</th>
-                    <th className="px-3 py-2 text-left">Platform</th>
-                    <th className="px-3 py-2 text-left">Event</th>
-                    <th className="px-3 py-2 text-left">Source</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Order</th>
-                    <th className="px-3 py-2 text-right">Retry</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((log) => (
-                    <tr
-                      key={log.id}
-                      onClick={() => setDetail(log)}
-                      className="hover:bg-warm-50 cursor-pointer border-b"
-                    >
-                      <td className="text-warm-600 px-3 py-2 text-xs">
-                        {formatRelativeTime(log.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-xs">
-                          {log.platform}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Waktu</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Order</TableHead>
+                  <TableHead className="text-right">Retry</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((log) => (
+                  <TableRow
+                    key={log.id}
+                    onClick={() => setDetail(log)}
+                    className="cursor-pointer"
+                  >
+                    <TableCell className="text-warm-600 text-xs">
+                      {formatRelativeTime(log.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs">{log.platform}</span>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {log.eventName}
+                    </TableCell>
+                    <TableCell className="text-warm-600 text-xs">
+                      {log.source}
+                    </TableCell>
+                    <TableCell>
+                      {log.succeeded ? (
+                        <StatusBadge
+                          tone="success"
+                          icon={CheckCircle2}
+                          label="Sukses"
+                        />
+                      ) : (
+                        <StatusBadge
+                          tone="danger"
+                          icon={XCircle}
+                          label="Gagal"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {log.orderId ? (
+                        <span className="text-warm-600">
+                          {log.orderId.slice(0, 8)}…
                         </span>
-                      </td>
-                      <td className="px-3 py-2 font-medium">{log.eventName}</td>
-                      <td className="text-warm-600 px-3 py-2 text-xs">
-                        {log.source}
-                      </td>
-                      <td className="px-3 py-2">
-                        {log.succeeded ? (
-                          <StatusBadge
-                            tone="success"
-                            icon={CheckCircle2}
-                            label="Sukses"
-                          />
-                        ) : (
-                          <StatusBadge
-                            tone="danger"
-                            icon={XCircle}
-                            label="Gagal"
-                          />
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {log.orderId ? (
-                          <span className="text-warm-600">
-                            {log.orderId.slice(0, 8)}…
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="text-warm-500 px-3 py-2 text-right text-xs">
-                        {log.retryCount > 0 ? `×${log.retryCount}` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-warm-500 text-right text-xs">
+                      {log.retryCount > 0 ? `×${log.retryCount}` : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="text-warm-600 text-sm">
-            Hal {page} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          isLoading={loading}
+          onPageChange={setPage}
+          noun="event"
+        />
       )}
 
       {/* Detail dialog */}

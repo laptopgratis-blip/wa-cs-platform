@@ -2,6 +2,14 @@
 // markdown eksternal supaya base URL & angka kuota selalu ikut kode yang
 // benar-benar jalan.
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RATE_LIMIT_PER_KEY } from '@/lib/public-api-auth'
 import { MAX_ACTIVE_KEYS_PER_USER } from '@/lib/validations/seller-api-key'
@@ -187,29 +195,30 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
           </TabsContent>
 
           <TabsContent value="error" className="pt-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-warm-200 text-warm-500 border-b text-left text-xs tracking-wide uppercase">
-                    <th className="py-2 pr-4 font-medium">HTTP</th>
-                    <th className="py-2 pr-4 font-medium">code</th>
-                    <th className="py-2 font-medium">Yang perlu dilakukan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ERRORS.map((e) => (
-                    <tr
-                      key={e.code}
-                      className="border-warm-100 border-b last:border-0"
-                    >
-                      <td className="py-2 pr-4 font-mono text-xs">{e.http}</td>
-                      <td className="py-2 pr-4 font-mono text-xs">{e.code}</td>
-                      <td className="text-warm-600 py-2">{e.act}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>HTTP</TableHead>
+                  <TableHead>code</TableHead>
+                  <TableHead>Yang perlu dilakukan</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ERRORS.map((e) => (
+                  <TableRow key={e.code}>
+                    <TableCell className="font-mono text-xs">
+                      {e.http}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {e.code}
+                    </TableCell>
+                    <TableCell className="text-warm-600 whitespace-normal">
+                      {e.act}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
             <p className="text-warm-500 mt-3 text-xs">
               Data milik akun lain dijawab{' '}
               <code className="font-mono">404</code>, bukan{' '}

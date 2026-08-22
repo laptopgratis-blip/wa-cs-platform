@@ -10,9 +10,23 @@ import { toast } from 'sonner'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatRupiah } from '@/lib/format'
 
 type Category = 'UTILITY' | 'MARKETING' | 'AUTHENTICATION'
@@ -64,7 +78,9 @@ const TX_LABEL: Record<string, string> = {
 export function MessageCreditRatesManager() {
   const [data, setData] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
-  const [drafts, setDrafts] = useState<Record<Category, { priceRp: string; metaRp: string }>>({
+  const [drafts, setDrafts] = useState<
+    Record<Category, { priceRp: string; metaRp: string }>
+  >({
     UTILITY: { priceRp: '', metaRp: '' },
     MARKETING: { priceRp: '', metaRp: '' },
     AUTHENTICATION: { priceRp: '', metaRp: '' },
@@ -76,7 +92,11 @@ export function MessageCreditRatesManager() {
     // state awal sudah loading=true, refresh berikutnya cukup ganti data.
     try {
       const res = await fetch('/api/admin/message-credit-rates')
-      const json = (await res.json()) as { success: boolean; data?: Payload; error?: string }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: Payload
+        error?: string
+      }
       if (!json.success || !json.data) {
         toast.error(json.error ?? 'Gagal memuat')
         return
@@ -84,7 +104,10 @@ export function MessageCreditRatesManager() {
       setData(json.data)
       const next = { ...drafts }
       for (const r of json.data.rates) {
-        next[r.category] = { priceRp: String(r.priceRp), metaRp: r.metaRp === null ? '' : String(r.metaRp) }
+        next[r.category] = {
+          priceRp: String(r.priceRp),
+          metaRp: r.metaRp === null ? '' : String(r.metaRp),
+        }
       }
       setDrafts(next)
     } finally {
@@ -136,7 +159,7 @@ export function MessageCreditRatesManager() {
       />
 
       {loading && !data ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
           <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
       ) : null}
@@ -147,19 +170,25 @@ export function MessageCreditRatesManager() {
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Saldo beredar (semua user)</CardDescription>
-                <CardTitle className="text-xl">{formatRupiah(data.totals.outstandingRp)}</CardTitle>
+                <CardTitle className="text-xl">
+                  {formatRupiah(data.totals.outstandingRp)}
+                </CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Total top-up</CardDescription>
-                <CardTitle className="text-xl">{formatRupiah(data.totals.purchasedRp)}</CardTitle>
+                <CardTitle className="text-xl">
+                  {formatRupiah(data.totals.purchasedRp)}
+                </CardTitle>
               </CardHeader>
             </Card>
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Total terpakai</CardDescription>
-                <CardTitle className="text-xl">{formatRupiah(data.totals.usedRp)}</CardTitle>
+                <CardTitle className="text-xl">
+                  {formatRupiah(data.totals.usedRp)}
+                </CardTitle>
               </CardHeader>
             </Card>
           </div>
@@ -170,27 +199,37 @@ export function MessageCreditRatesManager() {
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center justify-between text-base">
                     {CATEGORY_LABEL[r.category].title}
-                    {r.seeded && (
-                      <StatusBadge tone="warning" label="default" />
-                    )}
+                    {r.seeded && <StatusBadge tone="warning" label="default" />}
                   </CardTitle>
-                  <CardDescription className="text-xs">{CATEGORY_LABEL[r.category].hint}</CardDescription>
+                  <CardDescription className="text-xs">
+                    {CATEGORY_LABEL[r.category].hint}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor={`price-${r.category}`}>Harga (Rp / pesan)</Label>
+                    <Label htmlFor={`price-${r.category}`}>
+                      Harga (Rp / pesan)
+                    </Label>
                     <Input
                       id={`price-${r.category}`}
                       type="number"
                       min={0}
                       value={drafts[r.category].priceRp}
                       onChange={(e) =>
-                        setDrafts((d) => ({ ...d, [r.category]: { ...d[r.category], priceRp: e.target.value } }))
+                        setDrafts((d) => ({
+                          ...d,
+                          [r.category]: {
+                            ...d[r.category],
+                            priceRp: e.target.value,
+                          },
+                        }))
                       }
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor={`meta-${r.category}`}>Harga dasar Meta (Rp, info)</Label>
+                    <Label htmlFor={`meta-${r.category}`}>
+                      Harga dasar Meta (Rp, info)
+                    </Label>
                     <Input
                       id={`meta-${r.category}`}
                       type="number"
@@ -199,16 +238,32 @@ export function MessageCreditRatesManager() {
                       placeholder="mis. 586.33"
                       value={drafts[r.category].metaRp}
                       onChange={(e) =>
-                        setDrafts((d) => ({ ...d, [r.category]: { ...d[r.category], metaRp: e.target.value } }))
+                        setDrafts((d) => ({
+                          ...d,
+                          [r.category]: {
+                            ...d[r.category],
+                            metaRp: e.target.value,
+                          },
+                        }))
                       }
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {r.updatedAt ? `Diubah ${new Date(r.updatedAt).toLocaleString('id-ID')}` : 'Belum pernah diubah'}
+                    <span className="text-muted-foreground text-xs">
+                      {r.updatedAt
+                        ? `Diubah ${new Date(r.updatedAt).toLocaleString('id-ID')}`
+                        : 'Belum pernah diubah'}
                     </span>
-                    <Button size="sm" onClick={() => save(r.category)} disabled={saving === r.category}>
-                      {saving === r.category ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : <Save className="mr-1 size-3.5" />}
+                    <Button
+                      size="sm"
+                      onClick={() => save(r.category)}
+                      disabled={saving === r.category}
+                    >
+                      {saving === r.category ? (
+                        <Loader2 className="mr-1 size-3.5 animate-spin" />
+                      ) : (
+                        <Save className="mr-1 size-3.5" />
+                      )}
                       Simpan
                     </Button>
                   </div>
@@ -219,35 +274,45 @@ export function MessageCreditRatesManager() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Pemakaian 30 hari terakhir</CardTitle>
-              <CardDescription>Ringkasan ledger MessageCreditTransaction per jenis & kategori.</CardDescription>
+              <CardTitle className="text-base">
+                Pemakaian 30 hari terakhir
+              </CardTitle>
+              <CardDescription>
+                Ringkasan ledger MessageCreditTransaction per jenis & kategori.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {data.usage30d.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Belum ada transaksi.</p>
+                <p className="text-muted-foreground text-sm">
+                  Belum ada transaksi.
+                </p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="text-left text-xs text-muted-foreground">
-                      <tr>
-                        <th className="py-1.5">Jenis</th>
-                        <th className="py-1.5">Kategori</th>
-                        <th className="py-1.5 text-right">Jumlah tx</th>
-                        <th className="py-1.5 text-right">Total (Rp)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.usage30d.map((u, i) => (
-                        <tr key={i} className="border-t">
-                          <td className="py-1.5">{TX_LABEL[u.type] ?? u.type}</td>
-                          <td className="py-1.5">{u.category ? CATEGORY_LABEL[u.category].title : '—'}</td>
-                          <td className="py-1.5 text-right tabular-nums">{u.count}</td>
-                          <td className="py-1.5 text-right tabular-nums">{formatRupiah(u.amountRp)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Jenis</TableHead>
+                      <TableHead>Kategori</TableHead>
+                      <TableHead className="text-right">Jumlah tx</TableHead>
+                      <TableHead className="text-right">Total (Rp)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.usage30d.map((u, i) => (
+                      <TableRow key={i}>
+                        <TableCell>{TX_LABEL[u.type] ?? u.type}</TableCell>
+                        <TableCell>
+                          {u.category ? CATEGORY_LABEL[u.category].title : '—'}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {u.count}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatRupiah(u.amountRp)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>

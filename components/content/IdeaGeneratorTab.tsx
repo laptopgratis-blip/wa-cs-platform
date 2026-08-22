@@ -470,9 +470,12 @@ export function IdeaGeneratorTab({
                   onChange={(e) => handleLpChange(e.target.value)}
                   className="border-warm-300 w-full rounded-md border bg-white px-3 py-2 text-sm"
                 >
+                  {/* <option> hanya bisa memuat teks — penanda draft dipakai
+                      apa adanya, LP tayang tampil tanpa penanda. */}
                   {landingPages.map((lp) => (
                     <option key={lp.id} value={lp.id}>
-                      {lp.title} {lp.isPublished ? '✓' : '(draft)'}
+                      {lp.title}
+                      {lp.isPublished ? '' : ' (draft)'}
                     </option>
                   ))}
                 </select>

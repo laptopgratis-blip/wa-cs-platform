@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Download,
   ImagePlus,
+  Lightbulb,
   Loader2,
   Paperclip,
   Sparkles,
@@ -235,7 +236,7 @@ export function HostImageGallery({
             onClick={() => setShowGen((s) => !s)}
             className="h-8"
           >
-            <Sparkles className="mr-1.5 size-3.5 text-primary-500" /> Generate
+            <Sparkles className="text-primary-500 mr-1.5 size-3.5" /> Generate
           </Button>
           <input
             ref={uploadRef}
@@ -301,12 +302,15 @@ export function HostImageGallery({
             rows={5}
             spellCheck={false}
             placeholder="Prompt gambar untuk Gemini (editable)…"
-            className="border-warm-200 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs leading-relaxed focus:ring-2 focus:ring-primary-500 focus:outline-none"
+            className="border-warm-200 focus:ring-primary-500 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs leading-relaxed focus:ring-2 focus:outline-none"
           />
-          <p className="text-warm-500 text-xs">
-            {withProduct
-              ? '💡 Foto produk dikirim sebagai referensi — ukuran bisa kurang presisi.'
-              : '💡 Host tampil tangan kosong. Composite produk ukuran pas di luar lalu upload.'}
+          <p className="text-warm-500 flex items-start gap-1.5 text-xs">
+            <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              {withProduct
+                ? 'Foto produk dikirim sebagai referensi — ukuran bisa kurang presisi.'
+                : 'Host tampil tangan kosong. Composite produk ukuran pas di luar lalu upload.'}
+            </span>
           </p>
           <div className="flex justify-end">
             <Button
@@ -349,7 +353,7 @@ export function HostImageGallery({
                 key={v.id}
                 className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
                   isActive
-                    ? 'border-primary-500 ring-2 ring-primary-200'
+                    ? 'border-primary-500 ring-primary-200 ring-2'
                     : 'border-warm-200'
                 }`}
               >
@@ -361,7 +365,7 @@ export function HostImageGallery({
                     className="h-full w-full object-cover"
                   />
                   {isActive ? (
-                    <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-primary-500 px-1.5 py-0.5 text-xs font-bold text-white">
+                    <span className="bg-primary-500 absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-bold text-white">
                       <Star className="size-2.5 fill-white" /> AKTIF
                     </span>
                   ) : null}
@@ -384,13 +388,11 @@ export function HostImageGallery({
                 </div>
                 <div className="space-y-1.5 p-2">
                   {v.label ? (
-                    <p className="text-warm-600 truncate text-xs">
-                      {v.label}
-                    </p>
+                    <p className="text-warm-600 truncate text-xs">{v.label}</p>
                   ) : null}
                   <div className="flex items-center gap-1">
                     {isActive ? (
-                      <span className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-primary-50 py-1 text-xs font-medium text-primary-700">
+                      <span className="bg-primary-50 text-primary-700 inline-flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs font-medium">
                         <CheckCircle2 className="size-3" /> Dipakai
                       </span>
                     ) : (
@@ -412,7 +414,7 @@ export function HostImageGallery({
                       onClick={() => handleDownload(v)}
                       disabled={busy}
                       title="Download"
-                      className="text-warm-500 size-7 hover:text-primary-600"
+                      className="text-warm-500 hover:text-primary-600 size-7"
                     >
                       <Download className="size-3.5" />
                     </Button>
@@ -424,7 +426,7 @@ export function HostImageGallery({
                         onClick={() => handleDelete(v)}
                         disabled={busy}
                         title="Hapus"
-                        className="text-warm-400 size-7 hover:text-destructive"
+                        className="text-warm-400 hover:text-destructive size-7"
                       >
                         <Trash2 className="size-3.5" />
                       </Button>

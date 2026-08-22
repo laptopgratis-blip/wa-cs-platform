@@ -224,8 +224,11 @@ punya gaya sendiri — JANGAN disapu aturan ini.
 - Spacing: antar section `gap-6`; dalam card `space-y-4`; label→input `space-y-2`;
   toolbar `gap-2`.
 - Button: filled default = maks SATU aksi utama per halaman/dialog, TANPA override
-  `bg-primary-500...` (default sudah orange). Toolbar `outline`, tersier `ghost`,
-  destruktif `destructive`. Icon size diatur primitive — jangan `h-4 w-4` manual.
+  `bg-primary-500...` (default sudah orange, termasuk `hover:bg-primary-600` yang
+  ditambahkan ke varian `default` di `ui/button.tsx` — semula varian itu cuma punya
+  hover lewat `[a]:` sehingga `<button>` biasa tidak beri umpan balik hover sama
+  sekali). Toolbar `outline`, tersier `ghost`, destruktif `destructive`.
+  Icon size diatur primitive — jangan `h-4 w-4` manual.
 - Badge status → `<StatusBadge>`; `ui/Badge` untuk label non-status tanpa warna raw.
 - Tabel: `space-y-4` → toolbar → wrapper `rounded-md border` → shadcn `<Table>` →
   `<Pagination>` (components/shared).
@@ -236,7 +239,12 @@ punya gaya sendiri — JANGAN disapu aturan ini.
   `fixed inset-0`.
 - Icon: lucide-react, bukan emoji, di seluruh chrome UI (header, menu, status).
 - Dark mode: nonaktif (forcedTheme light). Jangan tulis class `dark:` baru;
-  hapus `dark:` di file yang disentuh. Blok `.dark` di globals.css dibiarkan.
+  hapus `dark:` di file yang disentuh. Blok `.dark` di globals.css dibiarkan —
+  begitu juga class `dark:` di `components/ui/**` (primitive radix-nova vendored:
+  mencabutnya bikin drift dari upstream tanpa efek visual apa pun).
+- Tabel di dalam `<Card>`: pakai `<Table>` langsung TANPA wrapper `rounded-md
+  border` (garis dobel). Primitive `<Table>` sudah membungkus dirinya dengan
+  `overflow-x-auto`, jadi jangan tambah wrapper scroll manual.
 
 ## Perintah Penting
 ```bash

@@ -9,7 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
+        default:
+          // hover:bg-primary-600 untuk <button> biasa — varian ini semula hanya
+          // punya hover lewat [a]: (khusus asChild link), jadi tombol utama
+          // tidak punya umpan balik hover sama sekali.
+          "bg-primary text-primary-foreground hover:bg-primary-600 [a]:hover:bg-primary/80",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

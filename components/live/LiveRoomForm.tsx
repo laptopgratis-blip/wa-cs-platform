@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, Loader2, Package, Save } from 'lucide-react'
+import { AlertTriangle, Loader2, Package, Save, Star } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -78,18 +78,19 @@ function formContainsProduct(
 
 // OpenAI gpt-4o-mini-tts voices — sorted female first + label gender hint.
 // Pakai 'nova' / 'shimmer' / 'coral' / 'sage' untuk live shopping woman host.
+// Tag berupa teks polos: dirender di dalam <option> yang tidak bisa memuat ikon.
 const TTS_VOICES: Array<{ value: string; label: string; tag: string }> = [
-  { value: 'nova', label: 'Nova', tag: '👩 friendly female (Hulao default)' },
-  { value: 'shimmer', label: 'Shimmer', tag: '👩 soft female' },
-  { value: 'coral', label: 'Coral', tag: '👩 warm female' },
-  { value: 'sage', label: 'Sage', tag: '👩 calm female' },
-  { value: 'alloy', label: 'Alloy', tag: '⚪ neutral' },
-  { value: 'echo', label: 'Echo', tag: '👨 male' },
-  { value: 'fable', label: 'Fable', tag: '👨 male storyteller' },
-  { value: 'onyx', label: 'Onyx', tag: '👨 deep male' },
-  { value: 'ash', label: 'Ash', tag: '👨 male' },
-  { value: 'ballad', label: 'Ballad', tag: '👨 expressive male' },
-  { value: 'verse', label: 'Verse', tag: '🎭 versatile' },
+  { value: 'nova', label: 'Nova', tag: 'friendly female (Hulao default)' },
+  { value: 'shimmer', label: 'Shimmer', tag: 'soft female' },
+  { value: 'coral', label: 'Coral', tag: 'warm female' },
+  { value: 'sage', label: 'Sage', tag: 'calm female' },
+  { value: 'alloy', label: 'Alloy', tag: 'neutral' },
+  { value: 'echo', label: 'Echo', tag: 'male' },
+  { value: 'fable', label: 'Fable', tag: 'male storyteller' },
+  { value: 'onyx', label: 'Onyx', tag: 'deep male' },
+  { value: 'ash', label: 'Ash', tag: 'male' },
+  { value: 'ballad', label: 'Ballad', tag: 'expressive male' },
+  { value: 'verse', label: 'Verse', tag: 'versatile' },
 ]
 
 const CHAT_MODELS: Array<{
@@ -492,9 +493,12 @@ export function LiveRoomForm({
             onChangeSelected={setSelectedProducts}
             onChangeFeatured={setFeaturedProductId}
           />
-          <p className="text-muted-foreground text-xs">
-            ⭐ Produk unggulan tampil sebagai kartu sorotan di room. Urutan
-            menentukan tampilan di rail produk &amp; katalog.
+          <p className="text-muted-foreground flex items-start gap-2 text-xs">
+            <Star className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Produk unggulan tampil sebagai kartu sorotan di room. Urutan
+              menentukan tampilan di rail produk &amp; katalog.
+            </span>
           </p>
         </CardContent>
       </Card>
@@ -834,11 +838,13 @@ export function LiveRoomForm({
                     .slice(0, 3)
                     .join(', ')
                   return (
-                    <div className={cn(
-                      'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
-                      TONES.warning.bg,
-                      TONES.warning.text,
-                    )}>
+                    <div
+                      className={cn(
+                        'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
+                        TONES.warning.bg,
+                        TONES.warning.text,
+                      )}
+                    >
                       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                       <span>
                         <strong>{gap.length} produk</strong> room tidak termuat
@@ -946,11 +952,13 @@ export function LiveRoomForm({
                             </select>
                           </div>
                           {mismatch && chosenForm ? (
-                            <div className={cn(
-                      'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
-                      TONES.warning.bg,
-                      TONES.warning.text,
-                    )}>
+                            <div
+                              className={cn(
+                                'mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-xs',
+                                TONES.warning.bg,
+                                TONES.warning.text,
+                              )}
+                            >
                               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                               <span>
                                 Form <strong>{chosenForm.name}</strong> tidak
@@ -1077,12 +1085,14 @@ export function LiveRoomForm({
                 />
                 {botPromptsText.split('\n').filter((s) => s.trim().length >= 3)
                   .length === 0 ? (
-                  <div className={cn(
-                    'mt-1.5 flex items-start gap-1.5 rounded-md px-2 py-1.5 text-xs',
-                    TONES.warning.bg,
-                    TONES.warning.text,
-                  )}>
-                    ⚠️{' '}
+                  <div
+                    className={cn(
+                      'mt-1.5 flex items-start gap-1.5 rounded-md px-2 py-1.5 text-xs',
+                      TONES.warning.bg,
+                      TONES.warning.text,
+                    )}
+                  >
+                    <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
                     <span>
                       Bot AKTIF tapi belum ada pertanyaan — bot gak akan jalan.
                       Klik <strong>+ Isi contoh</strong> di atas atau tulis
