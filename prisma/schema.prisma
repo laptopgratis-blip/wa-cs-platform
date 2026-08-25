@@ -145,6 +145,7 @@ model User {
   lpLiveEmbeds                 LpLiveEmbed[]
   // API publik seller (2026-08-21) — kunci Bearer untuk /api/v1/*.
   sellerApiKeys                SellerApiKey[]
+  webhookEndpoints             WebhookEndpoint[]
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -1699,6 +1700,69 @@ model SellerApiKey {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
+}
+
+// ─────────────────────────────────────────
+// WEBHOOK KELUAR (2026-08-25, Fase 2 API seller) — endpoint milik seller yang
+// menerima event platform (pesan masuk, perubahan status, kontak baru).
+//
+// - `secretEnc` = secret HMAC terenkripsi AES-256-GCM (lib/crypto.ts) — harus
+//   bisa dibaca balik server untuk menandatangani SETIAP delivery, beda dari
+//   SellerApiKey yang cukup sha256 satu arah. Plaintext hanya ditampilkan
+//   sekali saat dibuat / di-rotate.
+// - URL divalidasi anti-SSRF saat create DAN saat setiap kirim (DNS pinning
+//   via opsi lookup https.request) — lihat lib/services/webhooks/url-guard.ts.
+// - failStreak = kegagalan beruntun; lewat ambang → autoDisabledAt terisi dan
+//   endpoint berhenti menerima event sampai user mengaktifkan lagi.
+// ─────────────────────────────────────────
+model WebhookEndpoint {
+  id             String    @id @default(cuid())
+  userId         String
+  url            String    @db.VarChar(500)
+  description    String?   @db.VarChar(120)
+  secretEnc      String // whsec_... terenkripsi (iv:tag:ct)
+  events         String[] // subset lib/validations/webhook-endpoint.ts
+  isActive       Boolean   @default(true)
+  lastSuccessAt  DateTime?
+  lastFailureAt  DateTime?
+  lastError      String?   @db.VarChar(300)
+  failStreak     Int       @default(0)
+  autoDisabledAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([userId])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING // baru dibuat / menunggu percobaan berikutnya
+  SUCCESS
+  FAILED // gagal, masih ada jatah retry (nextRetryAt terisi)
+  DEAD // jatah retry habis
+}
+
+// Log pengiriman per event per endpoint — pola meniru PixelEventLog + cron
+// retry. Baris >30 hari dipurge oleh cron webhook-retry.
+model WebhookDelivery {
+  id          String                @id @default(cuid())
+  endpointId  String
+  eventType   String
+  payload     Json // envelope penuh yang dikirim (id, type, createdAt, data)
+  status      WebhookDeliveryStatus @default(PENDING)
+  attempt     Int                   @default(0)
+  httpStatus  Int?
+  error       String?               @db.VarChar(300)
+  nextRetryAt DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, createdAt])
+  @@index([status, nextRetryAt])
 }
 
 // ─────────────────────────────────────────

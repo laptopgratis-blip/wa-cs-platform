@@ -4,6 +4,7 @@
 
 import { Prisma, type MessageRole, type MessageStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { emitWebhookEvent } from '@/lib/services/webhooks/dispatch'
 
 // Window customer service Meta: 24 jam sejak pesan masuk terakhir.
 const WINDOW_MS = 24 * 60 * 60 * 1000
@@ -118,7 +119,9 @@ export async function saveMessage(
   let contact = await prisma.contact.findFirst({
     where: { userId: wa.userId, phoneNumber },
   })
+  let contactCreated = false
   if (!contact) {
+    contactCreated = true
     contact = await prisma.contact.create({
       data: {
         userId: wa.userId,
@@ -203,6 +206,36 @@ export async function saveMessage(
       select: { role: true, content: true, createdAt: true },
     })
     history = recent.reverse()
+  }
+
+  // Webhook keluar (Fase 2 API seller) — fire-and-forget, never-throw:
+  // jalur simpan pesan tidak boleh melambat/gagal karena endpoint seller.
+  if (contactCreated) {
+    emitWebhookEvent({
+      userId: wa.userId,
+      type: 'contact.created',
+      data: {
+        contactId: contact.id,
+        phoneNumber: contact.phoneNumber,
+        name: contact.name,
+        sessionId: input.sessionId,
+      },
+    })
+  }
+  if (input.role === 'USER') {
+    emitWebhookEvent({
+      userId: wa.userId,
+      type: 'message.received',
+      data: {
+        messageId: message.id,
+        contactId: contact.id,
+        phoneNumber: contact.phoneNumber,
+        name: contact.name,
+        content: input.content,
+        sessionId: input.sessionId,
+        externalMsgId: input.externalMsgId ?? null,
+      },
+    })
   }
 
   return {

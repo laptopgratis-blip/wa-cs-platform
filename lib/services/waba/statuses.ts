@@ -9,6 +9,8 @@ import { prisma } from '@/lib/prisma'
 
 import { applyRecipientStatusByMessage } from '@/lib/services/broadcast/recipient-status'
 
+import { emitWebhookEvent } from '@/lib/services/webhooks/dispatch'
+
 import { markMarketingOptOut, reconcileFromStatus } from './billing-reconcile'
 import { relayEmit } from './realtime'
 import type { WabaChangeValue, WabaStatusUpdate } from './types'
@@ -69,6 +71,16 @@ async function processOne(
     where: { externalMsgId: status.id, status: { in: OVERWRITABLE[kind] } },
     data: { status: TARGET[kind] },
   })
+
+  // Webhook keluar seller — hanya saat ada transisi nyata (dedup webhook
+  // Meta yang dobel/berulang sudah ditapis oleh guard progresi di atas).
+  if (updated.count > 0) {
+    emitWebhookEvent({
+      userId: session.userId,
+      type: 'message.status.updated',
+      data: { externalMsgId: status.id, status: TARGET[kind], sessionId: session.id },
+    })
+  }
 
   const errInfo = status.errors?.[0]
   if (kind === 'failed') {

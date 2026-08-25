@@ -7,6 +7,7 @@ import { z } from 'zod'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
+import { emitWebhookEvent } from '@/lib/services/webhooks/dispatch'
 
 const bodySchema = z.object({
   externalMsgId: z.string().min(1),
@@ -34,6 +35,22 @@ export async function POST(req: Request) {
       where: { externalMsgId: body.externalMsgId },
       data: { status: body.status },
     })
+
+    // Webhook keluar seller. Message tidak punya userId — ambil lewat
+    // relasi kontak dari salah satu baris yang barusan berubah.
+    if (r.count > 0) {
+      const msg = await prisma.message.findFirst({
+        where: { externalMsgId: body.externalMsgId },
+        select: { waSessionId: true, contact: { select: { userId: true } } },
+      })
+      if (msg) {
+        emitWebhookEvent({
+          userId: msg.contact.userId,
+          type: 'message.status.updated',
+          data: { externalMsgId: body.externalMsgId, status: body.status, sessionId: msg.waSessionId },
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,

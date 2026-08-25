@@ -81,9 +81,23 @@ pola DB-backed kalau perlu ada di `lib/otp/auth-otp.ts`.
 POST = satu-satunya tempat `plainKey` muncul — dilarang `console.log` body/respons di file itu.
 Pembuatan dibatasi 15 percobaan/jam per user (yang gagal ikut dihitung, lewat `consumeRateLimit`).
 
-## Fase 2 (belum ada)
+## Webhook keluar (2026-08-25)
 
-`POST /api/v1/messages` membungkus `smartSend` (sudah never-throw & sadar window/kredit/compliance),
-lalu webhook keluar meniru arsitektur `PixelEventLog` + cron `pixel-retry`. Webhook butuh SSRF guard
-(tolak IP privat/loopback/link-local/169.254.169.254, validasi hasil resolve DNS, larang redirect,
-https-only), HMAC signing, dan retry backoff.
+Endpoint webhook milik seller dikelola di `/pengembang/integrasi` (maks 5/user, kuota via
+`pg_advisory_xact_lock`). Event: `message.received`, `message.status.updated`, `contact.created`,
+plus `ping` (uji). Katalog & zod: `lib/validations/webhook-endpoint.ts`.
+
+| Bagian | File | Catatan |
+|---|---|---|
+| Emisi | `lib/services/webhooks/dispatch.ts` | `emitWebhookEvent` fire-and-forget never-throw — dipanggil dari `message-store` (pesan masuk + kontak baru), `waba/statuses` (status Cloud), `internal/messages/status` (ack Baileys). Percobaan pertama langsung. |
+| Kirim | `lib/services/webhooks/deliver.ts` | Klaim atomik → HMAC (`X-Hulao-Signature: t=...,v1=...` atas `${t}.${body}`) → POST via `https.request` dengan `lookup` ter-guard (anti DNS-rebinding), timeout 10 dtk, redirect TIDAK diikuti. Retry ±1m/5m/30m/2j/8j (maks 6 percobaan) → DEAD; 50 gagal beruntun → endpoint auto-nonaktif. |
+| Guard SSRF | `lib/services/webhooks/url-guard.ts` | https-only; tolak IP privat/loopback/link-local/CGNAT/metadata (v4+v6+mapped) saat create DAN saat setiap koneksi. Dev: `WEBHOOK_ALLOW_PRIVATE_URL=1` (JANGAN di prod/staging). |
+| Secret | `lib/services/webhooks/endpoints.ts` | `whsec_<base64url 24B>`, disimpan AES-256-GCM (`lib/crypto.ts`) karena harus dibaca balik untuk menandatangani; plaintext hanya keluar saat create/rotate. |
+| Cron | `app/api/cron/webhook-retry` | Tiap 5 menit: retry FAILED jatuh tempo + selamatkan PENDING macet >2 mnt + purge >30 hari. Daftarkan di crontab server (helper `hulao-staging-cron-call.sh`). |
+
+Dokumentasi user (verifikasi tanda tangan, anti-replay, dedup by event id): tab **Webhooks** di
+`/pengembang/api`.
+
+## Fase berikutnya (belum ada)
+
+`POST /api/v1/messages` membungkus `smartSend` (sudah never-throw & sadar window/compliance).

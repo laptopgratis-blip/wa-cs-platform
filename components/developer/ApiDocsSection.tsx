@@ -110,7 +110,7 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
             <TabsTrigger value="endpoint">Endpoint</TabsTrigger>
             <TabsTrigger value="error">Kode Error</TabsTrigger>
             <TabsTrigger value="kuota">Batas &amp; Kuota</TabsTrigger>
-            <TabsTrigger value="segera">Segera Hadir</TabsTrigger>
+            <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
           </TabsList>
 
           <TabsContent value="mulai" className="space-y-3 pt-4">
@@ -264,26 +264,47 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
             </ul>
           </TabsContent>
 
-          <TabsContent value="segera" className="space-y-3 pt-4">
+          <TabsContent value="webhooks" className="space-y-3 pt-4">
             <p className="text-warm-600 text-sm">
-              Fase 1 sengaja hanya membaca data. Yang sedang disiapkan:
+              Selain menarik data lewat API, Hulao bisa <strong>mengirim event ke sistemmu</strong>{' '}
+              lewat webhook — atur endpoint-nya di halaman{' '}
+              <a href="/pengembang/integrasi" className="text-primary-600 underline">
+                Integrasi
+              </a>
+              . Event yang tersedia: <code className="font-mono text-xs">message.received</code>,{' '}
+              <code className="font-mono text-xs">message.status.updated</code>,{' '}
+              <code className="font-mono text-xs">contact.created</code> (+{' '}
+              <code className="font-mono text-xs">ping</code> untuk uji koneksi).
             </p>
+            <p className="text-warm-600 text-sm">Bentuk kiriman — POST JSON:</p>
+            <Code>{`{
+  "id": "evt_…",
+  "type": "message.received",
+  "createdAt": "2026-08-25T07:00:00.000Z",
+  "data": { "contactId": "…", "phoneNumber": "628…", "content": "…" }
+}`}</Code>
+            <p className="text-warm-600 text-sm">
+              Setiap kiriman membawa header{' '}
+              <code className="font-mono text-xs">X-Hulao-Signature: t=&lt;unix&gt;,v1=&lt;hex&gt;</code>.
+              Verifikasi dengan menghitung ulang HMAC SHA-256 atas string{' '}
+              <code className="font-mono text-xs">{'`${t}.${rawBody}`'}</code> memakai signing secret{' '}
+              <code className="font-mono text-xs">whsec_…</code> milik endpoint:
+            </p>
+            <Code>{`const [tPart, vPart] = sigHeader.split(',')
+const t = tPart.slice(2), v1 = vPart.slice(3)
+const expected = crypto.createHmac('sha256', process.env.HULAO_WEBHOOK_SECRET)
+  .update(\`\${t}.\${rawBody}\`).digest('hex')
+const valid = crypto.timingSafeEqual(Buffer.from(v1, 'hex'), Buffer.from(expected, 'hex'))
+// tolak juga bila |now - t| > 5 menit (anti replay)`}</Code>
             <ul className="text-warm-600 list-inside list-disc space-y-1.5 text-sm">
-              <li>
-                <strong>Kirim pesan</strong> (
-                <code className="font-mono text-xs">POST /api/v1/messages</code>
-                ) — otomatis memilih Baileys atau template Meta sesuai window 24
-                jam.
-              </li>
-              <li>
-                <strong>Webhook keluar</strong> — pesan masuk & perubahan status
-                dikirim ke URL-mu, bertanda tangan HMAC.
-              </li>
+              <li>Balas <code className="font-mono text-xs">2xx</code> secepatnya (&lt;10 detik) — proses beratnya belakangan.</li>
+              <li>Gagal di-retry bertahap sampai 6× (±1m, 5m, 30m, 2j, 8j); gagal beruntun terus menonaktifkan endpoint otomatis.</li>
+              <li>Redirect tidak diikuti dan alamat internal/privat ditolak.</li>
+              <li>Kiriman bisa datang lebih dari sekali — jadikan <code className="font-mono text-xs">id</code> event kunci dedup.</li>
             </ul>
             <p className="text-warm-500 text-sm">
-              Butuh salah satunya lebih cepat? Kabari kami lewat halaman Bantuan
-              &amp; Dukungan — urutan pengerjaan mengikuti permintaan yang
-              paling sering masuk.
+              Berikutnya: <strong>kirim pesan</strong> (<code className="font-mono text-xs">POST /api/v1/messages</code>).
+              Butuh lebih cepat? Kabari lewat halaman Bantuan &amp; Dukungan.
             </p>
           </TabsContent>
         </Tabs>
