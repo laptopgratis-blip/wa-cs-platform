@@ -173,8 +173,11 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 ## WABA Trek 2B — Template Meta & Kredit Pesan (2026-08-20)
 
 Dua jalur WA permanen: Baileys (unofficial) + Cloud API (resmi Meta). Sesi Cloud
-di luar window 24 jam wajib template ter-approve & berbayar per pesan (dompet
-Kredit Pesan WA, Rp — terpisah dari token AI). Kontrak satu-pintu:
+di luar window 24 jam wajib template ter-approve & berbayar per pesan — **sejak
+2026-08-25 biaya itu ditagih Meta LANGSUNG ke kartu seller di WhatsApp Manager**;
+dompet Kredit Pesan WA (Rp) NONAKTIF via `lib/billing/message-credit-mode.ts`
+(markup dilewati — Tech Provider tak bisa credit line sharing; infra dompet
+dibiarkan utuh untuk jalur Multi-Partner Solutions kelak). Kontrak satu-pintu:
 `assertCanSendCloud` (compliance) → `sendCloudTemplate` (never-throw, charge
 idempoten by wamid) → webhook `statuses[].pricing` merekonsiliasi. SEMUA jalur
 non-CS (OTP/follow-up/notif/handoff/LMS) lewat `smartSend` +

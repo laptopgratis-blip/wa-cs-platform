@@ -97,7 +97,7 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
       }
       toast.success(
         json.data.chargedRp
-          ? `Template terkirim · kredit terpotong Rp ${json.data.chargedRp.toLocaleString('id-ID')}`
+          ? `Template terkirim · kredit terpotong Rp ${json.data.chargedRp.toLocaleString('id-ID')}` // hanya muncul bila billing kredit diaktifkan lagi
           : 'Template terkirim',
       )
       onSent(json.data)
@@ -114,7 +114,7 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
           <DialogTitle>Kirim template ke {contactName ?? contactPhone}</DialogTitle>
           <DialogDescription>
             Window 24 jam Meta untuk kontak ini sudah tutup — pesan bebas tidak bisa dikirim. Pilih template yang
-            sudah disetujui Meta; biaya per pesan dipotong dari Kredit Pesan WA (utility gratis bila masih dalam window).
+            sudah disetujui Meta. Biaya pesan resmi (bila ada) ditagih Meta langsung ke metode pembayaran di WhatsApp Manager.
           </DialogDescription>
         </DialogHeader>
 

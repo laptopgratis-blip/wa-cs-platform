@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator'
 import { authOptions } from '@/lib/auth'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,9 @@ export default async function SelectPaymentPage({
     where: { id: packageId, isActive: true },
   })
   if (!pkg) notFound()
+  // Paket Kredit Pesan tidak bisa dibeli selama billing kredit nonaktif
+  // (lihat lib/billing/message-credit-mode.ts) — lindungi dari tautan langsung.
+  if (pkg.kind === 'MESSAGE_CREDIT' && !MESSAGE_CREDIT_BILLING_ENABLED) notFound()
 
   const pricePerToken = pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
   // Paket Kredit Pesan WA (Trek 2B): tokenAmount = Rp kredit yang diterima.

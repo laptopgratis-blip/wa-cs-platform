@@ -11,6 +11,7 @@ import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { MainWelcomeWizard } from '@/components/onboarding/MainWelcomeWizard'
 import { authOptions } from '@/lib/auth'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import type { OnboardingGoal } from '@/lib/navigation'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
@@ -60,8 +61,12 @@ export default async function DashboardLayout({
     }),
   ])
   const tokenBalance = balance?.balance ?? 0
+  // null = kartu Kredit Pesan tidak dirender (billing kredit nonaktif).
   const messageCreditRp =
-    cloudSessionCount > 0 || (balance?.messageCreditRp ?? 0) !== 0 ? (balance?.messageCreditRp ?? 0) : null
+    MESSAGE_CREDIT_BILLING_ENABLED &&
+    (cloudSessionCount > 0 || (balance?.messageCreditRp ?? 0) !== 0)
+      ? (balance?.messageCreditRp ?? 0)
+      : null
   const hasOrderSystemAccess = orderAccess.hasAccess
   const onboardingGoal = (userMeta?.onboardingGoal ?? null) as
     | OnboardingGoal

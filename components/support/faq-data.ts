@@ -34,12 +34,12 @@ export const FAQ_GROUPS: FaqGroup[] = [
     title: 'Saldo, Token, & Kredit Pesan',
     items: [
       {
-        q: 'Apa bedanya Saldo Token dan Kredit Pesan WA?',
-        a: 'Dua dompet berbeda. Saldo Token dipakai untuk semua fitur AI (balasan CS otomatis, generate konten, Live AI). Kredit Pesan WA (satuan Rupiah) hanya dipakai membayar pesan template Meta di nomor resmi — broadcast, follow-up di luar window 24 jam, dan OTP. Balasan CS dalam window 24 jam tidak memotong Kredit Pesan sama sekali.',
+        q: 'Apa bedanya biaya token AI dan biaya pesan WhatsApp resmi?',
+        a: 'Dua hal terpisah. Saldo Token dibeli di hulao dan dipakai untuk semua fitur AI (balasan CS otomatis, generate konten, Live AI). Sedangkan biaya pesan template di nomor WhatsApp resmi (Cloud API) — broadcast, follow-up di luar window 24 jam, OTP — ditagih oleh Meta langsung ke metode pembayaran yang kamu pasang di WhatsApp Manager (business.facebook.com), bukan oleh hulao. Balasan CS dalam window 24 jam tidak dikenakan biaya pesan.',
       },
       {
         q: 'Berapa biaya per pesan template?',
-        a: 'Tarifnya beda per kategori: Utility (konfirmasi order, resi, invoice), Marketing (promo, broadcast penawaran), dan Authentication (OTP). Tarif yang sedang berlaku selalu tampil di menu Billing sebelum kamu mengirim — angkanya bisa disesuaikan, jadi pakai yang di sana sebagai patokan. Gratis hanya untuk: template Utility yang dikirim selagi window 24 jam customer masih terbuka, dan lead dari iklan Click-to-WhatsApp selama 72 jam pertama. Template Marketing dan OTP tetap ditagih penuh walaupun window sedang terbuka. Kalau Meta ternyata tidak menagih, kredit yang terlanjur terpotong dikembalikan otomatis.',
+        a: 'Tarifnya ditentukan Meta per kategori: Utility (konfirmasi order, resi, invoice), Marketing (promo, broadcast penawaran), dan Authentication (OTP) — rate card resminya ada di business.whatsapp.com. Meta menagihnya langsung ke metode pembayaran di WhatsApp Manager; pastikan kartu sudah terpasang di sana, kalau belum, kirim template berbayar akan gagal. Gratis dari Meta: template Utility yang dikirim selagi window 24 jam customer masih terbuka, dan lead dari iklan Click-to-WhatsApp selama 72 jam pertama.',
       },
       {
         q: 'Token saya habis, apa yang terjadi?',
@@ -60,7 +60,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Follow-up otomatis tidak terkirim.',
-        a: 'Cek tiga hal: nomor WhatsApp masih CONNECTED, customer tidak ada di daftar Blacklist, dan (untuk nomor resmi) template Meta yang dipakai sudah disetujui serta Kredit Pesan masih cukup. Pesan yang gagal akan dicoba ulang otomatis, dan alasan kegagalannya tercatat di daftar antrean follow-up.',
+        a: 'Cek tiga hal: nomor WhatsApp masih CONNECTED, customer tidak ada di daftar Blacklist, dan (untuk nomor resmi) template Meta yang dipakai sudah disetujui serta metode pembayaran Meta di WhatsApp Manager masih aktif. Pesan yang gagal akan dicoba ulang otomatis, dan alasan kegagalannya tercatat di daftar antrean follow-up.',
       },
     ],
   },

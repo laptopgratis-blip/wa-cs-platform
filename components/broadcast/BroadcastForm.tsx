@@ -316,8 +316,8 @@ export function BroadcastForm({
               )}
             >
               <BadgeCheck className="size-3.5" /> Nomor resmi Meta: broadcast
-              wajib memakai <b>template yang disetujui</b>; biaya per pesan
-              dipotong dari Kredit Pesan WA. Kelola template di{' '}
+              wajib memakai <b>template yang disetujui</b>; biaya pesan ditagih
+              Meta langsung sesuai kategori template. Kelola template di{' '}
               <Link
                 href={`/whatsapp/templates?session=${waSessionId}`}
                 className="underline"

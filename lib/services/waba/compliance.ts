@@ -12,6 +12,7 @@
 
 import type { MetaTemplateCategory, WabaTemplate } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import {
   formatRp,
   getMessageCreditBalance,
@@ -125,7 +126,10 @@ export async function assertCanSendCloud(input: {
       }
     : null
 
-  const creditUserId = session.ownerRole === 'ADMIN' ? null : session.userId
+  // Billing kredit dimatikan (lihat lib/billing/message-credit-mode.ts):
+  // creditUserId null untuk SEMUA orang → tanpa potongan & tanpa blokir saldo.
+  const creditUserId =
+    !MESSAGE_CREDIT_BILLING_ENABLED || session.ownerRole === 'ADMIN' ? null : session.userId
 
   if (input.intent.kind === 'freeform') {
     // Free-text = balasan CS dalam window; isBlacklisted di hulao hanya

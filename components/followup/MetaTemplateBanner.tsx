@@ -26,7 +26,7 @@ export function MetaTemplateBanner({ sessions }: { sessions: CloudSessionLite[] 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-sm text-emerald-900">
           <BadgeCheck className="size-4" /> Nomor resmi Meta (Cloud API) terdeteksi — follow-up di luar window 24 jam
-          butuh <b>template Meta yang disetujui</b>. Biaya per pesan dipotong dari Kredit Pesan WA.
+          butuh <b>template Meta yang disetujui</b>. Biaya pesan ditagih Meta langsung sesuai kategori template.
         </p>
         {sessions.length > 1 && (
           <Select value={sessionId} onValueChange={setSessionId}>

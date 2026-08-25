@@ -15,6 +15,13 @@ wajib **template ter-approve** dan **berbayar per pesan** → dompet **Kredit Pe
 
 ## Kredit Pesan (dompet kedua, Rupiah)
 
+> **NONAKTIF sejak 2026-08-25** (`lib/billing/message-credit-mode.ts`): keputusan owner melewati
+> model markup — Tech Provider tidak bisa credit line sharing, jadi seller memasang kartu sendiri
+> dan **ditagih Meta langsung**. `assertCanSendCloud` menetapkan `creditUserId = null` untuk semua
+> orang (tanpa potongan, tanpa `INSUFFICIENT_CREDIT`); UI dompet/top-up disembunyikan; pembelian
+> paket `MESSAGE_CREDIT` ditolak. Infrastruktur di bawah ini dibiarkan utuh untuk jalur
+> Multi-Partner Solutions kelak.
+
 - Kolom `TokenBalance.messageCreditRp/Purchased/Used`; ledger `MessageCreditTransaction`
   unique `(userId, reference, type)` — idempoten by wamid.
 - Harga per kategori di `MessageCreditRate` (admin: `/admin/message-credits`). Sesuai dokumen

@@ -35,6 +35,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { MessageCreditSection } from '@/components/billing/MessageCreditSection'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { OnboardingGoalCard } from '@/components/onboarding/OnboardingGoalCard'
 import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
 import { authOptions } from '@/lib/auth'
@@ -176,10 +177,14 @@ export default async function BillingPage({
       where: { userId: session.user.id },
     }),
   ])
+  // Billing kredit nonaktif (lihat lib/billing/message-credit-mode.ts):
+  // section dompet + top-up disembunyikan sepenuhnya — biaya pesan nomor
+  // resmi ditagih Meta langsung ke kartu di WhatsApp Manager.
   const showMessageCredit =
-    cloudSessionCount > 0 ||
-    creditTxCount > 0 ||
-    (tokenBalance?.messageCreditRp ?? 0) !== 0
+    MESSAGE_CREDIT_BILLING_ENABLED &&
+    (cloudSessionCount > 0 ||
+      creditTxCount > 0 ||
+      (tokenBalance?.messageCreditRp ?? 0) !== 0)
   const [creditRates, creditPackages, creditTx] = showMessageCredit
     ? await Promise.all([
         getMessageCreditRates(),

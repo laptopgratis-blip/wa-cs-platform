@@ -60,7 +60,8 @@ export function TemplateTestSendDialog({ open, onOpenChange, template }: Props) 
         return
       }
       toast.success(
-        `Terkirim ke ${phone}${json.data?.chargedRp ? ` · kredit terpotong Rp ${json.data.chargedRp.toLocaleString('id-ID')}` : ' · gratis (dalam window)'}`,
+        // chargedRp hanya terisi bila billing kredit diaktifkan lagi.
+        `Terkirim ke ${phone}${json.data?.chargedRp ? ` · kredit terpotong Rp ${json.data.chargedRp.toLocaleString('id-ID')}` : ''}`,
       )
       onOpenChange(false)
     } finally {
@@ -74,8 +75,8 @@ export function TemplateTestSendDialog({ open, onOpenChange, template }: Props) 
         <DialogHeader>
           <DialogTitle>Kirim uji: {template.name}</DialogTitle>
           <DialogDescription>
-            Kategori {CATEGORY_LABEL[template.category]}. Pengiriman uji memotong Kredit Pesan sungguhan
-            sesuai kategori (utility gratis bila window 24 jam nomor tujuan masih terbuka).
+            Kategori {CATEGORY_LABEL[template.category]}. Pengiriman uji memakai nomor resmi sungguhan —
+            biaya pesan (bila ada) ditagih Meta langsung ke metode pembayaran di WhatsApp Manager.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-[1fr_260px]">

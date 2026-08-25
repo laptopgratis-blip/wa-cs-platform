@@ -5,6 +5,7 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { buildTargetWhere } from '@/lib/broadcast'
 import { prisma } from '@/lib/prisma'
 import { getMessageCreditBalance, getMessageCreditRates } from '@/lib/services/message-credits'
@@ -71,7 +72,8 @@ export async function GET(req: Request) {
 
     let estimatedCreditRp = 0
     let balanceRp: number | null = null
-    if (template) {
+    // balanceRp null = UI menyembunyikan baris estimasi/saldo sepenuhnya.
+    if (template && MESSAGE_CREDIT_BILLING_ENABLED) {
       const rates = await getMessageCreditRates()
       estimatedCreditRp = count * rates[template.category]
       balanceRp = await getMessageCreditBalance(session.user.id)

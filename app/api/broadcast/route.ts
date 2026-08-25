@@ -3,6 +3,7 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { buildTargetWhere } from '@/lib/broadcast'
 import { prisma } from '@/lib/prisma'
 import { getMessageCreditRates } from '@/lib/services/message-credits'
@@ -104,7 +105,8 @@ export async function POST(req: Request) {
     })
 
     let estimatedCreditRp = 0
-    if (template) {
+    // Billing kredit nonaktif → estimasi disimpan 0 (kolom tetap ada).
+    if (template && MESSAGE_CREDIT_BILLING_ENABLED) {
       const rates = await getMessageCreditRates()
       estimatedCreditRp = totalTargets * rates[template.category]
     }
