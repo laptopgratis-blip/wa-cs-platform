@@ -90,13 +90,17 @@ plus `ping` (uji). Katalog & zod: `lib/validations/webhook-endpoint.ts`.
 | Bagian | File | Catatan |
 |---|---|---|
 | Emisi | `lib/services/webhooks/dispatch.ts` | `emitWebhookEvent` fire-and-forget never-throw — dipanggil dari `message-store` (pesan masuk + kontak baru), `waba/statuses` (status Cloud), `internal/messages/status` (ack Baileys). Percobaan pertama langsung. |
-| Kirim | `lib/services/webhooks/deliver.ts` | Klaim atomik → HMAC (`X-Hulao-Signature: t=...,v1=...` atas `${t}.${body}`) → POST via `https.request` dengan `lookup` ter-guard (anti DNS-rebinding), timeout 10 dtk, redirect TIDAK diikuti. Retry ±1m/5m/30m/2j/8j (maks 6 percobaan) → DEAD; 50 gagal beruntun → endpoint auto-nonaktif. |
-| Guard SSRF | `lib/services/webhooks/url-guard.ts` | https-only; tolak IP privat/loopback/link-local/CGNAT/metadata (v4+v6+mapped) saat create DAN saat setiap koneksi. Dev: `WEBHOOK_ALLOW_PRIVATE_URL=1` (JANGAN di prod/staging). |
+| Kirim | `lib/services/webhooks/deliver.ts` | Klaim EKSKLUSIF via `claimedAt` (dua run cron tak sama-sama mengirim; guard basi 2 mnt) → HMAC (`X-Hulao-Signature: t=...,v1=...` atas `${t}.${body}`) → POST via `https.request` dengan `lookup` ter-guard (anti DNS-rebinding), timeout 10 dtk, redirect TIDAK diikuti, respons >1KB resolve segera (bukan menunggu `end` — hindari hang). Throttle 120 kirim/mnt per endpoint (breaker volume). Retry ±1m/5m/30m/2j/8j (maks 6) → DEAD; 50 gagal beruntun → endpoint auto-nonaktif + sisa delivery-nya DEAD. |
+| Guard SSRF | `lib/services/webhooks/url-guard.ts` | https-only; v4 tolak privat/loopback/link-local/CGNAT/metadata/TEST-NET/multicast/reserved; v6 **default-deny** (hanya 2000::/3 global, minus 6to4/Teredo/doc) + decode IPv4-mapped dotted&hex + strip bracket literal; validasi saat create DAN via `lookup` tiap koneksi. PATCH url dibatasi 30/jam (anti oracle DNS). Dev: `WEBHOOK_ALLOW_PRIVATE_URL=1` (JANGAN di prod/staging). |
 | Secret | `lib/services/webhooks/endpoints.ts` | `whsec_<base64url 24B>`, disimpan AES-256-GCM (`lib/crypto.ts`) karena harus dibaca balik untuk menandatangani; plaintext hanya keluar saat create/rotate. |
 | Cron | `app/api/cron/webhook-retry` | Tiap 5 menit: retry FAILED jatuh tempo + selamatkan PENDING macet >2 mnt + purge >30 hari. Daftarkan di crontab server (helper `hulao-staging-cron-call.sh`). |
 
 Dokumentasi user (verifikasi tanda tangan, anti-replay, dedup by event id): tab **Webhooks** di
 `/pengembang/api`.
+
+> **Catatan infra (di luar kode)**: guard SSRF tidak memblokir IP PUBLIK server sendiri. Pastikan
+> `wa-service` (port 3001) & endpoint `internal/*` hanya reachable dari localhost/jaringan container
+> (firewall / bind 127.0.0.1), bukan hanya dilindungi secret app-layer.
 
 ## Fase berikutnya (belum ada)
 

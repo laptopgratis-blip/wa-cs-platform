@@ -1753,6 +1753,10 @@ model WebhookDelivery {
   payload     Json // envelope penuh yang dikirim (id, type, createdAt, data)
   status      WebhookDeliveryStatus @default(PENDING)
   attempt     Int                   @default(0)
+  // Klaim eksklusif: di-set saat deliverOne mulai mengirim, di-reset null saat
+  // gagal-retryable. Dua run cron yang tumpang-tindih tidak bisa sama-sama
+  // mengklaim baris yang sama (guard basi STALE_CLAIM_MS untuk proses mati).
+  claimedAt   DateTime?
   httpStatus  Int?
   error       String?               @db.VarChar(300)
   nextRetryAt DateTime?

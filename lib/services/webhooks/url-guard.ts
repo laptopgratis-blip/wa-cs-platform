@@ -40,8 +40,13 @@ const BLOCKED_V4: Array<[string, number]> = [
   ['169.254.0.0', 16], // link-local + metadata cloud
   ['172.16.0.0', 12],
   ['192.0.0.0', 24],
+  ['192.0.2.0', 24], // TEST-NET-1 (dokumentasi)
   ['192.168.0.0', 16],
   ['198.18.0.0', 15], // benchmarking
+  ['198.51.100.0', 24], // TEST-NET-2
+  ['203.0.113.0', 24], // TEST-NET-3
+  ['224.0.0.0', 4], // multicast
+  ['240.0.0.0', 4], // reserved/Class E (termasuk 255.255.255.255 broadcast)
 ]
 
 function isPrivateV4(ip: string): boolean {
@@ -51,15 +56,33 @@ function isPrivateV4(ip: string): boolean {
 
 function isPrivateV6(ip: string): boolean {
   const lower = ip.toLowerCase()
-  // IPv4-mapped (::ffff:a.b.c.d) → nilai sebenarnya IPv4.
-  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
-  if (mapped) return isPrivateV4(mapped[1])
-  if (lower === '::' || lower === '::1') return true
-  // fc00::/7 (ULA), fe80::/10 (link-local), 64:ff9b::/96 (NAT64 — bisa
-  // membungkus IPv4 privat; tolak seluruhnya biar aman).
-  if (lower.startsWith('fc') || lower.startsWith('fd')) return true
-  if (/^fe[89ab]/.test(lower)) return true
-  if (lower.startsWith('64:ff9b:')) return true
+
+  // Bentuk yang membungkus IPv4 → nilai sebenarnya IPv4.
+  // ::ffff:a.b.c.d (mapped, dotted) & ::a.b.c.d (compatible, deprecated).
+  const dotted = lower.match(/^::(ffff:)?(\d+\.\d+\.\d+\.\d+)$/)
+  if (dotted) return isPrivateV4(dotted[2])
+  // ::ffff:xxxx:xxxx (mapped, hex) — decode 2 grup hex jadi 4 oktet.
+  const hexMapped = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (hexMapped) {
+    const hi = parseInt(hexMapped[1], 16)
+    const lo = parseInt(hexMapped[2], 16)
+    return isPrivateV4(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`)
+  }
+
+  // DEFAULT-DENY: satu-satunya rentang yang diizinkan adalah global unicast
+  // 2000::/3 (nibble pertama 2 atau 3). Semua sisanya ditolak — ini menutup
+  // loopback (::,::1), ULA (fc/fd), link-local (fe8-feb), multicast (ff),
+  // NAT64 (64:ff9b), tanpa perlu mendaftar satu per satu.
+  const first = lower.replace(/^\[|\]$/g, '')[0]
+  if (first !== '2' && first !== '3') return true
+
+  // Di dalam 2000::/3 pun, tolak rentang non-routable/tunneling yang bisa
+  // membungkus alamat internal: 6to4 (2002::/16), Teredo (2001:0::/32),
+  // dokumentasi (2001:db8::/32).
+  if (lower.startsWith('2002:')) return true
+  if (lower.startsWith('2001:db8:')) return true
+  if (lower === '2001:0:0:0:0:0:0:0' || /^2001:0?:/.test(lower)) return true
+
   return false
 }
 
@@ -82,16 +105,25 @@ export async function assertSafeWebhookUrl(raw: string): Promise<URL> {
   } catch {
     throw new WebhookUrlError('URL tidak valid.')
   }
-  if (url.protocol !== 'https:' && !(allowPrivate() && url.protocol === 'http:')) {
+  if (
+    url.protocol !== 'https:' &&
+    !(allowPrivate() && url.protocol === 'http:')
+  ) {
     throw new WebhookUrlError('URL webhook wajib https://.')
   }
   if (url.username || url.password) {
     throw new WebhookUrlError('URL tidak boleh memuat kredensial (user:pass@).')
   }
 
+  // WHATWG menyimpan host IPv6 literal DENGAN kurung siku ("[::1]") → isIP
+  // selalu 0. Strip dulu supaya isBlockedIp benar-benar mengevaluasi alamatnya
+  // (bukan "aman karena kebetulan gagal resolve").
   const host = url.hostname
-  if (isIP(host)) {
-    if (isBlockedIp(host)) throw new WebhookUrlError('Alamat IP internal/privat tidak diizinkan.')
+  const bareHost =
+    host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
+  if (isIP(bareHost)) {
+    if (isBlockedIp(bareHost))
+      throw new WebhookUrlError('Alamat IP internal/privat tidak diizinkan.')
     return url
   }
 
@@ -101,10 +133,13 @@ export async function assertSafeWebhookUrl(raw: string): Promise<URL> {
   } catch {
     throw new WebhookUrlError(`Domain ${host} tidak bisa di-resolve.`)
   }
-  if (addrs.length === 0) throw new WebhookUrlError(`Domain ${host} tidak punya alamat.`)
+  if (addrs.length === 0)
+    throw new WebhookUrlError(`Domain ${host} tidak punya alamat.`)
   for (const a of addrs) {
     if (isBlockedIp(a.address)) {
-      throw new WebhookUrlError('Domain menunjuk ke alamat internal/privat — tidak diizinkan.')
+      throw new WebhookUrlError(
+        'Domain menunjuk ke alamat internal/privat — tidak diizinkan.',
+      )
     }
   }
   return url
@@ -116,24 +151,39 @@ export async function assertSafeWebhookUrl(raw: string): Promise<URL> {
  */
 export const guardedLookup: typeof dns.lookup = ((
   hostname: string,
-  options: dns.LookupOptions | ((err: NodeJS.ErrnoException | null, address: string, family: number) => void),
-  callback?: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+  options:
+    | dns.LookupOptions
+    | ((
+        err: NodeJS.ErrnoException | null,
+        address: string,
+        family: number,
+      ) => void),
+  callback?: (
+    err: NodeJS.ErrnoException | null,
+    address: string,
+    family: number,
+  ) => void,
 ) => {
   const cb = (typeof options === 'function' ? options : callback) as (
     err: NodeJS.ErrnoException | null,
     address: string | dns.LookupAddress[],
     family?: number,
   ) => void
-  const opts = (typeof options === 'function' ? {} : options) as dns.LookupOptions
+  const opts = (
+    typeof options === 'function' ? {} : options
+  ) as dns.LookupOptions
 
   dns.lookup(hostname, { ...opts, all: true }, (err, addresses) => {
     if (err) return cb(err, '', 0)
     const list = addresses as dns.LookupAddress[]
     const blocked = list.find((a) => isBlockedIp(a.address))
     if (blocked || list.length === 0) {
-      const e = Object.assign(new Error('alamat internal/privat ditolak (guard SSRF)'), {
-        code: 'EBLOCKED',
-      }) as NodeJS.ErrnoException
+      const e = Object.assign(
+        new Error('alamat internal/privat ditolak (guard SSRF)'),
+        {
+          code: 'EBLOCKED',
+        },
+      ) as NodeJS.ErrnoException
       return cb(e, '', 0)
     }
     if (opts.all) return cb(null, list)

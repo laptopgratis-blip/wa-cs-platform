@@ -26,7 +26,10 @@ async function handle(req: Request) {
       where: {
         OR: [
           { status: 'FAILED', nextRetryAt: { lte: now } },
-          { status: 'PENDING', createdAt: { lt: new Date(now.getTime() - STUCK_PENDING_MS) } },
+          {
+            status: 'PENDING',
+            createdAt: { lt: new Date(now.getTime() - STUCK_PENDING_MS) },
+          },
         ],
         endpoint: { isActive: true },
       },
@@ -35,25 +38,40 @@ async function handle(req: Request) {
       select: { id: true },
     })
 
+    // Paralel: satu delivery lambat tidak boleh menahan seluruh batch (dan
+    // tidak bisa lagi menggantung selamanya — postJson kini selalu resolve).
+    const outcomes = await Promise.allSettled(due.map((d) => deliverOne(d.id)))
     let sent = 0
     let failed = 0
-    for (const d of due) {
-      const outcome = await deliverOne(d.id)
-      if (outcome?.ok) sent += 1
+    for (const o of outcomes) {
+      if (o.status === 'fulfilled' && o.value?.ok) sent += 1
       else failed += 1
     }
 
     const purged = await prisma.webhookDelivery.deleteMany({
-      where: { createdAt: { lt: new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000) } },
+      where: {
+        createdAt: {
+          lt: new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000),
+        },
+      },
     })
 
     return NextResponse.json({
       success: true,
-      data: { due: due.length, sent, failed, purged: purged.count, durationMs: Date.now() - startedAt },
+      data: {
+        due: due.length,
+        sent,
+        failed,
+        purged: purged.count,
+        durationMs: Date.now() - startedAt,
+      },
     })
   } catch (err) {
     console.error('[cron/webhook-retry] gagal:', err)
-    return NextResponse.json({ success: false, error: 'internal error' }, { status: 500 })
+    return NextResponse.json(
+      { success: false, error: 'internal error' },
+      { status: 500 },
+    )
   }
 }
 

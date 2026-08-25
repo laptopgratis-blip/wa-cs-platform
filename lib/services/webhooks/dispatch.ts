@@ -20,7 +20,12 @@ export function buildEnvelope(
   type: WebhookEnvelope['type'],
   data: Record<string, unknown>,
 ): WebhookEnvelope {
-  return { id: `evt_${randomUUID()}`, type, createdAt: new Date().toISOString(), data }
+  return {
+    id: `evt_${randomUUID()}`,
+    type,
+    createdAt: new Date().toISOString(),
+    data,
+  }
 }
 
 /**
@@ -35,7 +40,11 @@ export function emitWebhookEvent(input: {
   void (async () => {
     try {
       const endpoints = await prisma.webhookEndpoint.findMany({
-        where: { userId: input.userId, isActive: true, events: { has: input.type } },
+        where: {
+          userId: input.userId,
+          isActive: true,
+          events: { has: input.type },
+        },
         select: { id: true },
       })
       if (endpoints.length === 0) return
@@ -54,10 +63,9 @@ export function emitWebhookEvent(input: {
         ),
       )
 
-      // Percobaan pertama langsung, berurutan (jumlah endpoint kecil, maks 5).
-      for (const row of rows) {
-        await deliverOne(row.id)
-      }
+      // Percobaan pertama langsung, PARALEL: satu endpoint yang lambat/timeout
+      // tidak boleh menahan pengiriman ke endpoint lain (maks 5 per user).
+      await Promise.allSettled(rows.map((row) => deliverOne(row.id)))
     } catch (err) {
       console.error('[webhooks/dispatch] emit gagal:', err)
     }

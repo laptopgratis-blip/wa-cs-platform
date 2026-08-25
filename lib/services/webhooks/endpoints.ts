@@ -45,7 +45,9 @@ function newSecret(): string {
   return `whsec_${randomBytes(24).toString('base64url')}`
 }
 
-export async function listWebhookEndpoints(userId: string): Promise<WebhookEndpointView[]> {
+export async function listWebhookEndpoints(
+  userId: string,
+): Promise<WebhookEndpointView[]> {
   return prisma.webhookEndpoint.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
@@ -75,8 +77,11 @@ export async function createWebhookEndpoint(input: {
       // Kuota ditegakkan atomik — pelajaran dari SellerApiKey: count+create
       // tanpa lock tembus saat request paralel.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('webhook_endpoint'), hashtext(${input.userId}))`
-      const count = await tx.webhookEndpoint.count({ where: { userId: input.userId } })
-      if (count >= MAX_WEBHOOK_ENDPOINTS_PER_USER) throw new EndpointQuotaError()
+      const count = await tx.webhookEndpoint.count({
+        where: { userId: input.userId },
+      })
+      if (count >= MAX_WEBHOOK_ENDPOINTS_PER_USER)
+        throw new EndpointQuotaError()
       return tx.webhookEndpoint.create({
         data: {
           userId: input.userId,
@@ -108,12 +113,16 @@ export async function updateWebhookEndpoint(input: {
   description?: string
   events?: WebhookEventType[]
   isActive?: boolean
-}): Promise<{ ok: true; endpoint: WebhookEndpointView } | { ok: false; error: string; notFound?: boolean }> {
+}): Promise<
+  | { ok: true; endpoint: WebhookEndpointView }
+  | { ok: false; error: string; notFound?: boolean }
+> {
   if (input.url !== undefined) {
     try {
       await assertSafeWebhookUrl(input.url)
     } catch (err) {
-      if (err instanceof WebhookUrlError) return { ok: false, error: err.message }
+      if (err instanceof WebhookUrlError)
+        return { ok: false, error: err.message }
       return { ok: false, error: 'Gagal memeriksa URL. Coba lagi.' }
     }
   }
@@ -123,18 +132,37 @@ export async function updateWebhookEndpoint(input: {
     where: { id: input.endpointId, userId: input.userId },
     data: {
       ...(input.url !== undefined ? { url: input.url } : {}),
-      ...(input.description !== undefined ? { description: input.description.trim() || null } : {}),
+      ...(input.description !== undefined
+        ? { description: input.description.trim() || null }
+        : {}),
       ...(input.events !== undefined ? { events: input.events } : {}),
       ...(input.isActive !== undefined
         ? {
             isActive: input.isActive,
             // Aktifkan lagi = beri kesempatan bersih: reset streak & jejak auto-disable.
-            ...(input.isActive ? { failStreak: 0, autoDisabledAt: null, lastError: null } : {}),
+            ...(input.isActive
+              ? { failStreak: 0, autoDisabledAt: null, lastError: null }
+              : {}),
           }
         : {}),
     },
   })
-  if (res.count === 0) return { ok: false, error: 'Endpoint tidak ditemukan', notFound: true }
+  if (res.count === 0)
+    return { ok: false, error: 'Endpoint tidak ditemukan', notFound: true }
+
+  // Dinonaktifkan manual → matikan (DEAD) sisa delivery yang menggantung.
+  // Tanpa ini, delivery FAILED-nya luput dari cron (yang menyaring endpoint
+  // nonaktif) sehingga tampak "masih akan di-retry" selamanya sampai purge.
+  if (input.isActive === false) {
+    await prisma.webhookDelivery.updateMany({
+      where: {
+        endpointId: input.endpointId,
+        status: { in: ['PENDING', 'FAILED'] },
+      },
+      data: { status: 'DEAD', error: 'Endpoint dinonaktifkan' },
+    })
+  }
+
   const endpoint = await prisma.webhookEndpoint.findUniqueOrThrow({
     where: { id: input.endpointId },
     select: VIEW_SELECT,
@@ -173,27 +201,41 @@ export async function rotateWebhookSecret(input: {
 export async function sendTestEvent(input: {
   userId: string
   endpointId: string
-}): Promise<{ ok: boolean; httpStatus: number | null; error: string | null } | { ok: false; error: string; notFound: true }> {
+}): Promise<
+  | { ok: boolean; httpStatus: number | null; error: string | null }
+  | { ok: false; error: string; notFound: true }
+> {
   const endpoint = await prisma.webhookEndpoint.findFirst({
     where: { id: input.endpointId, userId: input.userId },
     select: { id: true, isActive: true },
   })
-  if (!endpoint) return { ok: false, error: 'Endpoint tidak ditemukan', notFound: true }
+  if (!endpoint)
+    return { ok: false, error: 'Endpoint tidak ditemukan', notFound: true }
 
   const envelope: WebhookEnvelope = buildEnvelope('ping', {
-    message: 'Uji koneksi dari Hulao — kalau kamu membaca ini, endpoint-mu bekerja.',
+    message:
+      'Uji koneksi dari Hulao — kalau kamu membaca ini, endpoint-mu bekerja.',
   })
   const row = await prisma.webhookDelivery.create({
-    data: { endpointId: endpoint.id, eventType: 'ping', payload: envelope as unknown as object },
+    data: {
+      endpointId: endpoint.id,
+      eventType: 'ping',
+      payload: envelope as unknown as object,
+    },
     select: { id: true },
   })
   const outcome = await deliverOne(row.id)
-  if (!outcome) return { ok: false, httpStatus: null, error: 'Delivery sedang diproses' }
+  if (!outcome)
+    return { ok: false, httpStatus: null, error: 'Delivery sedang diproses' }
   return outcome
 }
 
 /** Dipakai halaman riwayat delivery per endpoint. */
-export async function listDeliveries(input: { userId: string; endpointId: string; take?: number }) {
+export async function listDeliveries(input: {
+  userId: string
+  endpointId: string
+  take?: number
+}) {
   const endpoint = await prisma.webhookEndpoint.findFirst({
     where: { id: input.endpointId, userId: input.userId },
     select: { id: true },
