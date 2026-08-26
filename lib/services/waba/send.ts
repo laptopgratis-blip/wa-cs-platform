@@ -67,10 +67,13 @@ export async function sendCloudText(input: {
       const { code, httpStatus, message } = result.error
       // Token mati/dicabut → tandai sesi ERROR supaya UI & cron tahu.
       if ((code !== undefined && TOKEN_ERROR_CODES.has(code)) || httpStatus === 401) {
+        // lastError tampil di tooltip kartu sesi — pakai copy ramah, pesan
+        // mentah Meta (Inggris) cukup di log server.
+        console.error(`[waba/send] token ditolak sesi ${session.id}: ${message}`)
         await prisma.whatsappSession
           .update({
             where: { id: session.id },
-            data: { status: 'ERROR', lastError: `Token Meta ditolak: ${message}` },
+            data: { status: 'ERROR', lastError: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup' },
           })
           .catch(() => undefined)
         return { success: false, error: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup', code: 'TOKEN_INVALID' }

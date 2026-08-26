@@ -89,18 +89,22 @@ export function AddWaModal({
           ? `/api/whatsapp/${existingSessionId}/reconnect`
           : '/api/whatsapp/connect'
         const res = await fetch(url, { method: 'POST' })
-        const json = (await res.json()) as ConnectResponse
+        // Guard parse: respons non-JSON (mis. halaman 502 proxy) jangan
+        // dilempar sebagai SyntaxError mentah ke user.
+        const json = (await res.json().catch(() => null)) as ConnectResponse | null
         if (aborted) return
-        if (!res.ok || !json.success || !json.data) {
-          setError(json.error || 'Gagal memulai koneksi')
+        if (!res.ok || !json?.success || !json.data) {
+          setError(json?.error || 'Gagal memulai koneksi')
           return
         }
         setSessionId(json.data.id)
         sessionRef.current = json.data.id
         setStatus(json.data.status)
-      } catch (err) {
+      } catch {
         if (aborted) return
-        setError((err as Error).message)
+        // Error di sini = fetch gagal total; pesan bawaan browser ("Failed
+        // to fetch") tidak membantu user.
+        setError('Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.')
       }
     })()
 
@@ -128,15 +132,30 @@ export function AddWaModal({
     function handleQr(payload: QrEventPayload) {
       if (payload.sessionId !== sessionId) return
       setQrDataUrl(payload.qrDataUrl)
-      setQrAt(Date.now()) // reset countdown tiap QR baru
+      const now = Date.now()
+      setQrAt(now) // reset countdown tiap QR baru
+      // Ticker 1 dtk baru menulis nowTick SATU detik kemudian. Tanpa seed ini
+      // render pertama memakai nowTick=0 → (0 - qrAt) negatif raksasa dan
+      // countdown sempat menampilkan angka ngaco (~1,7 miliar detik).
+      setNowTick(now)
       setStatus('WAITING_QR')
+      setError(null) // QR baru datang = pulih; buang error lama
     }
     function handleStatus(payload: StatusEventPayload) {
       if (payload.sessionId !== sessionId) return
       // Defensive: hanya update kalau payload punya status (event 'connected'/
       // 'disconnected' punya schema beda — tidak ada field status).
       if (payload.status) setStatus(payload.status)
-      if (payload.reason) setError(payload.reason)
+      // `reason` cuma layak tampil merah kalau sesi benar-benar berhenti.
+      // Saat CONNECTING/WAITING_QR/CONNECTED itu keterangan transien (mis.
+      // pesan internal Baileys pasca-pairing) — menampilkannya bikin user
+      // kira scan-nya gagal padahal koneksi sedang lanjut. Status non-terminal
+      // juga membersihkan error lama supaya tidak nyangkut.
+      if (payload.status === 'ERROR' || payload.status === 'DISCONNECTED') {
+        if (payload.reason) setError(payload.reason)
+      } else if (payload.status) {
+        setError(null)
+      }
     }
     function handleConnected(payload: StatusEventPayload) {
       if (payload.sessionId !== sessionId) return
@@ -230,8 +249,8 @@ export function AddWaModal({
         } | null
         setError(j?.error || 'Gagal memuat ulang QR')
       }
-    } catch (err) {
-      setError((err as Error).message)
+    } catch {
+      setError('Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.')
     } finally {
       setRefreshing(false)
     }
@@ -244,6 +263,7 @@ export function AddWaModal({
       setSessionId(null)
       setQrDataUrl(null)
       setQrAt(null)
+      setNowTick(0)
       setError(null)
     }
   }, [open])
@@ -287,6 +307,10 @@ export function AddWaModal({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Saat CONNECTING, QR lama sengaja disembunyikan dan diganti spinner:
+            tepat setelah QR dipindai Baileys menutup stream (515) untuk
+            restart socket, dan menampilkan QR basi + countdown di momen itu
+            bikin user kira scan-nya tidak terbaca. */}
         <div className="bg-muted/30 flex min-h-[320px] items-center justify-center rounded-lg border p-4">
           {error ? (
             <div className="text-center">
@@ -300,7 +324,7 @@ export function AddWaModal({
                 <X className="mr-2 size-4" /> Tutup
               </Button>
             </div>
-          ) : qrDataUrl ? (
+          ) : qrDataUrl && status !== 'CONNECTING' ? (
             <div className="flex flex-col items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

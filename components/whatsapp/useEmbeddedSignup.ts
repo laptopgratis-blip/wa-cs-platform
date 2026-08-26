@@ -80,7 +80,13 @@ function describeSdkError(err: unknown): string {
       )
     }
   }
-  return (err as Error)?.message || 'Terjadi kesalahan'
+  // fetch yang gagal total (offline/DNS/adblock jaringan) dilempar sebagai
+  // TypeError berpesan bawaan browser ("Failed to fetch") — ganti copy ramah.
+  // Error lain diteruskan: pesannya dari server kita (sudah Bahasa Indonesia).
+  if (err instanceof TypeError) {
+    return 'Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.'
+  }
+  return (err as Error)?.message || 'Terjadi kesalahan — coba lagi.'
 }
 
 export function useEmbeddedSignup(open: boolean) {
@@ -113,7 +119,7 @@ export function useEmbeddedSignup(open: boolean) {
       if (activeRef.current) setPhase('ready')
     } catch (err) {
       if (!activeRef.current) return
-      setError((err as Error).message)
+      setError(describeSdkError(err))
       setPhase('error')
     } finally {
       preparingRef.current = false

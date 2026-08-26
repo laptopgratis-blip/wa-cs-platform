@@ -155,7 +155,10 @@ async function handle(req: Request) {
             where: { id: session.id },
             data: {
               status: 'ERROR',
-              lastError: `Token Meta hampir kedaluwarsa & refresh gagal: ${result.error} — hubungkan ulang via Embedded Signup`,
+              // Detail kegagalan (raw, sering Inggris) sudah di console.error
+              // di atas — user cukup tahu aksinya.
+              lastError:
+                'Token Meta hampir kedaluwarsa & refresh gagal — hubungkan ulang via Embedded Signup',
             },
           })
         }

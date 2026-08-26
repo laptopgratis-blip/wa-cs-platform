@@ -144,8 +144,8 @@ export function AddWabaModal({
         return
       }
       setManualResult(json.data)
-    } catch (err) {
-      setManualError((err as Error).message)
+    } catch {
+      setManualError('Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.')
     } finally {
       setManualBusy(false)
     }

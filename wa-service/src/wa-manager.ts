@@ -51,6 +51,11 @@ const RECONNECT_MAX_DELAY_MS = 300_000
 // yang benar-benar mati tetap akhirnya berhenti (tidak hammer selamanya).
 const MAX_RECONNECT_ATTEMPTS = 30
 const FAST_RECONNECT_DELAY_MS = 1500
+// 515 (restartRequired) memang normal SEKALI pasca-pairing, tapi 515 beruntun
+// tanpa pernah 'open' = loop tidak konvergen (creds gagal persist, protokol
+// bermasalah). Lewat batas ini, 515 ikut jalur backoff+cap supaya berujung
+// status ERROR yang terlihat user — bukan spinner senyap selamanya.
+const MAX_RESTART_STREAK = 5
 
 // Hitung delay reconnect percobaan ke-N (1-based). Jitter LEBAR (±50%) + stagger
 // absolut pada gelombang awal supaya banyak sesi yang drop berbarengan TIDAK
@@ -181,6 +186,9 @@ interface SessionEntry {
   // Hitungan percobaan reconnect beruntun — reset saat connection open sukses.
   // Dipakai untuk exponential backoff + stop setelah MAX_RECONNECT_ATTEMPTS.
   reconnectAttempts: number
+  // Hitungan close 515 (restartRequired) beruntun tanpa 'open' — lihat
+  // MAX_RESTART_STREAK. Reset saat connection open sukses.
+  restartStreak: number
   // ID pesan outgoing yang baru-baru ini kita kirim sendiri (msg.key.id). Dipakai
   // untuk dedup event messages.upsert fromMe — cegah race antara save ke DB di
   // Next.js dan event echo dari Baileys. Entry di-evict setelah 60 detik.
@@ -310,9 +318,19 @@ export class WaManager {
       inFlight: new Set<string>(),
       pendingByContact: new Map<string, string[]>(),
       reconnectAttempts: 0,
+      restartStreak: 0,
       recentlySentIds: new Set<string>(),
     }
     entry.intentionallyClosed = false
+    // Connect saat status ERROR hanya datang dari aksi eksternal (user klik
+    // reconnect) — loop otomatis sudah berhenti begitu cap tercapai. Mulai
+    // hitungan dari nol supaya satu kegagalan berikutnya tidak langsung ERROR
+    // lagi karena counter lama. JANGAN reset tanpa syarat: connect() juga
+    // dipanggil setTimeout reconnect otomatis (reset buta mematikan cap).
+    if (existing && existing.state.status === 'ERROR') {
+      entry.reconnectAttempts = 0
+      entry.restartStreak = 0
+    }
     this.updateState(entry, { status: 'CONNECTING' })
     this.sessions.set(sessionId, entry)
 
@@ -327,7 +345,14 @@ export class WaManager {
     })
     entry.socket = sock
 
-    sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', () => {
+      // saveCreds bisa reject (mis. folder session sudah di-wipe saat
+      // loggedOut) — tanpa catch jadi unhandled rejection yang bisa
+      // mematikan proses Node.
+      void saveCreds().catch((err) =>
+        console.error(`[wa-manager:${sessionId}] gagal simpan creds:`, err),
+      )
+    })
 
     sock.ev.on('messages.upsert', (event) => {
       // Hanya pesan baru (bukan history sync). Process async, jangan block.
@@ -391,6 +416,7 @@ export class WaManager {
         // Koneksi sukses — reset counter backoff supaya disconnect berikutnya
         // mulai lagi dari delay terkecil.
         entry.reconnectAttempts = 0
+        entry.restartStreak = 0
         const me = sock.user
         const phoneNumber = me?.id ? me.id.split(':')[0]?.split('@')[0] ?? null : null
         this.updateState(entry, {
@@ -420,15 +446,24 @@ export class WaManager {
         entry.socket = null
 
         if (isLoggedOut || entry.intentionallyClosed) {
+          // Copy ramah — string ini tampil ke user (StatusEvent.reason →
+          // modal / tooltip kartu sesi). loggedOut = user mencabut tautan
+          // perangkat dari HP; intentional close tidak butuh alasan.
+          const friendlyReason = isLoggedOut
+            ? 'Sesi keluar — tautan perangkat dicabut dari HP. Scan QR ulang untuk menghubungkan lagi.'
+            : null
+          if (isLoggedOut && reasonText) {
+            console.warn(`[wa-manager:${sessionId}] logged out: ${reasonText}`)
+          }
           this.updateState(entry, {
             status: 'DISCONNECTED',
             qr: null,
             qrDataUrl: null,
-            lastError: reasonText,
+            lastError: friendlyReason,
           })
           this.emit<DisconnectedEvent>('disconnected', {
             sessionId,
-            reason: reasonText,
+            reason: friendlyReason,
           })
           if (isLoggedOut) {
             await this.wipeFolder(sessionId).catch(() => {})
@@ -473,8 +508,14 @@ export class WaManager {
         // dihitung sebagai kegagalan. Reason lain: exponential backoff +
         // jitter, stop setelah MAX_RECONNECT_ATTEMPTS percobaan beruntun.
         const isRestartRequired = reasonCode === DisconnectReason.restartRequired
+        if (isRestartRequired) entry.restartStreak += 1
+        // 515 masih dalam batas streak = langkah normal pasca-pairing.
+        // Lewat batas = loop tidak konvergen → perlakukan sebagai kegagalan
+        // biasa (dihitung, backoff, dan akhirnya cap ke ERROR).
+        const benignRestart =
+          isRestartRequired && entry.restartStreak <= MAX_RESTART_STREAK
         let delayMs = FAST_RECONNECT_DELAY_MS
-        if (!isRestartRequired) {
+        if (!benignRestart) {
           entry.reconnectAttempts += 1
           if (entry.reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
             this.updateState(entry, {
@@ -492,9 +533,15 @@ export class WaManager {
         }
 
         // Reconnect otomatis untuk error lain (network, server down, dll.).
+        // restartRequired (515) BUKAN kegagalan: itu langkah normal pasca-scan
+        // QR — Baileys memang menutup stream dan minta socket di-restart tepat
+        // setelah pairing sukses. Jangan simpan pesan mentahnya sebagai
+        // lastError, karena string itu ikut ter-emit ke UI lewat
+        // StatusEvent.reason dan tampil merah ("Stream Errored (restart
+        // required)") padahal koneksi justru sedang lanjut normal.
         this.updateState(entry, {
           status: 'CONNECTING',
-          lastError: reasonText,
+          lastError: benignRestart ? null : reasonText,
         })
         setTimeout(() => {
           if (!entry.intentionallyClosed) {
@@ -502,7 +549,7 @@ export class WaManager {
               console.error(`[wa-manager:${sessionId}] reconnect gagal:`, err)
               this.updateState(entry, {
                 status: 'ERROR',
-                lastError: (err as Error).message,
+                lastError: 'Gagal menyambung ulang ke WhatsApp — coba hubungkan lagi.',
               })
             })
           }

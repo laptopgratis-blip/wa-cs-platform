@@ -239,10 +239,12 @@ async function handleMetaError(ctx: {
   const suffix = ctx.code ? ` (code ${ctx.code})` : ''
 
   if ((ctx.code !== undefined && ctx.code === 190) || ctx.httpStatus === 401) {
+    // lastError tampil di tooltip kartu sesi — copy ramah; raw Meta ke log.
+    console.error(`[waba/send-template] token ditolak sesi ${ctx.sessionId}: ${ctx.message}`)
     await prisma.whatsappSession
       .update({
         where: { id: ctx.sessionId },
-        data: { status: 'ERROR', lastError: `Token Meta ditolak: ${ctx.message}` },
+        data: { status: 'ERROR', lastError: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup' },
       })
       .catch(() => undefined)
     return { success: false, error: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup', code: 'TOKEN_INVALID' }
