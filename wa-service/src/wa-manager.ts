@@ -28,6 +28,7 @@ import {
   type InternalSoulConfig,
 } from './internal-api.js'
 import { phoneToSendJid, resolvePhoneNumber } from './lib/jid-resolver.js'
+import { isStaleSocketEvent } from './socket-guard.js'
 import { tokenChecker } from './token-checker.js'
 
 // Cache version Baileys di module-level. fetchLatestBaileysVersion() HTTP
@@ -395,6 +396,24 @@ export class WaManager {
     })
 
     sock.ev.on('connection.update', async (update) => {
+      // GUARD IDENTITAS — wajib paling atas. Handler ini menutup `entry` dan
+      // `sock` dari doConnect, dan socket LAMA bisa masih memancarkan event
+      // jauh setelah digantikan socket baru: `logout()` Baileys memanggil
+      // `end()` TANPA di-await, jadi event 'close'-nya telat datang — sering
+      // setelah disconnect() selesai dan connect() berikutnya sudah membuat
+      // sesi baru. Tanpa guard, event basi itu menimpa sesi yang sedang hidup:
+      //   - 'close' + loggedOut → wipeFolder() MENGHAPUS folder auth milik
+      //     socket baru (pairing yang baru sukses langsung rusak),
+      //   - 'open' dari socket orphan → status CONNECTED palsu ke UI & DB,
+      //   - 'qr' basi → QR yang sudah mati ikut tampil.
+      // Dua syarat: entry masih yang terdaftar di map, DAN socket ini masih
+      // socket aktif milik entry itu.
+      if (isStaleSocketEvent(this.sessions.get(sessionId), entry, sock)) {
+        console.warn(
+          `[wa-manager:${sessionId}] abaikan event socket basi (connection=${update.connection ?? '-'})`,
+        )
+        return
+      }
       const { connection, lastDisconnect, qr } = update
 
       if (qr) {
@@ -695,7 +714,22 @@ export class WaManager {
     entry.intentionallyClosed = true
     try {
       if (wipe) {
-        await entry.socket?.logout().catch(() => {})
+        // logout() Baileys = `await sendNode(...)` DULU, baru `void end(...)`.
+        // Kalau sendNode menolak — mis. socket masih CONNECTING sehingga ws
+        // belum OPEN dan sendRawMessage melempar Boom 'Connection Closed' —
+        // maka end() TIDAK PERNAH jalan dan socket tetap hidup. Padahal entry
+        // ini sebentar lagi dihapus dari map, jadi socket itu jadi orphan yang
+        // tak terjangkau siapa pun: handler 'open'-nya masih bisa menembakkan
+        // status CONNECTED palsu ke UI dan DB. Karena itu end() dipanggil
+        // TANPA syarat — aman, karena end() idempoten (dijaga flag `closed`,
+        // diset sinkron sebelum await pertama).
+        await entry.socket?.logout().catch((err) => {
+          console.warn(
+            `[wa-manager:${sessionId}] logout gagal — tetap paksa end():`,
+            err,
+          )
+        })
+        entry.socket?.end(undefined)
       } else {
         entry.socket?.end(undefined)
       }
@@ -705,6 +739,10 @@ export class WaManager {
 
     if (wipe) {
       await this.wipeFolder(sessionId).catch(() => {})
+      // Putus referensi socket sebelum entry dibuang dari map — bersama guard
+      // identitas di connection.update, ini memastikan socket lama tidak bisa
+      // lagi menyentuh state sesi.
+      entry.socket = null
       this.sessions.delete(sessionId)
       this.emit<DisconnectedEvent>('disconnected', { sessionId, reason: 'wiped' })
       return null
