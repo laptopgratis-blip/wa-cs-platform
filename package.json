@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx lib/host-gen-gate.test.ts && tsx lib/services/host-gen/kling-retry.test.ts && tsx lib/services/subscription-entitlement.test.ts && tsx lib/services/lms/lms-entitlement.test.ts && tsx lib/validations/order-form-limit.test.ts"
+    "test": "tsx lib/host-gen-gate.test.ts && tsx lib/services/host-gen/kling-retry.test.ts && tsx lib/services/subscription-entitlement.test.ts && tsx lib/services/lms/lms-entitlement.test.ts && tsx lib/validations/order-form-limit.test.ts && tsx lib/services/public-api/sender-selection.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

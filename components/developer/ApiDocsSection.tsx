@@ -93,9 +93,49 @@ const ERRORS: Array<{ http: string; code: string; act: string }> = [
     act: 'Cursor sudah tidak berlaku (datanya terhapus). Ulangi dari halaman pertama.',
   },
   {
+    http: '402',
+    code: 'insufficient_credit',
+    act: 'Saldo Kredit Pesan WA kurang. Isi ulang lalu ulangi.',
+  },
+  {
+    http: '409',
+    code: 'no_session',
+    act: 'Belum ada nomor WhatsApp terhubung. Hubungkan dulu di menu WhatsApp.',
+  },
+  {
+    http: '409',
+    code: 'session_unavailable',
+    act: 'Nomor di session_id sedang tidak terhubung, sementara strict_session mengunci ke nomor itu. Hubungkan nomornya, atau lepas strict_session.',
+  },
+  {
+    http: '409',
+    code: 'window_closed',
+    act: 'Window 24 jam tutup. Kirim lewat /messages/template dengan template yang disetujui.',
+  },
+  {
+    http: '409',
+    code: 'no_template',
+    act: 'Template belum disetujui Meta / tidak cocok dengan WABA nomor pengirim.',
+  },
+  {
+    http: '409',
+    code: 'marketing_opt_out',
+    act: 'Kontak menolak pesan marketing. Jangan kirim ulang.',
+  },
+  {
+    http: '409',
+    code: 'blacklisted',
+    act: 'Kontak ada di blacklist akunmu.',
+  },
+  {
     http: '429',
     code: 'rate_limited',
     act: 'Tunggu sesuai header Retry-After lalu ulangi.',
+  },
+  {
+    http: '502',
+    code: 'send_failed',
+    act: 'Pengiriman gagal di sisi WhatsApp. Pastikan nomor masih terhubung lalu ulangi.',
   },
   {
     http: '500',
@@ -116,6 +156,7 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
           <TabsList className="flex w-full flex-wrap justify-start">
             <TabsTrigger value="mulai">Mulai Cepat</TabsTrigger>
             <TabsTrigger value="endpoint">Endpoint</TabsTrigger>
+            <TabsTrigger value="pengirim">Nomor Pengirim</TabsTrigger>
             <TabsTrigger value="error">Kode Error</TabsTrigger>
             <TabsTrigger value="kuota">Batas &amp; Kuota</TabsTrigger>
             <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
@@ -188,12 +229,12 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
             <Endpoint
               method="POST"
               path="/api/v1/messages"
-              desc="Kirim teks (Baileys / Cloud dalam window 24 jam). Body: { phone_number, content, session_id? }. Maks 30 kirim/menit per kunci."
+              desc="Kirim teks (Baileys / Cloud dalam window 24 jam). Body: { phone_number, content, session_id?, strict_session? }. Maks 30 kirim/menit per kunci. Lihat tab Nomor Pengirim."
             />
             <Endpoint
               method="POST"
               path="/api/v1/messages/template"
-              desc="Kirim template Meta yang disetujui (untuk di luar window). Body: { phone_number, template_name|template_id, params:[], session_id? }."
+              desc="Kirim template Meta yang disetujui (untuk di luar window). Body: { phone_number, template_name|template_id, params:[], session_id?, strict_session? }."
             />
             <div className="mt-4 space-y-2">
               <p className="text-warm-800 text-sm font-medium">
@@ -224,6 +265,70 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
                 saat retry.
               </p>
             </div>
+          </TabsContent>
+
+          <TabsContent value="pengirim" className="space-y-3 pt-4">
+            <p className="text-warm-600 text-sm">
+              Kalau akunmu punya lebih dari satu nomor terhubung, platform tidak memilih asal —
+              ia menyusun daftar prioritas lalu mencoba berurutan sampai ada yang berhasil.
+              Urutannya:
+            </p>
+            <ol className="text-warm-600 list-decimal space-y-1 pl-5 text-sm">
+              <li>
+                Nomor yang kamu sebut di <code className="font-mono text-xs">session_id</code>.
+              </li>
+              <li>Nomor yang terakhir dipakai untuk chat dengan tujuan itu.</li>
+              <li>Nomor Baileys (QR scan).</li>
+              <li>Nomor Cloud API (resmi Meta).</li>
+            </ol>
+            <p className="text-warm-600 text-sm">
+              Ambil daftar nomor beserta ID-nya lewat{' '}
+              <code className="font-mono text-xs">GET /api/v1/senders</code> — urutan responsnya
+              sama dengan urutan prioritas di atas.
+            </p>
+            <Code>{`curl "${baseUrl}/api/v1/senders" -H "Authorization: Bearer \$KEY"
+
+{
+  "success": true,
+  "data": { "items": [
+    { "sessionId": "cmt9j0gq...", "provider": "BAILEYS", "phoneNumber": "6282220651700", "label": "CS Utama" }
+  ] }
+}`}</Code>
+
+            <p className="text-warm-800 pt-1 text-sm font-medium">Memilih nomor tertentu</p>
+            <p className="text-warm-600 text-sm">
+              Sertakan <code className="font-mono text-xs">session_id</code> di body. Kalau ID itu
+              bukan milik akunmu, request ditolak{' '}
+              <code className="font-mono text-xs">404 not_found</code> — bukan diam-diam dipakai.
+            </p>
+            <Code>{`curl -X POST "${baseUrl}/api/v1/messages" \\
+  -H "Authorization: Bearer \$KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"phone_number":"628123456789","content":"Halo","session_id":"cmt9j0gq..."}'`}</Code>
+
+            <p className="text-warm-800 pt-1 text-sm font-medium">
+              Mengunci nomor (strict_session)
+            </p>
+            <p className="text-warm-600 text-sm">
+              Secara default <code className="font-mono text-xs">session_id</code> hanya{' '}
+              <strong>preferensi</strong>: kalau nomor itu gagal kirim, platform tetap mencoba nomor
+              lain supaya pesan tidak hilang. Untuk bisnis yang nomornya penting (beda brand atau
+              beda cabang), failover diam-diam itu justru merugikan — pelanggan menerima pesan dari
+              nomor tak dikenal dan membalas ke sana.
+            </p>
+            <p className="text-warm-600 text-sm">
+              Tambahkan <code className="font-mono text-xs">strict_session: true</code> untuk
+              mengunci. Kalau nomor itu tidak siap kirim, request gagal dengan{' '}
+              <code className="font-mono text-xs">409 session_unavailable</code> dan tidak ada pesan
+              yang keluar dari nomor lain.
+            </p>
+            <Code>{`-d '{"phone_number":"628123456789","content":"Halo","session_id":"cmt9j0gq...","strict_session":true}'`}</Code>
+            <p className="text-warm-500 text-xs">
+              Berlaku sama untuk{' '}
+              <code className="font-mono">/api/v1/messages/template</code>. Kirim{' '}
+              <code className="font-mono">session_id: null</code> (atau hilangkan field-nya) berarti
+              biarkan platform yang memilih.
+            </p>
           </TabsContent>
 
           <TabsContent value="error" className="pt-4">

@@ -5,6 +5,7 @@
 // menerjemahkan hasilnya ke bentuk API + kode HTTP.
 import { prisma } from '@/lib/prisma'
 import { listSenderCandidates } from '@/lib/wa-session'
+import { applySessionPin } from '@/lib/services/public-api/sender-selection'
 import {
   smartSend,
   type SmartSendCode,
@@ -96,7 +97,12 @@ function mapFailure(
  * tanpa verifikasi, id sesi milik orang lain bisa ikut (IDOR). Hasil akhir
  * tetap difilter ke userId sebagai lapis kedua.
  */
-async function ownedCandidates(userId: string, to: string, sessionId?: string) {
+async function ownedCandidates(
+  userId: string,
+  to: string,
+  sessionId?: string,
+  strictSession = false,
+) {
   let explicit: string[] | undefined
   if (sessionId) {
     const s = await prisma.whatsappSession.findFirst({
@@ -111,7 +117,22 @@ async function ownedCandidates(userId: string, to: string, sessionId?: string) {
     explicitSessionIds: explicit,
     preferContactPhone: to,
   })
-  return { candidates: cands.filter((c) => c.userId === userId) }
+  const owned = cands.filter((c) => c.userId === userId)
+  return { candidates: applySessionPin(owned, sessionId, strictSession) }
+}
+
+// strict_session menyisakan 0 kandidat kalau sesi yang dipilih ada tapi tidak
+// siap kirim (belum CONNECTED / dinonaktifkan). Tanpa ini pesannya jadi
+// "Tidak ada sesi WhatsApp terhubung" yang menyesatkan — seolah tak ada nomor
+// sama sekali, padahal masalahnya cuma nomor yang DIPILIH sedang tidak aktif.
+function strictSessionUnavailable(): PublicSendOutcome {
+  return {
+    ok: false,
+    httpStatus: 409,
+    code: 'session_unavailable',
+    error:
+      'Nomor yang dipilih di session_id sedang tidak terhubung. Hubungkan nomor itu, atau lepas strict_session agar bisa memakai nomor lain.',
+  }
 }
 
 export async function sendPublicText(input: {
@@ -119,10 +140,19 @@ export async function sendPublicText(input: {
   to: string
   content: string
   sessionId?: string
+  strictSession?: boolean
 }): Promise<PublicSendOutcome> {
-  const owned = await ownedCandidates(input.userId, input.to, input.sessionId)
+  const owned = await ownedCandidates(
+    input.userId,
+    input.to,
+    input.sessionId,
+    input.strictSession,
+  )
   if ('error' in owned)
     return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
+  if (input.sessionId && input.strictSession && owned.candidates.length === 0) {
+    return strictSessionUnavailable()
+  }
 
   const res = await smartSend({
     candidates: owned.candidates,
@@ -154,6 +184,7 @@ export async function sendPublicTemplate(input: {
   templateName?: string
   params: string[]
   sessionId?: string
+  strictSession?: boolean
 }): Promise<PublicSendOutcome> {
   // Resolusi template MILIK user (APPROVED). Dukung by id atau by name.
   const template = await prisma.wabaTemplate.findFirst({
@@ -174,9 +205,17 @@ export async function sendPublicTemplate(input: {
     }
   }
 
-  const owned = await ownedCandidates(input.userId, input.to, input.sessionId)
+  const owned = await ownedCandidates(
+    input.userId,
+    input.to,
+    input.sessionId,
+    input.strictSession,
+  )
   if ('error' in owned)
     return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
+  if (input.sessionId && input.strictSession && owned.candidates.length === 0) {
+    return strictSessionUnavailable()
+  }
 
   const sendParams: TemplateSendParams = { body: input.params }
   // Teks yang dikirim lewat Baileys / Cloud-in-window (bila fallback perlu) =

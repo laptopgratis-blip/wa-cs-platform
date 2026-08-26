@@ -4,6 +4,7 @@
 // plus form pilihan Soul + Model AI.
 import {
   BadgeCheck,
+  Copy,
   LayoutTemplate,
   Loader2,
   MoreVertical,
@@ -93,6 +94,32 @@ interface WaSessionCardProps {
 }
 
 const NONE = '__NONE__' as const
+
+// Salin ke clipboard dengan fallback execCommand — Clipboard API butuh
+// secure context, sementara staging/LAN kadang diakses lewat http.
+async function copySessionId(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // jatuh ke fallback
+  }
+  try {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    return ok
+  } catch {
+    return false
+  }
+}
 
 export function WaSessionCard({
   session,
@@ -279,6 +306,20 @@ export function WaSessionCard({
                 kalau status CONNECTED tapi sebenarnya broken (mis. WA kick
                 device tanpa update status di sini). Sesi Cloud API tidak
                 memakai QR — repair-nya lewat Embedded Signup ulang. */}
+              {/* ID sesi dipakai sebagai `session_id` di API publik untuk memilih
+                  nomor pengirim. Sebelumnya nilai ini tidak muncul di UI mana
+                  pun, jadi satu-satunya cara mendapatkannya adalah memanggil
+                  GET /api/v1/senders manual. */}
+              <DropdownMenuItem
+                onClick={async () => {
+                  const ok = await copySessionId(session.id)
+                  if (ok) toast.success('ID sesi disalin — pakai sebagai session_id di API')
+                  else toast.error('Gagal menyalin — salin manual dari /api/v1/senders')
+                }}
+              >
+                <Copy className="mr-2 size-4" />
+                Salin ID sesi (untuk API)
+              </DropdownMenuItem>
               {onRepair && !isCloud && (
                 <DropdownMenuItem onClick={() => onRepair(session.id)}>
                   <QrCode className="mr-2 size-4" />

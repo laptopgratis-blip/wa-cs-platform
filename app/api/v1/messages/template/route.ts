@@ -55,7 +55,8 @@ export async function POST(req: Request) {
       templateId: parsed.data.template_id,
       templateName: parsed.data.template_name,
       params: parsed.data.params,
-      sessionId: parsed.data.session_id,
+      sessionId: parsed.data.session_id ?? undefined,
+      strictSession: parsed.data.strict_session,
     })
     if (!out.ok) {
       if (idemKey) releaseIdempotent(gate.auth.keyId, idemKey)

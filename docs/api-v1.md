@@ -105,3 +105,16 @@ Dokumentasi user (verifikasi tanda tangan, anti-replay, dedup by event id): tab 
 ## Fase berikutnya (belum ada)
 
 `POST /api/v1/messages` membungkus `smartSend` (sudah never-throw & sadar window/compliance).
+
+**Pemilihan nomor pengirim.** `listSenderCandidates` menyusun prioritas:
+`session_id` eksplisit → sesi terakhir dipakai kontak tujuan → BAILEYS → CLOUD_API
+(tie-break `updatedAt` desc). `smartSend` lalu mencoba berurutan dengan failover.
+
+`session_id` default = PREFERENSI, bukan penguncian — kandidat lain tetap ikut,
+jadi kalau sesi pilihan gagal pesan tetap keluar dari nomor lain. `strict_session:
+true` memangkas kandidat jadi sesi itu saja lewat `applySessionPin`
+(`lib/services/public-api/sender-selection.ts`, ada test-nya). Kalau hasilnya
+kosong (sesi ada tapi belum CONNECTED) balasannya `409 session_unavailable` —
+JANGAN dibiarkan jatuh ke `NO_SESSION` yang berbunyi "tidak ada sesi terhubung"
+dan menyesatkan. `session_id`/`strict_session` sengaja `nullish()`: klien &
+contoh body Playground lazim mengirim `null` eksplisit untuk "otomatis".

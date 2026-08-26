@@ -164,7 +164,8 @@ export async function POST(req: Request) {
       userId: gate.auth.userId,
       to: parsed.data.phone_number,
       content: parsed.data.content,
-      sessionId: parsed.data.session_id,
+      sessionId: parsed.data.session_id ?? undefined,
+      strictSession: parsed.data.strict_session,
     })
     if (!out.ok) {
       // Hanya cache SUKSES — lepas reservasi supaya retry boleh jalan.
