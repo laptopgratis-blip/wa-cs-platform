@@ -13,8 +13,15 @@
 
 import { NextResponse } from 'next/server'
 import { getClientIp } from '@/lib/client-ip'
-import { checkRateLimit, consumeRateLimit, recordRateLimitHit } from '@/lib/rate-limit-memory'
-import { touchApiKeyUsage, verifySellerApiKey } from '@/lib/services/seller-api-keys'
+import {
+  checkRateLimit,
+  consumeRateLimit,
+  recordRateLimitHit,
+} from '@/lib/rate-limit-memory'
+import {
+  touchApiKeyUsage,
+  verifySellerApiKey,
+} from '@/lib/services/seller-api-keys'
 
 export const API_VERSION = 'v1'
 
@@ -45,10 +52,13 @@ export interface PublicApiAuth {
 }
 
 export type PublicApiAuthResult =
-  | { ok: true; auth: PublicApiAuth }
-  | { ok: false; response: NextResponse }
+  { ok: true; auth: PublicApiAuth } | { ok: false; response: NextResponse }
 
-function rateHeaders(r: { limit: number; remaining: number; resetAtMs: number }): Record<string, string> {
+function rateHeaders(r: {
+  limit: number
+  remaining: number
+  resetAtMs: number
+}): Record<string, string> {
   return {
     'X-RateLimit-Limit': String(r.limit),
     'X-RateLimit-Remaining': String(r.remaining),
@@ -66,12 +76,22 @@ export function apiV1Error(
   status: number,
   headers: Record<string, string> = {},
 ): NextResponse {
-  return NextResponse.json({ success: false, error: message, code }, { status, headers })
+  return NextResponse.json(
+    { success: false, error: message, code },
+    { status, headers },
+  )
 }
 
 /** Respons sukses + header kuota. */
-export function apiV1Ok<T>(data: T, auth: PublicApiAuth, status = 200): NextResponse {
-  return NextResponse.json({ success: true, data }, { status, headers: auth.rateLimitHeaders })
+export function apiV1Ok<T>(
+  data: T,
+  auth: PublicApiAuth,
+  status = 200,
+): NextResponse {
+  return NextResponse.json(
+    { success: true, data },
+    { status, headers: auth.rateLimitHeaders },
+  )
 }
 
 /**
@@ -87,7 +107,9 @@ function readBearer(req: Request): string | null {
   return token && token.length > 0 ? token : null
 }
 
-export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthResult> {
+export async function requirePublicApiAuth(
+  req: Request,
+): Promise<PublicApiAuthResult> {
   // 1. Guard tebak-kunci per IP. Dua keputusan yang saling mengunci:
   //
   //    a. Yang dihitung HANYA percobaan GAGAL (pasangan check/record, bukan
@@ -113,15 +135,24 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
   if (!hardCap.allowed) {
     return {
       ok: false,
-      response: apiV1Error('rate_limited', 'Terlalu banyak request dari alamat ini.', 429, {
-        ...rateHeaders(hardCap),
-        'Retry-After': String(Math.ceil(hardCap.retryAfterMs / 1000)),
-      }),
+      response: apiV1Error(
+        'rate_limited',
+        'Terlalu banyak request dari alamat ini.',
+        429,
+        {
+          ...rateHeaders(hardCap),
+          'Retry-After': String(Math.ceil(hardCap.retryAfterMs / 1000)),
+        },
+      ),
     }
   }
 
   const ipKey = `apiv1:ip:${ip}`
-  const ipGuard = checkRateLimit({ key: ipKey, limit: RATE_LIMIT_PER_IP, windowMs: RATE_WINDOW_MS })
+  const ipGuard = checkRateLimit({
+    key: ipKey,
+    limit: RATE_LIMIT_PER_IP,
+    windowMs: RATE_WINDOW_MS,
+  })
 
   const failAuth = (code: string, message: string): PublicApiAuthResult => {
     recordRateLimitHit({ key: ipKey, windowMs: RATE_WINDOW_MS })
@@ -129,9 +160,14 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
       // Sudah lewat jatah gagal: sembunyikan alasan aslinya.
       return {
         ok: false,
-        response: apiV1Error('rate_limited', 'Terlalu banyak percobaan. Coba lagi sebentar lagi.', 429, {
-          'Retry-After': String(Math.ceil(ipGuard.retryAfterMs / 1000)),
-        }),
+        response: apiV1Error(
+          'rate_limited',
+          'Terlalu banyak percobaan. Coba lagi sebentar lagi.',
+          429,
+          {
+            'Retry-After': String(Math.ceil(ipGuard.retryAfterMs / 1000)),
+          },
+        ),
       }
     }
     return { ok: false, response: apiV1Error(code, message, 401) }
@@ -139,7 +175,10 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
 
   const token = readBearer(req)
   if (!token) {
-    return failAuth('missing_token', 'Header Authorization: Bearer <API key> wajib diisi.')
+    return failAuth(
+      'missing_token',
+      'Header Authorization: Bearer <API key> wajib diisi.',
+    )
   }
 
   // DB tumbang tidak boleh keluar sebagai halaman error Next (bocor stack &
@@ -151,15 +190,21 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
     console.error('[api/v1] gagal verifikasi kunci:', err)
     return {
       ok: false,
-      response: apiV1Error('server_error', 'Gagal memverifikasi kunci API.', 500),
+      response: apiV1Error(
+        'server_error',
+        'Gagal memverifikasi kunci API.',
+        500,
+      ),
     }
   }
 
   if (!verified.ok) {
     // malformed & not_found dijawab SAMA — jangan sampai penyerang bisa
     // membedakan "formatnya salah" dari "kunci ini tidak ada".
-    if (verified.reason === 'revoked') return failAuth('key_revoked', 'Kunci API sudah dicabut.')
-    if (verified.reason === 'expired') return failAuth('key_expired', 'Kunci API sudah kedaluwarsa.')
+    if (verified.reason === 'revoked')
+      return failAuth('key_revoked', 'Kunci API sudah dicabut.')
+    if (verified.reason === 'expired')
+      return failAuth('key_expired', 'Kunci API sudah kedaluwarsa.')
     return failAuth('invalid_token', 'Kunci API tidak valid.')
   }
 
@@ -172,10 +217,15 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
   if (!keyQuota.allowed) {
     return {
       ok: false,
-      response: apiV1Error('rate_limited', 'Kuota request per menit habis.', 429, {
-        ...rateHeaders(keyQuota),
-        'Retry-After': String(Math.ceil(keyQuota.retryAfterMs / 1000)),
-      }),
+      response: apiV1Error(
+        'rate_limited',
+        'Kuota request per menit habis.',
+        429,
+        {
+          ...rateHeaders(keyQuota),
+          'Retry-After': String(Math.ceil(keyQuota.retryAfterMs / 1000)),
+        },
+      ),
     }
   }
 
@@ -195,10 +245,15 @@ export async function requirePublicApiAuth(req: Request): Promise<PublicApiAuthR
 }
 
 /**
- * Guard scope untuk Fase 2 (kirim pesan). Fase 1 semua kunci ber-scope "read".
- * 403 dipakai KHUSUS di sini — kekurangan scope memang bukan soal identitas.
+ * Guard scope. Keputusan produk 2026-08-25: SEMUA kunci boleh kirim (satu kunci
+ * = semua akses, seperti kirimchat), jadi endpoint POST tidak memanggil ini.
+ * Disimpan untuk kemungkinan scope granular kelak. 403 = soal izin, bukan
+ * identitas.
  */
-export function requireScope(auth: PublicApiAuth, scope: string): NextResponse | null {
+export function requireScope(
+  auth: PublicApiAuth,
+  scope: string,
+): NextResponse | null {
   if (auth.scopes.includes(scope)) return null
   return apiV1Error(
     'insufficient_scope',
@@ -206,6 +261,66 @@ export function requireScope(auth: PublicApiAuth, scope: string): NextResponse |
     403,
     auth.rateLimitHeaders,
   )
+}
+
+/** Batas kirim pesan per kunci per menit — lebih ketat dari 60/mnt umum. */
+export const SEND_LIMIT_PER_KEY = 30
+
+/**
+ * Guard laju KIRIM (POST). Terpisah dari kuota umum: mengirim pesan nyata jauh
+ * lebih sensitif daripada baca. Mengembalikan NextResponse 429 bila lewat, atau
+ * null bila boleh lanjut.
+ */
+export function checkSendRateLimit(auth: PublicApiAuth): NextResponse | null {
+  const q = consumeRateLimit({
+    key: `apiv1:send:${auth.keyId}`,
+    limit: SEND_LIMIT_PER_KEY,
+    windowMs: RATE_WINDOW_MS,
+  })
+  if (q.allowed) return null
+  return apiV1Error('rate_limited', 'Batas kirim pesan per menit habis.', 429, {
+    ...auth.rateLimitHeaders,
+    'Retry-After': String(Math.ceil(q.retryAfterMs / 1000)),
+  })
+}
+
+// Idempotensi kirim: klien boleh mengirim header `Idempotency-Key`. Hasil
+// dicache singkat per (kunci, key) supaya retry jaringan tidak mengirim pesan
+// dua kali. In-memory best-effort (single-instance) — didokumentasikan.
+interface IdemEntry {
+  at: number
+  status: number
+  body: unknown
+}
+const IDEM_TTL_MS = 10 * 60 * 1000
+const idemCache = new Map<string, IdemEntry>()
+
+export function readIdempotencyKey(req: Request): string | null {
+  const k = req.headers.get('idempotency-key')?.trim()
+  return k && k.length > 0 && k.length <= 128 ? k : null
+}
+
+export function getIdempotent(
+  keyId: string,
+  idemKey: string,
+): IdemEntry | null {
+  const hit = idemCache.get(`${keyId}:${idemKey}`)
+  if (!hit) return null
+  if (Date.now() - hit.at > IDEM_TTL_MS) {
+    idemCache.delete(`${keyId}:${idemKey}`)
+    return null
+  }
+  return hit
+}
+
+export function saveIdempotent(
+  keyId: string,
+  idemKey: string,
+  status: number,
+  body: unknown,
+): void {
+  if (idemCache.size > 2000) idemCache.clear()
+  idemCache.set(`${keyId}:${idemKey}`, { at: Date.now(), status, body })
 }
 
 /**
@@ -216,7 +331,11 @@ export function requireScope(auth: PublicApiAuth, scope: string): NextResponse |
  * — anchor cursor diselesaikan lewat subquery yang tidak memakai klausa where,
  * jadi cursor basi/asing membuat baris hilang tanpa error.
  */
-export function parsePagination(url: URL): { ok: true; limit: number; cursor: string | null } | { ok: false; error: string } {
+export function parsePagination(
+  url: URL,
+):
+  | { ok: true; limit: number; cursor: string | null }
+  | { ok: false; error: string } {
   const rawLimit = url.searchParams.get('limit')
   let limit = 25
   if (rawLimit !== null) {

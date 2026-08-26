@@ -1,12 +1,24 @@
-// GET /api/v1/messages?contactId=&limit=&cursor= — riwayat pesan satu kontak.
+// GET  /api/v1/messages?contactId=&limit=&cursor= — riwayat pesan satu kontak.
+// POST /api/v1/messages — kirim TEKS (Baileys / Cloud dalam window 24 jam).
 //
-// `contactId` WAJIB: tanpa itu endpoint ini jadi dump seluruh riwayat percakapan
-// akun, yang bukan tujuan API baca Fase 1.
-//
-// Model Message TIDAK punya userId — kepemilikan hanya lewat
-// contactId → Contact.userId, jadi filter selalu `contact: { userId }`.
-import { apiV1Error, apiV1Ok, parsePagination, requirePublicApiAuth } from '@/lib/public-api-auth'
+// GET: `contactId` WAJIB — tanpa itu jadi dump seluruh riwayat. Model Message
+// tak punya userId; kepemilikan lewat contactId → Contact.userId.
+import {
+  apiV1Error,
+  apiV1Ok,
+  checkSendRateLimit,
+  getIdempotent,
+  parsePagination,
+  readIdempotencyKey,
+  requirePublicApiAuth,
+  saveIdempotent,
+} from '@/lib/public-api-auth'
 import { prisma } from '@/lib/prisma'
+import { sendPublicText } from '@/lib/services/public-api/send-message'
+import {
+  normalizeMsisdn,
+  publicSendTextSchema,
+} from '@/lib/validations/public-message'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,11 +29,22 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const contactId = url.searchParams.get('contactId')?.trim()
   if (!contactId) {
-    return apiV1Error('invalid_query', 'Parameter contactId wajib diisi.', 400, gate.auth.rateLimitHeaders)
+    return apiV1Error(
+      'invalid_query',
+      'Parameter contactId wajib diisi.',
+      400,
+      gate.auth.rateLimitHeaders,
+    )
   }
 
   const page = parsePagination(url)
-  if (!page.ok) return apiV1Error('invalid_query', page.error, 400, gate.auth.rateLimitHeaders)
+  if (!page.ok)
+    return apiV1Error(
+      'invalid_query',
+      page.error,
+      400,
+      gate.auth.rateLimitHeaders,
+    )
 
   try {
     // Cek kepemilikan kontak dulu supaya id milik orang lain dijawab 404,
@@ -31,7 +54,12 @@ export async function GET(req: Request) {
       select: { id: true },
     })
     if (!contact) {
-      return apiV1Error('not_found', 'Kontak tidak ditemukan.', 404, gate.auth.rateLimitHeaders)
+      return apiV1Error(
+        'not_found',
+        'Kontak tidak ditemukan.',
+        404,
+        gate.auth.rateLimitHeaders,
+      )
     }
 
     // Cursor WAJIB divalidasi dalam scope yang sama (lihat komentar panjang di
@@ -39,7 +67,11 @@ export async function GET(req: Request) {
     // klausa where, jadi cursor basi/asing menghilangkan baris diam-diam.
     if (page.cursor) {
       const anchor = await prisma.message.findFirst({
-        where: { id: page.cursor, contactId, contact: { userId: gate.auth.userId } },
+        where: {
+          id: page.cursor,
+          contactId,
+          contact: { userId: gate.auth.userId },
+        },
         select: { id: true },
       })
       if (!anchor) {
@@ -76,13 +108,76 @@ export async function GET(req: Request) {
 
     return apiV1Ok(
       {
-        items: items.map((m) => ({ ...m, createdAt: m.createdAt.toISOString() })),
+        items: items.map((m) => ({
+          ...m,
+          createdAt: m.createdAt.toISOString(),
+        })),
         nextCursor: hasMore ? (items[items.length - 1]?.id ?? null) : null,
       },
       gate.auth,
     )
   } catch (err) {
     console.error('[api/v1/messages] gagal:', err)
-    return apiV1Error('server_error', 'Gagal memuat pesan.', 500, gate.auth.rateLimitHeaders)
+    return apiV1Error(
+      'server_error',
+      'Gagal memuat pesan.',
+      500,
+      gate.auth.rateLimitHeaders,
+    )
+  }
+}
+
+export async function POST(req: Request) {
+  const gate = await requirePublicApiAuth(req)
+  if (!gate.ok) return gate.response
+
+  const sendLimited = checkSendRateLimit(gate.auth)
+  if (sendLimited) return sendLimited
+
+  // Idempotensi: retry dengan header yang sama tidak mengirim dua kali.
+  const idemKey = readIdempotencyKey(req)
+  if (idemKey) {
+    const cached = getIdempotent(gate.auth.keyId, idemKey)
+    if (cached) {
+      return apiV1Ok(cached.body, gate.auth, cached.status)
+    }
+  }
+
+  const body = await req.json().catch(() => null)
+  const parsed = publicSendTextSchema.safeParse(body)
+  if (!parsed.success) {
+    return apiV1Error(
+      'invalid_body',
+      parsed.error.issues[0]?.message ?? 'Data tidak valid.',
+      400,
+      gate.auth.rateLimitHeaders,
+    )
+  }
+
+  try {
+    const out = await sendPublicText({
+      userId: gate.auth.userId,
+      to: normalizeMsisdn(parsed.data.phone_number),
+      content: parsed.data.content,
+      sessionId: parsed.data.session_id,
+    })
+    if (!out.ok) {
+      return apiV1Error(
+        out.code ?? 'send_failed',
+        out.error ?? 'Gagal mengirim.',
+        out.httpStatus,
+        gate.auth.rateLimitHeaders,
+      )
+    }
+    if (idemKey) saveIdempotent(gate.auth.keyId, idemKey, 200, out.data)
+    return apiV1Ok(out.data, gate.auth)
+  } catch (err) {
+    console.error('[api/v1/messages POST] gagal:', err)
+    return apiV1Error(
+      'server_error',
+      'Gagal mengirim pesan.',
+      500,
+      gate.auth.rateLimitHeaders,
+    )
   }
 }

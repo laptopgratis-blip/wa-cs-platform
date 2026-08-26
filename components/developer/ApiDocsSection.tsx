@@ -35,10 +35,18 @@ function Endpoint({
   path: string
   desc: string
 }) {
+  const isPost = method === 'POST'
   return (
     <div className="border-warm-200 flex flex-col gap-1 border-b py-3 last:border-0">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="bg-primary-50 text-primary-700 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold">
+        <span
+          className={
+            (isPost
+              ? 'bg-primary-100 text-primary-700'
+              : 'bg-warm-100 text-warm-600') +
+            ' inline-flex w-12 justify-center rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold'
+          }
+        >
           {method}
         </span>
         <code className="text-warm-800 font-mono text-xs">{path}</code>
@@ -177,6 +185,16 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
               path="/api/v1/senders"
               desc="Nomor WhatsApp terhubung milikmu, urut sesuai prioritas pemakaian platform."
             />
+            <Endpoint
+              method="POST"
+              path="/api/v1/messages"
+              desc="Kirim teks (Baileys / Cloud dalam window 24 jam). Body: { phone_number, content, session_id? }. Maks 30 kirim/menit per kunci."
+            />
+            <Endpoint
+              method="POST"
+              path="/api/v1/messages/template"
+              desc="Kirim template Meta yang disetujui (untuk di luar window). Body: { phone_number, template_name|template_id, params:[], session_id? }."
+            />
             <div className="mt-4 space-y-2">
               <p className="text-warm-800 text-sm font-medium">
                 Contoh pagination
@@ -190,6 +208,20 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
                 <code className="font-mono">nextCursor</code> bernilai{' '}
                 <code className="font-mono">null</code> saat sudah halaman
                 terakhir.
+              </p>
+            </div>
+            <div className="mt-4 space-y-2">
+              <p className="text-warm-800 text-sm font-medium">Contoh kirim pesan</p>
+              <Code>{`curl -X POST "${baseUrl}/api/v1/messages" \\
+  -H "Authorization: Bearer \$KEY" \\
+  -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: kirim-001" \\
+  -d '{"phone_number":"628123456789","content":"Halo dari API"}'`}</Code>
+              <p className="text-warm-500 text-xs">
+                Kirim teks butuh window 24 jam terbuka (atau nomor Baileys). Di luar window pakai{' '}
+                <code className="font-mono">/messages/template</code>. Header{' '}
+                <code className="font-mono">Idempotency-Key</code> (opsional) mencegah kirim ganda
+                saat retry.
               </p>
             </div>
           </TabsContent>
