@@ -6,7 +6,13 @@
 // bisa di-collapse via chevron — state persist di localStorage. Sumber data
 // dari lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
 // dengan Drawer mobile.
-import { ChevronDown, ChevronRight, Eye, EyeOff, MessageCircle } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  MessageCircle,
+} from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -134,18 +140,20 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'flex h-full w-60 flex-col border-r border-warm-200 bg-card text-warm-700',
+        'border-warm-200 bg-card text-warm-700 flex h-full w-60 flex-col border-r',
         className,
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-warm-200 px-4">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
+      <div className="border-warm-200 flex h-16 items-center gap-3 border-b px-4">
+        <div className="bg-primary-500 text-warm-900 shadow-orange flex size-9 items-center justify-center rounded-lg">
           <MessageCircle className="size-4" />
         </div>
         <div className="leading-tight">
-          <p className="font-display text-base font-bold text-warm-900">Hulao</p>
-          <p className="text-xs font-medium text-primary-500">Dashboard</p>
+          <p className="font-display text-warm-900 text-base font-bold">
+            Hulao
+          </p>
+          <p className="text-primary-500 text-xs font-medium">Dashboard</p>
         </div>
       </div>
 
@@ -175,7 +183,7 @@ export function Sidebar({
                 onClick={() => toggleGroup(group.label)}
                 aria-expanded={!isCollapsed}
                 className={cn(
-                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-xs font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
+                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-xs font-semibold tracking-wider uppercase transition-opacity hover:opacity-80',
                   NAV_ACCENT.header,
                 )}
                 title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
@@ -249,7 +257,7 @@ export function Sidebar({
               >
                 <p
                   className={cn(
-                    'text-xs font-medium uppercase tracking-wider',
+                    'text-xs font-medium tracking-wider uppercase',
                     labelClass,
                   )}
                 >
@@ -257,7 +265,7 @@ export function Sidebar({
                 </p>
                 <p
                   className={cn(
-                    'mt-1 font-display text-xl font-bold tabular-nums',
+                    'font-display mt-1 text-xl font-bold tabular-nums',
                     valueClass,
                   )}
                 >
@@ -287,7 +295,7 @@ export function Sidebar({
           >
             <p
               className={cn(
-                'text-xs font-medium uppercase tracking-wider',
+                'text-xs font-medium tracking-wider uppercase',
                 messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700',
               )}
             >
@@ -295,26 +303,35 @@ export function Sidebar({
             </p>
             <p
               className={cn(
-                'mt-0.5 font-display text-base font-bold tabular-nums',
+                'font-display mt-0.5 text-base font-bold tabular-nums',
                 messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-600',
               )}
             >
               Rp {formatNumber(messageCreditRp)}
             </p>
-            <p className={cn('text-xs', messageCreditRp <= 0 ? 'text-destructive/80' : 'text-primary-700/70')}>
-              {messageCreditRp <= 0 ? 'Habis — top up untuk template Meta' : 'Untuk template Meta (Cloud API)'}
+            <p
+              className={cn(
+                'text-xs',
+                messageCreditRp <= 0
+                  ? 'text-destructive/80'
+                  : 'text-primary-700/70',
+              )}
+            >
+              {messageCreditRp <= 0
+                ? 'Habis — top up untuk template Meta'
+                : 'Untuk template Meta (Cloud API)'}
             </p>
           </Link>
         </div>
       )}
 
       {/* Footer */}
-      <div className="flex flex-col gap-2 border-t border-warm-200 px-3 py-3">
+      <div className="border-warm-200 flex flex-col gap-2 border-t px-3 py-3">
         {hasHidden && (
           <button
             type="button"
             onClick={toggleShowAll}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-800"
+            className="text-warm-500 hover:bg-warm-100 hover:text-warm-800 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
             title={
               showAll
                 ? 'Sembunyikan menu yg tidak relevan untuk tujuanmu'
@@ -332,7 +349,7 @@ export function Sidebar({
             )}
           </button>
         )}
-        <p className="px-2 text-xs text-warm-400">v0.1.0 — beta</p>
+        <p className="text-warm-400 px-2 text-xs">v0.1.0 — beta</p>
       </div>
     </aside>
   )
@@ -368,7 +385,7 @@ function SidebarLink({
         <span
           aria-hidden
           className={cn(
-            'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full',
+            'absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full',
             a.bar,
           )}
         />

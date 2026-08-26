@@ -168,7 +168,7 @@ export function OrdersFilterBar({
               onClick={() => onSmartChange(active ? null : c.key)}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition ${
                 active
-                  ? 'border-primary-500 bg-primary-500 text-white shadow-sm'
+                  ? 'border-primary-500 bg-primary-500 text-warm-900 shadow-sm'
                   : 'border-warm-300 text-warm-700 hover:bg-warm-100 bg-white'
               }`}
             >

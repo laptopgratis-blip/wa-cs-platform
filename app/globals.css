@@ -5,10 +5,13 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ─────────────────────────────────────────
-   THEME — Citrus Energy (orange + warm gray)
+   THEME — Hulao Ember (Supabase-inspired)
+   Kanvas putih + ladder abu netral + orange
+   sebagai SATU-SATUNYA peristiwa kromatik.
    Token Tailwind v4 yang menghasilkan kelas
    `bg-primary`, `bg-warm-50`, `font-display`,
    `shadow-orange`, `animate-fade-slide-up`.
+   Sumber kebenaran desain: DESIGN.md (root).
 ───────────────────────────────────────── */
 @theme inline {
   /* core shadcn tokens (mengarah ke CSS var di :root) */
@@ -63,24 +66,27 @@
   --color-primary-800: #9a3e08;
   --color-primary-900: #7c3205;
 
-  /* Warm gray scale — kelas: bg-warm-50 ... bg-warm-900 */
-  --color-warm-50: #fafaf9;
-  --color-warm-100: #f5f5f4;
-  --color-warm-200: #e7e5e4;
-  --color-warm-300: #d6d3d1;
-  --color-warm-400: #a8a29e;
-  --color-warm-500: #78716c;
-  --color-warm-600: #57534e;
-  --color-warm-700: #44403c;
-  --color-warm-800: #292524;
-  --color-warm-900: #1c1917;
+  /* Ladder abu netral (ala Supabase) — nama kelas `warm-*` dipertahankan
+     demi kompatibilitas seluruh codebase, tapi nilainya kini abu NETRAL:
+     warm-900 = ink #171717 · warm-500 = ink-mute #707070 · warm-200 = hairline */
+  --color-warm-50: #fafafa;
+  --color-warm-100: #f5f5f5;
+  --color-warm-200: #e5e5e5;
+  --color-warm-300: #d4d4d4;
+  --color-warm-400: #a3a3a3;
+  --color-warm-500: #707070;
+  --color-warm-600: #525252;
+  --color-warm-700: #404040;
+  --color-warm-800: #212121;
+  --color-warm-900: #171717;
 
-  /* Radius — aturan lengkap di CLAUDE.md § Design System UI */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-2xl: 24px;
+  /* Radius — skala tajam ala Supabase (tombol/input 6px, kartu 12px).
+     Aturan pemakaian: DESIGN.md + CLAUDE.md § Design System UI */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
 
   /* Shadows — orange glow untuk CTA */
   --shadow-orange: 0 4px 20px rgba(249, 115, 22, 0.25);
@@ -101,32 +107,36 @@
 }
 
 /* ─────────────────────────────────────────
-   Light theme (Citrus Energy)
+   Light theme (Hulao Ember)
+   Komitmen kanvas putih — abu netral untuk
+   hierarki, orange hanya untuk CTA/aksen.
 ───────────────────────────────────────── */
 :root {
-  --background: #fafaf9;        /* warm-50 — bukan pure white */
-  --foreground: #292524;        /* warm-800 */
+  --background: #ffffff;        /* kanvas putih — komitmen ala Supabase */
+  --foreground: #171717;        /* ink (warm-900) — near-black, bukan pure black */
 
   --card: #ffffff;
-  --card-foreground: #292524;
+  --card-foreground: #171717;
   --popover: #ffffff;
-  --popover-foreground: #292524;
+  --popover-foreground: #171717;
 
-  --primary: #f97316;           /* orange-500 */
-  --primary-foreground: #ffffff;
+  --primary: #f97316;           /* orange-500 — satu-satunya peristiwa kromatik */
+  --primary-foreground: #171717; /* ink di atas orange ("lit surface", 6.4:1) —
+                                    BUKAN putih (putih di orange cuma 2.8:1, gagal AA) */
 
-  --secondary: #f5f5f4;         /* warm-100 */
-  --secondary-foreground: #292524;
+  --secondary: #f5f5f5;         /* warm-100 */
+  --secondary-foreground: #171717;
 
-  --muted: #f5f5f4;             /* warm-100 */
-  --muted-foreground: #78716c;  /* warm-500 */
+  --muted: #f5f5f5;             /* warm-100 */
+  --muted-foreground: #707070;  /* warm-500 — ink-mute */
 
-  --accent: #fff7ed;            /* primary-50 */
-  --accent-foreground: #c2570a; /* primary-700 */
+  --accent: #f5f5f5;            /* hover menu/dropdown NETRAL — orange tetap langka;
+                                   tint dekoratif orange → pakai bg-primary-50 langsung */
+  --accent-foreground: #171717;
 
   --destructive: #ef4444;       /* red-500 */
-  --border: #e7e5e4;            /* warm-200 */
-  --input: #e7e5e4;
+  --border: #e5e5e5;            /* warm-200 — hairline */
+  --input: #e5e5e5;
   --ring: #fb923c;              /* primary-400 untuk focus ring */
 
   --chart-1: #f97316;           /* orange-500 — AI / primary */
@@ -135,16 +145,16 @@
   --chart-4: #fdba74;           /* primary-300 */
   --chart-5: #ffedd5;           /* primary-100 */
 
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
-  /* Sidebar light — putih bersih dengan accent orange */
+  /* Sidebar light — putih + hairline, accent orange */
   --sidebar: #ffffff;
-  --sidebar-foreground: #44403c;           /* warm-700 */
+  --sidebar-foreground: #404040;           /* warm-700 */
   --sidebar-primary: #f97316;              /* orange-500 — accent active */
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f5f5f4;               /* warm-100 — hover bg */
-  --sidebar-accent-foreground: #1c1917;    /* warm-900 */
-  --sidebar-border: #e7e5e4;               /* warm-200 */
+  --sidebar-primary-foreground: #171717;   /* ink di atas orange */
+  --sidebar-accent: #f5f5f5;               /* warm-100 — hover bg */
+  --sidebar-accent-foreground: #171717;    /* warm-900 */
+  --sidebar-border: #e5e5e5;               /* warm-200 */
   --sidebar-ring: #fb923c;
 }
 
@@ -152,25 +162,25 @@
    Dark mode
 ───────────────────────────────────────── */
 .dark {
-  --background: #1c1917;
-  --foreground: #fafaf9;
+  --background: #1c1c1c;         /* canvas-night ala Supabase */
+  --foreground: #fafafa;
 
-  --card: #292524;
-  --card-foreground: #fafaf9;
-  --popover: #292524;
-  --popover-foreground: #fafaf9;
+  --card: #202020;
+  --card-foreground: #fafafa;
+  --popover: #202020;
+  --popover-foreground: #fafafa;
 
   --primary: #fb923c;            /* orange-400 — sedikit lebih terang di dark */
-  --primary-foreground: #1c1917;
+  --primary-foreground: #171717;
 
-  --secondary: #292524;
-  --secondary-foreground: #fafaf9;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
 
-  --muted: #292524;
-  --muted-foreground: #a8a29e;   /* warm-400 */
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;   /* warm-400 */
 
-  --accent: #44403c;             /* warm-700 */
-  --accent-foreground: #fafaf9;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
 
   --destructive: #f87171;        /* red-400 */
   --border: rgba(255, 255, 255, 0.1);
@@ -183,12 +193,12 @@
   --chart-4: #fdba74;
   --chart-5: #9a3e08;
 
-  --sidebar: #0f0d0c;
-  --sidebar-foreground: #fafaf9;
+  --sidebar: #161616;
+  --sidebar-foreground: #fafafa;
   --sidebar-primary: #fb923c;
-  --sidebar-primary-foreground: #1c1917;
-  --sidebar-accent: #292524;
-  --sidebar-accent-foreground: #fafaf9;
+  --sidebar-primary-foreground: #171717;
+  --sidebar-accent: #262626;
+  --sidebar-accent-foreground: #fafafa;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: #fb923c;
 }
@@ -210,7 +220,8 @@
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display), 'Plus Jakarta Sans', sans-serif;
-    letter-spacing: -0.01em;
+    /* Tracking negatif ala Supabase — menarik letterform humanist jadi padat */
+    letter-spacing: -0.02em;
   }
   html {
     @apply font-sans;
@@ -227,17 +238,17 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
+  background: #d4d4d4;
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
+  background: #a3a3a3;
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: #44403c;
+  background: #404040;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #57534e;
+  background: #525252;
 }
 
 /* Selection orange */
@@ -271,7 +282,7 @@
 
 /* Dot grid pattern untuk hero section */
 .dot-grid {
-  background-image: radial-gradient(circle, #d6d3d1 1px, transparent 1px);
+  background-image: radial-gradient(circle, #d4d4d4 1px, transparent 1px);
   background-size: 24px 24px;
 }
 

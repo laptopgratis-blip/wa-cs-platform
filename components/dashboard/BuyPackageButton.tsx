@@ -53,7 +53,7 @@ export function BuyPackageButton({
     <Button
       onClick={handleBuy}
       disabled={isLoading}
-      className="w-full rounded-full"
+      className="w-full"
       variant={isPopular ? 'default' : 'outline'}
       aria-label={`Beli paket ${packageName}`}
     >

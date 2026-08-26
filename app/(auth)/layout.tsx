@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       {/* Background gradient + subtle dot grid */}
       <div
         aria-hidden
-        className="absolute inset-0 -z-20 bg-linear-to-br from-primary-50 via-warm-50 to-white"
+        className="from-primary-50 via-warm-50 absolute inset-0 -z-20 bg-linear-to-br to-white"
       />
       <div
         aria-hidden
@@ -18,12 +18,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       />
 
       <Link href="/" className="mb-6 flex items-center gap-2.5">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-primary-500 text-white shadow-orange">
+        <div className="bg-primary-500 text-warm-900 shadow-orange flex size-10 items-center justify-center rounded-xl">
           <MessageCircle className="size-5" />
         </div>
         <div className="leading-tight">
-          <p className="font-display text-lg font-bold text-warm-900">Hulao</p>
-          <p className="text-xs font-medium text-primary-500">CS WhatsApp + CRM</p>
+          <p className="font-display text-warm-900 text-lg font-bold">Hulao</p>
+          <p className="text-primary-500 text-xs font-medium">
+            CS WhatsApp + CRM
+          </p>
         </div>
       </Link>
 

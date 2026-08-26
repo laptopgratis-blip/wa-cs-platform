@@ -22,34 +22,35 @@ export function LpGratisHero() {
       />
 
       <div className="relative flex flex-col gap-5 p-6 md:flex-row md:items-center md:gap-8 md:p-8">
-        <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-white shadow-lg backdrop-blur-sm md:size-20">
+        <div className="text-warm-900 flex size-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 shadow-lg backdrop-blur-sm md:size-20">
           <Rocket className="size-9 md:size-11" />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold tracking-wider text-white uppercase backdrop-blur-sm">
+          <div className="text-warm-900 mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold tracking-wider uppercase backdrop-blur-sm">
             <Sparkles className="size-3" /> Wizard Utama · Gratis
           </div>
-          <h2 className="font-display text-2xl leading-tight font-semibold text-white drop-shadow md:text-3xl">
+          <h2 className="text-warm-900 font-display text-2xl leading-tight font-semibold md:text-3xl">
             Bikin Landing Page Gratis
           </h2>
-          <p className="mt-1 text-sm text-white/90 md:text-base">
+          <p className="text-warm-900/90 mt-1 text-sm md:text-base">
             5 menit selesai. Upload foto, copy prompt → AI bikin HTML, paste,
             edit visual, publish. <strong>Tanpa upgrade plan</strong>.
           </p>
 
-          <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/95 md:text-sm">
+          <ul className="text-warm-900/95 mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs md:text-sm">
             <li className="flex items-center gap-1">
-              <span className="text-white/70">①</span> Siapkan foto
+              <span className="text-warm-900/70">①</span> Siapkan foto
             </li>
             <li className="flex items-center gap-1">
-              <span className="text-white/70">②</span> Upload
+              <span className="text-warm-900/70">②</span> Upload
             </li>
             <li className="flex items-center gap-1">
-              <span className="text-white/70">③</span> Copy ke ChatGPT/Claude.ai
+              <span className="text-warm-900/70">③</span> Copy ke
+              ChatGPT/Claude.ai
             </li>
             <li className="flex items-center gap-1">
-              <span className="text-white/70">④</span> Paste & publish
+              <span className="text-warm-900/70">④</span> Paste & publish
             </li>
           </ul>
         </div>

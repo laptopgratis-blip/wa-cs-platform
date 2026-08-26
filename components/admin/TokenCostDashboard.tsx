@@ -201,7 +201,7 @@ export function TokenCostDashboard() {
                 onClick={() => setPreset(p)}
                 className={`cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium transition ${
                   preset === p
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-primary-500 text-warm-900'
                     : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                 }`}
               >

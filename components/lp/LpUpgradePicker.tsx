@@ -145,7 +145,7 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
             )}
           >
             {pkg.isPopular && (
-              <span className="bg-primary-500 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
+              <span className="bg-primary-500 text-warm-900 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold">
                 <Sparkles className="size-3" />
                 Paling Populer
               </span>
@@ -208,7 +208,7 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
                 <Button
                   onClick={() => void handleTripay(pkg)}
                   disabled={isLowerOrEqual || isLoading}
-                  className="w-full rounded-full font-semibold"
+                  className="w-full font-semibold"
                   variant={pkg.isPopular ? 'default' : 'outline'}
                 >
                   {loadingId === tripayKey ? (

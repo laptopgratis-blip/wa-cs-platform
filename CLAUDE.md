@@ -185,15 +185,24 @@ non-CS (OTP/follow-up/notif/handoff/LMS) lewat `smartSend` +
 Broadcast Cloud = `BroadcastRecipient` + cron `broadcast-send` (1 menit).
 Detail: `docs/waba-templates.md`.
 
-## Design System UI (2026-08-21)
+## Design System UI (2026-08-21; rev Supabase-style 2026-08-25)
 
-Aturan konsistensi UI dashboard/admin/auth. Registry tone: `lib/ui-tones.ts`
+Aturan konsistensi UI dashboard/admin/auth. Arah visual lengkap: `DESIGN.md`
+(root) — bahasa desain ala Supabase: kanvas PUTIH, ladder abu netral, hairline
+1px, orange = satu-satunya peristiwa kromatik. Registry tone: `lib/ui-tones.ts`
 (SATU-SATUNYA file yang boleh pakai palet Tailwind mentah untuk status).
 Scope aturan: `app/(dashboard)`, `app/(admin)`, `app/(auth)` + komponennya.
 Halaman publik (landing, /live, /embed, /order, /review, belajar, onboarding)
 punya gaya sendiri — JANGAN disapu aturan ini.
 
 ### Warna
+- Kanvas halaman = `bg-background` (putih murni). Jangan hardcode `#fafaf9` /
+  tint latar halaman; band lembut → `bg-warm-50` (#fafafa).
+- Ladder `warm-*` kini abu NETRAL (nama kelas tetap, nilai berubah 2026-08-25):
+  warm-900 = ink #171717 · warm-500 = #707070 · warm-200 = hairline #e5e5e5.
+- On-primary = INK: teks/ikon di atas fill `bg-primary-*` memakai
+  `text-warm-900` / `text-primary-foreground` (6.4:1) — DILARANG `text-white`
+  di atas orange (2.8:1, gagal AA). Hover menu (`--accent`) kini netral.
 - Brand/aksen dekoratif: `primary-*` (orange) atau token semantic (`bg-primary`,
   `text-muted-foreground`, `bg-card`, `border-border`). DILARANG: `orange-*`
   (duplikat primary), `blue|purple|violet|indigo|fuchsia|pink|rose|teal|cyan|lime-*`
@@ -214,8 +223,10 @@ punya gaya sendiri — JANGAN disapu aturan ini.
 - h1 = milik `<PageHeader>` (satu per halaman). h2 section:
   `font-display text-xl font-semibold text-warm-900`; h3 `text-lg font-semibold`;
   label field `text-sm font-medium text-warm-700`.
-- Weight: `font-medium` / `font-semibold` / `font-bold` (h1 saja). Tanpa
-  `font-extrabold`. `font-display` untuk heading (alias `font-heading` dihapus).
+- Weight: `font-medium` / `font-semibold` (maks untuk heading — display
+  mid-weight ala Supabase; h1 PageHeader kini `font-semibold`). `font-bold`
+  hanya untuk angka stat besar. Tanpa `font-extrabold`. `font-display` untuk
+  heading (alias `font-heading` dihapus). Tracking heading `-0.02em` global.
 
 ### Layout & Komponen
 - Container halaman: `<PageContainer width>` (`components/shared/PageContainer.tsx`)
@@ -229,12 +240,15 @@ punya gaya sendiri — JANGAN disapu aturan ini.
   (Card pakai `ring-1` tanpa border-width, jadi `border-*` no-op senyap).
   Panel hand-rolled → `<Card>`; tint dekoratif hanya `bg-primary-50`; panel
   status → `TONES[tone].bg/border`.
-- Radius ikuti primitive: card/panel/dialog `rounded-xl` · input/button `rounded-lg`
-  · chip `rounded-md` · pill/avatar `rounded-full`. Maks 2-3 radius per file.
+- Radius ikuti primitive (skala tajam 2026-08-25: sm 4 · md 6 · lg 8 · xl 12):
+  card/panel/dialog `rounded-xl` (12px) · input/button/select/chip `rounded-md`
+  (6px — signature, JANGAN pill untuk tombol) · menu/alert `rounded-lg` (8px)
+  · pill status/avatar `rounded-full`. Maks 2-3 radius per file.
 - Spacing: antar section `gap-6`; dalam card `space-y-4`; label→input `space-y-2`;
   toolbar `gap-2`.
 - Button: filled default = maks SATU aksi utama per halaman/dialog, TANPA override
-  `bg-primary-500...` (default sudah orange, termasuk `hover:bg-primary-600` yang
+  `bg-primary-500...` (default sudah orange dengan teks INK `--primary-foreground`
+  #171717 — bukan putih — termasuk `hover:bg-primary-600` yang
   ditambahkan ke varian `default` di `ui/button.tsx` — semula varian itu cuma punya
   hover lewat `[a]:` sehingga `<button>` biasa tidak beri umpan balik hover sama
   sekali). Toolbar `outline`, tersier `ghost`, destruktif `destructive`.
@@ -247,7 +261,11 @@ punya gaya sendiri — JANGAN disapu aturan ini.
 - Nav: aksen tunggal `NAV_ACCENT` (lib/navigation.ts) — grup dibedakan spacing,
   bukan warna. Modal pakai `ui/dialog.tsx`/`ui/sheet.tsx`, bukan hand-rolled
   `fixed inset-0`.
-- Icon: lucide-react, bukan emoji, di seluruh chrome UI (header, menu, status).
+- Icon: HANYA lucide-react. Emoji DILARANG di seluruh copy UI (chrome, toast,
+  notif in-app, empty state — termasuk halaman publik/landing, sapuan
+  2026-08-25): emoji-ikon → lucide, emoji dekoratif → hapus. PENGECUALIAN:
+  konten pesan WA keluar (template/follow-up/notif WA) & prompt AI — itu
+  konten chat, bukan tampilan aplikasi.
 - Dark mode: nonaktif (forcedTheme light). Jangan tulis class `dark:` baru;
   hapus `dark:` di file yang disentuh. Blok `.dark` di globals.css dibiarkan —
   begitu juga class `dark:` di `components/ui/**` (primitive radix-nova vendored:

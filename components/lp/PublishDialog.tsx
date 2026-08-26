@@ -161,7 +161,7 @@ export function PublishDialog({
             {/* CTA utama: topup token → otomatis dibawa ke generator setelah berhasil */}
             <div className="border-primary-200 bg-primary-50 overflow-hidden rounded-xl border p-4">
               <div className="flex items-start gap-3">
-                <span className="bg-primary-500 flex size-10 shrink-0 items-center justify-center rounded-full text-white">
+                <span className="bg-primary-500 text-warm-900 flex size-10 shrink-0 items-center justify-center rounded-full">
                   <Sparkles className="size-5" />
                 </span>
                 <div className="flex-1">
@@ -184,11 +184,7 @@ export function PublishDialog({
                   </div>
                 </div>
               </div>
-              <Button
-                asChild
-                size="lg"
-                className="mt-3 w-full rounded-full font-semibold"
-              >
+              <Button asChild size="lg" className="mt-3 w-full font-semibold">
                 <Link
                   href={`/billing?from=post-publish&lpId=${lpId}`}
                   onClick={handleClose}

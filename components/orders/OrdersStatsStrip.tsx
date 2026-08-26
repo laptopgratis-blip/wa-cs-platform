@@ -75,7 +75,7 @@ export function OrdersStatsStrip({
             aria-pressed={range === opt.key}
             className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               range === opt.key
-                ? 'border-primary-500 bg-primary-500 text-white'
+                ? 'border-primary-500 bg-primary-500 text-warm-900'
                 : 'border-warm-300 text-warm-700 hover:bg-warm-50 bg-white'
             }`}
           >

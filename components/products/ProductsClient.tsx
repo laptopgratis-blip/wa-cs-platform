@@ -779,7 +779,7 @@ export function ProductsClient({
                         className="size-full object-cover"
                       />
                       {idx === 0 && (
-                        <span className="bg-primary-600 absolute top-1 left-1 rounded px-1.5 py-0.5 text-xs font-bold tracking-wide text-white uppercase">
+                        <span className="bg-primary-600 text-warm-900 absolute top-1 left-1 rounded px-1.5 py-0.5 text-xs font-bold tracking-wide uppercase">
                           Cover
                         </span>
                       )}

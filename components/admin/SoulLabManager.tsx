@@ -1174,7 +1174,7 @@ function ChatBubble({ turn }: { turn: ConversationTurn }) {
         className={cn(
           'max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm',
           isSeller
-            ? 'bg-primary-500 rounded-tr-sm text-white'
+            ? 'bg-primary-500 text-warm-900 rounded-tr-sm'
             : 'text-warm-900 rounded-tl-sm bg-white',
         )}
       >
@@ -1185,7 +1185,7 @@ function ChatBubble({ turn }: { turn: ConversationTurn }) {
         <div
           className={cn(
             'mt-1 text-right text-xs',
-            isSeller ? 'text-primary-100' : 'text-warm-400',
+            isSeller ? 'text-warm-900/60' : 'text-warm-400',
           )}
         >
           {time}

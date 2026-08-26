@@ -211,7 +211,7 @@ export function PaymentMethodPicker({
         <Button
           onClick={handleConfirm}
           disabled={!selectedChannel || isLoading}
-          className="w-full rounded-full"
+          className="w-full"
           size="lg"
           aria-label={`Bayar paket ${packageName} via ${selectedChannel?.name ?? 'Payment Gateway'}`}
         >

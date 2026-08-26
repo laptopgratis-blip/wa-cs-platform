@@ -63,22 +63,22 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
           <button
             type="button"
             onClick={() => onSelect('TTS_GENERATIVE')}
-            className="group flex flex-col rounded-xl border-2 border-warm-200 bg-card p-5 text-left transition hover:border-primary-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+            className="group border-warm-200 bg-card hover:border-primary-400 focus-visible:ring-primary-400 flex flex-col rounded-xl border-2 p-5 text-left transition hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
           >
             <div className="mb-3 flex items-start justify-between">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-warm-100">
-                <Bot className="size-6 text-warm-600" aria-hidden />
+              <div className="bg-warm-100 flex size-12 items-center justify-center rounded-xl">
+                <Bot className="text-warm-600 size-6" aria-hidden />
               </div>
-              <span className="rounded-full bg-warm-100 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-warm-700">
+              <span className="bg-warm-100 text-warm-700 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase">
                 Existing
               </span>
             </div>
             <h3 className="text-lg font-semibold">TTS Host</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               AI jawab semua pertanyaan customer, suara dihasilkan real-time
               dari TTS.
             </p>
-            <ul className="mt-3 space-y-1 text-xs text-warm-700">
+            <ul className="text-warm-700 mt-3 space-y-1 text-xs">
               <li className="flex items-start gap-1.5">
                 <Check
                   className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
@@ -101,15 +101,15 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
                 Suara TTS realtime, sedikit delay
               </li>
             </ul>
-            <div className="mt-4 border-t border-warm-100 pt-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-warm-500">
+            <div className="border-warm-100 mt-4 border-t pt-3">
+              <div className="text-warm-500 text-xs font-semibold tracking-wider uppercase">
                 Estimasi cost setup
               </div>
-              <div className="mt-0.5 text-sm font-semibold text-primary-600">
+              <div className="text-primary-600 mt-0.5 text-sm font-semibold">
                 ~10 token (1 video loop)
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-primary-600 group-hover:underline">
+            <div className="text-primary-600 mt-3 flex items-center gap-1.5 text-xs font-semibold group-hover:underline">
               Pilih TTS Host →
             </div>
           </button>
@@ -119,35 +119,35 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
             type="button"
             onClick={() => !klipLiveDisabled && onSelect('NATIVE_LIBRARY')}
             disabled={klipLiveDisabled}
-            className={`group flex flex-col rounded-xl border-2 p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 ${
+            className={`group focus-visible:ring-primary-400 flex flex-col rounded-xl border-2 p-5 text-left transition focus-visible:ring-2 focus-visible:outline-none ${
               klipLiveDisabled
-                ? 'cursor-not-allowed border-warm-100 bg-warm-50/50 opacity-70'
-                : 'border-primary-300 bg-linear-to-br from-primary-50 to-primary-100 hover:border-primary-500 hover:shadow-lg'
+                ? 'border-warm-100 bg-warm-50/50 cursor-not-allowed opacity-70'
+                : 'border-primary-300 from-primary-50 to-primary-100 hover:border-primary-500 bg-linear-to-br hover:shadow-lg'
             }`}
           >
             <div className="mb-3 flex items-start justify-between">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary-100">
-                <Mic className="size-6 text-primary-600" aria-hidden />
+              <div className="bg-primary-100 flex size-12 items-center justify-center rounded-xl">
+                <Mic className="text-primary-600 size-6" aria-hidden />
               </div>
               {klipLiveDisabled ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-warm-200 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-warm-700">
+                <span className="bg-warm-200 text-warm-700 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase">
                   <Lock className="size-2.5" /> Soon
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-linear-to-r from-primary-500 to-primary-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white shadow">
+                <span className="from-primary-500 to-primary-600 text-warm-900 inline-flex items-center gap-1 rounded-full bg-linear-to-r px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase shadow">
                   <Sparkles className="size-2.5" /> Baru
                 </span>
               )}
             </div>
             <h3 className="flex items-center gap-1 text-lg font-semibold">
               Klip Live
-              <Sparkles className="size-3.5 text-primary-600" aria-hidden />
+              <Sparkles className="text-primary-600 size-3.5" aria-hidden />
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               Library klip pre-baked dengan suara natural. AI match pertanyaan
               customer ke klip yang cocok. Latency rendah, lip-sync presisi.
             </p>
-            <ul className="mt-3 space-y-1 text-xs text-warm-700">
+            <ul className="text-warm-700 mt-3 space-y-1 text-xs">
               <li className="flex items-start gap-1.5">
                 <Check
                   className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
@@ -161,7 +161,7 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
                   aria-hidden
                 />
                 <span className="inline-flex items-center gap-0.5">
-                  <Mic className="size-3 text-primary-500" />
+                  <Mic className="text-primary-500 size-3" />
                   Visual hook + background TikTok-optimized
                 </span>
               </li>
@@ -173,17 +173,19 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
                 Jawaban terbatas pada library klip
               </li>
             </ul>
-            <div className="mt-4 border-t border-primary-200/60 pt-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-warm-500">
+            <div className="border-primary-200/60 mt-4 border-t pt-3">
+              <div className="text-warm-500 text-xs font-semibold tracking-wider uppercase">
                 Estimasi cost setup
               </div>
-              <div className="mt-0.5 text-sm font-semibold text-primary-600">
+              <div className="text-primary-600 mt-0.5 text-sm font-semibold">
                 ~50-100 token (~8-10 klip)
               </div>
             </div>
             <div
               className={`mt-3 flex items-center gap-1.5 text-xs font-semibold ${
-                klipLiveDisabled ? 'text-warm-400' : 'text-primary-600 group-hover:underline'
+                klipLiveDisabled
+                  ? 'text-warm-400'
+                  : 'text-primary-600 group-hover:underline'
               }`}
             >
               {klipLiveDisabled

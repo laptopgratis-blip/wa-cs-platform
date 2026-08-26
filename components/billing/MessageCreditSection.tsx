@@ -189,7 +189,7 @@ export function MessageCreditSection({
                     <Button
                       asChild
                       variant={isHighlight ? 'default' : 'outline'}
-                      className="w-full rounded-full"
+                      className="w-full"
                     >
                       <Link href={`/checkout/select/${pkg.id}`}>
                         Top-up Kredit

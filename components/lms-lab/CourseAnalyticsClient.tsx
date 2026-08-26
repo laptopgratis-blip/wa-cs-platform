@@ -79,7 +79,7 @@ export function CourseAnalyticsClient({ courseId }: Props) {
               onClick={() => setDays(d)}
               className={`rounded px-3 py-1 text-xs font-medium ${
                 days === d
-                  ? 'bg-primary-500 text-white'
+                  ? 'bg-primary-500 text-warm-900'
                   : 'text-warm-600 hover:bg-warm-100'
               }`}
             >

@@ -98,7 +98,7 @@ export function LmsPricingView({
               className={cn(
                 'rounded-lg px-3 py-1.5 text-xs font-medium transition',
                 duration === d.months
-                  ? 'bg-primary-500 text-white shadow-sm'
+                  ? 'bg-primary-500 text-warm-900 shadow-sm'
                   : 'text-warm-600 hover:bg-warm-50',
               )}
             >
@@ -137,16 +137,16 @@ export function LmsPricingView({
                 key={pkg.id}
                 className={cn(
                   // pt-4: badge "Paling Hemat/Populer" menggantung -top-3.5 dan
-                // menimpa judul kartu (terukur 10px). Headroom dikasih ke
-                // SEMUA kartu supaya judul antar-kartu tetap sejajar.
-                'relative flex flex-col overflow-visible pt-8 transition-all',
+                  // menimpa judul kartu (terukur 10px). Headroom dikasih ke
+                  // SEMUA kartu supaya judul antar-kartu tetap sejajar.
+                  'relative flex flex-col overflow-visible pt-8 transition-all',
                   pkg.isPopular && 'ring-primary-400 scale-[1.02] ring-2',
                   // Plan aktif ditandai tint success + badge, bukan ring hue lepas.
                   isCurrent && TONES.success.bg,
                 )}
               >
                 {pkg.isPopular && (
-                  <span className="bg-primary-500 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
+                  <span className="bg-primary-500 text-warm-900 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold">
                     <Sparkles className="size-3" />
                     Paling Populer
                   </span>

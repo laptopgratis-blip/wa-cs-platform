@@ -498,7 +498,7 @@ export default async function BillingPage({
                   )}
                 >
                   {isHighlight && (
-                    <span className="bg-primary-500 shadow-orange absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
+                    <span className="bg-primary-500 shadow-orange text-warm-900 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold">
                       <Sparkles className="size-3" />
                       Paling Hemat
                     </span>
@@ -570,7 +570,7 @@ export default async function BillingPage({
                       <Button
                         asChild
                         className={cn(
-                          'w-full rounded-full font-semibold',
+                          'w-full font-semibold',
                           isHighlight && 'shadow-orange',
                         )}
                         variant={isHighlight ? 'default' : 'outline'}

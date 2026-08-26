@@ -12,13 +12,7 @@
 // sudah orange, badge info orange tidak lagi terbaca sebagai "status".
 
 export type Tone =
-  | 'success'
-  | 'warning'
-  | 'danger'
-  | 'info'
-  | 'neutral'
-  | 'brand'
-  | 'whatsapp'
+  'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'brand' | 'whatsapp'
 
 export interface ToneClasses {
   /** Latar lembut untuk pill/panel. */
@@ -74,7 +68,9 @@ export const TONES: Record<Tone, ToneClasses> = {
     text: 'text-primary-700',
     dot: 'bg-primary-500',
     border: 'border-primary-200',
-    solid: 'bg-primary-500 text-white',
+    // Ink di atas orange ("lit surface", 6.4:1) — putih di orange-500 cuma
+    // 2.8:1, gagal WCAG AA. Konsisten dengan --primary-foreground di globals.css.
+    solid: 'bg-primary-500 text-warm-900',
   },
   // Aksen KANAL WhatsApp (kartu/CTA "hubungi via WA"), bukan status.
   // Sengaja sehue dengan `success` — keduanya emerald. Konsekuensinya: jangan

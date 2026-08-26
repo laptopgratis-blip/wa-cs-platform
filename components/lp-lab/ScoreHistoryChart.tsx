@@ -100,7 +100,7 @@ export function ScoreHistoryChart({ lpId }: Props) {
                 onClick={() => setDays(d as 7 | 30 | 90)}
                 className={`rounded px-2 py-0.5 text-xs ${
                   days === d
-                    ? 'bg-primary-500 text-white'
+                    ? 'bg-primary-500 text-warm-900'
                     : 'text-warm-600 hover:bg-warm-100'
                 }`}
               >
