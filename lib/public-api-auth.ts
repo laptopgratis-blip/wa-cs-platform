@@ -265,30 +265,48 @@ export function requireScope(
 
 /** Batas kirim pesan per kunci per menit — lebih ketat dari 60/mnt umum. */
 export const SEND_LIMIT_PER_KEY = 30
+/**
+ * Batas kirim AGREGAT per user per menit. Tanpa ini, satu akun dengan 5 kunci
+ * (MAX_ACTIVE_KEYS_PER_USER) mendapat 5 × 30 = 150/mnt — jauh di atas yang
+ * diiklankan. Cap per-user membatasi total per akun apa pun jumlah kuncinya.
+ */
+export const SEND_LIMIT_PER_USER = 60
 
 /**
- * Guard laju KIRIM (POST). Terpisah dari kuota umum: mengirim pesan nyata jauh
- * lebih sensitif daripada baca. Mengembalikan NextResponse 429 bila lewat, atau
- * null bila boleh lanjut.
+ * Guard laju KIRIM (POST). Dua lapis: per kunci (anti satu kunci memonopoli) &
+ * per user (cap total akun). Mengembalikan 429 bila salah satu habis.
  */
 export function checkSendRateLimit(auth: PublicApiAuth): NextResponse | null {
-  const q = consumeRateLimit({
+  const perKey = consumeRateLimit({
     key: `apiv1:send:${auth.keyId}`,
     limit: SEND_LIMIT_PER_KEY,
     windowMs: RATE_WINDOW_MS,
   })
-  if (q.allowed) return null
+  const perUser = consumeRateLimit({
+    key: `apiv1:send:user:${auth.userId}`,
+    limit: SEND_LIMIT_PER_USER,
+    windowMs: RATE_WINDOW_MS,
+  })
+  const blocked = !perKey.allowed ? perKey : !perUser.allowed ? perUser : null
+  if (!blocked) return null
   return apiV1Error('rate_limited', 'Batas kirim pesan per menit habis.', 429, {
     ...auth.rateLimitHeaders,
-    'Retry-After': String(Math.ceil(q.retryAfterMs / 1000)),
+    'Retry-After': String(Math.ceil(blocked.retryAfterMs / 1000)),
   })
 }
 
-// Idempotensi kirim: klien boleh mengirim header `Idempotency-Key`. Hasil
-// dicache singkat per (kunci, key) supaya retry jaringan tidak mengirim pesan
-// dua kali. In-memory best-effort (single-instance) — didokumentasikan.
+// Idempotensi kirim: klien boleh mengirim header `Idempotency-Key`. In-memory
+// best-effort (single-instance) — didokumentasikan.
+//
+// RESERVASI SINKRON: `reserveIdempotent` menandai key `pending` di titik yang
+// SAMA (tanpa await di antaranya) dengan pemeriksaan — sehingga dua retry
+// konkuren tidak sama-sama lolos lalu mengirim pesan dua kali. Yang menang
+// mengerjakan; yang kalah dapat 'pending'. `complete` menyimpan hasil sukses;
+// `release` menghapus reservasi saat gagal supaya retry berikutnya boleh jalan
+// (kita hanya meng-cache SUKSES).
 interface IdemEntry {
   at: number
+  pending: boolean
   status: number
   body: unknown
 }
@@ -300,27 +318,43 @@ export function readIdempotencyKey(req: Request): string | null {
   return k && k.length > 0 && k.length <= 128 ? k : null
 }
 
-export function getIdempotent(
+export type IdemReservation =
+  | { kind: 'reserved' }
+  | { kind: 'pending' }
+  | { kind: 'done'; status: number; body: unknown }
+
+/** Atomik (sinkron): reservasi key, atau kembalikan hasil/pending yang ada. */
+export function reserveIdempotent(
   keyId: string,
   idemKey: string,
-): IdemEntry | null {
-  const hit = idemCache.get(`${keyId}:${idemKey}`)
-  if (!hit) return null
-  if (Date.now() - hit.at > IDEM_TTL_MS) {
-    idemCache.delete(`${keyId}:${idemKey}`)
-    return null
+): IdemReservation {
+  const k = `${keyId}:${idemKey}`
+  const hit = idemCache.get(k)
+  if (hit && Date.now() - hit.at <= IDEM_TTL_MS) {
+    if (hit.pending) return { kind: 'pending' }
+    return { kind: 'done', status: hit.status, body: hit.body }
   }
-  return hit
+  if (idemCache.size > 2000) idemCache.clear()
+  idemCache.set(k, { at: Date.now(), pending: true, status: 0, body: null })
+  return { kind: 'reserved' }
 }
 
-export function saveIdempotent(
+export function completeIdempotent(
   keyId: string,
   idemKey: string,
   status: number,
   body: unknown,
 ): void {
-  if (idemCache.size > 2000) idemCache.clear()
-  idemCache.set(`${keyId}:${idemKey}`, { at: Date.now(), status, body })
+  idemCache.set(`${keyId}:${idemKey}`, {
+    at: Date.now(),
+    pending: false,
+    status,
+    body,
+  })
+}
+
+export function releaseIdempotent(keyId: string, idemKey: string): void {
+  idemCache.delete(`${keyId}:${idemKey}`)
 }
 
 /**

@@ -5,7 +5,10 @@
 // menerjemahkan hasilnya ke bentuk API + kode HTTP.
 import { prisma } from '@/lib/prisma'
 import { listSenderCandidates } from '@/lib/wa-session'
-import { smartSend, type SmartSendCode } from '@/lib/services/wa-send/smart-send'
+import {
+  smartSend,
+  type SmartSendCode,
+} from '@/lib/services/wa-send/smart-send'
 import type { TemplateSendParams } from '@/lib/services/waba/template-payload'
 
 export interface PublicSendOutcome {
@@ -22,28 +25,68 @@ export interface PublicSendOutcome {
 }
 
 // smartSend code → HTTP + pesan siap-API.
-function mapFailure(code: SmartSendCode | undefined, error: string | undefined): PublicSendOutcome {
+function mapFailure(
+  code: SmartSendCode | undefined,
+  error: string | undefined,
+): PublicSendOutcome {
   const err = error ?? 'Gagal mengirim pesan'
   switch (code) {
     case 'NO_SESSION':
-      return { ok: false, httpStatus: 409, code: 'no_session', error: 'Tidak ada sesi WhatsApp terhubung.' }
+      return {
+        ok: false,
+        httpStatus: 409,
+        code: 'no_session',
+        error: 'Tidak ada sesi WhatsApp terhubung.',
+      }
     case 'WINDOW_CLOSED':
       return {
         ok: false,
         httpStatus: 409,
         code: 'window_closed',
-        error: 'Window 24 jam tutup — kirim lewat /messages/template dengan template yang disetujui.',
+        error:
+          'Window 24 jam tutup — kirim lewat /messages/template dengan template yang disetujui.',
       }
     case 'NO_TEMPLATE':
-      return { ok: false, httpStatus: 409, code: 'no_template', error: 'Template yang cocok tidak ditemukan/disetujui.' }
+      return {
+        ok: false,
+        httpStatus: 409,
+        code: 'no_template',
+        error: 'Template yang cocok tidak ditemukan/disetujui.',
+      }
     case 'INSUFFICIENT_CREDIT':
-      return { ok: false, httpStatus: 402, code: 'insufficient_credit', error: err }
+      return {
+        ok: false,
+        httpStatus: 402,
+        code: 'insufficient_credit',
+        error: 'Saldo kirim tidak cukup.',
+      }
     case 'MARKETING_OPT_OUT':
-      return { ok: false, httpStatus: 409, code: 'marketing_opt_out', error: 'Kontak menolak pesan marketing.' }
+      return {
+        ok: false,
+        httpStatus: 409,
+        code: 'marketing_opt_out',
+        error: 'Kontak menolak pesan marketing.',
+      }
     case 'BLACKLISTED':
-      return { ok: false, httpStatus: 409, code: 'blacklisted', error: 'Kontak masuk blacklist.' }
+      return {
+        ok: false,
+        httpStatus: 409,
+        code: 'blacklisted',
+        error: 'Kontak masuk blacklist.',
+      }
     default:
-      return { ok: false, httpStatus: 502, code: 'send_failed', error: err }
+      // Detail asli smartSend (mis. "3dbl8g/BAILEYS: wa-service tidak bisa
+      // dihubungi") bocorkan sessionId & topologi infra → jangan diteruskan
+      // ke klien API. Tapi TETAP catat di server (jalur transport Baileys/Cloud
+      // tidak selalu log kegagalan normal) supaya ops punya sinyal debug.
+      console.error('[public-api/send-message] kirim gagal:', err)
+      return {
+        ok: false,
+        httpStatus: 502,
+        code: 'send_failed',
+        error:
+          'Gagal mengirim pesan. Pastikan nomor WhatsApp terhubung, lalu coba lagi.',
+      }
   }
 }
 
@@ -78,7 +121,8 @@ export async function sendPublicText(input: {
   sessionId?: string
 }): Promise<PublicSendOutcome> {
   const owned = await ownedCandidates(input.userId, input.to, input.sessionId)
-  if ('error' in owned) return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
+  if ('error' in owned)
+    return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
 
   const res = await smartSend({
     candidates: owned.candidates,
@@ -94,7 +138,12 @@ export async function sendPublicText(input: {
   return {
     ok: true,
     httpStatus: 200,
-    data: { externalMsgId: res.messageId ?? null, provider: res.provider ?? null, via: res.via ?? null, to: input.to },
+    data: {
+      externalMsgId: res.messageId ?? null,
+      provider: res.provider ?? null,
+      via: res.via ?? null,
+      to: input.to,
+    },
   }
 }
 
@@ -117,11 +166,17 @@ export async function sendPublicTemplate(input: {
     select: { id: true, bodyText: true },
   })
   if (!template) {
-    return { ok: false, httpStatus: 404, code: 'template_not_found', error: 'Template tidak ditemukan / belum disetujui.' }
+    return {
+      ok: false,
+      httpStatus: 404,
+      code: 'template_not_found',
+      error: 'Template tidak ditemukan / belum disetujui.',
+    }
   }
 
   const owned = await ownedCandidates(input.userId, input.to, input.sessionId)
-  if ('error' in owned) return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
+  if ('error' in owned)
+    return { ok: false, httpStatus: 404, code: 'not_found', error: owned.error }
 
   const sendParams: TemplateSendParams = { body: input.params }
   // Teks yang dikirim lewat Baileys / Cloud-in-window (bila fallback perlu) =
@@ -142,7 +197,12 @@ export async function sendPublicTemplate(input: {
   return {
     ok: true,
     httpStatus: 200,
-    data: { externalMsgId: res.messageId ?? null, provider: res.provider ?? null, via: res.via ?? null, to: input.to },
+    data: {
+      externalMsgId: res.messageId ?? null,
+      provider: res.provider ?? null,
+      via: res.via ?? null,
+      to: input.to,
+    },
   }
 }
 

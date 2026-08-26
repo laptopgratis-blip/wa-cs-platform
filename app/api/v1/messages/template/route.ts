@@ -5,13 +5,14 @@ import {
   apiV1Error,
   apiV1Ok,
   checkSendRateLimit,
-  getIdempotent,
+  completeIdempotent,
   readIdempotencyKey,
+  releaseIdempotent,
+  reserveIdempotent,
   requirePublicApiAuth,
-  saveIdempotent,
 } from '@/lib/public-api-auth'
 import { sendPublicTemplate } from '@/lib/services/public-api/send-message'
-import { normalizeMsisdn, publicSendTemplateSchema } from '@/lib/validations/public-message'
+import { publicSendTemplateSchema } from '@/lib/validations/public-message'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,12 +22,6 @@ export async function POST(req: Request) {
 
   const sendLimited = checkSendRateLimit(gate.auth)
   if (sendLimited) return sendLimited
-
-  const idemKey = readIdempotencyKey(req)
-  if (idemKey) {
-    const cached = getIdempotent(gate.auth.keyId, idemKey)
-    if (cached) return apiV1Ok(cached.body, gate.auth, cached.status)
-  }
 
   const body = await req.json().catch(() => null)
   const parsed = publicSendTemplateSchema.safeParse(body)
@@ -39,21 +34,37 @@ export async function POST(req: Request) {
     )
   }
 
+  const idemKey = readIdempotencyKey(req)
+  if (idemKey) {
+    const r = reserveIdempotent(gate.auth.keyId, idemKey)
+    if (r.kind === 'done') return apiV1Ok(r.body, gate.auth, r.status)
+    if (r.kind === 'pending') {
+      return apiV1Error(
+        'idempotency_in_progress',
+        'Request dengan Idempotency-Key ini sedang diproses.',
+        409,
+        gate.auth.rateLimitHeaders,
+      )
+    }
+  }
+
   try {
     const out = await sendPublicTemplate({
       userId: gate.auth.userId,
-      to: normalizeMsisdn(parsed.data.phone_number),
+      to: parsed.data.phone_number,
       templateId: parsed.data.template_id,
       templateName: parsed.data.template_name,
       params: parsed.data.params,
       sessionId: parsed.data.session_id,
     })
     if (!out.ok) {
+      if (idemKey) releaseIdempotent(gate.auth.keyId, idemKey)
       return apiV1Error(out.code ?? 'send_failed', out.error ?? 'Gagal mengirim.', out.httpStatus, gate.auth.rateLimitHeaders)
     }
-    if (idemKey) saveIdempotent(gate.auth.keyId, idemKey, 200, out.data)
+    if (idemKey) completeIdempotent(gate.auth.keyId, idemKey, 200, out.data)
     return apiV1Ok(out.data, gate.auth)
   } catch (err) {
+    if (idemKey) releaseIdempotent(gate.auth.keyId, idemKey)
     console.error('[api/v1/messages/template POST] gagal:', err)
     return apiV1Error('server_error', 'Gagal mengirim template.', 500, gate.auth.rateLimitHeaders)
   }
