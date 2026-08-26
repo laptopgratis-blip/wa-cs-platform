@@ -53,9 +53,10 @@ const STATUS_LABEL: Record<WaStatus, string> = {
   ERROR: 'Gagal',
 }
 
-// WhatsApp memutar QR ~tiap 20 detik; Baileys mengirim event 'qr' baru tiap
-// putaran. Countdown di-reset tiap QR baru datang.
-const QR_TTL_SEC = 20
+// QR WhatsApp berlaku ~60 detik. Baileys mengirim event 'qr' baru (biasanya
+// setelah timeout + reconnect) yang me-reset countdown. Kalau habis sebelum QR
+// baru datang, user diberi tombol "Muat ulang QR" (bukan spinner nyangkut).
+const QR_TTL_SEC = 60
 
 export function AddWaModal({
   open,
@@ -70,6 +71,7 @@ export function AddWaModal({
   const [nowTick, setNowTick] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [isCancelling, setCancelling] = useState(false)
+  const [isRefreshing, setRefreshing] = useState(false)
   const sessionRef = useRef<string | null>(null)
   const isRepair = Boolean(existingSessionId)
 
@@ -209,6 +211,32 @@ export function AddWaModal({
     }
   }, [isRepair, onOpenChange])
 
+  // Minta QR baru (Baileys wipe + reconnect di sesi yang sama). Dipakai saat
+  // countdown habis tapi QR baru belum datang.
+  const refreshQr = useCallback(async () => {
+    const id = sessionRef.current
+    if (!id || isRefreshing) return
+    setRefreshing(true)
+    setQrDataUrl(null)
+    setQrAt(null)
+    setStatus('CONNECTING')
+    try {
+      const res = await fetch(`/api/whatsapp/${id}/reconnect`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as {
+          error?: string
+        } | null
+        setError(j?.error || 'Gagal memuat ulang QR')
+      }
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [isRefreshing])
+
   // Reset state saat modal benar-benar tertutup.
   useEffect(() => {
     if (!open) {
@@ -293,13 +321,27 @@ export function AddWaModal({
                 return left > 0 ? (
                   <p className="text-muted-foreground flex items-center gap-1.5 text-xs tabular-nums">
                     <RefreshCw className="size-3" />
-                    QR diperbarui otomatis dalam {left} dtk
+                    QR berlaku {left} dtk lagi
                   </p>
                 ) : (
-                  <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-                    <Loader2 className="size-3 animate-spin" />
-                    Menyegarkan QR…
-                  </p>
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-muted-foreground text-xs">
+                      QR mungkin sudah kedaluwarsa.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void refreshQr()}
+                      disabled={isRefreshing}
+                    >
+                      {isRefreshing ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 size-4" />
+                      )}
+                      Muat ulang QR
+                    </Button>
+                  </div>
                 )
               })()}
             </div>
