@@ -10,7 +10,7 @@
 //
 // Audio queue: TTS hasil per kalimat di-play berurutan. Saat playing, video
 // tetap loop (no lip-sync per kata — di handphone aman, di mobile UX live shop).
-import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Volume2, X } from 'lucide-react'
+import { CheckCircle2, Eye, Flame, Loader2, MessageSquare, MicOff, Send, ShoppingCart, Star, Volume2, X, Zap } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -1699,7 +1699,7 @@ function RecentPurchasePopup({
         </div>
         <div className="leading-tight">
           <div className="text-xs font-semibold uppercase tracking-wide text-emerald-100">
-            <span aria-hidden="true">✨ </span>Pembelian Baru
+            Pembelian Baru
           </div>
           <div className="font-semibold">
             {entry.name} <span className="font-normal opacity-90">dari</span>{' '}
@@ -1811,15 +1811,15 @@ function FeaturedProductCard({
         <div className="flex items-center gap-1">
           {flashOn ? (
             <span className="inline-flex items-center gap-0.5 rounded-sm bg-red-600 px-1 py-px text-[8px] font-black uppercase tracking-wider text-white animate-pulse motion-reduce:animate-none">
-              ⚡ FLASH
+              <Zap className="size-3" aria-hidden="true" /> FLASH
             </span>
           ) : (
             <span className="inline-flex items-center gap-0.5 rounded-sm bg-orange-100 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-orange-700">
               LIVE
             </span>
           )}
-          <span className="text-[9px] font-medium uppercase tracking-wide text-warm-500">
-            ★ Unggulan
+          <span className="inline-flex items-center gap-0.5 text-[9px] font-medium uppercase tracking-wide text-warm-500">
+            <Star className="size-2.5" aria-hidden="true" /> Unggulan
           </span>
         </div>
         <div className="line-clamp-1 text-[11px] font-semibold leading-tight text-foreground">
@@ -1957,7 +1957,7 @@ Keranjang Belanja ({products.length})
                   <div>
                     {flashOn ? (
                       <div className="mb-0.5 inline-flex items-center gap-1 rounded-sm bg-red-600 px-1.5 py-px text-[10px] font-black uppercase tracking-wider text-white">
-                        ⚡ Flash Sale
+                        <Zap className="size-3" aria-hidden="true" /> Flash Sale
                       </div>
                     ) : null}
                     <div className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
@@ -2202,7 +2202,7 @@ function JoinGate({
                 <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> Masuk...
               </>
             ) : (
-              <>Masuk Live <span aria-hidden="true">🚀</span></>
+              <>Masuk Live</>
             )}
           </button>
           <p className="text-center text-xs text-muted-foreground">

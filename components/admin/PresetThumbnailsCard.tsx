@@ -85,7 +85,7 @@ export function PresetThumbnailsCard() {
         }
         await loadStatus()
         if (d.remaining <= 0) {
-          toast.success('Semua thumbnail preset sudah ter-generate 🎉')
+          toast.success('Semua thumbnail preset sudah ter-generate')
           break
         }
       }
@@ -110,12 +110,12 @@ export function PresetThumbnailsCard() {
             <p className="text-sm font-semibold">
               Thumbnail Preset Klip Live{' '}
               {status ? (
-                <span className="font-normal text-muted-foreground">
+                <span className="text-muted-foreground font-normal">
                   — {status.done}/{status.total} tersedia
                 </span>
               ) : null}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {complete
                 ? 'Semua visual hook & background sudah punya thumbnail.'
                 : 'Generate gambar thumbnail (Gemini) untuk picker visual hook & background di wizard Klip Live.'}
@@ -142,7 +142,11 @@ export function PresetThumbnailsCard() {
                 Hentikan
               </Button>
             ) : (
-              <Button size="sm" onClick={() => void runAll()} disabled={!status}>
+              <Button
+                size="sm"
+                onClick={() => void runAll()}
+                disabled={!status}
+              >
                 {running && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Generate{status ? ` ${status.missing.length} thumbnail` : ''}
               </Button>

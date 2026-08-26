@@ -229,8 +229,8 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua</SelectItem>
-                  <SelectItem value="succeeded">✅ Sukses</SelectItem>
-                  <SelectItem value="failed">❌ Gagal</SelectItem>
+                  <SelectItem value="succeeded">Sukses</SelectItem>
+                  <SelectItem value="failed">Gagal</SelectItem>
                 </SelectContent>
               </Select>
             </div>

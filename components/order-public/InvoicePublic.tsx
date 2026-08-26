@@ -5,6 +5,7 @@
 // TRANSFER: list rekening + upload bukti / kirim via WA.
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   Clock,
   Copy,
@@ -497,7 +498,8 @@ export function InvoicePublic({
 
                 {proofUrl && (
                   <div className="mb-3 rounded-lg border bg-emerald-50 p-3 text-sm text-emerald-800">
-                    ✓ Bukti sudah dikirim, menunggu konfirmasi penjual.
+                    <Check className="mr-1 inline size-3.5" aria-hidden="true" />
+                    Bukti sudah dikirim, menunggu konfirmasi penjual.
                     <a
                       href={proofUrl}
                       target="_blank"

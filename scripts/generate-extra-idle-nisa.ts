@@ -24,7 +24,7 @@ async function generateOne(input: {
 }) {
   const motion = getIdleMotionById(input.motionId)
   if (!motion) throw new Error(`Motion ${input.motionId} not found`)
-  console.log(`[gen ${motion.id}] start: ${motion.emoji} ${motion.label}`)
+  console.log(`[gen ${motion.id}] start: ${motion.label}`)
 
   const clip = await prisma.liveClip.create({
     data: {
@@ -32,7 +32,7 @@ async function generateOne(input: {
       userId: input.userId,
       scriptOriginal: motion.label,
       transcript: motion.label,
-      summary: `Idle motion: ${motion.emoji} ${motion.label}`,
+      summary: `Idle motion: ${motion.label}`,
       category: 'IDLE',
       tags: ['idle-motion', motion.category, motion.id],
       source: 'GENERATED',
@@ -73,7 +73,11 @@ async function generateOne(input: {
   const clipsDir = path.join(process.cwd(), 'public', 'uploads', 'clips')
   await mkdir(clipsDir, { recursive: true })
   const finalPath = `/uploads/clips/${clip.id}.mp4`
-  const absSource = path.join(process.cwd(), 'public', dl.videoPath.replace(/^\//, ''))
+  const absSource = path.join(
+    process.cwd(),
+    'public',
+    dl.videoPath.replace(/^\//, ''),
+  )
   const buf = await readFile(absSource)
   await writeFile(path.join(clipsDir, `${clip.id}.mp4`), buf)
 
@@ -124,4 +128,9 @@ async function main() {
   }
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1) })
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })

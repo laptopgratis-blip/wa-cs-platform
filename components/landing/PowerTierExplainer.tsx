@@ -27,19 +27,19 @@ const advanced = [
 
 export function PowerTierExplainer() {
   return (
-    <section className="border-y border-warm-200 bg-warm-50 py-16 md:py-20">
+    <section className="border-warm-200 bg-warm-50 border-y py-16 md:py-20">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-2xl text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
-            🚀 Khusus yang udah jualan rutin
+            Khusus yang udah jualan rutin
           </span>
-          <h2 className="mt-4 font-display text-3xl font-extrabold tracking-tight text-warm-900 md:text-4xl">
+          <h2 className="font-display text-warm-900 mt-4 text-3xl font-extrabold tracking-tight md:text-4xl">
             Sudah produksi 100+ order/bulan?
           </h2>
-          <p className="mt-3 text-warm-600">
-            Paket{' '}
-            <span className="font-semibold text-warm-900">POWER</span> buka
-            fitur e-commerce yang biasanya butuh subscribe ke 3-4 tools beda.
+          <p className="text-warm-600 mt-3">
+            Paket <span className="text-warm-900 font-semibold">POWER</span>{' '}
+            buka fitur e-commerce yang biasanya butuh subscribe ke 3-4 tools
+            beda.
           </p>
         </div>
 
@@ -47,31 +47,32 @@ export function PowerTierExplainer() {
           {advanced.map(({ icon: Icon, title, desc, badge }, idx) => (
             <div
               key={title}
-              className={`relative rounded-xl border border-warm-200 bg-card p-6 shadow-sm hover-lift opacity-0 animate-fade-slide-up stagger-${idx + 1}`}
+              className={`border-warm-200 bg-card hover-lift animate-fade-slide-up relative rounded-xl border p-6 opacity-0 shadow-sm stagger-${idx + 1}`}
             >
               {badge && (
-                <span className="absolute right-4 top-4 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
+                <span className="absolute top-4 right-4 rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
                   {badge}
                 </span>
               )}
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary-100 text-primary-600">
+              <div className="bg-primary-100 text-primary-600 flex size-12 items-center justify-center rounded-xl">
                 <Icon className="size-6" />
               </div>
-              <h3 className="mt-5 font-display text-lg font-bold text-warm-900">
+              <h3 className="font-display text-warm-900 mt-5 text-lg font-bold">
                 {title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-warm-600">
+              <p className="text-warm-600 mt-2 text-sm leading-relaxed">
                 {desc}
               </p>
             </div>
           ))}
         </div>
 
-        <div className="mx-auto mt-12 max-w-2xl rounded-2xl border border-primary-200 bg-card p-6 text-center shadow-sm md:p-8">
-          <div className="font-display text-2xl font-extrabold text-warm-900">
-            Rp 199.000<span className="text-base font-medium text-warm-500">/bulan</span>
+        <div className="border-primary-200 bg-card mx-auto mt-12 max-w-2xl rounded-2xl border p-6 text-center shadow-sm md:p-8">
+          <div className="font-display text-warm-900 text-2xl font-extrabold">
+            Rp 199.000
+            <span className="text-warm-500 text-base font-medium">/bulan</span>
           </div>
-          <p className="mt-2 text-sm text-warm-600">
+          <p className="text-warm-600 mt-2 text-sm">
             Tanpa kontrak. Mulai dari paket gratis dulu — upgrade saat omset
             ramai. Cancel kapan saja.
           </p>
@@ -79,7 +80,7 @@ export function PowerTierExplainer() {
             asChild
             size="lg"
             variant="outline"
-            className="mt-5 h-11 rounded-full border-primary-300 bg-card px-7 font-semibold text-primary-700 hover:bg-primary-50"
+            className="border-primary-300 bg-card text-primary-700 hover:bg-primary-50 mt-5 h-11 rounded-full px-7 font-semibold"
           >
             <Link href="/register">
               Mulai dari Gratis Dulu

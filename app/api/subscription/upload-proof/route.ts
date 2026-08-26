@@ -47,9 +47,7 @@ export async function POST(req: Request) {
     return jsonError('Tipe file harus JPG, PNG, atau WebP')
   }
   if (file.size > MAX_RAW_BYTES) {
-    return jsonError(
-      `Ukuran file maksimal ${MAX_RAW_BYTES / 1024 / 1024} MB`,
-    )
+    return jsonError(`Ukuran file maksimal ${MAX_RAW_BYTES / 1024 / 1024} MB`)
   }
 
   try {
@@ -104,7 +102,7 @@ export async function POST(req: Request) {
         subscriptionId: invoice.subscriptionId,
         type: 'MANUAL_PROOF_UPLOADED',
         channel: 'IN_APP',
-        title: '🧾 Bukti Transfer Baru',
+        title: 'Bukti Transfer Baru',
         message: `Ada user upload bukti transfer untuk invoice ${invoice.invoiceNumber}. Cek di /admin/subscriptions.`,
         link: `/admin/subscriptions`,
       }).catch(() => {})

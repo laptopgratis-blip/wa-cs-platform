@@ -1,5 +1,6 @@
 // /live/[slug] — public live room. No auth. Server fetch room data dulu
 // supaya kalau 404/410 user dapat halaman friendly.
+import { Mic, PowerOff, Settings } from 'lucide-react'
 import type { Viewport } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -56,7 +57,11 @@ export default async function PublicLivePage({
           sourceImageUrl: true,
           mode: true,
           scenes: {
-            where: { status: 'READY', videoUrl: { not: null }, isEnabled: true },
+            where: {
+              status: 'READY',
+              videoUrl: { not: null },
+              isEnabled: true,
+            },
             orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
             select: {
               id: true,
@@ -76,11 +81,11 @@ export default async function PublicLivePage({
   if (!room.isActive) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black p-6 text-center text-white">
-        <div className="text-4xl">📴</div>
+        <PowerOff className="size-10 text-zinc-400" aria-hidden="true" />
         <h1 className="mt-4 text-2xl font-semibold">Live sedang offline</h1>
         <p className="mt-2 max-w-md text-sm text-zinc-300">
-          Sesi live <strong>{room.name}</strong> belum dimulai atau sudah selesai.
-          Cek lagi nanti, ya.
+          Sesi live <strong>{room.name}</strong> belum dimulai atau sudah
+          selesai. Cek lagi nanti, ya.
         </p>
       </div>
     )
@@ -94,14 +99,17 @@ export default async function PublicLivePage({
     // Ambil semua idle clip → array buat rotation di client (LRU spread).
     const { findIdleClips } = await import('@/lib/services/clip-library/match')
     const idleList = await findIdleClips(room.hostTemplate.id)
-    idleClips = idleList.map((c) => ({ videoUrl: c.videoUrl, durationMs: c.durationMs }))
+    idleClips = idleList.map((c) => ({
+      videoUrl: c.videoUrl,
+      durationMs: c.durationMs,
+    }))
     idleClipUrl = idleClips[0]?.videoUrl ?? null
   }
   // Pre-req per mode
   if (hostMode === 'TTS_GENERATIVE' && !room.hostTemplate?.videoLoopUrl) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black p-6 text-center text-white">
-        <div className="text-4xl">⚙️</div>
+        <Settings className="size-10 text-zinc-400" aria-hidden="true" />
         <h1 className="mt-4 text-2xl font-semibold">Host belum siap</h1>
         <p className="mt-2 max-w-md text-sm text-zinc-300">
           Avatar host masih dalam proses generate. Coba lagi beberapa menit.
@@ -111,14 +119,18 @@ export default async function PublicLivePage({
   }
   // Fallback: belum ada klip IDLE tapi baseline primary sudah READY →
   // pakai videoLoopUrl sebagai idle loop supaya live tetap tayang.
-  if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl && room.hostTemplate?.videoLoopUrl) {
+  if (
+    hostMode === 'NATIVE_LIBRARY' &&
+    !idleClipUrl &&
+    room.hostTemplate?.videoLoopUrl
+  ) {
     idleClipUrl = room.hostTemplate.videoLoopUrl
     idleClips = [{ videoUrl: idleClipUrl, durationMs: null }]
   }
   if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-zinc-900 to-black p-6 text-center text-white">
-        <div className="text-4xl">🎙️</div>
+        <Mic className="size-10 text-zinc-400" aria-hidden="true" />
         <h1 className="mt-4 text-2xl font-semibold">Klip Live belum siap</h1>
         <p className="mt-2 max-w-md text-sm text-zinc-300">
           Owner belum bikin klip idle loop. Owner perlu generate minimal 1 klip
@@ -209,7 +221,8 @@ export default async function PublicLivePage({
         // dan quota belum habis (kalau quota di-set). Validasi dilakukan
         // server-side supaya client cukup tampilkan harga + countdown.
         const now = Date.now()
-        const startOk = !p.flashSaleStartAt || p.flashSaleStartAt.getTime() <= now
+        const startOk =
+          !p.flashSaleStartAt || p.flashSaleStartAt.getTime() <= now
         const endOk = !p.flashSaleEndAt || p.flashSaleEndAt.getTime() > now
         const quotaOk =
           p.flashSaleQuota == null || p.flashSaleSold < p.flashSaleQuota
@@ -233,7 +246,9 @@ export default async function PublicLivePage({
           weightGrams: p.weightGrams,
           variants: p.variants,
           flashSalePrice: flashOn ? p.flashSalePrice : null,
-          flashSaleEndAt: flashOn ? p.flashSaleEndAt?.toISOString() ?? null : null,
+          flashSaleEndAt: flashOn
+            ? (p.flashSaleEndAt?.toISOString() ?? null)
+            : null,
           flashSaleQuota: flashOn ? p.flashSaleQuota : null,
           flashSaleSold: flashOn ? p.flashSaleSold : null,
         }

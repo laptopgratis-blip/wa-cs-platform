@@ -82,7 +82,7 @@ export async function POST(
       userId: host.userId,
       scriptOriginal: motion.label,
       transcript: motion.label, // utk display saja
-      summary: `Idle motion: ${motion.emoji} ${motion.label}`,
+      summary: `Idle motion: ${motion.label}`,
       category: 'IDLE',
       tags: ['idle-motion', motion.category, motion.id],
       source: 'GENERATED',
@@ -140,8 +140,14 @@ export async function POST(
     const clipsDir = path.join(process.cwd(), 'public', 'uploads', 'clips')
     await mkdir(clipsDir, { recursive: true })
     const finalPath = `/uploads/clips/${clip.id}.mp4`
-    const absSource = path.join(process.cwd(), 'public', dl.videoPath.replace(/^\//, ''))
-    const buf = await import('node:fs/promises').then((m) => m.readFile(absSource))
+    const absSource = path.join(
+      process.cwd(),
+      'public',
+      dl.videoPath.replace(/^\//, ''),
+    )
+    const buf = await import('node:fs/promises').then((m) =>
+      m.readFile(absSource),
+    )
     const finalAbs = path.join(clipsDir, `${clip.id}.mp4`)
     await writeFile(finalAbs, buf)
     // Kompres ke bitrate web (aman: gagal → file asli tetap dipakai).
@@ -157,7 +163,8 @@ export async function POST(
         featureKey: 'KLIP_LIVE_LIPSYNC',
         units: Math.round(durationSec),
       })
-      const { deductTokenAtomic } = await import('@/lib/services/ai-generation-log')
+      const { deductTokenAtomic } =
+        await import('@/lib/services/ai-generation-log')
       await deductTokenAtomic({
         userId: host.userId,
         tokensCharged: charge.tokensCharged,
@@ -177,7 +184,11 @@ export async function POST(
         errorMessage: null,
       },
     })
-    return jsonOk({ clipId: clip.id, videoUrl: finalPath, durationMs: Math.round(durationSec * 1000) })
+    return jsonOk({
+      clipId: clip.id,
+      videoUrl: finalPath,
+      durationMs: Math.round(durationSec * 1000),
+    })
   } catch (e) {
     await prisma.liveClip.update({
       where: { id: clip.id },

@@ -9,6 +9,7 @@
 // - Wrapped dalam gate flow (REQUIRED/OPTIONAL/HYBRID/OFF)
 // - Layout iframe-friendly (no header/footer/sidebar)
 // - Background transparent supaya menyatu dgn LP host
+import { Settings, TriangleAlert } from 'lucide-react'
 import type { Viewport } from 'next'
 import { notFound } from 'next/navigation'
 
@@ -33,7 +34,10 @@ interface PageProps {
   searchParams: Promise<{ lpId?: string }>
 }
 
-export default async function LiveEmbedPage({ params, searchParams }: PageProps) {
+export default async function LiveEmbedPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { liveSlug } = await params
   const { lpId } = await searchParams
 
@@ -41,7 +45,10 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
     return (
       <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
         <div>
-          <div className="text-3xl">⚠️</div>
+          <TriangleAlert
+            className="mx-auto size-8 text-amber-400"
+            aria-hidden="true"
+          />
           <p className="mt-3 text-sm text-zinc-300">Parameter lpId hilang.</p>
         </div>
       </div>
@@ -86,9 +93,20 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
           videoLoopUrl: true,
           mode: true,
           scenes: {
-            where: { status: 'READY', videoUrl: { not: null }, isEnabled: true },
+            where: {
+              status: 'READY',
+              videoUrl: { not: null },
+              isEnabled: true,
+            },
             orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
-            select: { id: true, name: true, category: true, videoUrl: true, videoSeconds: true, isPrimary: true },
+            select: {
+              id: true,
+              name: true,
+              category: true,
+              videoUrl: true,
+              videoSeconds: true,
+              isPrimary: true,
+            },
           },
         },
       },
@@ -102,13 +120,20 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
   if (hostMode === 'NATIVE_LIBRARY' && room.hostTemplate?.id) {
     const { findIdleClips } = await import('@/lib/services/clip-library/match')
     const idleList = await findIdleClips(room.hostTemplate.id)
-    idleClips = idleList.map((c) => ({ videoUrl: c.videoUrl, durationMs: c.durationMs }))
+    idleClips = idleList.map((c) => ({
+      videoUrl: c.videoUrl,
+      durationMs: c.durationMs,
+    }))
     idleClipUrl = idleClips[0]?.videoUrl ?? null
   }
   // Host baru sering belum bikin klip IDLE (wizard cuma generate baseline).
   // Fallback ke video baseline primary (videoLoopUrl) supaya live tetap
   // tayang — jangan 404 di dalam iframe LP.
-  if (hostMode === 'NATIVE_LIBRARY' && !idleClipUrl && room.hostTemplate?.videoLoopUrl) {
+  if (
+    hostMode === 'NATIVE_LIBRARY' &&
+    !idleClipUrl &&
+    room.hostTemplate?.videoLoopUrl
+  ) {
     idleClipUrl = room.hostTemplate.videoLoopUrl
     idleClips = [{ videoUrl: idleClipUrl, durationMs: null }]
   }
@@ -121,9 +146,13 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
     return (
       <div className="flex min-h-screen items-center justify-center bg-black p-6 text-center text-white">
         <div>
-          <div className="text-3xl">⚙️</div>
+          <Settings
+            className="mx-auto size-8 text-zinc-400"
+            aria-hidden="true"
+          />
           <p className="mt-3 text-sm text-zinc-300">
-            Host live belum siap — video host masih diproses. Coba lagi beberapa menit.
+            Host live belum siap — video host masih diproses. Coba lagi beberapa
+            menit.
           </p>
         </div>
       </div>
@@ -133,16 +162,31 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
   const products = await prisma.product.findMany({
     where: { id: { in: room.productIds }, isActive: true },
     select: {
-      id: true, name: true, description: true, price: true, imageUrl: true, images: true,
-      stock: true, weightGrams: true,
-      flashSalePrice: true, flashSaleStartAt: true, flashSaleEndAt: true,
-      flashSaleQuota: true, flashSaleSold: true, flashSaleActive: true,
+      id: true,
+      name: true,
+      description: true,
+      price: true,
+      imageUrl: true,
+      images: true,
+      stock: true,
+      weightGrams: true,
+      flashSalePrice: true,
+      flashSaleStartAt: true,
+      flashSaleEndAt: true,
+      flashSaleQuota: true,
+      flashSaleSold: true,
+      flashSaleActive: true,
       variants: {
         where: { isActive: true },
         orderBy: { sortOrder: 'asc' },
         select: {
-          id: true, name: true, sku: true, price: true,
-          weightGrams: true, stock: true, imageUrl: true,
+          id: true,
+          name: true,
+          sku: true,
+          price: true,
+          weightGrams: true,
+          stock: true,
+          imageUrl: true,
         },
       },
     },
@@ -182,25 +226,42 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
       productFormMap={productFormMap}
       ttsPauseMs={room.ttsPauseMs}
       scenes={room.hostTemplate.scenes.map((s) => ({
-        id: s.id, name: s.name, category: s.category, videoUrl: s.videoUrl as string, isPrimary: s.isPrimary,
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        videoUrl: s.videoUrl as string,
+        isPrimary: s.isPrimary,
       }))}
       products={products.map((p) => {
         const now = Date.now()
-        const startOk = !p.flashSaleStartAt || p.flashSaleStartAt.getTime() <= now
+        const startOk =
+          !p.flashSaleStartAt || p.flashSaleStartAt.getTime() <= now
         const endOk = !p.flashSaleEndAt || p.flashSaleEndAt.getTime() > now
-        const quotaOk = p.flashSaleQuota == null || p.flashSaleSold < p.flashSaleQuota
+        const quotaOk =
+          p.flashSaleQuota == null || p.flashSaleSold < p.flashSaleQuota
         const flashOn =
-          p.flashSaleActive && p.flashSalePrice != null && p.flashSalePrice < p.price && startOk && endOk && quotaOk
-        const gallery = p.images.length > 0 ? p.images : p.imageUrl ? [p.imageUrl] : []
+          p.flashSaleActive &&
+          p.flashSalePrice != null &&
+          p.flashSalePrice < p.price &&
+          startOk &&
+          endOk &&
+          quotaOk
+        const gallery =
+          p.images.length > 0 ? p.images : p.imageUrl ? [p.imageUrl] : []
         return {
-          id: p.id, name: p.name, description: p.description, price: p.price,
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          price: p.price,
           imageUrl: gallery[0] ?? null,
           images: gallery,
           stock: p.stock,
           weightGrams: p.weightGrams,
           variants: p.variants,
           flashSalePrice: flashOn ? p.flashSalePrice : null,
-          flashSaleEndAt: flashOn ? p.flashSaleEndAt?.toISOString() ?? null : null,
+          flashSaleEndAt: flashOn
+            ? (p.flashSaleEndAt?.toISOString() ?? null)
+            : null,
           flashSaleQuota: flashOn ? p.flashSaleQuota : null,
           flashSaleSold: flashOn ? p.flashSaleSold : null,
         }
@@ -208,7 +269,9 @@ export default async function LiveEmbedPage({ params, searchParams }: PageProps)
       featuredProductId={room.featuredProductId ?? null}
       gateConfig={{
         mode: embed.gateMode,
-        fields: embed.gateFields as Array<'name' | 'phone' | 'email' | 'city' | 'productInterest'>,
+        fields: embed.gateFields as Array<
+          'name' | 'phone' | 'email' | 'city' | 'productInterest'
+        >,
         triggerSec: embed.gateTriggerSec,
         triggerOnChat: embed.gateTriggerOnChat,
         autoplay: embed.autoplay,

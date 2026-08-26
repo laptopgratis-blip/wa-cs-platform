@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Bot,
   Camera,
   Check,
   CheckCircle2,
@@ -25,6 +26,7 @@ import {
   ExternalLink,
   Grid3x3,
   ImagePlus,
+  Lightbulb,
   ListOrdered,
   Loader2,
   MessageSquareQuote,
@@ -425,7 +427,13 @@ function Step1Prepare() {
       </div>
 
       <div className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-        <p className="font-semibold">💡 Tips supaya hasil maksimal:</p>
+        <p className="font-semibold">
+          <Lightbulb
+            className="mr-1 inline size-3.5 align-text-bottom"
+            aria-hidden
+          />
+          Tips supaya hasil maksimal:
+        </p>
         <ul className="mt-1 space-y-0.5 pl-4">
           <li>
             Format: <strong>JPG, PNG, atau WebP</strong> — max 4 MB per foto
@@ -695,7 +703,7 @@ function Step2Upload({
                 ))}
               </div>
               <p className="mt-2 text-[10px] text-warm-500">
-                💡 Mau atur urutan / kasih keterangan tiap foto? Klik tombol{' '}
+                Mau atur urutan / kasih keterangan tiap foto? Klik tombol{' '}
                 <ListOrdered className="inline size-3 align-text-bottom" /> di
                 kanan atas.
               </p>
@@ -855,7 +863,7 @@ function Step2Upload({
               </button>
 
               <p className="rounded-md bg-blue-50 px-3 py-2 text-[11px] leading-relaxed text-blue-900">
-                💡 <strong>Tips:</strong> isi keterangan singkat tiap foto (mis.
+                <strong>Tips:</strong> isi keterangan singkat tiap foto (mis.
                 &ldquo;foto utama produk&rdquo;, &ldquo;testimoni Bu Ani&rdquo;,
                 &ldquo;detail jahitan&rdquo;). Keterangan ini ikut dipakai saat
                 generate prompt — AI jadi tahu mana foto produk, mana testimoni,
@@ -1186,7 +1194,7 @@ function Step3Prompt({ images }: { images: LpImage[] }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="mr-2 text-lg">✨</span>
+              <Sparkles className="mr-2 size-5 text-primary-500" aria-hidden />
               <span className="flex-1 text-left">
                 <span className="block font-semibold">Gemini (Google)</span>
                 <span className="block text-[10px] text-warm-500">
@@ -1207,7 +1215,7 @@ function Step3Prompt({ images }: { images: LpImage[] }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="mr-2 text-lg">🤖</span>
+              <Bot className="mr-2 size-5 text-primary-500" aria-hidden />
               <span className="flex-1 text-left">
                 <span className="block font-semibold">Claude.ai</span>
                 <span className="block text-[10px] text-warm-500">
@@ -1362,7 +1370,7 @@ function Step4Paste({
       </Button>
 
       <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-900">
-        💡 Setelah klik Simpan, kamu akan dibawa ke editor LP. Di sana kamu
+        Setelah klik Simpan, kamu akan dibawa ke editor LP. Di sana kamu
         bisa edit visual (klik teks/gambar), ganti warna, ubah link, dan
         publish LP-mu.
       </p>

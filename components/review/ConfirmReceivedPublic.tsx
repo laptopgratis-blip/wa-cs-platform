@@ -51,11 +51,11 @@ export function ConfirmReceivedPublic({
           <>
             <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-500" />
             <h1 className="mt-4 text-xl font-semibold text-zinc-900">
-              Makasih, {customerName}! 🙏
+              Makasih, {customerName}!
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
               Pesanan ditandai sudah diterima. Sudah sempat dicoba? Bantu kami
-              dengan testimoni singkat ya ✨
+              dengan testimoni singkat ya.
             </p>
             <a
               href={reviewUrl}
@@ -68,7 +68,7 @@ export function ConfirmReceivedPublic({
           <>
             <PackageCheck className="mx-auto h-16 w-16 text-orange-500" />
             <h1 className="mt-4 text-xl font-semibold text-zinc-900">
-              Halo {customerName} 👋
+              Halo {customerName}!
             </h1>
             <p className="mt-2 text-sm text-zinc-600">
               Pesananmu sudah sampai? Klik tombol di bawah untuk konfirmasi.

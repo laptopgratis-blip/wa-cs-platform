@@ -311,13 +311,13 @@ export function LiveEmbedPanel({
                 >
                   <Check className="mr-1 inline size-3" aria-hidden />
                   <strong>{currentRoom.name}</strong> tampil di bawah headline.
-                  Penanda 📺 di preview hanya petunjuk posisi — room asli muncul
-                  saat LP dipublish.
+                  Penanda LIVE ROOM di preview hanya petunjuk posisi — room
+                  asli muncul saat LP dipublish.
                 </p>
               ) : (
                 <p className="text-warm-500 text-xs leading-relaxed">
                   Embed tampil saat LP <strong>dipublish</strong>. Di editor ini
-                  hanya muncul penanda posisi (📺).
+                  hanya muncul penanda posisi bertuliskan LIVE ROOM.
                 </p>
               )}
 

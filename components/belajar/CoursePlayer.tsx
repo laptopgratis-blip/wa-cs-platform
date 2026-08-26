@@ -508,7 +508,7 @@ function CertificateBanner({
   if (!ownerCanIssueCertificate) {
     return (
       <div className="mt-3 rounded-md border border-warm-200 bg-warm-50 p-3 text-xs text-warm-600">
-        🎉 Selamat! Kamu sudah selesaikan semua lesson. Penjual belum
+        Selamat! Kamu sudah selesaikan semua lesson. Penjual belum
         upgrade plan untuk fitur sertifikat.
       </div>
     )

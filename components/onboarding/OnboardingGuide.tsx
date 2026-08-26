@@ -166,15 +166,16 @@ export function OnboardingGuide({
       return (
         <Card className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm">
           <div className="flex items-center gap-4 p-5">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-orange">
+            <div className="shadow-orange flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
               <PartyPopper className="size-6" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-base font-extrabold text-warm-900">
-                Setup selesai 🎉
+              <h2 className="font-display text-warm-900 text-base font-extrabold">
+                Setup selesai
               </h2>
-              <p className="text-sm text-warm-600">
-                Semua langkah utama untuk <strong>{title}</strong> sudah selesai.
+              <p className="text-warm-600 text-sm">
+                Semua langkah utama untuk <strong>{title}</strong> sudah
+                selesai.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => goToStep(0)}>
@@ -186,18 +187,22 @@ export function OnboardingGuide({
     }
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="mb-6 flex size-24 items-center justify-center rounded-full bg-emerald-500 text-white shadow-orange">
+        <div className="shadow-orange mb-6 flex size-24 items-center justify-center rounded-full bg-emerald-500 text-white">
           <PartyPopper className="size-12" />
         </div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight text-warm-900 md:text-4xl">
-          Mantap! Setup selesai 🎉
+        <h1 className="font-display text-warm-900 text-3xl font-extrabold tracking-tight md:text-4xl">
+          Mantap! Setup selesai
         </h1>
-        <p className="mx-auto mt-3 max-w-md text-warm-600">
-          Semua langkah penting untuk <strong>{title}</strong> sudah kamu selesaikan.
-          Saatnya buka dashboard dan mulai jalanin bisnis.
+        <p className="text-warm-600 mx-auto mt-3 max-w-md">
+          Semua langkah penting untuk <strong>{title}</strong> sudah kamu
+          selesaikan. Saatnya buka dashboard dan mulai jalanin bisnis.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Button asChild size="lg" className="bg-primary-500 hover:bg-primary-600">
+          <Button
+            asChild
+            size="lg"
+            className="bg-primary-500 hover:bg-primary-600"
+          >
             <Link href="/dashboard">
               Buka Dashboard <ArrowRight className="ml-1.5 size-4" />
             </Link>
@@ -223,21 +228,21 @@ export function OnboardingGuide({
     <div className="flex flex-col gap-6">
       {/* Header — title + progress */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-primary-600">
+        <p className="text-primary-600 text-xs font-semibold tracking-wider uppercase">
           {title}
         </p>
-        <p className="mt-1 text-sm text-warm-600">{subtitle}</p>
+        <p className="text-warm-600 mt-1 text-sm">{subtitle}</p>
         <div className="mt-4 flex items-center gap-3">
-          <span className="text-xs font-semibold text-warm-600">
+          <span className="text-warm-600 text-xs font-semibold">
             Langkah {stepNum} dari {totalSteps}
           </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-warm-200/60">
+          <div className="bg-warm-200/60 h-2 flex-1 overflow-hidden rounded-full">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-primary-500 to-orange-500 transition-all"
+              className="from-primary-500 h-full rounded-full bg-gradient-to-r to-orange-500 transition-all"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-          <span className="text-xs font-semibold text-warm-700 tabular-nums">
+          <span className="text-warm-700 text-xs font-semibold tabular-nums">
             {progressPct}%
           </span>
         </div>
@@ -256,7 +261,7 @@ export function OnboardingGuide({
               className={cn(
                 'flex size-7 items-center justify-center rounded-full text-xs font-bold transition-colors',
                 s.index === activeIndex
-                  ? 'bg-primary-500 text-white ring-2 ring-primary-200'
+                  ? 'bg-primary-500 ring-primary-200 text-white ring-2'
                   : sDone
                     ? 'bg-emerald-500 text-white hover:bg-emerald-600'
                     : sSkipped
@@ -272,20 +277,20 @@ export function OnboardingGuide({
       </div>
 
       {/* Active step card */}
-      <Card className="overflow-hidden rounded-2xl border-2 border-primary-200 shadow-lg">
+      <Card className="border-primary-200 overflow-hidden rounded-2xl border-2 shadow-lg">
         <CardContent className="p-0">
-          <div className="border-b border-primary-100 bg-gradient-to-br from-primary-50 to-orange-50 p-6">
+          <div className="border-primary-100 from-primary-50 border-b bg-gradient-to-br to-orange-50 p-6">
             <div className="flex items-start gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary-500 text-xl font-bold text-white shadow-orange">
+              <div className="bg-primary-500 shadow-orange flex size-12 shrink-0 items-center justify-center rounded-xl text-xl font-bold text-white">
                 {stepNum}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-xl font-extrabold leading-tight text-warm-900">
+                  <h2 className="font-display text-warm-900 text-xl leading-tight font-extrabold">
                     {active.title}
                   </h2>
                   {active.optional && (
-                    <span className="rounded-full bg-warm-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-600">
+                    <span className="bg-warm-200 text-warm-600 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
                       Opsional
                     </span>
                   )}
@@ -294,9 +299,13 @@ export function OnboardingGuide({
                       <Crown className="size-3" /> Butuh {active.requiresPlan}
                     </span>
                   )}
-                  <span className="text-xs text-warm-500">~{active.estimatedMin} menit</span>
+                  <span className="text-warm-500 text-xs">
+                    ~{active.estimatedMin} menit
+                  </span>
                 </div>
-                <p className="mt-1.5 text-sm text-warm-700">{active.description}</p>
+                <p className="text-warm-700 mt-1.5 text-sm">
+                  {active.description}
+                </p>
 
                 {/* Status badge */}
                 {(isDone || isSkipped) && (
@@ -311,7 +320,9 @@ export function OnboardingGuide({
                     {isDone ? (
                       <>
                         <Check className="size-3.5" />
-                        {active.autoChecked ? 'Sudah terdeteksi otomatis' : 'Sudah ditandai selesai'}
+                        {active.autoChecked
+                          ? 'Sudah terdeteksi otomatis'
+                          : 'Sudah ditandai selesai'}
                       </>
                     ) : (
                       <>– Dilewati</>
@@ -326,13 +337,13 @@ export function OnboardingGuide({
             {/* Instruksi step-by-step */}
             {active.instructions.length > 0 && (
               <div>
-                <p className="mb-3 text-sm font-semibold text-warm-700">
+                <p className="text-warm-700 mb-3 text-sm font-semibold">
                   Cara melakukan:
                 </p>
-                <ol className="space-y-2.5 text-sm text-warm-700">
+                <ol className="text-warm-700 space-y-2.5 text-sm">
                   {active.instructions.map((line, i) => (
                     <li key={i} className="flex gap-3">
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-warm-100 text-xs font-semibold text-warm-700">
+                      <span className="bg-warm-100 text-warm-700 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
                         {i + 1}
                       </span>
                       <span className="pt-0.5">{line}</span>
@@ -367,7 +378,9 @@ export function OnboardingGuide({
                 disabled={refreshing}
                 title="Cek apakah step sudah selesai"
               >
-                <RefreshCw className={cn('mr-2 size-4', refreshing && 'animate-spin')} />
+                <RefreshCw
+                  className={cn('mr-2 size-4', refreshing && 'animate-spin')}
+                />
                 Refresh status
               </Button>
             )}
@@ -438,12 +451,12 @@ export function OnboardingGuide({
         </div>
       </div>
 
-      <div className="border-t border-warm-200 pt-4 text-center">
+      <div className="border-warm-200 border-t pt-4 text-center">
         <button
           type="button"
           onClick={dismissChecklist}
           disabled={busy !== null}
-          className="text-xs text-warm-500 hover:text-warm-700"
+          className="text-warm-500 hover:text-warm-700 text-xs"
         >
           Tutup panduan permanen (bisa di-buka ulang dari Dashboard)
         </button>
