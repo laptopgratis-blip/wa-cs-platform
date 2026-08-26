@@ -43,6 +43,20 @@ interface ConnectResponse {
   error?: string
 }
 
+// Label ramah untuk baris "Status" — jangan tampilkan raw enum ke user.
+const STATUS_LABEL: Record<WaStatus, string> = {
+  CONNECTING: 'Menghubungkan…',
+  WAITING_QR: 'Menunggu dipindai',
+  CONNECTED: 'Terhubung',
+  DISCONNECTED: 'Terputus',
+  PAUSED: 'Dijeda',
+  ERROR: 'Gagal',
+}
+
+// WhatsApp memutar QR ~tiap 20 detik; Baileys mengirim event 'qr' baru tiap
+// putaran. Countdown di-reset tiap QR baru datang.
+const QR_TTL_SEC = 20
+
 export function AddWaModal({
   open,
   onOpenChange,
@@ -52,6 +66,8 @@ export function AddWaModal({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [status, setStatus] = useState<WaStatus>('CONNECTING')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [qrAt, setQrAt] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [isCancelling, setCancelling] = useState(false)
   const sessionRef = useRef<string | null>(null)
@@ -110,6 +126,7 @@ export function AddWaModal({
     function handleQr(payload: QrEventPayload) {
       if (payload.sessionId !== sessionId) return
       setQrDataUrl(payload.qrDataUrl)
+      setQrAt(Date.now()) // reset countdown tiap QR baru
       setStatus('WAITING_QR')
     }
     function handleStatus(payload: StatusEventPayload) {
@@ -198,9 +215,17 @@ export function AddWaModal({
       sessionRef.current = null
       setSessionId(null)
       setQrDataUrl(null)
+      setQrAt(null)
       setError(null)
     }
   }, [open])
+
+  // Ticker 1 dtk untuk countdown QR — hanya jalan selama QR tampil.
+  useEffect(() => {
+    if (!qrDataUrl || qrAt === null) return
+    const t = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [qrDataUrl, qrAt])
 
   return (
     <Dialog
@@ -223,20 +248,21 @@ export function AddWaModal({
             {isRepair && (
               <>
                 Pastikan dulu device <strong>Hulao</strong> lama sudah di-unlink
-                di HP (Pengaturan → Perangkat Tertaut), lalu scan QR baru di bawah.
+                di HP (Pengaturan → Perangkat Tertaut), lalu scan QR baru di
+                bawah.
                 <br />
               </>
             )}
             Buka WhatsApp di HP → <strong>Pengaturan</strong> →{' '}
-            <strong>Perangkat Tertaut</strong> → <strong>Tautkan Perangkat</strong>,
-            lalu pindai QR di bawah.
+            <strong>Perangkat Tertaut</strong> →{' '}
+            <strong>Tautkan Perangkat</strong>, lalu pindai QR di bawah.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-[320px] items-center justify-center rounded-lg border bg-muted/30 p-4">
+        <div className="bg-muted/30 flex min-h-[320px] items-center justify-center rounded-lg border p-4">
           {error ? (
             <div className="text-center">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-destructive text-sm">{error}</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -256,12 +282,29 @@ export function AddWaModal({
                 height={280}
                 className="rounded bg-white p-2"
               />
-              <p className="text-xs text-muted-foreground">
-                QR otomatis refresh kalau kadaluarsa
-              </p>
+              {(() => {
+                const left =
+                  qrAt === null
+                    ? QR_TTL_SEC
+                    : Math.max(
+                        0,
+                        QR_TTL_SEC - Math.floor((nowTick - qrAt) / 1000),
+                      )
+                return left > 0 ? (
+                  <p className="text-muted-foreground flex items-center gap-1.5 text-xs tabular-nums">
+                    <RefreshCw className="size-3" />
+                    QR diperbarui otomatis dalam {left} dtk
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                    <Loader2 className="size-3 animate-spin" />
+                    Menyegarkan QR…
+                  </p>
+                )
+              })()}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+            <div className="text-muted-foreground flex flex-col items-center gap-3 text-center text-sm">
               <Loader2 className="size-8 animate-spin" />
               <span>
                 {status === 'CONNECTING'
@@ -273,9 +316,12 @@ export function AddWaModal({
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <p className="text-muted-foreground flex items-center gap-2 text-xs">
             <RefreshCw className="size-3" />
-            Status: <span className="font-medium text-foreground">{status}</span>
+            Status:{' '}
+            <span className="text-foreground font-medium">
+              {STATUS_LABEL[status]}
+            </span>
           </p>
           <Button
             variant="ghost"
