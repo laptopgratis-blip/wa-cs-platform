@@ -8,6 +8,7 @@
 import {
   Activity,
   Banknote,
+  Webhook,
   BarChart3,
   BellRing,
   BookMarked,
@@ -63,6 +64,10 @@ export interface NavItem {
   icon: LucideIcon
   // Role yang boleh lihat — kosong = semua role yang punya akses ke parent.
   roles?: Role[]
+  // Item hanya untuk paket POWER (Order System). Gating per-ITEM: dipakai saat
+  // integrasi POWER (Pixel, Auto Confirm) berada di grup yang tampil untuk
+  // semua user — hanya item-nya yang disembunyikan bila user tak punya akses.
+  requiresOrderSystem?: boolean
 }
 
 // Aksen nav TUNGGAL — brand orange untuk state aktif, netral untuk sisanya.
@@ -103,8 +108,8 @@ export interface NavGroup {
 // - "Pesanan" pindah dari Produktivitas ke ORDER SYSTEM (kontekstual cocok)
 // - "Rekening" → "Pengaturan" (label, route tetap /bank-accounts) karena
 //   page itu juga berisi pengaturan pengiriman (origin city, kurir aktif)
-// - Pixel Tracking + Auto Confirm Bank pindah ke group "INTEGRASI TOKO" terpisah
-//   supaya ORDER SYSTEM fokus ke operasional jualan
+// - Pixel Tracking + Auto Confirm Bank pindah dari ORDER SYSTEM ke grup
+//   integrasi (2026-08-26: kini item POWER-gated di grup "INTEGRASI")
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'CHAT & CS',
@@ -182,20 +187,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
   // supaya scope grup itu fokus ke operasional jualan harian.
   {
-    label: 'INTEGRASI TOKO',
-    requiresOrderSystem: true,
-    items: [
-      { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
-      // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
-      // scraping mutasi BCA. Disclaimer & risk handling di halaman tujuan.
-      {
-        label: 'Auto Confirm (BETA)',
-        href: '/integrations/bank-mutation',
-        icon: Banknote,
-      },
-    ],
-  },
-  {
     label: 'LAPORAN',
     items: [{ label: 'Analytics', href: '/analytics', icon: BarChart3 }],
   },
@@ -210,14 +201,30 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Upgrade LMS', href: '/pricing-lms', icon: Rocket },
     ],
   },
-  // PENGEMBANG (2026-08-21) — kunci API seller + dokumentasi script embed.
-  // Tanpa requiresOrderSystem/roles: tampil untuk SEMUA user (keputusan owner).
-  // Kunci API tetap harus dibuat sendiri, jadi menu ini aman dilihat siapa pun.
+  // INTEGRASI (2026-08-26; dulu "PENGEMBANG") — satu grup berisi TIAP integrasi
+  // sebagai item terpisah. API/Webhook/Script&Embed tampil untuk SEMUA user
+  // (kunci API tetap dibuat sendiri). Pixel & Auto Confirm khusus POWER via
+  // requiresOrderSystem per-item (grup ini sendiri tidak POWER-gated).
   {
-    label: 'PENGEMBANG',
+    label: 'INTEGRASI',
     items: [
       { label: 'API', href: '/pengembang/api', icon: Code2 },
-      { label: 'Integrasi', href: '/pengembang/integrasi', icon: Plug },
+      { label: 'Webhook', href: '/pengembang/webhook', icon: Webhook },
+      { label: 'Script & Embed', href: '/pengembang/integrasi', icon: Plug },
+      {
+        label: 'Pixel Tracking',
+        href: '/integrations/pixels',
+        icon: Activity,
+        requiresOrderSystem: true,
+      },
+      // Phase 1 BETA, 2026-05-08 — auto-confirm transfer via scraping mutasi
+      // BCA. Disclaimer & risk handling di halaman tujuan.
+      {
+        label: 'Auto Confirm (BETA)',
+        href: '/integrations/bank-mutation',
+        icon: Banknote,
+        requiresOrderSystem: true,
+      },
     ],
   },
   // DUKUNGAN — sengaja TIDAK pernah disembunyikan oleh HIDDEN_GROUPS_BY_GOAL:
@@ -495,7 +502,16 @@ export function filterGroupsByOrderSystem(
   groups: NavGroup[],
   hasOrderSystemAccess: boolean,
 ): NavGroup[] {
-  return groups.filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
+  return groups
+    .filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
+    .map((g) => {
+      // Gating per-ITEM: buang item POWER dari grup non-POWER (mis. Pixel &
+      // Auto Confirm di grup INTEGRASI). Grup yang seluruhnya POWER sudah
+      // lolos filter di atas, jadi item-nya dibiarkan.
+      if (hasOrderSystemAccess || !g.items.some((i) => i.requiresOrderSystem)) return g
+      return { ...g, items: g.items.filter((i) => !i.requiresOrderSystem) }
+    })
+    .filter((g) => g.items.length > 0)
 }
 
 // ─── ONBOARDING GOAL FILTER ───────────────────────────────────────────
@@ -510,7 +526,7 @@ export type OnboardingGoal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
 // di-update di mapping ini juga.
 const HIDDEN_GROUPS_BY_GOAL: Record<OnboardingGoal, string[]> = {
   // CS AI saja → tidak butuh jualan / course / integrasi pixel.
-  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS', 'INTEGRASI TOKO'],
+  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS'],
   // Jualan + LP → tidak butuh LMS.
   SELL_LP: ['LMS'],
   // Jualan WA only → tidak butuh LP & LMS. Content Studio (di group LP)

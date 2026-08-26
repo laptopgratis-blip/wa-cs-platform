@@ -1,26 +1,21 @@
-// Halaman /pengembang/integrasi — pola "Integrations" kirimchat: fokus utama
-// = endpoint webhook keluar (counter X/5, buat, uji, riwayat). Dokumentasi
-// script LP Tracker / Live AI Embed / tool otomasi dilipat ke <details>
-// supaya halaman tetap ringkas.
-import { BarChart3, Bot, ChevronDown, Lock, Plug, Radio, Workflow } from 'lucide-react'
+// Halaman /pengembang/integrasi — "Script & Embed" (2026-08-26: webhook dipisah
+// ke /pengembang/webhook; Pixel & Auto Confirm jadi item menu sendiri). Sisa di
+// sini = dokumentasi script yang dipasang di landing page: LP Tracker, Live AI
+// Embed, dan cara pakai kunci API dari n8n/Zapier/Make.
+import { BarChart3, Bot, ChevronDown, Plug, Workflow } from 'lucide-react'
 import { getServerSession } from 'next-auth'
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { ReactNode } from 'react'
 
-import { WebhookEndpointsClient } from '@/components/developer/WebhookEndpointsClient'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { authOptions } from '@/lib/auth'
-import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { publicBaseUrl } from '@/lib/review-token'
-import { listWebhookEndpoints } from '@/lib/services/webhooks/endpoints'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Integrasi · Hulao',
+  title: 'Script & Embed · Hulao',
 }
 
 function Snippet({ children }: { children: string }) {
@@ -70,46 +65,17 @@ export default async function PengembangIntegrasiPage() {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
-  const [access, endpoints] = await Promise.all([
-    checkOrderSystemAccess(session.user.id),
-    listWebhookEndpoints(session.user.id),
-  ])
   const baseUrl = publicBaseUrl()
-  const initialEndpoints = endpoints.map((e) => ({
-    ...e,
-    autoDisabledAt: e.autoDisabledAt?.toISOString() ?? null,
-    lastSuccessAt: e.lastSuccessAt?.toISOString() ?? null,
-    lastFailureAt: e.lastFailureAt?.toISOString() ?? null,
-    createdAt: e.createdAt.toISOString(),
-  }))
 
   return (
     <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
       <PageHeader
         icon={Plug}
-        title="Integrasi"
-        description="Terima event Hulao lewat webhook, dan pasang script Hulao di landing page-mu."
+        title="Script & Embed"
+        description="Script yang dipasang di landing page, dan cara menyambungkan Hulao ke tool otomasi."
       />
 
-      <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold text-warm-900">Webhook Endpoint</h2>
-        <WebhookEndpointsClient initialEndpoints={initialEndpoints} />
-        <p className="text-xs text-warm-500">
-          Payload: <code className="font-mono">{'{ id, type, createdAt, data }'}</code> + header{' '}
-          <code className="font-mono">X-Hulao-Signature</code> (HMAC SHA-256) &{' '}
-          <code className="font-mono">X-Hulao-Event</code>. Cara verifikasi tanda tangan ada di tab
-          Dokumentasi halaman{' '}
-          <Link href="/pengembang/api" className="text-primary-600 underline">
-            API
-          </Link>
-          . Gagal di-retry bertahap sampai 6×; gagal beruntun terus-menerus menonaktifkan endpoint
-          otomatis.
-        </p>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold text-warm-900">Script &amp; Tool</h2>
-
+      <div className="space-y-3">
         <ToolCard
           icon={<BarChart3 className="mt-0.5 size-4 shrink-0 text-primary-500" aria-hidden />}
           title="LP Tracker"
@@ -164,71 +130,24 @@ export default async function PengembangIntegrasiPage() {
         >
           <ul className="space-y-2 text-sm text-warm-600">
             <li>
-              <strong>n8n</strong> — node <em>Webhook</em> untuk menerima event dari endpoint di atas;
-              node <em>HTTP Request</em> + Header Auth (<code className="font-mono text-xs">Authorization:
-              Bearer hl_live_…</code>) untuk menarik data.
+              <strong>n8n</strong> — node <em>Webhook</em> untuk menerima event dari endpoint
+              Webhook; node <em>HTTP Request</em> + Header Auth (<code className="font-mono text-xs">Authorization:
+              Bearer hl_live_…</code>) untuk menarik/mengirim data.
             </li>
             <li>
               <strong>Zapier</strong> — <em>Webhooks by Zapier</em>: &quot;Catch Hook&quot; untuk menerima,
-              &quot;Custom Request&quot; untuk menarik data.
+              &quot;Custom Request&quot; untuk memanggil API.
             </li>
             <li>
               <strong>Make</strong> — modul <em>Webhooks</em> dan <em>HTTP</em>, pola yang sama.
             </li>
           </ul>
           <p className="text-xs text-warm-500">
-            Simpan kunci & signing secret di credential store masing-masing tool — jangan di URL.
+            Buat kunci di menu API dan endpoint di menu Webhook. Simpan kunci &amp; signing secret di
+            credential store masing-masing tool — jangan di URL.
           </p>
         </ToolCard>
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="font-display text-xl font-semibold text-warm-900">Fitur Toko</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card>
-            <CardContent className="space-y-2 pt-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-warm-900">
-                <Radio className="size-4 text-primary-500" aria-hidden /> Pixel Tracking
-              </p>
-              <p className="text-sm text-warm-500">
-                Kirim event pesanan ke Meta, Google, dan TikTok Ads dari sisi server.
-              </p>
-              {access.hasAccess ? (
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/integrations/pixels">Atur Pixel</Link>
-                </Button>
-              ) : (
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/pricing">
-                    <Lock className="mr-2 size-4" /> Paket POWER
-                  </Link>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="space-y-2 pt-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-warm-900">
-                <Plug className="size-4 text-primary-500" aria-hidden /> Auto Confirm Bank
-              </p>
-              <p className="text-sm text-warm-500">
-                Cocokkan mutasi rekening dengan pesanan supaya konfirmasi transfer otomatis.
-              </p>
-              {access.hasAccess ? (
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/integrations/bank-mutation">Atur Auto Confirm</Link>
-                </Button>
-              ) : (
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/pricing">
-                    <Lock className="mr-2 size-4" /> Paket POWER
-                  </Link>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+      </div>
     </div>
   )
 }
