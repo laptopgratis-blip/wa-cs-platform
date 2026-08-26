@@ -17,7 +17,8 @@ import {
 } from './resources'
 import { upsertCloudSession } from './session-store'
 
-export type OnboardWarningCode = RegisterFailReason | 'REGISTER_FAILED' | 'WEBHOOK_FAILED'
+export type OnboardWarningCode =
+  RegisterFailReason | 'REGISTER_FAILED' | 'WEBHOOK_FAILED'
 
 export interface CompleteSignupInput {
   userId: string
@@ -70,16 +71,72 @@ export async function completeEmbeddedSignup(
   const exchange = await exchangeCodeForToken(input.code)
   if (!exchange.ok || !exchange.accessToken) {
     console.error('[waba/onboarding] exchange code gagal:', exchange.error)
-    return { ok: false, status: 400, error: `Gagal menukar kode Meta: ${exchange.error}` }
+    return {
+      ok: false,
+      status: 400,
+      error: `Gagal menukar kode Meta: ${exchange.error}`,
+    }
   }
-  const token = exchange.accessToken
+  return finishOnboardingWithToken({
+    userId: input.userId,
+    token: exchange.accessToken,
+    wabaId: input.wabaId,
+    phoneNumberId: input.phoneNumberId,
+    pin: input.pin,
+  })
+}
+
+export interface ManualTokenInput {
+  userId: string
+  /** Access token (System User / long-lived) milik user sendiri. */
+  accessToken: string
+  /** WABA ID yang mau dihubungkan (wajib untuk jalur manual). */
+  wabaId: string
+  phoneNumberId?: string
+  pin?: string
+}
+
+/**
+ * Hubungkan WABA lewat Access Token + WABA ID yang dimasukkan user sendiri
+ * (jalur "Token Manual", untuk developer / migrasi dari platform lain). Sama
+ * seperti Embedded Signup tapi TANPA tukar-kode OAuth — token dipakai langsung.
+ */
+export async function completeManualToken(
+  input: ManualTokenInput,
+): Promise<CompleteSignupResult> {
+  const token = input.accessToken.trim()
+  if (!token)
+    return { ok: false, status: 400, error: 'Access token wajib diisi' }
+  return finishOnboardingWithToken({
+    userId: input.userId,
+    token,
+    wabaId: input.wabaId,
+    phoneNumberId: input.phoneNumberId,
+    pin: input.pin,
+  })
+}
+
+// Logika bersama SETELAH token didapat (dari OAuth exchange atau input manual):
+// discover WABA → pilih nomor → simpan sesi → register → subscribe webhook.
+async function finishOnboardingWithToken(input: {
+  userId: string
+  token: string
+  wabaId?: string
+  phoneNumberId?: string
+  pin?: string
+}): Promise<CompleteSignupResult> {
+  const token = input.token
 
   // WABA yang SUDAH BENAR-BENAR terhubung user ini (untuk WABA kedua). Hanya
   // CONNECTED — sesi ERROR dari percobaan gagal tidak boleh mengecualikan
   // WABA yang sedang di-retry.
   const existingWabaIds = (
     await prisma.whatsappSession.findMany({
-      where: { userId: input.userId, wabaId: { not: null }, status: 'CONNECTED' },
+      where: {
+        userId: input.userId,
+        wabaId: { not: null },
+        status: 'CONNECTED',
+      },
       select: { wabaId: true },
     })
   )
@@ -97,7 +154,8 @@ export async function completeEmbeddedSignup(
   }
 
   const phone = pickPhone(discovery.waba.phoneNumbers, input.phoneNumberId)
-  if (!phone) return { ok: false, status: 400, error: 'WABA tidak punya nomor telepon' }
+  if (!phone)
+    return { ok: false, status: 400, error: 'WABA tidak punya nomor telepon' }
 
   const isCoexistence = phone.is_on_biz_app === true
   const phoneDigits = phone.display_phone_number?.replace(/\D/g, '') ?? ''
@@ -116,7 +174,8 @@ export async function completeEmbeddedSignup(
     })
   } catch (err) {
     const msg = (err as Error).message
-    if (msg.includes('terhubung ke akun lain')) return { ok: false, status: 409, error: msg }
+    if (msg.includes('terhubung ke akun lain'))
+      return { ok: false, status: 409, error: msg }
     throw err
   }
 
@@ -143,7 +202,10 @@ export async function completeEmbeddedSignup(
       await storeSessionPin(created.id, pin, generated)
       if (generated) generatedPin = pin
     } else {
-      console.error(`[waba/onboarding] register gagal (${reg.reason}):`, reg.error)
+      console.error(
+        `[waba/onboarding] register gagal (${reg.reason}):`,
+        reg.error,
+      )
       warning = reg.error
       warningCode = reg.reason
     }
