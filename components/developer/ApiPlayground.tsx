@@ -2,9 +2,12 @@
 
 // API Playground ala kirimchat (palet hulao): pilih endpoint dari dropdown
 // ber-badge method, isi parameter / request body, kirim — respons + kuota
-// tampil langsung. Kunci hanya hidup di state (tidak pernah disimpan).
-import { Loader2, Send } from 'lucide-react'
+// tampil langsung. Menampilkan Base URL, URL penuh, deskripsi endpoint, dan
+// contoh cURL supaya jelas dipakai dari luar (n8n/Zapier/skrip). Kunci hanya
+// hidup di state (tidak pernah disimpan).
+import { Check, Copy, Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +22,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+
+interface ApiPlaygroundProps {
+  /** Base URL publik (mis. https://hulao.id) — dari publicBaseUrl(). */
+  baseUrl: string
+}
 
 type Method = 'GET' | 'POST'
 
@@ -35,6 +43,7 @@ interface EndpointDef {
   method: Method
   label: string
   path: string
+  desc: string
   params: ParamDef[]
   /** Contoh request body (POST). Ditampilkan & bisa diedit di editor. */
   bodyExample?: string
@@ -46,6 +55,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Uji kunci',
     path: '/api/v1/ping',
+    desc: 'Cek apakah kunci valid. Balikannya menyebut nama kunci yang dipakai.',
     params: [],
   },
   {
@@ -53,19 +63,10 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Daftar kontak',
     path: '/api/v1/contacts',
+    desc: 'Daftar kontak dengan paginasi cursor. Filter opsional: search, stage, tag.',
     params: [
-      {
-        name: 'search',
-        label: 'search',
-        kind: 'query',
-        placeholder: 'nama / nomor',
-      },
-      {
-        name: 'stage',
-        label: 'stage',
-        kind: 'query',
-        placeholder: 'NEW / PROSPECT / …',
-      },
+      { name: 'search', label: 'search', kind: 'query', placeholder: 'nama / nomor' },
+      { name: 'stage', label: 'stage', kind: 'query', placeholder: 'NEW / PROSPECT / …' },
       { name: 'tag', label: 'tag', kind: 'query' },
       { name: 'limit', label: 'limit', kind: 'query', placeholder: '25' },
       { name: 'cursor', label: 'cursor', kind: 'query' },
@@ -76,6 +77,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Detail kontak',
     path: '/api/v1/contacts/{id}',
+    desc: 'Detail satu kontak beserta jumlah pesannya.',
     params: [{ name: 'id', label: 'id kontak', kind: 'path', required: true }],
   },
   {
@@ -83,6 +85,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Riwayat pesan',
     path: '/api/v1/messages',
+    desc: 'Riwayat pesan satu kontak, terbaru dulu. contactId wajib diisi.',
     params: [
       { name: 'contactId', label: 'contactId', kind: 'query', required: true },
       { name: 'limit', label: 'limit', kind: 'query', placeholder: '25' },
@@ -94,13 +97,9 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Status kirim pesan',
     path: '/api/v1/messages/{externalMsgId}/status',
+    desc: 'Status kirim (SENT/DELIVERED/READ/FAILED) satu pesan by externalMsgId (wamid).',
     params: [
-      {
-        name: 'externalMsgId',
-        label: 'externalMsgId (wamid)',
-        kind: 'path',
-        required: true,
-      },
+      { name: 'externalMsgId', label: 'externalMsgId (wamid)', kind: 'path', required: true },
     ],
   },
   {
@@ -108,6 +107,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Saldo',
     path: '/api/v1/balance',
+    desc: 'Saldo token AI, saldo Kredit Pesan WA, dan tarif per kategori.',
     params: [],
   },
   {
@@ -115,6 +115,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'GET',
     label: 'Nomor terhubung',
     path: '/api/v1/senders',
+    desc: 'Nomor WhatsApp yang terhubung ke akunmu, urut prioritas pemakaian.',
     params: [],
   },
   {
@@ -122,6 +123,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'POST',
     label: 'Kirim WhatsApp Teks',
     path: '/api/v1/messages',
+    desc: 'Kirim pesan teks (Baileys, atau Cloud API selama window 24 jam terbuka). Maks 30 kirim/menit.',
     params: [],
     bodyExample: JSON.stringify(
       { phone_number: '628123456789', content: 'Halo dari API Playground!' },
@@ -134,13 +136,10 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'POST',
     label: 'Kirim WhatsApp Template',
     path: '/api/v1/messages/template',
+    desc: 'Kirim template Meta yang sudah disetujui — untuk mengirim di luar window 24 jam.',
     params: [],
     bodyExample: JSON.stringify(
-      {
-        phone_number: '628123456789',
-        template_name: 'nama_template',
-        params: ['Budi', 'INV-001'],
-      },
+      { phone_number: '628123456789', template_name: 'nama_template', params: ['Budi', 'INV-001'] },
       null,
       2,
     ),
@@ -188,6 +187,30 @@ async function timedFetch(
   }
 }
 
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fallback di bawah
+  }
+  try {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 function MethodBadge({ method }: { method: Method }) {
   // Orange = satu-satunya peristiwa kromatik (design system): POST (aksi tulis)
   // memakainya, GET (baca) netral. Bukan tone status, jadi tidak lewat ui-tones.
@@ -195,9 +218,7 @@ function MethodBadge({ method }: { method: Method }) {
     <span
       className={cn(
         'inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 font-mono text-xs font-bold',
-        method === 'GET'
-          ? 'bg-warm-100 text-warm-600'
-          : 'bg-primary-100 text-primary-700',
+        method === 'GET' ? 'bg-warm-100 text-warm-600' : 'bg-primary-100 text-primary-700',
       )}
     >
       {method}
@@ -205,7 +226,29 @@ function MethodBadge({ method }: { method: Method }) {
   )
 }
 
-export function ApiPlayground() {
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={async () => {
+        const ok = await copyText(text)
+        if (ok) {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        } else {
+          toast.error('Gagal menyalin — salin manual')
+        }
+      }}
+      className="text-warm-400 hover:text-warm-700 shrink-0"
+    >
+      {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+    </button>
+  )
+}
+
+export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
   const [apiKey, setApiKey] = useState('')
   const [endpointId, setEndpointId] = useState(ENDPOINTS[0].id)
   const [values, setValues] = useState<Record<string, string>>({})
@@ -216,9 +259,7 @@ export function ApiPlayground() {
 
   const endpoint = ENDPOINTS.find((e) => e.id === endpointId) ?? ENDPOINTS[0]
   const isPost = endpoint.method === 'POST'
-  const missingRequired = endpoint.params.some(
-    (p) => p.required && !values[p.name]?.trim(),
-  )
+  const missingRequired = endpoint.params.some((p) => p.required && !values[p.name]?.trim())
   let bodyInvalid = false
   if (isPost) {
     try {
@@ -237,32 +278,35 @@ export function ApiPlayground() {
     setError(null)
   }
 
-  const buildUrl = (): string => {
+  const buildPath = (): string => {
     let path = endpoint.path
     const qs = new URLSearchParams()
     for (const p of endpoint.params) {
       const v = values[p.name]?.trim()
       if (!v) continue
-      if (p.kind === 'path')
-        path = path.replace(/\{[^}]+\}/, encodeURIComponent(v))
+      if (p.kind === 'path') path = path.replace(/\{[^}]+\}/, encodeURIComponent(v))
       else qs.set(p.name, v)
     }
     return qs.size > 0 ? `${path}?${qs}` : path
   }
+
+  const fullUrl = `${baseUrl}${buildPath()}`
+  const keyForCurl = apiKey.trim() || 'hl_live_xxxxxxxxxxxx'
+  const curl = [
+    `curl -X ${endpoint.method} "${fullUrl}"`,
+    `  -H "Authorization: Bearer ${keyForCurl}"`,
+    ...(isPost
+      ? [`  -H "Content-Type: application/json"`, `  -d '${(bodyText || '{}').replace(/\n\s*/g, ' ')}'`]
+      : []),
+  ].join(' \\\n')
 
   const run = async () => {
     setRunning(true)
     setError(null)
     setResult(null)
     try {
-      setResult(
-        await timedFetch(
-          endpoint.method,
-          buildUrl(),
-          apiKey.trim(),
-          isPost ? bodyText : null,
-        ),
-      )
+      // fetch pakai path relatif (same-origin, tanpa CORS); tampilan pakai URL penuh.
+      setResult(await timedFetch(endpoint.method, buildPath(), apiKey.trim(), isPost ? bodyText : null))
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -276,12 +320,26 @@ export function ApiPlayground() {
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div>
-          <h2 className="font-display text-warm-900 text-lg font-semibold">
-            API Playground
-          </h2>
+          <h2 className="font-display text-warm-900 text-lg font-semibold">API Playground</h2>
           <p className="text-warm-500 text-sm">
-            Coba endpoint langsung dari sini. Kunci hanya dipakai untuk request
-            ini — tidak disimpan.
+            Coba endpoint langsung dari sini. Kunci hanya dipakai untuk request ini — tidak disimpan.
+          </p>
+        </div>
+
+        {/* Info Base URL + autentikasi — supaya jelas dipakai dari luar. */}
+        <div className="border-warm-200 bg-warm-50 space-y-2 rounded-lg border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-warm-500 text-xs font-medium uppercase tracking-wide">Base URL</span>
+            <CopyButton text={`${baseUrl}/api/v1`} label="Salin base URL" />
+          </div>
+          <code className="text-warm-800 block break-all font-mono text-sm">{baseUrl}/api/v1</code>
+          <p className="text-warm-500 text-xs">
+            Autentikasi: kirim header{' '}
+            <code className="bg-warm-100 text-warm-700 rounded px-1 py-0.5 font-mono">
+              Authorization: Bearer &lt;kunci&gt;
+            </code>{' '}
+            di setiap request. Semua respons berbentuk{' '}
+            <code className="font-mono">{'{ success, data | error, code }'}</code>.
           </p>
         </div>
 
@@ -296,6 +354,9 @@ export function ApiPlayground() {
             onChange={(e) => setApiKey(e.target.value)}
             className="font-mono"
           />
+          <p className="text-warm-500 text-xs">
+            Belum punya? Buat di tab <span className="font-medium">Kunci API</span>.
+          </p>
         </div>
 
         <div className="space-y-1.5">
@@ -320,11 +381,13 @@ export function ApiPlayground() {
               ))}
             </SelectContent>
           </Select>
-          <p className="pt-1">
-            <code className="bg-warm-100 text-warm-700 rounded px-2 py-1 font-mono text-xs">
-              {endpoint.method} {endpoint.path}
-            </code>
-          </p>
+          <p className="text-warm-500 pt-0.5 text-xs">{endpoint.desc}</p>
+          {/* URL penuh (bukan cuma path relatif). */}
+          <div className="bg-warm-100 flex items-center gap-2 rounded px-2 py-1.5">
+            <MethodBadge method={endpoint.method} />
+            <code className="text-warm-700 min-w-0 flex-1 break-all font-mono text-xs">{fullUrl}</code>
+            <CopyButton text={fullUrl} label="Salin URL" />
+          </div>
         </div>
 
         {endpoint.params.length > 0 && (
@@ -339,9 +402,7 @@ export function ApiPlayground() {
                   id={`pg-${p.name}`}
                   value={values[p.name] ?? ''}
                   placeholder={p.placeholder}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, [p.name]: e.target.value }))
-                  }
+                  onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
                   className="font-mono text-sm"
                 />
               </div>
@@ -360,20 +421,13 @@ export function ApiPlayground() {
               rows={7}
               className="font-mono text-sm"
             />
-            {bodyInvalid && (
-              <p className="text-xs text-red-600">JSON tidak valid.</p>
-            )}
+            {bodyInvalid && <p className="text-xs text-red-600">JSON tidak valid.</p>}
           </div>
         )}
 
         <Button
           onClick={run}
-          disabled={
-            running ||
-            apiKey.trim().length < 10 ||
-            missingRequired ||
-            bodyInvalid
-          }
+          disabled={running || apiKey.trim().length < 10 || missingRequired || bodyInvalid}
           className="w-full"
         >
           {running ? (
@@ -384,20 +438,23 @@ export function ApiPlayground() {
           Kirim Request
         </Button>
 
-        {error && (
-          <p className="text-sm text-red-600">Request gagal: {error}</p>
-        )}
+        {/* Contoh cURL — copy-paste ke terminal / n8n / tool lain. */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label>Setara cURL</Label>
+            <CopyButton text={curl} label="Salin cURL" />
+          </div>
+          <pre className="bg-warm-900 text-warm-50 overflow-x-auto rounded-lg p-3 text-xs leading-relaxed">
+            <code>{curl}</code>
+          </pre>
+        </div>
+
+        {error && <p className="text-sm text-red-600">Request gagal: {error}</p>}
 
         {result && (
           <div className="space-y-2">
             <p className="text-sm">
-              <span
-                className={
-                  okStatus
-                    ? 'font-semibold text-emerald-700'
-                    : 'font-semibold text-red-600'
-                }
-              >
+              <span className={okStatus ? 'font-semibold text-emerald-700' : 'font-semibold text-red-600'}>
                 HTTP {result.status}
               </span>{' '}
               <span className="text-warm-500">

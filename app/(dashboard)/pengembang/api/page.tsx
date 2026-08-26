@@ -50,10 +50,13 @@ export default async function PengembangApiPage() {
               <div className="space-y-4">
                 <Card>
                   <CardContent className="flex items-start gap-3 pt-4 text-sm">
-                    <TerminalSquare className="mt-0.5 size-4 shrink-0 text-primary-500" aria-hidden />
+                    <TerminalSquare
+                      className="text-primary-500 mt-0.5 size-4 shrink-0"
+                      aria-hidden
+                    />
                     <p className="text-warm-600">
                       Kirim kunci lewat header{' '}
-                      <code className="rounded bg-warm-100 px-1.5 py-0.5 font-mono text-xs">
+                      <code className="bg-warm-100 rounded px-1.5 py-0.5 font-mono text-xs">
                         Authorization: Bearer hl_live_…
                       </code>{' '}
                       pada setiap request. Kunci tidak boleh ditaruh di URL.
@@ -69,7 +72,7 @@ export default async function PengembangApiPage() {
             label: 'Playground',
             icon: <TerminalSquare className="size-4" aria-hidden />,
             badge: 'Baru',
-            content: <ApiPlayground />,
+            content: <ApiPlayground baseUrl={publicBaseUrl()} />,
           },
           {
             id: 'docs',
