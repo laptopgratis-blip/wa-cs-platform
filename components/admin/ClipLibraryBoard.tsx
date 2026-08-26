@@ -981,7 +981,7 @@ export function ClipLibraryBoard({
                         <CheckCircle2 className="text-primary-600 absolute top-1.5 right-1.5 z-10 size-4 rounded-full bg-white" />
                       ) : null}
                       {b.isPrimary ? (
-                        <span className="bg-primary-500 text-warm-900 absolute top-1.5 left-1.5 z-10 inline-flex items-center gap-0.5 rounded px-1.5 py-px text-xs font-semibold shadow">
+                        <span className="bg-primary-500 absolute top-1.5 left-1.5 z-10 inline-flex items-center gap-0.5 rounded px-1.5 py-px text-xs font-semibold text-white shadow">
                           <Star className="size-2.5" aria-hidden /> Default
                         </span>
                       ) : null}
@@ -1072,7 +1072,7 @@ export function ClipLibraryBoard({
                     onClick={() => setIdleMotionFilter(f.value)}
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                       idleMotionFilter === f.value
-                        ? 'bg-primary-500 text-warm-900'
+                        ? 'bg-primary-500 text-white'
                         : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                     }`}
                   >
@@ -1289,7 +1289,7 @@ export function ClipLibraryBoard({
                       key={c.id}
                       className="bg-warm-50 flex items-start gap-2 rounded-md px-2 py-1.5"
                     >
-                      <span className="bg-primary-500 text-warm-900 flex size-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+                      <span className="bg-primary-500 flex size-5 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white">
                         {i + 1}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -1961,7 +1961,7 @@ function VoicePickerCard({
                   onClick={() => setFilter('id')}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                     filter === 'id'
-                      ? 'bg-primary-500 text-warm-900'
+                      ? 'bg-primary-500 text-white'
                       : 'bg-warm-100 text-warm-700'
                   }`}
                 >
@@ -1972,7 +1972,7 @@ function VoicePickerCard({
                   onClick={() => setFilter('en')}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                     filter === 'en'
-                      ? 'bg-primary-500 text-warm-900'
+                      ? 'bg-primary-500 text-white'
                       : 'bg-warm-100 text-warm-700'
                   }`}
                 >
@@ -1983,7 +1983,7 @@ function VoicePickerCard({
                   onClick={() => setFilter('all')}
                   className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                     filter === 'all'
-                      ? 'bg-primary-500 text-warm-900'
+                      ? 'bg-primary-500 text-white'
                       : 'bg-warm-100 text-warm-700'
                   }`}
                 >
@@ -2253,7 +2253,7 @@ function BrowseSharedVoicesModal({
               onClick={() => setGender(g.val as 'male' | 'female' | '')}
               className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                 gender === g.val
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700'
               }`}
             >
@@ -2483,7 +2483,7 @@ function AttachQuestionToClipModal({
                 onClick={() => setCategoryFilter('ALL')}
                 className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                   categoryFilter === 'ALL'
-                    ? 'bg-primary-500 text-warm-900'
+                    ? 'bg-primary-500 text-white'
                     : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                 }`}
               >
@@ -2501,7 +2501,7 @@ function AttachQuestionToClipModal({
                       onClick={() => setCategoryFilter(c.value)}
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                         categoryFilter === c.value
-                          ? 'bg-primary-500 text-warm-900'
+                          ? 'bg-primary-500 text-white'
                           : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                       }`}
                     >
@@ -2748,7 +2748,7 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
                   result.chosen.isFallback
                     ? `${TONES.warning.bg} ${TONES.warning.text}`
                     : result.chosen.isKeywordMatch
-                      ? 'bg-primary-500 text-warm-900'
+                      ? 'bg-primary-500 text-white'
                       : TONES.success.solid
                 }`}
               >

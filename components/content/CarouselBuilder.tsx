@@ -199,7 +199,7 @@ export function CarouselBuilder({ slides, pieceTitle }: Props) {
               onClick={() => setActiveIdx(i)}
               className={`shrink-0 rounded px-3 py-1 text-xs font-medium transition-all ${
                 i === activeIdx
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'text-warm-600 hover:bg-warm-100 bg-white'
               }`}
             >

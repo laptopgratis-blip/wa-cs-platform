@@ -341,7 +341,7 @@ export function BulkGenerateModal({
                 <div
                   className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold ${
                     step >= s
-                      ? 'bg-primary-500 text-warm-900'
+                      ? 'bg-primary-500 text-white'
                       : 'bg-warm-200 text-warm-500'
                   }`}
                 >
@@ -379,7 +379,7 @@ export function BulkGenerateModal({
                     onClick={() => setSelectedProductId('manual')}
                     className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                       selectedProductId === 'manual'
-                        ? 'bg-primary-500 text-warm-900'
+                        ? 'bg-primary-500 text-white'
                         : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                     }`}
                   >
@@ -393,7 +393,7 @@ export function BulkGenerateModal({
                       onClick={() => handlePickProduct(p)}
                       className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                         selectedProductId === p.id
-                          ? 'bg-primary-500 text-warm-900'
+                          ? 'bg-primary-500 text-white'
                           : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                       }`}
                     >

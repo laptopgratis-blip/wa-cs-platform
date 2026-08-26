@@ -8,7 +8,7 @@ colors:
   primary-deep: "#ea6c0a"     # orange-600 — hover/pressed
   primary-soft: "#fb923c"     # orange-400 — focus ring, chart accent
   primary-tint: "#fff7ed"     # primary-50 — tint dekoratif & badge brand
-  on-primary: "#171717"       # ink di atas orange ("lit surface") — BUKAN putih
+  on-primary: "#ffffff"       # PUTIH di atas orange — keputusan owner 2026-08-26
   ink: "#171717"              # warm-900 — teks utama, near-black
   ink-secondary: "#212121"    # warm-800
   ink-mute: "#707070"         # warm-500 — teks sekunder (4.9:1 di putih)
@@ -73,9 +73,11 @@ aksen ikon, titik indikator, active state navigasi (sebagai tint lembut).
 
 - **Orange langka.** Maksimal SATU tombol filled orange per halaman/dialog.
   Selebihnya outline/ghost. Aksen dekoratif memakai tint `primary-50`.
-- **Ink di atas orange.** Teks/ikon di atas fill orange = `text-warm-900`
-  (`#171717`), BUKAN putih. Tombol terbaca sebagai permukaan "menyala" dengan
-  tipe gelap — sekaligus lolos WCAG AA (6.4:1; putih hanya 2.8:1, gagal).
+- **Putih di atas orange.** Teks/ikon di atas fill orange = `text-white`
+  (via `text-primary-foreground`) — keputusan owner 2026-08-26, meng-override
+  signature "ink-on-brand" Supabase. Catatan kontras: putih di orange-500 =
+  2.8:1 (di bawah AA) — batasi untuk label tombol/badge pendek ber-
+  `font-medium`/`font-semibold`; jangan teks kecil panjang di atas orange.
 - **Kanvas putih adalah desainnya.** Tanpa gradient atmosferik, tanpa tint
   latar halaman. Pemisah antar-permukaan = hairline 1px, bukan bayangan.
 - **Radius tajam-teknis.** Tombol/input 6px (`rounded-md`), card/dialog 12px
@@ -92,9 +94,9 @@ aksen ikon, titik indikator, active state navigasi (sebagai tint lembut).
 - **Orange Soft** (`#fb923c` / `primary-400`): focus ring (`--ring`), chart.
 - **Tint** (`primary-50`–`primary-200`): latar badge brand, tint dekoratif,
   active state sidebar (`bg-primary-50 text-primary-700`).
-- **On-Primary** (`#171717`): teks di atas fill orange. Token
-  `--primary-foreground` sudah menunjuk ke sini — `text-primary-foreground`
-  otomatis benar. Jangan pernah menulis `text-white` di atas `bg-primary-*`.
+- **On-Primary** (`#ffffff`): teks di atas fill orange = PUTIH (keputusan
+  owner). Token `--primary-foreground` sudah menunjuk ke sini — pakai
+  `text-primary-foreground` (atau `text-white` pada `bg-primary-500` manual).
 
 ### Permukaan & Ladder Netral (`warm-*`)
 | Kelas | Hex | Peran |
@@ -211,8 +213,8 @@ spacing, bukan warna. Modal via `ui/dialog.tsx`/`ui/sheet.tsx`.
 
 ### Do
 - Sediakan orange secukupnya — satu CTA filled per viewport; sisanya abu.
-- Pakai ink `text-warm-900` di atas fill orange (juga via
-  `text-primary-foreground`).
+- Pakai putih di atas fill orange via `text-primary-foreground`; label tetap
+  `font-medium`/`font-semibold` dan pendek (kompensasi kontras 2.8:1).
 - Bangun pemisah dengan hairline `warm-200`, bukan bayangan.
 - Display mid-weight (500–600) dengan tracking negatif.
 - Mono untuk semua kode/ID/angka teknis.
@@ -223,7 +225,8 @@ spacing, bukan warna. Modal via `ui/dialog.tsx`/`ui/sheet.tsx`.
   dilarang di scope; status hanya via `TONES`.
 - Jangan pakai emoji di copy/chrome UI mana pun — ikon = lucide-react
   (kecuali konten pesan WA keluar & prompt AI).
-- Jangan `text-white` di atas `bg-primary-*`.
+- Jangan teks kecil panjang (paragraf/caption) putih di atas orange —
+  kontrasnya 2.8:1; konten panjang taruh di kanvas putih.
 - Jangan tombol pill; radius tombol 6px.
 - Jangan gradient atmosferik / tint latar halaman — kanvas putih adalah
   desainnya.

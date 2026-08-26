@@ -172,7 +172,7 @@ function StatCard({ icon, label, value, hint }: StatCardProps) {
         <CardTitle className="text-warm-500 text-xs font-medium tracking-wider uppercase">
           {label}
         </CardTitle>
-        <span className="bg-primary-100 text-primary-500 group-hover:bg-primary-500 group-hover:text-warm-900 flex size-9 items-center justify-center rounded-lg transition-colors">
+        <span className="bg-primary-100 text-primary-500 group-hover:bg-primary-500 flex size-9 items-center justify-center rounded-lg transition-colors group-hover:text-white">
           {icon}
         </span>
       </CardHeader>

@@ -175,7 +175,7 @@ export function PricingView({
               className={cn(
                 'rounded-full px-4 py-2 text-sm font-medium transition-colors',
                 duration === d.months
-                  ? 'bg-primary-500 text-warm-900 shadow-sm'
+                  ? 'bg-primary-500 text-white shadow-sm'
                   : 'text-muted-foreground hover:bg-muted',
               )}
             >
@@ -185,7 +185,7 @@ export function PricingView({
                   className={cn(
                     'ml-2 rounded-full px-1.5 py-0.5 text-xs',
                     duration === d.months
-                      ? 'text-warm-900 bg-white/20'
+                      ? 'bg-white/20 text-white'
                       : 'bg-primary-100 text-primary-700',
                   )}
                 >

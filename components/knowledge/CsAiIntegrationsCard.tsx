@@ -131,7 +131,7 @@ export function CsAiIntegrationsCard() {
     <Card className="border-primary-200 from-primary-50/40 via-card to-card overflow-hidden border-2 bg-linear-to-br">
       <CardContent className="p-5">
         <div className="mb-4 flex items-start gap-3">
-          <div className="bg-primary-500 text-warm-900 flex size-10 shrink-0 items-center justify-center rounded-lg">
+          <div className="bg-primary-500 flex size-10 shrink-0 items-center justify-center rounded-lg text-white">
             <Sparkles className="size-5" />
           </div>
           <div>

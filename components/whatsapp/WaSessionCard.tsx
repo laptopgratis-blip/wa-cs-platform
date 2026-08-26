@@ -304,8 +304,8 @@ export function WaSessionCard({
         </CardHeader>
 
         <CardContent className="space-y-4 border-t pt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               {status === 'ERROR' && session.lastError ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -341,7 +341,7 @@ export function WaSessionCard({
                 </Tooltip>
               )}
             </div>
-            <span className="text-muted-foreground text-xs">
+            <span className="text-muted-foreground text-xs whitespace-nowrap">
               Ditambahkan {formatDate(session.createdAt)}
             </span>
           </div>
@@ -368,7 +368,7 @@ export function WaSessionCard({
                 onValueChange={(v) => setSoulId(v === NONE ? null : v)}
                 disabled={souls.length === 0}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue
                     placeholder={
                       souls.length === 0
@@ -396,7 +396,7 @@ export function WaSessionCard({
                 onValueChange={(v) => setModelId(v === NONE ? null : v)}
                 disabled={models.length === 0}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Pilih model AI" />
                 </SelectTrigger>
                 <SelectContent>

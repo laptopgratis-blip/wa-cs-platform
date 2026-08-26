@@ -275,7 +275,7 @@ function PeriodSelector({
           onClick={() => onChange(p)}
           className={`rounded px-2.5 py-1 text-xs font-medium transition ${
             value === p
-              ? 'bg-primary-500 text-warm-900'
+              ? 'bg-primary-500 text-white'
               : 'text-warm-600 hover:bg-warm-100'
           }`}
         >

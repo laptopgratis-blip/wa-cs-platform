@@ -121,8 +121,11 @@
   --popover-foreground: #171717;
 
   --primary: #f97316;           /* orange-500 — satu-satunya peristiwa kromatik */
-  --primary-foreground: #171717; /* ink di atas orange ("lit surface", 6.4:1) —
-                                    BUKAN putih (putih di orange cuma 2.8:1, gagal AA) */
+  --primary-foreground: #ffffff; /* KEPUTUSAN OWNER 2026-08-26: teks di atas fill
+                                    orange = PUTIH (override signature Supabase
+                                    ink-on-brand). Catatan kontras: 2.8:1 di
+                                    orange-500 — pakai font-medium/semibold utk
+                                    label tombol, hindari teks kecil panjang. */
 
   --secondary: #f5f5f5;         /* warm-100 */
   --secondary-foreground: #171717;
@@ -151,7 +154,7 @@
   --sidebar: #ffffff;
   --sidebar-foreground: #404040;           /* warm-700 */
   --sidebar-primary: #f97316;              /* orange-500 — accent active */
-  --sidebar-primary-foreground: #171717;   /* ink di atas orange */
+  --sidebar-primary-foreground: #ffffff;   /* putih di atas orange (keputusan owner) */
   --sidebar-accent: #f5f5f5;               /* warm-100 — hover bg */
   --sidebar-accent-foreground: #171717;    /* warm-900 */
   --sidebar-border: #e5e5e5;               /* warm-200 */

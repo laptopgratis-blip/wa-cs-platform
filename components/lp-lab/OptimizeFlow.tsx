@@ -358,7 +358,7 @@ export function OptimizeFlow({ lpId, lpSlug, onApplied }: Props) {
                     output
                   </div>
                 </div>
-                <div className="bg-primary-600 text-warm-900 mt-2 rounded-md p-2.5">
+                <div className="bg-primary-600 mt-2 rounded-md p-2.5 text-white">
                   <div className="text-xs opacity-80">
                     Perkiraan token yang akan dipotong:
                   </div>

@@ -98,7 +98,7 @@ export function LmsPricingView({
               className={cn(
                 'rounded-lg px-3 py-1.5 text-xs font-medium transition',
                 duration === d.months
-                  ? 'bg-primary-500 text-warm-900 shadow-sm'
+                  ? 'bg-primary-500 text-white shadow-sm'
                   : 'text-warm-600 hover:bg-warm-50',
               )}
             >
@@ -146,7 +146,7 @@ export function LmsPricingView({
                 )}
               >
                 {pkg.isPopular && (
-                  <span className="bg-primary-500 text-warm-900 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold">
+                  <span className="bg-primary-500 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
                     <Sparkles className="size-3" />
                     Paling Populer
                   </span>

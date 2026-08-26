@@ -200,9 +200,11 @@ punya gaya sendiri — JANGAN disapu aturan ini.
   tint latar halaman; band lembut → `bg-warm-50` (#fafafa).
 - Ladder `warm-*` kini abu NETRAL (nama kelas tetap, nilai berubah 2026-08-25):
   warm-900 = ink #171717 · warm-500 = #707070 · warm-200 = hairline #e5e5e5.
-- On-primary = INK: teks/ikon di atas fill `bg-primary-*` memakai
-  `text-warm-900` / `text-primary-foreground` (6.4:1) — DILARANG `text-white`
-  di atas orange (2.8:1, gagal AA). Hover menu (`--accent`) kini netral.
+- On-primary = PUTIH (keputusan owner 2026-08-26, override signature Supabase):
+  teks/ikon di atas fill `bg-primary-*` memakai `text-white` /
+  `text-primary-foreground`. Kontras 2.8:1 — hanya untuk label tombol/badge
+  pendek ber-`font-medium`+; JANGAN teks kecil panjang di atas orange.
+  Hover menu (`--accent`) netral.
 - Brand/aksen dekoratif: `primary-*` (orange) atau token semantic (`bg-primary`,
   `text-muted-foreground`, `bg-card`, `border-border`). DILARANG: `orange-*`
   (duplikat primary), `blue|purple|violet|indigo|fuchsia|pink|rose|teal|cyan|lime-*`
@@ -247,8 +249,8 @@ punya gaya sendiri — JANGAN disapu aturan ini.
 - Spacing: antar section `gap-6`; dalam card `space-y-4`; label→input `space-y-2`;
   toolbar `gap-2`.
 - Button: filled default = maks SATU aksi utama per halaman/dialog, TANPA override
-  `bg-primary-500...` (default sudah orange dengan teks INK `--primary-foreground`
-  #171717 — bukan putih — termasuk `hover:bg-primary-600` yang
+  `bg-primary-500...` (default sudah orange dengan teks putih
+  `--primary-foreground`, termasuk `hover:bg-primary-600` yang
   ditambahkan ke varian `default` di `ui/button.tsx` — semula varian itu cuma punya
   hover lewat `[a]:` sehingga `<button>` biasa tidak beri umpan balik hover sama
   sekali). Toolbar `outline`, tersier `ghost`, destruktif `destructive`.

@@ -455,7 +455,7 @@ function SceneCard({
           className="absolute top-2 right-2"
         />
         {scene.isPrimary ? (
-          <Badge className="bg-primary-500 text-warm-900 absolute top-2 left-2">
+          <Badge className="bg-primary-500 absolute top-2 left-2 text-white">
             <Star className="mr-1 size-3 fill-current" /> Primary
           </Badge>
         ) : null}

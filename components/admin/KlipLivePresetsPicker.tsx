@@ -154,7 +154,7 @@ export function KlipLivePresetsPicker({
               onClick={() => setHookFilter(c.value)}
               className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 hookFilter === c.value
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -283,7 +283,7 @@ export function KlipLivePresetsPicker({
               onClick={() => setBgFilter(c.value)}
               className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 bgFilter === c.value
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >

@@ -146,7 +146,7 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="border-warm-200 flex h-16 items-center gap-3 border-b px-4">
-        <div className="bg-primary-500 text-warm-900 shadow-orange flex size-9 items-center justify-center rounded-lg">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
           <MessageCircle className="size-4" />
         </div>
         <div className="leading-tight">

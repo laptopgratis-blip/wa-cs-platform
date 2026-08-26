@@ -18,7 +18,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       />
 
       <Link href="/" className="mb-6 flex items-center gap-2.5">
-        <div className="bg-primary-500 text-warm-900 shadow-orange flex size-10 items-center justify-center rounded-xl">
+        <div className="flex size-10 items-center justify-center rounded-xl bg-primary-500 text-white shadow-orange">
           <MessageCircle className="size-5" />
         </div>
         <div className="leading-tight">

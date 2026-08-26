@@ -393,7 +393,7 @@ export function OrchestratedHostWizard({
                           }
                           className={`rounded-full px-3 py-1.5 text-xs transition ${
                             isActive
-                              ? 'bg-primary-500 text-warm-900'
+                              ? 'bg-primary-500 text-white'
                               : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                           }`}
                         >
@@ -447,7 +447,7 @@ export function OrchestratedHostWizard({
                             <div className="bg-warm-100 size-14" />
                           )}
                           {checked ? (
-                            <div className="bg-primary-500 text-warm-900 absolute top-0.5 right-0.5 rounded-full p-0.5">
+                            <div className="bg-primary-500 absolute top-0.5 right-0.5 rounded-full p-0.5 text-white">
                               <CheckCircle2 className="size-3" />
                             </div>
                           ) : null}

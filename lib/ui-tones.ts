@@ -68,9 +68,10 @@ export const TONES: Record<Tone, ToneClasses> = {
     text: 'text-primary-700',
     dot: 'bg-primary-500',
     border: 'border-primary-200',
-    // Ink di atas orange ("lit surface", 6.4:1) — putih di orange-500 cuma
-    // 2.8:1, gagal WCAG AA. Konsisten dengan --primary-foreground di globals.css.
-    solid: 'bg-primary-500 text-warm-900',
+    // Putih di atas orange — keputusan owner 2026-08-26 (konsisten dengan
+    // --primary-foreground). Kontras 2.8:1: pakai untuk badge/label pendek
+    // ber-font-medium, bukan teks kecil panjang.
+    solid: 'bg-primary-500 text-white',
   },
   // Aksen KANAL WhatsApp (kartu/CTA "hubungi via WA"), bukan status.
   // Sengaja sehue dengan `success` — keduanya emerald. Konsekuensinya: jangan

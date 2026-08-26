@@ -134,7 +134,7 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
                   <Lock className="size-2.5" /> Soon
                 </span>
               ) : (
-                <span className="from-primary-500 to-primary-600 text-warm-900 inline-flex items-center gap-1 rounded-full bg-linear-to-r px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase shadow">
+                <span className="inline-flex items-center gap-1 rounded-full bg-linear-to-r from-primary-500 to-primary-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white shadow">
                   <Sparkles className="size-2.5" /> Baru
                 </span>
               )}

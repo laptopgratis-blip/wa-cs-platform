@@ -27,7 +27,7 @@ export async function CsAiPromoBanner({ userId }: { userId: string }) {
       href="/knowledge"
       className="group border-primary-200 bg-primary-50 hover:border-primary-400 flex items-start gap-3 rounded-xl border-2 p-4 transition hover:shadow-md"
     >
-      <div className="bg-primary-500 shadow-orange text-warm-900 flex size-10 shrink-0 items-center justify-center rounded-lg">
+      <div className="bg-primary-500 shadow-orange flex size-10 shrink-0 items-center justify-center rounded-lg text-white">
         <Sparkles className="size-5" />
       </div>
       <div className="min-w-0 flex-1">

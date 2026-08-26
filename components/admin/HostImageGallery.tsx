@@ -278,7 +278,7 @@ export function HostImageGallery({
               onClick={() => setWithProduct(false)}
               className={`rounded-full px-2.5 py-1 text-xs transition ${
                 !withProduct
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -289,7 +289,7 @@ export function HostImageGallery({
               onClick={() => setWithProduct(true)}
               className={`rounded-full px-2.5 py-1 text-xs transition ${
                 withProduct
-                  ? 'bg-primary-500 text-warm-900'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -365,8 +365,8 @@ export function HostImageGallery({
                     className="h-full w-full object-cover"
                   />
                   {isActive ? (
-                    <span className="bg-primary-500 text-warm-900 absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-bold">
-                      <Star className="fill-warm-900 size-2.5" /> AKTIF
+                    <span className="bg-primary-500 absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-bold text-white">
+                      <Star className="size-2.5 fill-white" /> AKTIF
                     </span>
                   ) : null}
                   <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-xs text-white">

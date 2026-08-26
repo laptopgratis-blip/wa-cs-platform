@@ -136,23 +136,31 @@ export function CoexSyncStatus({ sessionId, initial }: Props) {
 
   return (
     <div className="border-warm-200 bg-warm-50/60 rounded-lg border px-2.5 py-2 text-xs">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-start gap-1.5">
         {active ? (
-          <Loader2 className="text-primary-500 size-3.5 animate-spin" />
+          <Loader2 className="text-primary-500 mt-0.5 size-3.5 shrink-0 animate-spin" />
         ) : anyProblem ? (
-          <AlertCircle className={cn('size-3.5', TONES.warning.text)} />
+          <AlertCircle
+            className={cn('mt-0.5 size-3.5 shrink-0', TONES.warning.text)}
+          />
         ) : (
-          <CheckCircle2 className={cn('size-3.5', TONES.success.text)} />
+          <CheckCircle2
+            className={cn('mt-0.5 size-3.5 shrink-0', TONES.success.text)}
+          />
         )}
-        <span className="text-muted-foreground">Sinkronisasi dari HP:</span>
-        <span className="font-medium">
-          {label('kontak', snap.contact.status, snap.contact.count)} ·{' '}
-          {label(
-            'riwayat',
-            snap.history.status,
-            snap.history.count,
-            snap.history.progress,
-          )}
+        <span className="min-w-0 leading-relaxed">
+          <span className="text-muted-foreground whitespace-nowrap">
+            Sinkronisasi dari HP:
+          </span>{' '}
+          <span className="font-medium">
+            {label('kontak', snap.contact.status, snap.contact.count)} ·{' '}
+            {label(
+              'riwayat',
+              snap.history.status,
+              snap.history.count,
+              snap.history.progress,
+            )}
+          </span>
         </span>
         {snap.error && (
           <TooltipProvider>
