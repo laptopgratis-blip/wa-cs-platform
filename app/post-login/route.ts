@@ -12,13 +12,23 @@ import { resolveLoginRedirect } from '@/lib/auth-landing'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Redirect dengan Location RELATIF.
+ *
+ * JANGAN pakai `new URL(path, req.url)`: di balik proxy, req.url memakai alamat
+ * bind internal container (mis. https://0.0.0.0:3000), sehingga browser
+ * dilempar ke host yang tidak ada. Location relatif diselesaikan browser
+ * terhadap alamat yang benar-benar dia buka, jadi aman di semua environment
+ * tanpa perlu menebak host dari header.
+ */
+function redirectTo(path: string): NextResponse {
+  return new NextResponse(null, { status: 307, headers: { Location: path } })
+}
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions)
-  if (!session) {
-    return NextResponse.redirect(new URL('/login', req.url))
-  }
+  if (!session) return redirectTo('/login')
   // `next` opsional: tujuan semula user sebelum ditendang ke /login.
   const next = new URL(req.url).searchParams.get('next')
-  const target = resolveLoginRedirect(next, session.user.role)
-  return NextResponse.redirect(new URL(target, req.url))
+  return redirectTo(resolveLoginRedirect(next, session.user.role))
 }
