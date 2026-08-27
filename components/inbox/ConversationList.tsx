@@ -53,11 +53,14 @@ interface ConversationListProps {
 // Radix Select melarang SelectItem bernilai string kosong.
 const ALL_SENDERS = '__all__'
 
+// Label sengaja PENDEK: sidebar cuma 320px dan ada 4 tab. "Perlu Perhatian"
+// tidak muat bersama angkanya dan berakhir jadi "Pe…". "Selesai" juga
+// menggantikan "Resolved" yang sebelumnya satu-satunya label berbahasa Inggris.
 const TAB_ITEMS: { value: InboxFilter; label: string }[] = [
   { value: 'all', label: 'Semua' },
   { value: 'ai', label: 'AI' },
-  { value: 'attention', label: 'Perlu Perhatian' },
-  { value: 'resolved', label: 'Resolved' },
+  { value: 'attention', label: 'Perhatian' },
+  { value: 'resolved', label: 'Selesai' },
 ]
 
 export function ConversationList({
@@ -125,12 +128,26 @@ export function ConversationList({
           value={filter}
           onValueChange={(v) => onFilterChange(v as InboxFilter)}
         >
-          <TabsList className="grid w-full grid-cols-4">
+          {/* Lebar mengikuti ISI, BUKAN grid-cols-4 / flex-1. Kolom sama lebar
+              memberi jatah yang sama untuk "AI" (2 huruf) dan "Perhatian"
+              (9 huruf), sehingga yang panjang selalu terpotong. Dengan
+              justify-between tiap tab mengambil seperlunya dan keempatnya muat
+              di 320px — terukur: scrollWidth == clientWidth, tanpa truncation.
+              Angka juga dibuat polos (tanpa pil) karena padding pil-nya yang
+              dulu bikin label kehabisan ruang. */}
+          <TabsList className="flex w-full justify-between gap-0.5">
             {TAB_ITEMS.map((t) => (
-              <TabsTrigger key={t.value} value={t.value} className="text-xs">
-                <span className="truncate">{t.label}</span>
+              <TabsTrigger
+                key={t.value}
+                value={t.value}
+                className="shrink-0 px-1.5 text-xs"
+              >
+                <span>{t.label}</span>
                 {counts[t.value] > 0 && (
-                  <span className="bg-muted-foreground/20 ml-1 hidden rounded-full px-1.5 text-xs sm:inline">
+                  // Tanpa `sm:` — varian itu berbasis lebar VIEWPORT, bukan
+                  // lebar sidebar, jadi di desktop angkanya muncul justru saat
+                  // ruangnya paling sempit.
+                  <span className="text-muted-foreground ml-1 text-xs tabular-nums">
                     {counts[t.value]}
                   </span>
                 )}
