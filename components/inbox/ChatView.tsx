@@ -372,8 +372,14 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <Bot className="size-3" /> AI
             </Badge>
           )}
+          {/* Tombol ini AKSI, bukan penanda state — state ada di badge kiri.
+              Dulu variant-nya ikut berubah (`default` saat Manual), sehingga
+              aksen orange LOMPAT dari badge ke tombol: di mode Manual mata
+              jatuh ke "Lepaskan ke AI" dan membacanya sebagai state terpilih.
+              Toolbar = outline (design system), jadi orange konsisten hanya
+              berarti satu hal: AI sedang aktif. */}
           <Button
-            variant={contact.aiPaused ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={toggleTakeover}
             disabled={isToggling}
