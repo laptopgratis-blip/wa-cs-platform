@@ -351,7 +351,8 @@ enum CoexSyncStatus {
   IN_PROGRESS // chunk riwayat mulai masuk (progress < 100)
   DONE
   DECLINED // user menolak berbagi riwayat di HP (Meta 2593109)
-  SKIPPED // di luar jendela 24 jam (2593108) / tidak eligible
+  SKIPPED // tidak dijalankan: di luar jendela 24 jam (2593108), atau token
+  // bukan hasil Embedded Signup sehingga sync pasti ditolak Meta
   ERROR
 }
 
