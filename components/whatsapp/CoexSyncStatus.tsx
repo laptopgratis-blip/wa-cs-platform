@@ -65,7 +65,10 @@ function label(
     case 'DECLINED':
       return `${kind}: ditolak dari HP`
     case 'SKIPPED':
-      return `${kind}: lewat jendela 24 jam`
+      // Netral: SKIPPED kini punya lebih dari satu sebab (lewat jendela 24 jam
+      // ATAU token bukan hasil Embedded Signup). Sebab persisnya ada di
+      // tooltip "detail" — jangan tebak-tebak di label.
+      return `${kind}: dilewati`
     case 'ERROR':
       return `${kind}: gagal`
     default:

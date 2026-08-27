@@ -10,12 +10,18 @@ import { decrypt } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
 
 import { graphRequest } from './graph'
+import { coexSyncBlockedReason, inspectToken } from './token-info'
 
 export type SmbSyncType = 'smb_app_state_sync' | 'history'
 
 // Kode error Meta khusus sync coexistence.
 const SYNC_ALREADY_REQUESTED = 2593107 // sekali per nomor per onboarding
 const SYNC_OUTSIDE_WINDOW = 2593108 // > 24 jam sejak onboarding
+// 135000 = "Generic user error": Meta menolak tanpa menyebut alasan. Pada
+// endpoint smb_app_data penyebab paling sering adalah token yang dipakai BUKAN
+// hasil Embedded Signup (mis. System User token yang ditempel manual) — sync
+// coexistence butuh persetujuan pemilik WhatsApp Business App.
+const SYNC_GENERIC_USER_ERROR = 135000
 
 export type RequestSyncResult =
   | { ok: true; requestId?: string }
@@ -52,6 +58,15 @@ export function coexSyncErrorText(kind: 'kontak' | 'riwayat', code?: number, mes
       'Kalau ingin sinkron: putuskan koneksi di HP (WA Business App → Pengaturan → Akun → Platform Bisnis) lalu hubungkan ulang.'
     )
   }
+  if (code === SYNC_GENERIC_USER_ERROR) {
+    return (
+      `Meta menolak sinkronisasi ${kind} tanpa menyebut alasan (135000). ` +
+      'Penyebab paling sering: nomor ini dihubungkan memakai Token Manual ' +
+      '(System User), padahal sinkronisasi dari HP hanya diizinkan untuk koneksi ' +
+      'lewat Embedded Signup. Putuskan koneksi lalu hubungkan ulang lewat ' +
+      'Embedded Signup kalau ingin menarik kontak & riwayat.'
+    )
+  }
   return `Sinkronisasi ${kind} gagal: ${message ?? 'error tidak diketahui'}${code ? ` (code ${code})` : ''}`
 }
 
@@ -83,6 +98,31 @@ export async function startCoexistenceSync(sessionId: string): Promise<void> {
         where: { id: sessionId },
         data: { coexSyncError: 'Token tidak bisa didekripsi — sinkronisasi dilewati' },
       })
+      return
+    }
+
+    // GERBANG SEBELUM MEMANGGIL META — urutannya penting.
+    // Sync coexistence hanya boleh diminta SEKALI per sync_type per onboarding.
+    // Kalau token-nya System User, Meta pasti menolak (135000) TAPI percobaan
+    // itu tetap menghabiskan jatah tersebut. Jadi tipe token diperiksa lebih
+    // dulu: kalau jelas tidak akan diterima, jangan panggil sama sekali —
+    // simpan jatahnya untuk koneksi ulang lewat Embedded Signup nanti.
+    const info = await inspectToken(token)
+    const blocked = coexSyncBlockedReason(info?.type)
+    if (blocked) {
+      await prisma.whatsappSession.update({
+        where: { id: sessionId },
+        data: {
+          coexSyncRequestedAt: new Date(),
+          coexSyncError: blocked,
+          // SKIPPED, bukan ERROR: tidak ada yang gagal — kita sengaja tidak
+          // mencoba. Status ini juga tidak masuk daftar `skip` di bawah, jadi
+          // sync tetap bisa jalan setelah user menghubungkan ulang via ES.
+          coexContactSyncStatus: 'SKIPPED',
+          coexHistorySyncStatus: 'SKIPPED',
+        },
+      })
+      console.warn(`[waba/coex-sync] ${sessionId} dilewati — token ${info?.type ?? 'tidak diketahui'}`)
       return
     }
 
