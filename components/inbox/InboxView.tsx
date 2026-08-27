@@ -216,13 +216,19 @@ export function InboxView({
     [conversations, selectedId],
   )
 
+  // h-full, BUKAN kalkulasi viewport: <main> di layout dashboard sudah punya
+  // tinggi pasti (flex-1 dalam kolom h-dvh), jadi h-full pas persis mengisinya
+  // di semua breakpoint — termasuk saat ada padding BottomNav + safe-area di
+  // mobile. Kalkulasi `100svh - <tinggi topbar>` gampang meleset begitu tinggi
+  // topbar/padding berubah, dan selisih sekecil apa pun bikin <main> ikut
+  // scrollable sehingga seluruh halaman bergeser saat panel di-scroll.
   return (
-    <div className="flex h-[calc(100svh-3.5rem-4rem)] overflow-hidden border-t bg-background md:h-[calc(100svh-3.5rem)]">
+    <div className="flex h-full overflow-hidden border-t bg-background">
       {/* List — full width di mobile saat tidak ada selection,
           fixed-width sidebar di desktop. */}
       <aside
         className={cn(
-          'shrink-0 border-r md:w-80 md:block',
+          'h-full shrink-0 overflow-hidden border-r md:block md:w-80',
           selected ? 'hidden md:block' : 'w-full',
         )}
       >

@@ -278,8 +278,19 @@
   /* Padding-bottom = tinggi BottomNav (h-16 = 4rem) + safe-area inset iPhone.
      Tanpa ini, konten 64px terakhir nutup oleh BottomNav + home-indicator
      iPhone — terlihat saat user over-scroll (rubber-band). */
-  .pb-mobile-nav {
-    padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  /* HANYA di bawah md — BottomNav sendiri `md:hidden`, jadi di desktop padding
+     ini tidak ada gunanya. Ditulis sebagai satu aturan ber-media-query (bukan
+     aturan dasar + reset `md:pb-0` di markup) karena kelas ini hidup di
+     @layer utilities yang SAMA dengan utility Tailwind tapi didefinisikan
+     setelahnya, dan spesifisitasnya identik (0,1,0) — media query tidak
+     menambah spesifisitas. Akibatnya `md:pb-0` KALAH oleh source order dan
+     tidak pernah berlaku: <main> tetap ber-padding 64px di desktop sehingga
+     overflow 64px dan seluruh halaman ikut ter-scroll (paling terasa di
+     /inbox yang dirancang setinggi viewport). */
+  @media (max-width: 767.98px) {
+    .pb-mobile-nav {
+      padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+    }
   }
 }
 

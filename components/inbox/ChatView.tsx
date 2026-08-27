@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { StatusBadge as SharedStatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -363,14 +364,14 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <CheckCircle2 className="size-3" /> Selesai
             </Badge>
           )}
+          {/* Dua-duanya status, jadi dua-duanya ber-highlight lewat TONES —
+              dulu Manual pakai `secondary` (abu polos) sehingga hanya AI yang
+              terlihat "aktif". brand=orange utk AI, info=sky utk Manual:
+              beda hue yang jelas tanpa memakai orange dua kali. */}
           {contact.aiPaused ? (
-            <Badge variant="secondary" className="gap-1">
-              <Hand className="size-3" /> Manual
-            </Badge>
+            <SharedStatusBadge tone="info" label="Manual" icon={Hand} />
           ) : (
-            <Badge variant="default" className="gap-1">
-              <Bot className="size-3" /> AI
-            </Badge>
+            <SharedStatusBadge tone="brand" label="AI" icon={Bot} />
           )}
           {/* Tombol ini AKSI, bukan penanda state — state ada di badge kiri.
               Dulu variant-nya ikut berubah (`default` saat Manual), sehingga
@@ -433,7 +434,12 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="bg-muted/20 flex-1 overflow-y-auto">
+      {/* overscroll-contain + min-h-0: scroll mentok tidak merambat ke <main>
+          (scroll chaining) sehingga header & halaman tidak ikut bergerak. */}
+      <div
+        ref={scrollRef}
+        className="bg-muted/20 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         <div className="flex flex-col gap-2 p-4">
           {grouped.map((group) => (
             <div key={group.date} className="flex flex-col gap-2">

@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -117,7 +118,7 @@ export function ConversationList({
           Root ikut tinggi konten (ratusan chat), Viewport size-full tak pernah
           punya tinggi terbatas → tidak ada scroll & item bawah terpotong oleh
           overflow-hidden. min-h-0 bikin flex-1 menyusut ke ruang tersisa. */}
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 overscroll-contain">
         {isLoading ? (
           <div className="text-muted-foreground p-4 text-center text-sm">
             Memuat…
@@ -220,18 +221,10 @@ function ConvBadges({
       </Badge>
     )
   }
+  // Tone sama dengan header ChatView supaya arti warnanya konsisten:
+  // brand (orange) = AI menangani, info (sky) = manusia yang menangani.
   if (aiPaused) {
-    return (
-      <Badge variant="secondary" className="gap-1 px-1.5 text-xs">
-        <Hand className="size-3" />
-        Manual
-      </Badge>
-    )
+    return <StatusBadge tone="info" label="Manual" icon={Hand} className="px-2 py-0.5" />
   }
-  return (
-    <Badge variant="default" className="gap-1 px-1.5 text-xs">
-      <Bot className="size-3" />
-      AI
-    </Badge>
-  )
+  return <StatusBadge tone="brand" label="AI" icon={Bot} className="px-2 py-0.5" />
 }
