@@ -161,7 +161,11 @@ export function ContactDetailSheet({
             Memuat…
           </div>
         ) : (
-          <ScrollArea className="-mx-6 flex-1">
+          <ScrollArea
+            // Wrapper Viewport Radix dipaksa `block` (bawaannya display:table
+            // yang melebar mengikuti isi) — lihat ConversationList.tsx.
+            className="-mx-6 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block"
+          >
             <div className="space-y-5 px-6 pb-6">
               <div className="flex items-center gap-3">
                 <Avatar className="size-12">
