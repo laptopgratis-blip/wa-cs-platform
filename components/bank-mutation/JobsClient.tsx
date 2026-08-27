@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
@@ -64,7 +65,7 @@ export function JobsClient() {
   }, [])
 
   return (
-    <div className="space-y-4">
+    <PageContainer width="wide">
       <div>
         <Link href="/integrations/bank-mutation">
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
@@ -135,6 +136,6 @@ export function JobsClient() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }

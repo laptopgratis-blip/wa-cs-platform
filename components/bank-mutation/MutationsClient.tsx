@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
@@ -192,7 +193,7 @@ export function MutationsClient() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <div className="space-y-4">
+    <PageContainer width="wide">
       <div>
         <Link href="/integrations/bank-mutation">
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
@@ -403,6 +404,6 @@ export function MutationsClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }
