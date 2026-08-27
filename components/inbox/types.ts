@@ -7,12 +7,18 @@ export type InboxFilter = 'all' | 'ai' | 'attention' | 'resolved'
 // CLOUD_API = nomor WhatsApp Business resmi Meta (window 24 jam + template).
 export type WaProvider = 'BAILEYS' | 'CLOUD_API'
 
-/** Satu nomor WhatsApp milik user — opsi filter di daftar percakapan. */
+/**
+ * Satu NOMOR WhatsApp milik user — opsi filter di daftar percakapan.
+ *
+ * Dikunci ke nomor, bukan ke id sesi: satu nomor yang di-pair ulang punya
+ * banyak baris WhatsappSession, dan user berpikir dalam satuan nomor.
+ */
 export interface SenderOption {
-  id: string
+  phoneNumber: string
   displayName: string | null
-  phoneNumber: string | null
   provider: WaProvider
+  /** false = nomor lama yang masih menyimpan percakapan. */
+  isConnected: boolean
 }
 
 // Asal pesan AGENT/AI: WA_DIRECT (CS balas langsung dari WA HP), WEB_DASHBOARD

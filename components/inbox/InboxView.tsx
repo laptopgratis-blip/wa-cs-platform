@@ -77,7 +77,7 @@ export function InboxView({
     try {
       const params = new URLSearchParams({ filter })
       if (debouncedSearch) params.set('search', debouncedSearch)
-      if (senderFilter) params.set('sessionId', senderFilter)
+      if (senderFilter) params.set('senderPhone', senderFilter)
       // Dulu hanya cabang sukses yang ditangani: kalau gagal, daftar tetap
       // kosong tanpa pesan apa pun dan user mengira memang belum ada chat.
       const r = await fetchJson<{
@@ -111,7 +111,7 @@ export function InboxView({
         offset: String(conversations.length),
       })
       if (debouncedSearch) params.set('search', debouncedSearch)
-      if (senderFilter) params.set('sessionId', senderFilter)
+      if (senderFilter) params.set('senderPhone', senderFilter)
       const r = await fetchJson<{
         success: boolean
         data?: { conversations: InboxConversation[]; hasMore?: boolean }

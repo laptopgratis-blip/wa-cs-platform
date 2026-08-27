@@ -38,10 +38,16 @@ export async function GET(req: Request) {
   if (filter === 'resolved') Object.assign(where, { isResolved: true })
   // Filter "nomor kita yang mana" — wajib saat akun punya >1 nomor, karena
   // satu nomor pelanggan bisa muncul sebagai beberapa Contact (satu per sesi).
-  // Kepemilikan sesi tidak perlu dicek terpisah: where sudah dikunci userId,
-  // jadi sessionId milik orang lain hanya menghasilkan daftar kosong.
-  const sessionId = (url.searchParams.get('sessionId') ?? '').trim()
-  if (sessionId) Object.assign(where, { waSessionId: sessionId })
+  //
+  // Difilter per NOMOR, bukan per id sesi: satu nomor yang di-pair ulang punya
+  // banyak baris WhatsappSession, dan kontaknya tersebar di beberapa di
+  // antaranya. Memfilter per id sesi akan menyembunyikan sebagian percakapan
+  // dari nomor yang sama. Kepemilikan tidak perlu dicek terpisah — where sudah
+  // dikunci userId, jadi nomor milik orang lain hanya menghasilkan hasil kosong.
+  const senderPhone = (url.searchParams.get('senderPhone') ?? '').trim()
+  if (senderPhone) {
+    Object.assign(where, { waSession: { phoneNumber: senderPhone } })
+  }
   if (search) {
     Object.assign(where, {
       OR: [

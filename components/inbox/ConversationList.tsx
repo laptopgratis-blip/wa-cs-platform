@@ -44,7 +44,7 @@ interface ConversationListProps {
   onSearchChange: (next: string) => void
   /** Nomor WA milik user. Filter hanya muncul kalau lebih dari satu. */
   senders: SenderOption[]
-  /** '' = semua nomor. */
+  /** '' = semua nomor. Berisi phoneNumber, bukan id sesi. */
   senderFilter: string
   onSenderFilterChange: (next: string) => void
   onSelect: (id: string) => void
@@ -155,8 +155,9 @@ export function ConversationList({
             <SelectContent>
               <SelectItem value={ALL_SENDERS}>Semua nomor</SelectItem>
               {senders.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
+                <SelectItem key={s.phoneNumber} value={s.phoneNumber}>
                   {senderName(s)}
+                  {!s.isConnected && ' · tidak aktif'}
                 </SelectItem>
               ))}
             </SelectContent>

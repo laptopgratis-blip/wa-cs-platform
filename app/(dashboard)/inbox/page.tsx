@@ -5,12 +5,14 @@ import { redirect } from 'next/navigation'
 
 import { InboxView } from '@/components/inbox/InboxView'
 import type {
+  SenderOption,
   InboxConversation,
   InboxCounts,
   MessageSource,
 } from '@/components/inbox/types'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { buildSenderOptions } from '@/lib/services/inbox/sender-options'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,13 +62,33 @@ export default async function InboxPage() {
       // sesi (event 'inbox:message' & 'inbox:status').
       prisma.whatsappSession.findMany({
         where: { userId },
-        // displayName/phoneNumber/provider dipakai filter "nomor mana" di UI.
-        select: { id: true, displayName: true, phoneNumber: true, provider: true },
+        select: {
+          id: true,
+          displayName: true,
+          phoneNumber: true,
+          provider: true,
+          status: true,
+          _count: { select: { contacts: true } },
+        },
         orderBy: { createdAt: 'asc' },
       }),
     ])
 
+  // sessionIds = SEMUA sesi (termasuk DISCONNECTED) — dipakai subscribe room
+  // realtime, jadi memang harus lengkap.
   const sessionIds: string[] = sessions.map((s) => s.id)
+
+  // Opsi filter dikelompokkan per NOMOR (bukan per sesi) — lihat
+  // buildSenderOptions untuk aturannya beserta alasannya.
+  const senders: SenderOption[] = buildSenderOptions(
+    sessions.map((s) => ({
+      displayName: s.displayName,
+      phoneNumber: s.phoneNumber,
+      provider: s.provider,
+      status: s.status,
+      contactCount: s._count.contacts,
+    })),
+  )
 
   const initialHasMore = contacts.length > 100
   const pageContacts = initialHasMore ? contacts.slice(0, 100) : contacts
@@ -105,7 +127,7 @@ export default async function InboxPage() {
       initialCounts={counts}
       initialHasMore={initialHasMore}
       sessionIds={sessionIds}
-      senders={sessions}
+      senders={senders}
     />
   )
 }
