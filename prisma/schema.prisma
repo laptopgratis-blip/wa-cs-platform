@@ -1572,14 +1572,22 @@ model SiteSettings {
 // table ini untuk dropdown + auto-fill harga.
 model AiModelPreset {
   id                String   @id @default(cuid())
-  provider          String // ANTHROPIC | OPENAI | GOOGLE
+  provider          String // ANTHROPIC | OPENAI | GOOGLE | KLING | ELEVENLABS
   modelId           String   @unique
   displayName       String
-  inputPricePer1M   Float // USD per 1M token
+  // Untuk unitType TOKEN: USD per 1M token/char/detik. Untuk IMAGE/VIDEO_SECOND:
+  // USD per 1 unit × 1_000_000 (mirror konvensi AiFeatureConfig — angka besar,
+  // ditampilkan per-unit di UI). outputPricePer1M = 0 untuk model non-chat.
+  inputPricePer1M   Float
   outputPricePer1M  Float
   contextWindow     Int?
   isAvailable       Boolean  @default(true)
   notes             String?
+  // Satuan charge — mirror AiFeatureConfig.unitType. TOKEN (LLM/char/detik audio),
+  // IMAGE (per gambar), VIDEO_SECOND (per detik video). Menentukan cara UI format harga.
+  unitType          String   @default("TOKEN")
+  // Label satuan display (mis. "token", "character", "image", "detik").
+  unitLabel         String?
   // 'manual' = admin edit langsung; 'ai-research' = update via Claude
   // web_search; 'seed' = data awal saat migration.
   lastUpdatedSource String?
