@@ -36,6 +36,12 @@ export async function GET(req: Request) {
   if (filter === 'ai') Object.assign(where, { aiPaused: false, isResolved: false })
   if (filter === 'attention') Object.assign(where, { aiPaused: true, isResolved: false })
   if (filter === 'resolved') Object.assign(where, { isResolved: true })
+  // Filter "nomor kita yang mana" — wajib saat akun punya >1 nomor, karena
+  // satu nomor pelanggan bisa muncul sebagai beberapa Contact (satu per sesi).
+  // Kepemilikan sesi tidak perlu dicek terpisah: where sudah dikunci userId,
+  // jadi sessionId milik orang lain hanya menghasilkan daftar kosong.
+  const sessionId = (url.searchParams.get('sessionId') ?? '').trim()
+  if (sessionId) Object.assign(where, { waSessionId: sessionId })
   if (search) {
     Object.assign(where, {
       OR: [
@@ -62,7 +68,7 @@ export async function GET(req: Request) {
         aiPaused: true,
         isResolved: true,
         lastMessageAt: true,
-        waSession: { select: { id: true, displayName: true, phoneNumber: true } },
+        waSession: { select: { id: true, displayName: true, phoneNumber: true, provider: true } },
         messages: {
           orderBy: { createdAt: 'desc' },
           take: 1,

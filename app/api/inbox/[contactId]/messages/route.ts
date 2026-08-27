@@ -42,7 +42,7 @@ export async function GET(req: Request, { params }: Params) {
         lastMessageAt: true,
         // FK scalar — ChatView pakai untuk subscribe room sesi (event inbox:*).
         waSessionId: true,
-        waSession: { select: { id: true, displayName: true, status: true } },
+        waSession: { select: { id: true, displayName: true, status: true, provider: true, phoneNumber: true } },
       },
     })
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)

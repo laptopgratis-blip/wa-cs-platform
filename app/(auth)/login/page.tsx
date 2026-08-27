@@ -2,6 +2,8 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
+import { landingPathForRole } from '@/lib/auth-landing'
+
 import { LoginForm } from '@/components/auth/LoginForm'
 import {
   Card,
@@ -15,7 +17,9 @@ import { getOtpChannelMode } from '@/lib/settings'
 
 export default async function LoginPage() {
   const session = await getServerSession(authOptions)
-  if (session) redirect('/dashboard')
+  // Sudah login → langsung ke halaman sesuai role (admin jangan mampir
+  // ke dashboard user dulu).
+  if (session) redirect(landingPathForRole(session.user.role))
 
   const googleEnabled = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,

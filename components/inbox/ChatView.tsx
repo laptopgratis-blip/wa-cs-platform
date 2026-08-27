@@ -20,6 +20,8 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { fetchJson } from '@/lib/fetch-json'
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { StatusBadge as SharedStatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +43,7 @@ import {
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
+import { senderName } from './SenderLabel'
 import { SendTemplateDialog } from './SendTemplateDialog'
 import type { ChatContact, ChatMessage } from './types'
 
@@ -75,24 +78,18 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setDraft('')
     ;(async () => {
       try {
-        const res = await fetch(`/api/inbox/${contactId}/messages`)
-        const json = (await res.json()) as {
+        const r = await fetchJson<{
           success: boolean
-          data?: {
-            contact: ChatContact
-            messages: ChatMessage[]
-            isAdmin?: boolean
-          }
-          error?: string
-        }
+          data?: { contact: ChatContact; messages: ChatMessage[]; isAdmin?: boolean }
+        }>(`/api/inbox/${contactId}/messages`, undefined, 'Gagal memuat percakapan')
         if (aborted) return
-        if (!res.ok || !json.success || !json.data) {
-          toast.error(json.error || 'Gagal memuat percakapan')
+        if (!r.ok || !r.data?.data) {
+          toast.error(r.error ?? 'Gagal memuat percakapan')
           return
         }
-        setContact(json.data.contact)
-        setMessages(json.data.messages)
-        setIsAdmin(Boolean(json.data.isAdmin))
+        setContact(r.data.data.contact)
+        setMessages(r.data.data.messages)
+        setIsAdmin(Boolean(r.data.data.isAdmin))
       } finally {
         if (!aborted) setLoading(false)
       }
@@ -179,21 +176,24 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     if (!content || isSending) return
     setSending(true)
     try {
-      const res = await fetch(`/api/inbox/${contactId}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      const json = (await res.json()) as {
+      const r = await fetchJson<{
         success: boolean
         data?: ChatMessage
-        error?: string
         code?: string
         sessionId?: string
-      }
-      if (!res.ok || !json.success || !json.data) {
+      }>(
+        `/api/inbox/${contactId}/send`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        },
+        'Gagal kirim pesan',
+      )
+      const json = r.data
+      if (!r.ok || !json?.data) {
         // Sesi Cloud API di luar window 24 jam → tawarkan kirim template.
-        if (res.status === 409 && json.code === 'WINDOW_CLOSED') {
+        if (r.status === 409 && json?.code === 'WINDOW_CLOSED') {
           setTemplateSessionId(json.sessionId ?? null)
           setTemplateOpen(true)
           toast.info(
@@ -201,7 +201,7 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
           )
           return
         }
-        toast.error(json.error || 'Gagal kirim pesan')
+        toast.error(r.error ?? 'Gagal kirim pesan')
         return
       }
       setMessages((prev) => [...prev, json.data!])
@@ -217,14 +217,19 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setToggling(true)
     try {
       const next = !contact.aiPaused
-      const res = await fetch(`/api/inbox/${contact.id}/takeover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paused: next }),
-      })
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal mengubah status')
+      // Kegagalan diam di sini bikin badge AI/Manual desync dari server:
+      // UI menampilkan status baru padahal server masih status lama.
+      const r = await fetchJson(
+        `/api/inbox/${contact.id}/takeover`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paused: next }),
+        },
+        'Gagal mengubah status',
+      )
+      if (!r.ok) {
+        toast.error(r.error ?? 'Gagal mengubah status')
         return
       }
       setContact({ ...contact, aiPaused: next })
@@ -299,14 +304,19 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   async function toggleResolved() {
     if (!contact) return
     const next = !contact.isResolved
-    const res = await fetch(`/api/inbox/${contact.id}/resolve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resolved: next }),
-    })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (!res.ok || !json.success) {
-      toast.error(json.error || 'Gagal mengubah status')
+    // Fungsi ini sebelumnya TANPA try/catch sama sekali — "Tandai selesai"
+    // bisa benar-benar tidak melakukan apa pun tanpa jejak.
+    const r = await fetchJson(
+      `/api/inbox/${contact.id}/resolve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved: next }),
+      },
+      'Gagal mengubah status',
+    )
+    if (!r.ok) {
+      toast.error(r.error ?? 'Gagal mengubah status')
       return
     }
     setContact({ ...contact, isResolved: next })
@@ -353,8 +363,11 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
             </p>
             <p className="text-muted-foreground truncate text-xs">
               +{contact.phoneNumber}
-              {contact.waSession?.displayName &&
-                ` · via ${contact.waSession.displayName}`}
+              {/* Dulu "via …" hilang total kalau displayName null — padahal
+                  sesi Cloud yang baru terhubung sering belum punya nama dari
+                  Meta. senderName() jatuh ke nomor, jadi penandanya tidak
+                  pernah menghilang. */}
+              {contact.waSession && ` · via ${senderName(contact.waSession)}`}
             </p>
           </div>
         </div>
@@ -497,21 +510,27 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <Send className="size-4" />
             )}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Kirim template Meta"
-            title="Kirim template Meta (nomor Cloud API, di luar window 24 jam)"
-            className="shrink-0"
-            disabled={!contact.aiPaused || isSending}
-            onClick={() => {
-              setTemplateSessionId(null)
-              setTemplateOpen(true)
-            }}
-          >
-            <LayoutTemplate className="size-4" />
-          </Button>
+          {/* Template Meta hanya ada di jalur Cloud API. Untuk percakapan yang
+              berjalan lewat nomor Baileys (QR), tombol ini disembunyikan —
+              sebelumnya tetap tampil, lalu server diam-diam mengirim dari nomor
+              Cloud lain DAN memindahkan percakapan itu ke sana permanen. */}
+          {contact.waSession?.provider === 'CLOUD_API' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Kirim template Meta"
+              title="Kirim template Meta (di luar window 24 jam)"
+              className="shrink-0"
+              disabled={!contact.aiPaused || isSending}
+              onClick={() => {
+                setTemplateSessionId(contact.waSession?.id ?? null)
+                setTemplateOpen(true)
+              }}
+            >
+              <LayoutTemplate className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
 

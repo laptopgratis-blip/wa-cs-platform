@@ -13,6 +13,13 @@ import { useEffect, useRef } from 'react'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -20,7 +27,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatRelativeTime } from '@/lib/format-time'
 import { cn } from '@/lib/utils'
 
-import type { InboxConversation, InboxCounts, InboxFilter } from './types'
+import { SenderLabel, senderName } from './SenderLabel'
+import type { SenderOption, InboxConversation, InboxCounts, InboxFilter } from './types'
 
 interface ConversationListProps {
   conversations: InboxConversation[]
@@ -34,8 +42,16 @@ interface ConversationListProps {
   onLoadMore: () => void
   onFilterChange: (next: InboxFilter) => void
   onSearchChange: (next: string) => void
+  /** Nomor WA milik user. Filter hanya muncul kalau lebih dari satu. */
+  senders: SenderOption[]
+  /** '' = semua nomor. */
+  senderFilter: string
+  onSenderFilterChange: (next: string) => void
   onSelect: (id: string) => void
 }
+
+// Radix Select melarang SelectItem bernilai string kosong.
+const ALL_SENDERS = '__all__'
 
 const TAB_ITEMS: { value: InboxFilter; label: string }[] = [
   { value: 'all', label: 'Semua' },
@@ -56,6 +72,9 @@ export function ConversationList({
   onLoadMore,
   onFilterChange,
   onSearchChange,
+  senders,
+  senderFilter,
+  onSenderFilterChange,
   onSelect,
 }: ConversationListProps) {
   // Auto-load: begitu sentinel di dasar list mendekati layar, muat halaman
@@ -80,6 +99,13 @@ export function ConversationList({
     observer.observe(el)
     return () => observer.disconnect()
   }, [hasMore, isLoadingMore, onLoadMore])
+
+  // Tampilkan penanda nomor hanya bila percakapan yang termuat memang berasal
+  // dari lebih dari satu nomor kita.
+  const showSender =
+    new Set(
+      conversations.map((c) => c.waSession?.id).filter((id): id is string => Boolean(id)),
+    ).size > 1
 
   return (
     <div className="flex h-full flex-col">
@@ -113,6 +139,30 @@ export function ConversationList({
           </TabsList>
         </Tabs>
       </div>
+
+      {/* Filter nomor — hanya relevan kalau user punya >1 nomor terhubung.
+          Tanpa ini, satu nomor pelanggan yang chat ke dua nomor kita tampil
+          sebagai dua baris yang terlihat kembar. */}
+      {senders.length > 1 && (
+        <div className="border-b px-3 pb-3">
+          <Select
+            value={senderFilter || ALL_SENDERS}
+            onValueChange={(v) => onSenderFilterChange(v === ALL_SENDERS ? '' : v)}
+          >
+            <SelectTrigger className="w-full" aria-label="Filter nomor WhatsApp">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_SENDERS}>Semua nomor</SelectItem>
+              {senders.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {senderName(s)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* min-h-0 WAJIB: tanpa ini flex item (flex-1) default min-height:auto →
           Root ikut tinggi konten (ratusan chat), Viewport size-full tak pernah
@@ -181,6 +231,12 @@ export function ConversationList({
                         isResolved={c.isResolved}
                       />
                     </div>
+                    {/* Nomor KITA yang memegang percakapan ini. Hanya relevan
+                        (dan hanya ditampilkan) kalau akun punya >1 nomor —
+                        untuk akun satu nomor barisnya cuma jadi ramai. */}
+                    {showSender && (
+                      <SenderLabel sender={c.waSession} className="mt-0.5" />
+                    )}
                   </div>
                 </button>
               </li>

@@ -7,6 +7,10 @@
 // full-screen saat conversation di-pilih (dengan tombol back ke list).
 // Desktop: split panel seperti biasa.
 import { Inbox as InboxIcon } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { fetchJson } from '@/lib/fetch-json'
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -23,6 +27,7 @@ import type {
   InboxCounts,
   InboxFilter,
   MessageSource,
+  SenderOption,
 } from './types'
 
 interface InboxViewProps {
@@ -31,6 +36,8 @@ interface InboxViewProps {
   initialHasMore?: boolean
   // Daftar WA session milik user — dipakai untuk subscribe room realtime.
   sessionIds: string[]
+  /** Nomor WA milik user, untuk filter "tampilkan percakapan nomor mana". */
+  senders: SenderOption[]
 }
 
 export function InboxView({
@@ -38,10 +45,13 @@ export function InboxView({
   initialCounts,
   initialHasMore = false,
   sessionIds,
+  senders,
 }: InboxViewProps) {
   const [conversations, setConversations] = useState(initialConversations)
   const [counts, setCounts] = useState(initialCounts)
   const [filter, setFilter] = useState<InboxFilter>('all')
+  // '' = semua nomor.
+  const [senderFilter, setSenderFilter] = useState<string>('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(
     initialConversations[0]?.id ?? null,
@@ -67,24 +77,28 @@ export function InboxView({
     try {
       const params = new URLSearchParams({ filter })
       if (debouncedSearch) params.set('search', debouncedSearch)
-      const res = await fetch(`/api/inbox?${params}`)
-      const json = (await res.json()) as {
+      if (senderFilter) params.set('sessionId', senderFilter)
+      // Dulu hanya cabang sukses yang ditangani: kalau gagal, daftar tetap
+      // kosong tanpa pesan apa pun dan user mengira memang belum ada chat.
+      const r = await fetchJson<{
         success: boolean
         data?: {
           conversations: InboxConversation[]
           counts: InboxCounts
           hasMore?: boolean
         }
+      }>(`/api/inbox?${params}`, undefined, 'Gagal memuat daftar percakapan')
+      if (!r.ok || !r.data?.data) {
+        toast.error(r.error ?? 'Gagal memuat daftar percakapan')
+        return
       }
-      if (json.success && json.data) {
-        setConversations(json.data.conversations)
-        setCounts(json.data.counts)
-        setHasMore(json.data.hasMore ?? false)
-      }
+      setConversations(r.data.data.conversations)
+      setCounts(r.data.data.counts)
+      setHasMore(r.data.data.hasMore ?? false)
     } finally {
       setLoading(false)
     }
-  }, [filter, debouncedSearch])
+  }, [filter, debouncedSearch, senderFilter])
 
   // Muat halaman percakapan berikutnya (offset = jumlah yang sudah tampil) lalu
   // tambahkan ke daftar. Dipakai tombol "Muat lebih banyak".
@@ -97,24 +111,28 @@ export function InboxView({
         offset: String(conversations.length),
       })
       if (debouncedSearch) params.set('search', debouncedSearch)
-      const res = await fetch(`/api/inbox?${params}`)
-      const json = (await res.json()) as {
+      if (senderFilter) params.set('sessionId', senderFilter)
+      const r = await fetchJson<{
         success: boolean
         data?: { conversations: InboxConversation[]; hasMore?: boolean }
+      }>(`/api/inbox?${params}`, undefined, 'Gagal memuat percakapan berikutnya')
+      if (!r.ok || !r.data?.data) {
+        toast.error(r.error ?? 'Gagal memuat percakapan berikutnya')
+        return
       }
-      if (json.success && json.data) {
-        const more = json.data.conversations
+      {
+        const more = r.data.data.conversations
         setConversations((prev) => {
           // Dedup defensif kalau ada pergeseran urutan antar-fetch.
           const seen = new Set(prev.map((c) => c.id))
           return [...prev, ...more.filter((c) => !seen.has(c.id))]
         })
-        setHasMore(json.data.hasMore ?? false)
+        setHasMore(r.data.data.hasMore ?? false)
       }
     } finally {
       setLoadingMore(false)
     }
-  }, [isLoadingMore, hasMore, filter, conversations.length, debouncedSearch])
+  }, [isLoadingMore, hasMore, filter, conversations.length, debouncedSearch, senderFilter])
 
   // Skip first call (data sudah dari server). Trigger saat filter/search ganti.
   const isFirst = useRef(true)
@@ -247,6 +265,12 @@ export function InboxView({
             setSelectedId(null)
           }}
           onSearchChange={setSearch}
+          senders={senders}
+          senderFilter={senderFilter}
+          onSenderFilterChange={(v) => {
+            setSenderFilter(v)
+            setSelectedId(null)
+          }}
           onSelect={setSelectedId}
         />
       </aside>

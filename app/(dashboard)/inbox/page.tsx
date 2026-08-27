@@ -38,7 +38,7 @@ export default async function InboxPage() {
           aiPaused: true,
           isResolved: true,
           lastMessageAt: true,
-          waSession: { select: { id: true, displayName: true, phoneNumber: true } },
+          waSession: { select: { id: true, displayName: true, phoneNumber: true, provider: true } },
           messages: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -60,7 +60,9 @@ export default async function InboxPage() {
       // sesi (event 'inbox:message' & 'inbox:status').
       prisma.whatsappSession.findMany({
         where: { userId },
-        select: { id: true },
+        // displayName/phoneNumber/provider dipakai filter "nomor mana" di UI.
+        select: { id: true, displayName: true, phoneNumber: true, provider: true },
+        orderBy: { createdAt: 'asc' },
       }),
     ])
 
@@ -103,6 +105,7 @@ export default async function InboxPage() {
       initialCounts={counts}
       initialHasMore={initialHasMore}
       sessionIds={sessionIds}
+      senders={sessions}
     />
   )
 }

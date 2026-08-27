@@ -3,6 +3,18 @@ import type { MessageRole, MessageStatus, PipelineStage } from '@prisma/client'
 
 export type InboxFilter = 'all' | 'ai' | 'attention' | 'resolved'
 
+// BAILEYS = nomor hasil scan QR (tanpa aturan window Meta, tanpa template).
+// CLOUD_API = nomor WhatsApp Business resmi Meta (window 24 jam + template).
+export type WaProvider = 'BAILEYS' | 'CLOUD_API'
+
+/** Satu nomor WhatsApp milik user — opsi filter di daftar percakapan. */
+export interface SenderOption {
+  id: string
+  displayName: string | null
+  phoneNumber: string | null
+  provider: WaProvider
+}
+
 // Asal pesan AGENT/AI: WA_DIRECT (CS balas langsung dari WA HP), WEB_DASHBOARD
 // (CS balas dari inbox web), AI (otomatis), WA_HISTORY (import riwayat).
 // Trek 2B (Cloud API): TEMPLATE (CS kirim template), BROADCAST, FOLLOWUP,
@@ -27,7 +39,15 @@ export interface InboxConversation {
   aiPaused: boolean
   isResolved: boolean
   lastMessageAt: string | null
-  waSession: { id: string; displayName: string | null; phoneNumber: string | null } | null
+  // Nomor WhatsApp KITA yang memegang percakapan ini. Penting saat akun punya
+  // >1 nomor: satu nomor pelanggan yang chat ke dua nomor kita menghasilkan
+  // DUA Contact terpisah, yang tanpa penanda ini terlihat seperti duplikat.
+  waSession: {
+    id: string
+    displayName: string | null
+    phoneNumber: string | null
+    provider: WaProvider
+  } | null
   lastMessage: {
     content: string
     role: MessageRole
@@ -76,5 +96,11 @@ export interface ChatContact {
   pipelineStage: PipelineStage
   aiPaused: boolean
   isResolved: boolean
-  waSession: { id: string; displayName: string | null; status: string } | null
+  waSession: {
+    id: string
+    displayName: string | null
+    status: string
+    provider: WaProvider
+    phoneNumber: string | null
+  } | null
 }

@@ -13,10 +13,12 @@
 // (lewat callback onResend dari parent — parent yang punya data signup
 // atau identifier). Cooldown 60s, UI countdown.
 import { AlertTriangle, Loader2 } from 'lucide-react'
-import { signIn } from 'next-auth/react'
+import { getSession, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+
+import { resolveLoginRedirect } from '@/lib/auth-landing'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -43,7 +45,7 @@ interface OtpFormProps {
   // supaya OtpForm bisa update otpId & cooldown.
   onResend: () => Promise<OtpRequestPayload>
   // Redirect setelah login berhasil.
-  callbackUrl?: string
+  callbackUrl?: string | null
   // Tampilkan "ganti email/no WA" link kalau true.
   onBack?: () => void
 }
@@ -64,7 +66,7 @@ const ERROR_MESSAGE: Record<string, string> = {
 export function OtpForm({
   initial,
   onResend,
-  callbackUrl = '/dashboard',
+  callbackUrl = null,
   onBack,
 }: OtpFormProps) {
   const router = useRouter()
@@ -92,7 +94,7 @@ export function OtpForm({
         otpId: payload.otpId,
         code,
         redirect: false,
-        callbackUrl,
+        callbackUrl: callbackUrl ?? undefined,
       })
       if (res?.error) {
         const msg = ERROR_MESSAGE[res.error] ?? 'Verifikasi gagal. Coba lagi.'
@@ -108,7 +110,10 @@ export function OtpForm({
         return
       }
       toast.success('Berhasil masuk')
-      router.push(res?.url || callbackUrl)
+      // Sama seperti jalur password: tujuan dihitung dari role, bukan dari
+      // res.url yang masih memakai callbackUrl mentah.
+      const fresh = await getSession()
+      router.push(resolveLoginRedirect(callbackUrl, fresh?.user?.role))
       router.refresh()
     } finally {
       setSubmitting(false)

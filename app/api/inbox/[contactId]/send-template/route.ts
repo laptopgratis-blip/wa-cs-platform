@@ -38,9 +38,30 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const contact = await prisma.contact.findFirst({
       where: { id: contactId, userId: session.user.id },
-      select: { id: true, phoneNumber: true, waSessionId: true, name: true },
+      select: {
+        id: true,
+        phoneNumber: true,
+        waSessionId: true,
+        name: true,
+        waSession: { select: { provider: true, displayName: true, phoneNumber: true } },
+      },
     })
     if (!contact) return jsonError('Kontak tidak ditemukan', 404)
+
+    // GATE PROVIDER — wajib sebelum fallback pemilihan sesi di bawah.
+    // Template Meta hanya ada di jalur Cloud API. Tanpa gate ini, kontak yang
+    // ter-pin ke nomor Baileys akan jatuh ke fallback "sesi Cloud mana pun yang
+    // WABA-nya cocok", sehingga pesan keluar dari NOMOR LAIN tanpa pemberitahuan
+    // — dan lebih parah, saveMessage lalu me-repin kontak itu ke sesi Cloud
+    // (purpose 'CS' → skipRepin false), memindahkan seluruh percakapan secara
+    // permanen ke nomor yang salah.
+    if (contact.waSession && contact.waSession.provider !== 'CLOUD_API') {
+      const nomor = contact.waSession.displayName ?? contact.waSession.phoneNumber ?? 'nomor ini'
+      return jsonError(
+        `Percakapan ini berjalan lewat ${nomor} (WhatsApp QR/Baileys). Template Meta hanya bisa dikirim dari nomor WhatsApp Business resmi (Cloud API), jadi balas dengan pesan biasa saja.`,
+        409,
+      )
+    }
 
     const template = await prisma.wabaTemplate.findFirst({
       where: { id: parsed.data.templateId, userId: session.user.id },

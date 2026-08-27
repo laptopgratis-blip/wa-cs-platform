@@ -8,6 +8,8 @@ import { Loader2, Send } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { fetchJson } from '@/lib/fetch-json'
+
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -44,24 +46,27 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
     const t = window.setTimeout(() => {
       setLoading(true)
       const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}&status=APPROVED` : '?status=APPROVED'
-      fetch(`/api/whatsapp/templates${qs}`)
-        .then((r) => r.json() as Promise<{ success: boolean; data?: { templates: WabaTemplateDto[] }; error?: string }>)
-        .then((json) => {
-          if (cancelled) return
-          if (!json.success || !json.data) {
-            toast.error(json.error ?? 'Gagal memuat template')
-            return
-          }
-          setTemplates(json.data.templates)
-          const first = json.data.templates[0]
-          if (first) {
-            setTemplateId(first.id)
-            setParams(emptyParamsFor(first))
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
+      // Kegagalan muat dulu jatuh ke empty state "belum ada template
+      // disetujui" — user mengira Meta belum menyetujui apa pun padahal
+      // request-nya yang gagal.
+      void fetchJson<{ success: boolean; data?: { templates: WabaTemplateDto[] } }>(
+        `/api/whatsapp/templates${qs}`,
+        undefined,
+        'Gagal memuat template',
+      ).then((r) => {
+        if (cancelled) return
+        setLoading(false)
+        if (!r.ok || !r.data?.data) {
+          toast.error(r.error ?? 'Gagal memuat template')
+          return
+        }
+        setTemplates(r.data.data.templates)
+        const first = r.data.data.templates[0]
+        if (first) {
+          setTemplateId(first.id)
+          setParams(emptyParamsFor(first))
+        }
+      })
     }, 0)
     return () => {
       cancelled = true
@@ -81,18 +86,25 @@ export function SendTemplateDialog({ open, onOpenChange, contactId, contactName,
     }
     setSending(true)
     try {
-      const res = await fetch(`/api/inbox/${contactId}/send-template`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId: template.id, params, ...(sessionId ? { sessionId } : {}) }),
-      })
-      const json = (await res.json()) as {
+      // fetchJson tidak pernah throw: jaringan putus / respons non-JSON pun
+      // tetap jadi hasil bertanda error. Sebelumnya blok ini try/finally TANPA
+      // catch dengan res.json() telanjang, jadi kegagalan semacam itu lolos
+      // sebagai unhandled rejection — spinner berhenti, tanpa pesan apa pun.
+      const r = await fetchJson<{
         success: boolean
-        error?: string
         data?: ChatMessage & { chargedRp?: number }
-      }
-      if (!json.success || !json.data) {
-        toast.error(json.error ?? 'Gagal mengirim template')
+      }>(
+        `/api/inbox/${contactId}/send-template`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId: template.id, params, ...(sessionId ? { sessionId } : {}) }),
+        },
+        'Gagal mengirim template',
+      )
+      const json = r.data
+      if (!r.ok || !json?.data) {
+        toast.error(r.error ?? 'Gagal mengirim template')
         return
       }
       toast.success(
