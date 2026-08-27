@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatusBadge as SharedStatusBadge } from '@/components/shared/StatusBadge'
 import {
   CoexSyncStatus,
@@ -213,6 +214,13 @@ export function WaSessionCard({
     }
   }, [session.id, isCloud])
 
+  // null = dialog tertutup. Aksi destruktif WAJIB lewat konfirmasi — dulu
+  // "Putuskan koneksi" dan "Hapus & logout" langsung eksekusi dari menu,
+  // satu salah klik cukup untuk mencabut nomor produksi.
+  const [confirmMode, setConfirmMode] = useState<null | 'disconnect' | 'wipe'>(
+    null,
+  )
+
   async function disconnect(wipe: boolean) {
     setBusy(true)
     try {
@@ -230,6 +238,7 @@ export function WaSessionCard({
         return
       }
       toast.success(wipe ? 'WhatsApp dihapus' : 'Koneksi diputus')
+      setConfirmMode(null)
       onChanged()
     } finally {
       setBusy(false)
@@ -328,13 +337,13 @@ export function WaSessionCard({
               )}
               <DropdownMenuItem
                 disabled={status === 'DISCONNECTED'}
-                onClick={() => disconnect(false)}
+                onClick={() => setConfirmMode('disconnect')}
               >
                 <Unplug className="mr-2 size-4" />
                 Putuskan koneksi
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => disconnect(true)}
+                onClick={() => setConfirmMode('wipe')}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="mr-2 size-4" />
@@ -467,6 +476,51 @@ export function WaSessionCard({
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmMode !== null}
+        onOpenChange={(o) => (o ? undefined : setConfirmMode(null))}
+        isLoading={isBusy}
+        variant={confirmMode === 'wipe' ? 'destructive' : 'default'}
+        title={
+          confirmMode === 'wipe'
+            ? `Hapus & logout ${displayName || (phoneNumber ? `+${phoneNumber}` : 'nomor ini')}?`
+            : 'Putuskan koneksi WhatsApp?'
+        }
+        confirmLabel={confirmMode === 'wipe' ? 'Ya, Hapus & Logout' : 'Ya, Putuskan'}
+        description={
+          confirmMode === 'wipe' ? (
+            <span className="space-y-2">
+              <span className="block">
+                Kredensial nomor ini dihapus dari Hulao dan AI berhenti membalas.
+                Riwayat chat &amp; kontak TETAP tersimpan.
+              </span>
+              {isCloud ? (
+                // Poin yang paling sering bikin bingung: melepas di Hulao TIDAK
+                // melepas nomor di sisi Meta, jadi memakainya di akun lain tetap
+                // ditolak ("nomor sudah terdaftar") sampai dilepas di sana.
+                <span className="block">
+                  Nomor ini <strong>tetap terdaftar</strong> di WhatsApp Business
+                  Account milikmu di Meta — Hulao hanya melepas akses. Untuk
+                  memakai nomor yang sama di akun atau platform lain, hapus atau
+                  migrasikan nomornya lewat WhatsApp Manager dulu.
+                </span>
+              ) : (
+                <span className="block">
+                  Untuk memakai nomor ini lagi, kamu perlu scan QR dari awal.
+                </span>
+              )}
+            </span>
+          ) : (
+            <span>
+              AI berhenti membalas pesan di nomor ini. Riwayat chat &amp; kontak
+              tetap tersimpan, dan kamu bisa menghubungkan lagi kapan saja tanpa
+              scan ulang.
+            </span>
+          )
+        }
+        onConfirm={() => disconnect(confirmMode === 'wipe')}
+      />
     </TooltipProvider>
   )
 }
