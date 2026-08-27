@@ -31,6 +31,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -168,7 +169,7 @@ export function BankMutationClient({ initial }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <PageContainer>
       <PageHeader
         title="Auto-Confirm Pembayaran"
         icon={Banknote}
@@ -283,7 +284,7 @@ export function BankMutationClient({ initial }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }
 
