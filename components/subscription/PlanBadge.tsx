@@ -13,6 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { TONES, type Tone } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface BadgeData {
@@ -21,11 +22,13 @@ interface BadgeData {
   isLifetime: boolean
 }
 
-const TIER_CFG: Record<string, { icon: typeof Sparkles; class: string }> = {
-  FREE: { icon: Sparkles, class: 'bg-warm-100 text-warm-700' },
-  STARTER: { icon: Zap, class: 'bg-blue-100 text-blue-700' },
-  POPULAR: { icon: Crown, class: 'bg-amber-100 text-amber-700' },
-  POWER: { icon: Crown, class: 'bg-purple-100 text-purple-700' },
+// Tier berbayar = tone brand (orange); FREE = neutral. Warna dari registry
+// ui-tones, bukan palet ad-hoc per tier.
+const TIER_CFG: Record<string, { icon: typeof Sparkles; tone: Tone }> = {
+  FREE: { icon: Sparkles, tone: 'neutral' },
+  STARTER: { icon: Zap, tone: 'brand' },
+  POPULAR: { icon: Crown, tone: 'brand' },
+  POWER: { icon: Crown, tone: 'brand' },
 }
 
 export function PlanBadge() {
@@ -86,8 +89,8 @@ export function PlanBadge() {
             className={cn(
               'flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80',
               expiringSoon
-                ? 'bg-amber-100 text-amber-800 ring-2 ring-amber-300'
-                : cfg.class,
+                ? cn(TONES.warning.bg, TONES.warning.text, 'ring-2 ring-amber-300')
+                : cn(TONES[cfg.tone].bg, TONES[cfg.tone].text),
             )}
           >
             <Icon className="size-3" />

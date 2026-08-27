@@ -9,7 +9,15 @@
 //
 // Dipanggil dari header / bottom nav. State open dikontrol parent supaya
 // trigger di mana saja bisa pakai drawer yang sama.
-import { ChevronRight, Eye, EyeOff, LogOut, User as UserIcon } from 'lucide-react'
+import {
+  ChevronRight,
+  Eye,
+  EyeOff,
+  LogOut,
+  ShieldCheck,
+  User as UserIcon,
+  Wallet,
+} from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { signOut } from 'next-auth/react'
@@ -27,8 +35,7 @@ import { formatNumber } from '@/lib/format'
 import {
   ADMIN_NAV_GROUPS,
   ADMIN_NAV_HOME,
-  NAV_ACCENTS,
-  type NavAccent,
+  NAV_ACCENT,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -52,6 +59,7 @@ interface MobileDrawerProps {
   }
   /** Saldo token user — untuk card di drawer. */
   tokenBalance?: number | null
+  messageCreditRp?: number | null
   /** Akses Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
@@ -63,6 +71,7 @@ export function MobileDrawer({
   onOpenChange,
   user,
   tokenBalance,
+  messageCreditRp = null,
   hasOrderSystemAccess = false,
   onboardingGoal = null,
 }: MobileDrawerProps) {
@@ -159,8 +168,8 @@ export function MobileDrawer({
               className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-3 transition-colors hover:bg-primary-100"
             >
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-wider text-primary-700">
-                  💰 Saldo Token
+                <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-primary-700">
+                  <Wallet className="size-3.5" aria-hidden /> Saldo Token
                 </p>
                 <p className="mt-0.5 font-display text-xl font-bold tabular-nums text-primary-700">
                   {formatNumber(tokenBalance)}
@@ -169,6 +178,32 @@ export function MobileDrawer({
               <div className="text-xs font-medium text-primary-700">
                 Top-up →
               </div>
+            </Link>
+          </div>
+        )}
+
+        {/* Kredit Pesan WA (Cloud API) */}
+        {typeof messageCreditRp === 'number' && (
+          <div className="px-4 pb-3">
+            <Link
+              href="/billing#kredit-pesan"
+              onClick={close}
+              className={cn(
+                'flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors',
+                messageCreditRp <= 0
+                  ? 'border-destructive/40 bg-destructive/10'
+                  : 'border-primary-200 bg-primary-50 hover:bg-primary-100',
+              )}
+            >
+              <div>
+                <p className={cn('text-xs font-medium uppercase tracking-wider', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>
+                  Kredit Pesan WA
+                </p>
+                <p className={cn('mt-0.5 font-display text-base font-bold tabular-nums', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>
+                  Rp {formatNumber(messageCreditRp)}
+                </p>
+              </div>
+              <div className={cn('text-xs font-medium', messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700')}>Top-up →</div>
             </Link>
           </div>
         )}
@@ -194,8 +229,8 @@ export function MobileDrawer({
           <>
             <div className="mt-2 border-t" />
             <div className="px-4 pb-2 pt-3">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-red-600">
-                ⚡ ADMIN PANEL
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-warm-500">
+                <ShieldCheck className="size-3.5 text-primary-600" aria-hidden /> Admin Panel
               </p>
             </div>
             <nav className="px-3">
@@ -277,13 +312,12 @@ function DrawerSection({
   pathnameActive: (href: string) => boolean
   onClickItem: () => void
 }) {
-  const accent = NAV_ACCENTS[group.accent ?? 'neutral']
   return (
     <div className="mb-2">
       <p
         className={cn(
-          'px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider',
-          accent.header,
+          'px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider',
+          NAV_ACCENT.header,
         )}
       >
         {group.label}
@@ -296,7 +330,6 @@ function DrawerSection({
             label={it.label}
             Icon={it.icon}
             active={pathnameActive(it.href)}
-            accent={accent}
             onClick={onClickItem}
           />
         ))}
@@ -310,17 +343,15 @@ function DrawerLink({
   label,
   Icon,
   active,
-  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: NavGroup['items'][number]['icon']
   active: boolean
-  accent?: NavAccent
   onClick: () => void
 }) {
-  const a = accent ?? NAV_ACCENTS.neutral
+  const a = NAV_ACCENT
   return (
     <Link
       href={href}

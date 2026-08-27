@@ -10,6 +10,8 @@ import { CheckoutStatusPoller } from '@/components/dashboard/CheckoutStatusPolle
 import { PaymentInfoCard } from '@/components/dashboard/PaymentInfoCard'
 import { PaymentInstructions } from '@/components/dashboard/PaymentInstructions'
 import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +25,8 @@ import { Separator } from '@/components/ui/separator'
 import { authOptions } from '@/lib/auth'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,11 +49,24 @@ const STATUS_VARIANT: Record<
   CANCELLED: 'outline',
 }
 
+// Kelas dasar panel status di bawah rincian order; warnanya dari TONES.
+const STATUS_PANEL = 'rounded-lg border p-4 text-sm'
+
 // Channel REDIRECT — QRIS, E-Wallet (tidak perlu instruksi in-app).
-const REDIRECT_CHANNELS = new Set(['QRIS', 'QRISC', 'QRIS2', 'SHOPEEPAY', 'OVO', 'DANA'])
+const REDIRECT_CHANNELS = new Set([
+  'QRIS',
+  'QRISC',
+  'QRIS2',
+  'SHOPEEPAY',
+  'OVO',
+  'DANA',
+])
 
 // Normalize QRIS variants ke "QRIS" saja.
-function normalizePaymentName(name: string | null, code: string | null): string {
+function normalizePaymentName(
+  name: string | null,
+  code: string | null,
+): string {
   if (code?.startsWith('QRIS')) return 'QRIS'
   return name ?? code ?? '—'
 }
@@ -70,13 +87,17 @@ export default async function CheckoutPage({
   if (!payment) notFound()
   // Cegah user lain melihat order ini.
   if (payment.userId !== session.user.id) notFound()
+  // Paket Kredit Pesan WA (Trek 2B) — label unit beda (Rp kredit, bukan token).
+  const isCredit = payment.purpose === 'MESSAGE_CREDIT_PURCHASE'
 
   // Auto-tandai expired kalau lewat batas tapi masih PENDING.
   const isExpiredByTime =
     payment.status === 'PENDING' &&
     payment.expiredAt &&
     payment.expiredAt.getTime() < Date.now()
-  const displayStatus: PaymentStatus = isExpiredByTime ? 'EXPIRED' : payment.status
+  const displayStatus: PaymentStatus = isExpiredByTime
+    ? 'EXPIRED'
+    : payment.status
 
   const StatusIcon =
     displayStatus === 'SUCCESS'
@@ -91,7 +112,7 @@ export default async function CheckoutPage({
     : false
 
   return (
-    <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/billing">
@@ -99,12 +120,12 @@ export default async function CheckoutPage({
             Kembali ke Billing
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Checkout
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Selesaikan pembayaran untuk menambah saldo token.
-        </p>
+        <PageHeader
+          title="Checkout"
+          description={`Selesaikan pembayaran untuk menambah saldo ${
+            isCredit ? 'kredit pesan WA' : 'token'
+          }.`}
+        />
       </div>
 
       <PostPublishReturnBanner
@@ -119,16 +140,13 @@ export default async function CheckoutPage({
 
       {/* Auto-polling banner */}
       {displayStatus === 'PENDING' && (
-        <CheckoutStatusPoller
-          orderId={orderId}
-          initialStatus={displayStatus}
-        />
+        <CheckoutStatusPoller orderId={orderId} initialStatus={displayStatus} />
       )}
 
-      <Card className="rounded-xl border-warm-200 shadow-sm">
+      <Card>
         <CardHeader className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
-            <CardTitle className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+            <CardTitle className="font-display text-warm-900 text-lg font-semibold">
               Order #{orderId}
             </CardTitle>
             <Badge
@@ -151,25 +169,36 @@ export default async function CheckoutPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-warm-200 bg-warm-50/50 p-4">
-            <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
-              Paket Token
+          <div className="border-warm-200 bg-warm-50/50 rounded-lg border p-4">
+            <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
+              {isCredit ? 'Paket Kredit Pesan WA' : 'Paket Token'}
             </div>
-            <div className="mt-1 font-display text-xl font-bold text-warm-900 dark:text-warm-50">
-              {formatNumber(payment.tokenAmount)} token
+            <div className="font-display text-warm-900 mt-1 text-xl font-semibold">
+              {isCredit
+                ? `Kredit ${formatRupiah(payment.tokenAmount)}`
+                : `${formatNumber(payment.tokenAmount)} token`}
             </div>
           </div>
 
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-warm-500">Jumlah Token</span>
+              <span className="text-warm-500">
+                {isCredit ? 'Kredit diterima' : 'Jumlah Token'}
+              </span>
               <span className="font-medium tabular-nums">
-                {formatNumber(payment.tokenAmount)} token
+                {isCredit
+                  ? formatRupiah(payment.tokenAmount)
+                  : `${formatNumber(payment.tokenAmount)} token`}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-warm-500">Metode Pembayaran</span>
-              <span className="font-medium">{normalizePaymentName(payment.paymentName, payment.paymentMethod)}</span>
+              <span className="font-medium">
+                {normalizePaymentName(
+                  payment.paymentName,
+                  payment.paymentMethod,
+                )}
+              </span>
             </div>
             {payment.expiredAt && displayStatus === 'PENDING' && (
               <div className="flex justify-between">
@@ -186,8 +215,8 @@ export default async function CheckoutPage({
             )}
             <Separator className="my-2" />
             <div className="flex justify-between text-base">
-              <span className="font-medium text-warm-700">Total</span>
-              <span className="font-display text-lg font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
+              <span className="text-warm-700 font-medium">Total</span>
+              <span className="font-display text-warm-900 text-lg font-semibold tabular-nums">
                 {formatRupiah(payment.amount)}
               </span>
             </div>
@@ -213,36 +242,68 @@ export default async function CheckoutPage({
             />
           )}
 
-          {/* Status messages */}
+          {/* Status messages — warna panel lewat registry tone (lib/ui-tones). */}
           {displayStatus === 'SUCCESS' && (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              Pembayaran sukses — saldo token sudah masuk ke akun kamu.
+            <div
+              className={cn(
+                STATUS_PANEL,
+                TONES.success.border,
+                TONES.success.bg,
+                TONES.success.text,
+              )}
+            >
+              Pembayaran sukses — saldo {isCredit ? 'kredit pesan' : 'token'}{' '}
+              sudah masuk ke akun kamu.
             </div>
           )}
           {displayStatus === 'EXPIRED' && (
-            <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm text-warm-700">
-              Order ini sudah expired. Silakan buat order baru dari halaman Billing.
+            <div
+              className={cn(
+                STATUS_PANEL,
+                TONES.neutral.border,
+                TONES.neutral.bg,
+                TONES.neutral.text,
+              )}
+            >
+              Order ini sudah expired. Silakan buat order baru dari halaman
+              Billing.
             </div>
           )}
           {displayStatus === 'FAILED' && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+            <div
+              className={cn(
+                STATUS_PANEL,
+                TONES.danger.border,
+                TONES.danger.bg,
+                TONES.danger.text,
+              )}
+            >
               Pembayaran gagal. Silakan buat order baru dari halaman Billing.
             </div>
           )}
           {displayStatus === 'CANCELLED' && (
-            <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm text-warm-700">
-              Order ini dibatalkan. Silakan buat order baru dari halaman Billing.
+            <div
+              className={cn(
+                STATUS_PANEL,
+                TONES.neutral.border,
+                TONES.neutral.bg,
+                TONES.neutral.text,
+              )}
+            >
+              Order ini dibatalkan. Silakan buat order baru dari halaman
+              Billing.
             </div>
           )}
         </CardContent>
       </Card>
 
       {displayStatus === 'PENDING' && (
-        <p className="text-center text-xs text-warm-500">
+        <p className="text-warm-500 text-center text-xs">
           Setelah pembayaran selesai, halaman ini akan otomatis update status.
-          Saldo token akan langsung masuk ke akun kamu.
+          Saldo {isCredit ? 'kredit pesan' : 'token'} akan langsung masuk ke
+          akun kamu.
         </p>
       )}
-    </div>
+    </PageContainer>
   )
 }

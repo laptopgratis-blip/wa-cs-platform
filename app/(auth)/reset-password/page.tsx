@@ -19,9 +19,9 @@ export default async function ResetPasswordPage() {
   if (session) redirect('/dashboard')
 
   return (
-    <Card className="rounded-xl border-warm-200 shadow-lg">
+    <Card>
       <CardHeader className="space-y-1.5">
-        <CardTitle className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50">
+        <CardTitle className="font-display text-warm-900 text-2xl font-bold">
           Reset Password
         </CardTitle>
         <CardDescription className="text-warm-500">
@@ -29,7 +29,9 @@ export default async function ResetPasswordPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Suspense fallback={<p className="text-sm text-muted-foreground">Memuat…</p>}>
+        <Suspense
+          fallback={<p className="text-muted-foreground text-sm">Memuat…</p>}
+        >
           <ResetPasswordForm />
         </Suspense>
       </CardContent>

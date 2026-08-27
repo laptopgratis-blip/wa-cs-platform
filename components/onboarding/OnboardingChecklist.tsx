@@ -75,7 +75,9 @@ export function OnboardingChecklist() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/onboarding/checklist', { cache: 'no-store' })
+      const res = await fetch('/api/onboarding/checklist', {
+        cache: 'no-store',
+      })
       if (!res.ok) throw new Error('Gagal memuat')
       const json = await res.json()
       setData(json.checklist)
@@ -123,30 +125,30 @@ export function OnboardingChecklist() {
   const totalCount = data.steps.length
 
   return (
-    <Card className="overflow-hidden rounded-2xl border-2 border-primary-200 bg-gradient-to-br from-primary-50 via-orange-50 to-amber-50 shadow-md">
-      <div className="flex items-start justify-between gap-3 border-b border-primary-100/60 bg-white/40 p-5">
+    <Card className="border-primary-200 from-primary-50 overflow-hidden rounded-2xl border-2 bg-gradient-to-br via-orange-50 to-amber-50 shadow-md">
+      <div className="border-primary-100/60 flex items-start justify-between gap-3 border-b bg-white/40 p-5">
         <div className="flex flex-1 items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-500 text-white shadow-orange">
+          <div className="bg-primary-500 shadow-orange flex size-10 shrink-0 items-center justify-center rounded-xl text-white">
             <Sparkles className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-display text-lg font-extrabold text-warm-900">
+              <h2 className="font-display text-warm-900 text-lg font-extrabold">
                 {data.title}
               </h2>
-              <span className="rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">
+              <span className="bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-xs font-semibold">
                 {completedCount}/{totalCount}
               </span>
             </div>
-            <p className="mt-0.5 text-sm text-warm-600">{data.subtitle}</p>
+            <p className="text-warm-600 mt-0.5 text-sm">{data.subtitle}</p>
             <div className="mt-3 flex items-center gap-3">
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-warm-200/60">
+              <div className="bg-warm-200/60 h-2 flex-1 overflow-hidden rounded-full">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary-500 to-orange-500 transition-all"
+                  className="from-primary-500 h-full rounded-full bg-gradient-to-r to-orange-500 transition-all"
                   style={{ width: `${data.progressPct}%` }}
                 />
               </div>
-              <span className="text-xs font-semibold text-warm-700 tabular-nums">
+              <span className="text-warm-700 text-xs font-semibold tabular-nums">
                 {data.progressPct}%
               </span>
             </div>
@@ -156,7 +158,7 @@ export function OnboardingChecklist() {
           <Button
             variant="ghost"
             size="sm"
-            className="hidden h-8 gap-1.5 px-2 text-xs text-warm-600 hover:text-warm-900 sm:inline-flex"
+            className="text-warm-600 hover:text-warm-900 hidden h-8 gap-1.5 px-2 text-xs sm:inline-flex"
             disabled={busy !== null}
             onClick={handleResetGoal}
             title="Ubah tujuan onboarding"
@@ -180,7 +182,7 @@ export function OnboardingChecklist() {
           <Button
             variant="ghost"
             size="sm"
-            className="size-8 p-0 text-warm-500 hover:text-rose-600"
+            className="text-warm-500 size-8 p-0 hover:text-rose-600"
             aria-label="Tutup permanen"
             disabled={busy !== null}
             onClick={async () => {
@@ -200,14 +202,14 @@ export function OnboardingChecklist() {
       </div>
 
       {!collapsed && (
-        <div className="flex flex-col divide-y divide-primary-100/60">
+        <div className="divide-primary-100/60 flex flex-col divide-y">
           {data.allRequiredDone && (
             <div className="flex items-center gap-3 bg-emerald-50 p-4 text-sm text-emerald-800">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
                 <Check className="size-4" />
               </span>
               <p className="flex-1 font-medium">
-                Mantap! Semua langkah utama sudah selesai. Selamat berjualan! 🎉
+                Mantap! Semua langkah utama sudah selesai. Selamat berjualan!
               </p>
               <Button
                 variant="ghost"
@@ -229,15 +231,11 @@ export function OnboardingChecklist() {
               step={step}
               index={idx + 1}
               busy={busy !== null}
-              onSkip={() =>
-                postAction({ action: 'skip', stepId: step.id })
-              }
+              onSkip={() => postAction({ action: 'skip', stepId: step.id })}
               onComplete={() =>
                 postAction({ action: 'complete', stepId: step.id })
               }
-              onReset={() =>
-                postAction({ action: 'reset', stepId: step.id })
-              }
+              onReset={() => postAction({ action: 'reset', stepId: step.id })}
             />
           ))}
         </div>
@@ -255,7 +253,14 @@ interface StepRowProps {
   onReset: () => void
 }
 
-function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProps) {
+function StepRow({
+  step,
+  index,
+  busy,
+  onSkip,
+  onComplete,
+  onReset,
+}: StepRowProps) {
   const done = step.status === 'completed'
   const skipped = step.status === 'skipped'
 
@@ -274,7 +279,7 @@ function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProp
             ? 'bg-emerald-500 text-white'
             : skipped
               ? 'bg-warm-300 text-warm-600'
-              : 'bg-white text-warm-700 ring-2 ring-primary-200',
+              : 'text-warm-700 ring-primary-200 bg-white ring-2',
         )}
       >
         {done ? <Check className="size-4" /> : skipped ? '–' : index}
@@ -284,14 +289,15 @@ function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProp
         <div className="flex flex-wrap items-center gap-2">
           <p
             className={cn(
-              'font-semibold text-warm-900',
-              (done || skipped) && 'text-warm-500 line-through decoration-warm-400',
+              'text-warm-900 font-semibold',
+              (done || skipped) &&
+                'text-warm-500 decoration-warm-400 line-through',
             )}
           >
             {step.title}
           </p>
           {step.optional && (
-            <span className="rounded-full bg-warm-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warm-600">
+            <span className="bg-warm-200 text-warm-600 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase">
               Opsional
             </span>
           )}
@@ -305,7 +311,7 @@ function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProp
               Auto-terdeteksi
             </span>
           )}
-          <span className="text-xs text-warm-500">~{step.estimatedMin}m</span>
+          <span className="text-warm-500 text-xs">~{step.estimatedMin}m</span>
         </div>
         <p
           className={cn(
@@ -324,7 +330,7 @@ function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProp
             size="sm"
             disabled={busy}
             onClick={onReset}
-            className="text-xs text-warm-500"
+            className="text-warm-500 text-xs"
           >
             Buka lagi
           </Button>
@@ -335,7 +341,7 @@ function StepRow({ step, index, busy, onSkip, onComplete, onReset }: StepRowProp
               size="sm"
               disabled={busy}
               onClick={onSkip}
-              className="text-xs text-warm-500"
+              className="text-warm-500 text-xs"
             >
               Lewati
             </Button>

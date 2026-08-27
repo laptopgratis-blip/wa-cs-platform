@@ -583,13 +583,19 @@ Simpan setup yg sering dipakai sebagai preset (`SoulSimulationPreset`). Klik "Sa
 
 URL: **/admin/settings**
 
-Key-value config platform. Saat ini ada 3 key:
+Key-value config platform. Saat ini ada 5 key:
 
 | Key | Default | Fungsi |
 |---|---|---|
 | `WA_ADMIN` | (kosong) | Nomor WA admin yg dipakai sistem untuk kirim notif (subscription reminder, sales flow notif). Format: 62xxxxxxx tanpa 0/+ |
 | `PLATFORM_NAME` | Hulao | Nama platform yg muncul di email, footer, dll |
-| `SUPPORT_EMAIL` | (kosong) | Email support yg user lihat di footer / contact |
+| `SUPPORT_EMAIL` | (kosong) | Email support. Dipakai kartu Email Support di halaman user `/bantuan` |
+| `DOCS_URL` | (kosong) | Tautan dokumentasi eksternal di `/dokumentasi`. **Wajib https** — nilainya dirender sebagai `href`. Kosong = kartu tautan disembunyikan, halaman tetap berguna |
+| `SUPPORT_HOURS` | Senin–Jumat, 09.00–17.00 WIB | Jam operasional yg tampil di `/bantuan` (maks 120 karakter) |
+
+> Menu **Dukungan** (`/dokumentasi`, `/bantuan`) dan **Pengembang** (`/pengembang/api`,
+> `/pengembang/integrasi`) terlihat oleh SEMUA user, tanpa gate paket. Yang di-gate POWER hanya
+> tautan Pixel Tracking & Auto Confirm di halaman Integrasi.
 
 > ⚠️ `WA_ADMIN` **bukan** WA session admin yg connected. Itu adalah nomor tujuan saat sales flow user complete (admin dapat notif "Customer X sudah order"). Untuk kirim WA dari admin ke user, pakai session WA admin yg connected (lihat `lib/services/subscription.ts:findAdminWaSessionId`).
 

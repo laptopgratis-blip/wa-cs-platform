@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 
 import { LpManualCheckoutDetail } from '@/components/dashboard/LpManualCheckoutDetail'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -42,7 +44,7 @@ export default async function ManualLpCheckoutPage({
   const expiresAt = new Date(payment.createdAt.getTime() + TRANSFER_TTL_MS)
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/pricing">
@@ -50,13 +52,10 @@ export default async function ManualLpCheckoutPage({
             Kembali ke Pilih Paket
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Transfer Manual — Upgrade LP
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Transfer ke salah satu rekening di bawah, lalu upload bukti transfer.
-          Setelah verifikasi, kuota LP kamu otomatis di-upgrade.
-        </p>
+        <PageHeader
+          title="Transfer Manual — Upgrade LP"
+          description="Transfer ke salah satu rekening di bawah, lalu upload bukti transfer. Setelah verifikasi, kuota LP kamu otomatis di-upgrade."
+        />
       </div>
 
       <LpManualCheckoutDetail
@@ -84,8 +83,11 @@ export default async function ManualLpCheckoutPage({
           accountNumber: b.accountNumber,
           accountName: b.accountName,
         }))}
-        user={{ name: session.user.name ?? null, email: session.user.email ?? '' }}
+        user={{
+          name: session.user.name ?? null,
+          email: session.user.email ?? '',
+        }}
       />
-    </div>
+    </PageContainer>
   )
 }

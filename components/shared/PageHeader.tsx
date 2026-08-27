@@ -28,12 +28,12 @@ export function PageHeader({
       )}
     >
       <div>
-        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-warm-900 md:text-3xl dark:text-warm-50">
-          {Icon && <Icon className="size-6 text-primary-500" aria-hidden />}
+        <h1 className="font-display text-warm-900 flex items-center gap-2 text-2xl font-semibold tracking-tight md:text-3xl">
+          {Icon && <Icon className="text-primary-500 size-6" aria-hidden />}
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-sm text-warm-500">{description}</p>
+          <p className="text-warm-500 mt-1 text-sm">{description}</p>
         )}
       </div>
       {actions && (

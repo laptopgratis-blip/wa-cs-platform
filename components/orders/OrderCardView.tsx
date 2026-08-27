@@ -36,6 +36,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { formatShippingArea } from '@/lib/format'
 import { formatRelativeTime } from '@/lib/format-time'
+import { TONES } from '@/lib/ui-tones'
 
 import type { OrderListItem, QuickAction } from './types'
 
@@ -112,7 +113,8 @@ function OrderCard({
   const isCancelled =
     order.paymentStatus === 'CANCELLED' || order.deliveryStatus === 'CANCELLED'
   const [renderTime] = useState(() => Date.now())
-  const isNew = renderTime - new Date(order.createdAt).getTime() < 60 * 60 * 1000
+  const isNew =
+    renderTime - new Date(order.createdAt).getTime() < 60 * 60 * 1000
   const itemsSummary =
     order.items.length === 0
       ? '—'
@@ -122,8 +124,8 @@ function OrderCard({
           .join(', ')
   return (
     <Card
-      className={`rounded-xl border-warm-200 shadow-sm ${
-        selected ? 'ring-2 ring-primary-500' : ''
+      className={`${
+        selected ? 'ring-primary-500 ring-2' : ''
       } ${isCancelled ? 'opacity-70' : ''}`}
     >
       <CardContent className="space-y-3 p-5">
@@ -135,7 +137,7 @@ function OrderCard({
               aria-label="Pilih"
             />
             <span className="flex items-center gap-2 text-xs">
-              {isNew && <Badge className="bg-emerald-500 text-white">Baru</Badge>}
+              {isNew && <Badge className={TONES.success.solid}>Baru</Badge>}
               {isCancelled && (
                 <Badge variant="outline" className="text-destructive">
                   Dibatalkan
@@ -155,17 +157,17 @@ function OrderCard({
 
         <div className="space-y-1 text-sm">
           <p className="flex items-center gap-1.5 font-medium">
-            <User className="size-3.5 shrink-0 text-warm-400" aria-hidden />
+            <User className="text-warm-400 size-3.5 shrink-0" aria-hidden />
             {order.customerName}
           </p>
-          <p className="flex items-center gap-1.5 text-muted-foreground">
-            <Phone className="size-3.5 shrink-0 text-warm-400" aria-hidden />
+          <p className="text-muted-foreground flex items-center gap-1.5">
+            <Phone className="text-warm-400 size-3.5 shrink-0" aria-hidden />
             {order.customerPhone}
           </p>
           {order.customerAddress && (
-            <p className="flex items-start gap-1.5 text-muted-foreground">
+            <p className="text-muted-foreground flex items-start gap-1.5">
               <MapPin
-                className="mt-0.5 size-3.5 shrink-0 text-warm-400"
+                className="text-warm-400 mt-0.5 size-3.5 shrink-0"
                 aria-hidden
               />
               <span className="line-clamp-2">
@@ -185,29 +187,28 @@ function OrderCard({
           {order.items.length > 0 && (
             <p className="flex items-start gap-1.5">
               <ShoppingCart
-                className="mt-0.5 size-3.5 shrink-0 text-warm-400"
+                className="text-warm-400 mt-0.5 size-3.5 shrink-0"
                 aria-hidden
               />
               <span>{itemsSummary}</span>
             </p>
           )}
           {order.invoiceNumber ? (
-            <div className="space-y-0.5 rounded-lg bg-warm-50 px-2 py-1.5 text-xs text-warm-700">
-              <p className="flex items-center gap-1.5 font-mono text-warm-900">
+            <div className="bg-warm-50 text-warm-700 space-y-0.5 rounded-lg px-2 py-1.5 text-xs">
+              <p className="text-warm-900 flex items-center gap-1.5 font-mono">
                 <FileText
-                  className="size-3 shrink-0 text-warm-400"
+                  className="text-warm-400 size-3 shrink-0"
                   aria-hidden
                 />
                 {order.invoiceNumber}
               </p>
               {(order.subtotalRp ?? 0) > 0 && (
                 <p>
-                  Subtotal: Rp{' '}
-                  {(order.subtotalRp ?? 0).toLocaleString('id-ID')}
+                  Subtotal: Rp {(order.subtotalRp ?? 0).toLocaleString('id-ID')}
                 </p>
               )}
               {(order.flashSaleDiscountRp ?? 0) > 0 && (
-                <p className="flex items-center gap-1 text-amber-700">
+                <p className="text-primary-700 flex items-center gap-1">
                   <Zap className="size-3 shrink-0" aria-hidden />
                   Hemat Flash: -Rp{' '}
                   {(order.flashSaleDiscountRp ?? 0).toLocaleString('id-ID')}
@@ -215,7 +216,10 @@ function OrderCard({
               )}
               {(order.shippingCostRp ?? 0) > 0 && (
                 <p className="flex items-center gap-1">
-                  <Truck className="size-3 shrink-0 text-warm-400" aria-hidden />
+                  <Truck
+                    className="text-warm-400 size-3 shrink-0"
+                    aria-hidden
+                  />
                   Ongkir{' '}
                   {order.shippingCourier && order.shippingService
                     ? `${order.shippingCourier.toUpperCase()} ${order.shippingService}`
@@ -224,21 +228,21 @@ function OrderCard({
                 </p>
               )}
               {(order.shippingSubsidyRp ?? 0) > 0 && (
-                <p className="flex items-center gap-1 text-blue-700">
+                <p className="text-primary-700 flex items-center gap-1">
                   <Gift className="size-3 shrink-0" aria-hidden />
                   Subsidi {order.appliedZoneName ?? ''}: -Rp{' '}
                   {(order.shippingSubsidyRp ?? 0).toLocaleString('id-ID')}
                 </p>
               )}
               {order.originSnapshot?.name && (
-                <p className="flex items-center gap-1 text-warm-600">
+                <p className="text-warm-600 flex items-center gap-1">
                   <Warehouse className="size-3.5 shrink-0" />
                   Dikirim dari: {order.originSnapshot.name}
                 </p>
               )}
-              <p className="font-bold text-warm-900">
+              <p className="text-warm-900 font-bold">
                 Total: Rp{' '}
-                {((order.totalRp ?? order.totalAmount) ?? 0).toLocaleString(
+                {(order.totalRp ?? order.totalAmount ?? 0).toLocaleString(
                   'id-ID',
                 )}
                 {order.uniqueCode ? ` (kode +${order.uniqueCode})` : ''}
@@ -248,7 +252,7 @@ function OrderCard({
             order.totalAmount !== null && (
               <p className="flex items-center gap-1.5">
                 <Banknote
-                  className="size-3.5 shrink-0 text-warm-400"
+                  className="text-warm-400 size-3.5 shrink-0"
                   aria-hidden
                 />
                 Total: Rp {order.totalAmount.toLocaleString('id-ID')}
@@ -256,37 +260,46 @@ function OrderCard({
             )
           )}
           <p className="flex items-center gap-1.5">
-            <CreditCard className="size-3.5 shrink-0 text-warm-400" aria-hidden />
+            <CreditCard
+              className="text-warm-400 size-3.5 shrink-0"
+              aria-hidden
+            />
             Bayar: {order.paymentMethod}
             {order.paymentProofUrl && (
               <a
                 href={order.paymentProofUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="ml-2 text-primary-600 underline"
+                className="text-primary-600 ml-2 underline"
               >
                 Lihat bukti
               </a>
             )}
           </p>
           {order.invoiceNumber && (
-            <div className="flex items-start justify-between gap-2 text-xs text-warm-600">
+            <div className="text-warm-600 flex items-start justify-between gap-2 text-xs">
               <span className="flex flex-1 items-center gap-1">
-                <Activity className="size-3 shrink-0 text-warm-400" aria-hidden />
+                <Activity
+                  className="text-warm-400 size-3 shrink-0"
+                  aria-hidden
+                />
                 Pixel:{' '}
                 {order.pixelPurchaseFiredAt ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-700">
+                  <span
+                    className={`inline-flex items-center gap-1 ${TONES.success.text}`}
+                  >
                     <CheckCircle2 className="size-3" aria-hidden />
-                    Purchase ·{' '}
-                    {formatRelativeTime(order.pixelPurchaseFiredAt)}
+                    Purchase · {formatRelativeTime(order.pixelPurchaseFiredAt)}
                   </span>
                 ) : order.pixelLeadFiredAt ? (
-                  <span className="inline-flex items-center gap-1 text-emerald-700">
+                  <span
+                    className={`inline-flex items-center gap-1 ${TONES.success.text}`}
+                  >
                     <CheckCircle2 className="size-3" aria-hidden />
                     Lead · {formatRelativeTime(order.pixelLeadFiredAt)}
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-warm-500">
+                  <span className="text-warm-500 inline-flex items-center gap-1">
                     <Clock className="size-3" aria-hidden />
                     Belum fired
                   </span>
@@ -295,7 +308,7 @@ function OrderCard({
               <button
                 type="button"
                 onClick={() => onRefirePixel(order)}
-                className="shrink-0 rounded border border-warm-300 px-1.5 py-0.5 text-[10px] text-warm-600 hover:bg-warm-100"
+                className="border-warm-300 text-warm-600 hover:bg-warm-100 shrink-0 rounded border px-1.5 py-0.5 text-xs"
               >
                 Re-fire
               </button>
@@ -310,7 +323,7 @@ function OrderCard({
               variant="outline"
               className={
                 isWaitingConf
-                  ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                  ? `${TONES.success.border} ${TONES.success.bg} ${TONES.success.text}`
                   : ''
               }
               onClick={() => onQuickAction(order, 'mark_paid')}

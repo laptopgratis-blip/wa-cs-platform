@@ -66,6 +66,8 @@ export async function PATCH(req: Request, { params }: Params) {
             (data.scope ?? existing.scope) === 'FORM' ? data.orderFormId : null,
         }),
         ...(data.order !== undefined && { order: data.order }),
+        ...(data.metaTemplateId !== undefined && { metaTemplateId: data.metaTemplateId }),
+        ...(data.metaParamMap !== undefined && { metaParamMap: data.metaParamMap ?? undefined }),
       },
     })
 

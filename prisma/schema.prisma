@@ -40,6 +40,8 @@ model User {
   sessions                     Session[]
   tokenBalance                 TokenBalance?
   tokenTx                      TokenTransaction[]
+  messageCreditTx              MessageCreditTransaction[]
+  wabaTemplates                WabaTemplate[]
   waSessions                   WhatsappSession[]
   souls                        Soul[]
   contacts                     Contact[]
@@ -141,6 +143,9 @@ model User {
   liveProposals                LiveOptimizationProposal[]
   // LP × Live AI Embed (2026-06-04).
   lpLiveEmbeds                 LpLiveEmbed[]
+  // API publik seller (2026-08-21) — kunci Bearer untuk /api/v1/*.
+  sellerApiKeys                SellerApiKey[]
+  webhookEndpoints             WebhookEndpoint[]
 }
 
 // Audit trail wizard onboarding — analytics funnel (Q1 view, Q1 answer,
@@ -248,7 +253,51 @@ model TokenBalance {
   totalUsed      Int      @default(0)
   updatedAt      DateTime @updatedAt
 
+  // ── Kredit Pesan WA (Trek 2B, 2026-08-20) — dompet KEDUA, satuan RUPIAH ──
+  // Dipakai membayar pesan template Meta (Cloud API) di luar window 24 jam.
+  // Terpisah dari `balance` (token AI). Boleh minus maksimal ±1 pesan saat
+  // race (deduct terjadi SETELAH Meta menerima pesan, tanpa guard gte).
+  messageCreditRp        Int @default(0)
+  messageCreditPurchased Int @default(0)
+  messageCreditUsed      Int @default(0)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Kredit Pesan WA: harga per pesan per kategori template (editable admin) ──
+model MessageCreditRate {
+  id        String               @id @default(cuid())
+  category  MetaTemplateCategory @unique
+  priceRp   Int // Rp per pesan (harga jual ke customer, sudah termasuk margin hulao)
+  metaRp    Float? // info: harga dasar Meta per pesan (Rp) untuk referensi admin
+  updatedAt DateTime             @updatedAt
+}
+
+enum MessageCreditTxType {
+  PURCHASE // top-up (Tripay/manual)
+  USAGE // potong saat pesan template diterima Meta (reference = wamid)
+  REFUND // pesan gagal / Meta tidak menagih (reference = wamid)
+  ADJUSTMENT // rekonsiliasi webhook pricing (+/−) atau koreksi admin
+  BONUS // bonus dari admin
+}
+
+model MessageCreditTransaction {
+  id          String                @id @default(cuid())
+  userId      String
+  amountRp    Int // positif = tambah, negatif = kurang
+  type        MessageCreditTxType
+  category    MetaTemplateCategory?
+  description String?
+  // wamid (USAGE/REFUND/ADJUSTMENT) | orderId/paymentId (PURCHASE/BONUS).
+  reference   String?
+  messageId   String?
+  createdAt   DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Idempoten: webhook retry / race tidak boleh memotong dua kali.
+  @@unique([userId, reference, type], name: "userId_reference_type_unique")
+  @@index([userId, createdAt])
 }
 
 enum TokenTxType {
@@ -287,6 +336,25 @@ enum WaStatus {
   ERROR
 }
 
+// Transport sesi WA: BAILEYS (unofficial, QR pairing via wa-service) atau
+// CLOUD_API (WhatsApp Cloud API resmi Meta, onboard via Embedded Signup).
+// Dual-run: satu nomor hanya boleh hidup di SATU provider.
+enum WaProvider {
+  BAILEYS
+  CLOUD_API
+}
+
+// Status sinkronisasi coexistence (kontak/riwayat dari WhatsApp Business App
+// di HP). Meta hanya mengizinkan SEKALI per onboarding, dalam 24 jam.
+enum CoexSyncStatus {
+  REQUESTED // POST smb_app_data sukses, menunggu webhook
+  IN_PROGRESS // chunk riwayat mulai masuk (progress < 100)
+  DONE
+  DECLINED // user menolak berbagi riwayat di HP (Meta 2593109)
+  SKIPPED // di luar jendela 24 jam (2593108) / tidak eligible
+  ERROR
+}
+
 model WhatsappSession {
   id          String   @id @default(cuid())
   userId      String
@@ -297,6 +365,36 @@ model WhatsappSession {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // ── WhatsApp Cloud API (provider = CLOUD_API) ──
+  provider           WaProvider @default(BAILEYS)
+  wabaId             String? // WhatsApp Business Account ID milik user
+  // phone_number_id Meta — kunci routing webhook (value.metadata.phone_number_id).
+  // Unique: onboard ulang nomor yang sama meng-update row lama sehingga relasi
+  // Contact/Message tetap utuh; row Baileys bernilai NULL (multi-NULL aman).
+  phoneNumberId      String?    @unique
+  // Access token Meta terenkripsi via lib/crypto.ts (AES-256-GCM, iv:tag:ct).
+  // JANGAN pernah masuk `select` yang mengalir ke client/admin UI.
+  wabaTokenEnc       String?    @db.Text
+  wabaTokenExpiresAt DateTime?
+  // Error terakhir yang membuat sesi ERROR/PAUSED (Baileys menyimpan ini
+  // in-memory di wa-service; sesi Cloud API butuh persist untuk UI).
+  lastError          String?
+
+  // ── Coexistence & PIN (provider CLOUD_API) ──
+  // true = nomor juga hidup di WhatsApp Business App di HP (is_on_biz_app).
+  isCoexistence           Boolean         @default(false)
+  // PIN two-step nomor (jalur standar) — terenkripsi lib/crypto.ts.
+  // JANGAN pernah masuk `select` yang mengalir ke client.
+  wabaPinEnc              String?         @db.Text
+  wabaPinGenerated        Boolean         @default(false) // true = dibuat hulao (ditampilkan sekali)
+  coexContactSyncStatus   CoexSyncStatus?
+  coexHistorySyncStatus   CoexSyncStatus?
+  coexHistorySyncProgress Int             @default(0) // 0-100, monotonic max (chunk bisa out-of-order)
+  coexContactsImported    Int             @default(0)
+  coexMessagesImported    Int             @default(0)
+  coexSyncRequestedAt     DateTime?
+  coexSyncError           String?
 
   // Soul & model yang dipakai sesi ini
   soulId  String?
@@ -311,6 +409,76 @@ model WhatsappSession {
 
   @@index([userId])
   @@index([status])
+}
+
+// ─────────────────────────────────────────
+// WABA TEMPLATE (Trek 2B, 2026-08-20) — template pesan Meta per WABA.
+// Wajib APPROVED untuk pesan business-initiated (di luar window 24 jam)
+// pada sesi CLOUD_API. Sumber kebenaran status = Meta (webhook + sync).
+// ─────────────────────────────────────────
+
+enum MetaTemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum MetaTemplateStatus {
+  DRAFT // lokal, belum disubmit ke Meta
+  PENDING // dikirim ke Meta, menunggu review
+  APPROVED
+  REJECTED
+  PAUSED // kualitas rendah — Meta menghentikan sementara
+  DISABLED
+  IN_APPEAL
+  LIMIT_EXCEEDED
+  DELETED // hilang dari Meta saat sync / dihapus user (soft — jaga FK)
+}
+
+model WabaTemplate {
+  id             String               @id @default(cuid())
+  userId         String // pemilik (denormalisasi dari sesi yang memakai WABA ini)
+  wabaId         String
+  name           String // ^[a-z0-9_]{1,512}$
+  language       String // 'id' | 'en' | 'en_US' ...
+  category       MetaTemplateCategory
+  status         MetaTemplateStatus   @default(DRAFT)
+  metaTemplateId String?              @unique // id dari Meta (global unik)
+  // Kunci semantik template bawaan hulao (starter pack / platform), mis.
+  // 'FOLLOWUP_ORDER_MASUK_COD', 'AUTH_OTP', 'INFO_GENERIC'. null = custom user.
+  purposeKey     String?
+
+  headerType         String? // 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null
+  headerText         String? // headerType TEXT (boleh 1 variabel {{1}})
+  headerTextExample  String?
+  headerMediaHandle  String? // handle Resumable Upload (contoh untuk review Meta)
+  headerMediaUrl     String? // URL publik file di storage hulao (preview + link saat kirim)
+  bodyText           String   @db.Text
+  bodyExamples       String[] @default([]) // contoh {{1}}..{{n}} (index 0 = {{1}})
+  footerText         String?
+  buttons            Json? // WabaTemplateButton[] (lib/services/waba/types.ts)
+  // Khusus AUTHENTICATION.
+  authAddSecurityRecommendation Boolean @default(true)
+  authCodeExpirationMinutes     Int?
+
+  rejectionReason    String? @db.Text
+  qualityScore       String? // GREEN | YELLOW | RED | UNKNOWN
+  componentsSnapshot Json? // komponen mentah dari Meta saat sync (template dibuat di luar hulao)
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  broadcasts        Broadcast[]
+  followUpTemplates FollowUpTemplate[]
+
+  // Kunci UPSERT sync dari Meta — jangan pernah delete-all-recreate (FK).
+  @@unique([wabaId, name, language])
+  @@index([userId, status])
+  @@index([wabaId, purposeKey])
 }
 
 // ─────────────────────────────────────────
@@ -471,18 +639,50 @@ model Contact {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  // ── Customer service window 24 jam Meta (hanya diisi sesi CLOUD_API) ──
+  // Pesan free-form ke customer hanya boleh selama window aktif; di luar itu
+  // wajib template ter-approve. Di-refresh tiap pesan masuk dari customer.
+  lastInboundAt   DateTime?
+  windowExpiresAt DateTime? // lastInboundAt + 24 jam
+
+  // ── Consent marketing Meta (Trek 2B) — hanya memengaruhi template MARKETING ──
+  // Diset dari webhook `user_preferences` (customer memilih "stop" di WA) atau
+  // error 131050. Tidak menyentuh isBlacklisted (CS/utility tetap boleh).
+  marketingOptOut       Boolean   @default(false)
+  marketingOptOutAt     DateTime?
+  marketingOptOutSource String? // META_USER_PREFERENCE | META_ERROR_131050 | MANUAL
+
   // Data tambahan (flexible)
   customFields Json?
 
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waSession     WhatsappSession @relation(fields: [waSessionId], references: [id])
-  messages      Message[]
-  orderSessions OrderSession[]
-  orders        UserOrder[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession               WhatsappSession          @relation(fields: [waSessionId], references: [id])
+  messages                Message[]
+  orderSessions           OrderSession[]
+  orders                  UserOrder[]
+  marketingPreferenceLogs MarketingPreferenceLog[]
 
   @@unique([waSessionId, phoneNumber])
   @@index([userId, pipelineStage])
   @@index([userId, lastMessageAt])
+}
+
+// Jejak perubahan preferensi marketing customer (STOP/RESUME) — audit &
+// bukti kepatuhan.
+model MarketingPreferenceLog {
+  id            String    @id @default(cuid())
+  contactId     String
+  userId        String
+  phoneNumber   String
+  action        String // STOP | RESUME
+  source        String // META_USER_PREFERENCE | META_ERROR_131050 | MANUAL
+  detail        String?
+  metaTimestamp DateTime?
+  createdAt     DateTime  @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, createdAt])
 }
 
 // ─────────────────────────────────────────
@@ -533,16 +733,31 @@ model Message {
   source          String?
   // ID pesan dari Baileys (msg.key.id) — dipakai untuk dedup saat event
   // messages.upsert masuk untuk pesan yang baru saja kita kirim sendiri.
-  externalMsgId   String?
+  // ID pesan eksternal: Baileys msg.key.id / Cloud API wamid. UNIQUE untuk
+  // dedup webhook retry & import riwayat (Postgres: multi-NULL aman).
+  externalMsgId   String?       @unique
   createdAt       DateTime      @default(now())
 
-  contact   Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+  // ── Jejak template & billing Kredit Pesan (Trek 2B; hanya pesan template
+  // Cloud API). creditUserId null = platform/admin (tidak ditagih).
+  templateId          String?
+  creditUserId        String?
+  creditChargedRp     Int? // nilai terakhir (setelah rekonsiliasi webhook pricing)
+  pricingCategory     String? // dari webhook statuses[].pricing.category
+  billable            Boolean?
+  billingReconciledAt DateTime?
+  billingRefundedAt   DateTime?
+  broadcastRecipientId String? @unique
+
+  contact            Contact             @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  waSession          WhatsappSession     @relation(fields: [waSessionId], references: [id])
+  template           WabaTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  broadcastRecipient BroadcastRecipient? @relation(fields: [broadcastRecipientId], references: [id], onDelete: SetNull)
 
   @@index([contactId, createdAt])
   @@index([waSessionId, createdAt])
   @@index([createdAt])
-  @@index([externalMsgId])
+  @@index([templateId])
 }
 
 // ─────────────────────────────────────────
@@ -553,9 +768,21 @@ enum BroadcastStatus {
   DRAFT
   SCHEDULED
   SENDING
+  PAUSED // Cloud API: kredit habis / template dijeda — bisa dilanjutkan
   COMPLETED
   FAILED
   CANCELLED
+}
+
+// Status per penerima broadcast Cloud API (Trek 2B).
+enum BroadcastRecipientStatus {
+  PENDING
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED // opt-out / blacklist / dibatalkan
 }
 
 model Broadcast {
@@ -563,7 +790,7 @@ model Broadcast {
   userId       String
   waSessionId  String
   name         String
-  message      String          @db.Text
+  message      String          @db.Text // Baileys: isi pesan; Cloud: teks render template (preview)
   targetTags   String[]        @default([]) // tag kontak yang dituju
   targetStages String[]        @default([]) // pipeline stage yang dituju
   status       BroadcastStatus @default(DRAFT)
@@ -575,8 +802,52 @@ model Broadcast {
   totalFailed  Int             @default(0)
   createdAt    DateTime        @default(now())
 
-  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  waSession WhatsappSession @relation(fields: [waSessionId], references: [id])
+  // ── Cloud API (Trek 2B): broadcast = template Meta APPROVED, berbayar per
+  // pesan dari Kredit Pesan; worker = cron broadcast-send + BroadcastRecipient.
+  provider          WaProvider            @default(BAILEYS) // snapshot saat create
+  templateId        String?
+  templateParams    Json? // TemplateSendParams — nilai boleh memuat {nama}/{nomor}
+  category          MetaTemplateCategory?
+  estimatedCreditRp Int                   @default(0)
+  chargedCreditRp   Int                   @default(0)
+  totalDelivered    Int                   @default(0)
+  totalRead         Int                   @default(0)
+  totalSkipped      Int                   @default(0)
+  pausedReason      String?
+  lastBatchAt       DateTime? // heartbeat worker cloud
+
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waSession  WhatsappSession      @relation(fields: [waSessionId], references: [id])
+  template   WabaTemplate?        @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipients BroadcastRecipient[]
+
+  @@index([status, scheduledAt])
+}
+
+// Progres per penerima broadcast Cloud API — ganti "results JSON" yang O(n²).
+model BroadcastRecipient {
+  id            String                   @id @default(cuid())
+  broadcastId   String
+  contactId     String
+  phoneNumber   String
+  name          String?
+  status        BroadcastRecipientStatus @default(PENDING)
+  attempt       Int                      @default(0)
+  claimedAt     DateTime?
+  sentAt        DateTime?
+  externalMsgId String? // wamid
+  messageId     String?
+  errorCode     Int?
+  errorMessage  String?
+  creditRp      Int                      @default(0)
+  createdAt     DateTime                 @default(now())
+
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  message   Message?
+
+  @@unique([broadcastId, contactId])
+  @@index([broadcastId, status])
+  @@index([messageId])
 }
 
 // ─────────────────────────────────────────
@@ -596,6 +867,7 @@ enum PaymentStatus {
 enum PaymentPurpose {
   TOKEN_PURCHASE
   LP_UPGRADE
+  MESSAGE_CREDIT_PURCHASE // top-up Kredit Pesan WA (Trek 2B) — tokenAmount = Rp kredit
 }
 
 model Payment {
@@ -630,15 +902,23 @@ model Payment {
 // TOKEN PACKAGE (diset admin)
 // ─────────────────────────────────────────
 
+// Jenis paket: TOKEN (token AI, default lama) atau MESSAGE_CREDIT (Kredit
+// Pesan WA — tokenAmount diartikan sebagai Rp kredit yang diterima).
+enum TokenPackageKind {
+  TOKEN
+  MESSAGE_CREDIT
+}
+
 model TokenPackage {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   name        String // "Starter", "Popular", "Power"
-  tokenAmount Int // jumlah token
+  tokenAmount Int // jumlah token (TOKEN) | Rp kredit (MESSAGE_CREDIT)
   price       Int // harga dalam Rupiah
-  isPopular   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  isPopular   Boolean          @default(false)
+  isActive    Boolean          @default(true)
+  sortOrder   Int              @default(0)
+  kind        TokenPackageKind @default(TOKEN)
+  createdAt   DateTime         @default(now())
 
   manualPayments ManualPayment[]
 }
@@ -1292,14 +1572,22 @@ model SiteSettings {
 // table ini untuk dropdown + auto-fill harga.
 model AiModelPreset {
   id                String   @id @default(cuid())
-  provider          String // ANTHROPIC | OPENAI | GOOGLE
+  provider          String // ANTHROPIC | OPENAI | GOOGLE | KLING | ELEVENLABS
   modelId           String   @unique
   displayName       String
-  inputPricePer1M   Float // USD per 1M token
+  // Untuk unitType TOKEN: USD per 1M token/char/detik. Untuk IMAGE/VIDEO_SECOND:
+  // USD per 1 unit × 1_000_000 (mirror konvensi AiFeatureConfig — angka besar,
+  // ditampilkan per-unit di UI). outputPricePer1M = 0 untuk model non-chat.
+  inputPricePer1M   Float
   outputPricePer1M  Float
   contextWindow     Int?
   isAvailable       Boolean  @default(true)
   notes             String?
+  // Satuan charge — mirror AiFeatureConfig.unitType. TOKEN (LLM/char/detik audio),
+  // IMAGE (per gambar), VIDEO_SECOND (per detik video). Menentukan cara UI format harga.
+  unitType          String   @default("TOKEN")
+  // Label satuan display (mis. "token", "character", "image", "detik").
+  unitLabel         String?
   // 'manual' = admin edit langsung; 'ai-research' = update via Claude
   // web_search; 'seed' = data awal saat migration.
   lastUpdatedSource String?
@@ -1389,6 +1677,104 @@ model ApiKey {
   lastTestError  String?   @db.Text
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// ─────────────────────────────────────────
+// SELLER API KEY (2026-08-21) — kunci API publik milik SELLER untuk memanggil
+// /api/v1/*. BEDA TOTAL dari model ApiKey di atas, yang berisi kunci provider
+// AI milik PLATFORM (satu baris per provider, terenkripsi, dipakai server).
+//
+// Disimpan sebagai SHA-256 SATU ARAH: key penuh hanya bisa dilihat SEKALI saat
+// dibuat. Kalau DB bocor, hash tidak bisa dipakai memanggil API. Tanpa salt
+// karena entropinya 256-bit CSPRNG (bukan password manusia) — salt memaksa
+// scan seluruh tabel tiap request, sedangkan hash unik bisa di-index.
+// Cabut = soft (revokedAt) supaya jejak audit & lastUsedAt tetap ada.
+// ─────────────────────────────────────────
+model SellerApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String    @db.VarChar(60) // label bebas, mis. "n8n produksi"
+  keyHash    String    @unique // sha256 hex — lookup O(1) lewat index unik
+  keyPrefix  String    @db.VarChar(24) // 16 char awal, ditampilkan di tabel
+  lastFour   String    @db.VarChar(4)
+  // Fase 1 selalu ["read"]. Disiapkan supaya Fase 2 (kirim pesan) tidak
+  // perlu migrasi lagi.
+  scopes     String[]  @default(["read"])
+  lastUsedAt DateTime? // di-update maks. sekali per 5 menit (throttle)
+  expiresAt  DateTime? // null = tidak pernah kedaluwarsa
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+}
+
+// ─────────────────────────────────────────
+// WEBHOOK KELUAR (2026-08-25, Fase 2 API seller) — endpoint milik seller yang
+// menerima event platform (pesan masuk, perubahan status, kontak baru).
+//
+// - `secretEnc` = secret HMAC terenkripsi AES-256-GCM (lib/crypto.ts) — harus
+//   bisa dibaca balik server untuk menandatangani SETIAP delivery, beda dari
+//   SellerApiKey yang cukup sha256 satu arah. Plaintext hanya ditampilkan
+//   sekali saat dibuat / di-rotate.
+// - URL divalidasi anti-SSRF saat create DAN saat setiap kirim (DNS pinning
+//   via opsi lookup https.request) — lihat lib/services/webhooks/url-guard.ts.
+// - failStreak = kegagalan beruntun; lewat ambang → autoDisabledAt terisi dan
+//   endpoint berhenti menerima event sampai user mengaktifkan lagi.
+// ─────────────────────────────────────────
+model WebhookEndpoint {
+  id             String    @id @default(cuid())
+  userId         String
+  url            String    @db.VarChar(500)
+  description    String?   @db.VarChar(120)
+  secretEnc      String // whsec_... terenkripsi (iv:tag:ct)
+  events         String[] // subset lib/validations/webhook-endpoint.ts
+  isActive       Boolean   @default(true)
+  lastSuccessAt  DateTime?
+  lastFailureAt  DateTime?
+  lastError      String?   @db.VarChar(300)
+  failStreak     Int       @default(0)
+  autoDisabledAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
+
+  @@index([userId])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING // baru dibuat / menunggu percobaan berikutnya
+  SUCCESS
+  FAILED // gagal, masih ada jatah retry (nextRetryAt terisi)
+  DEAD // jatah retry habis
+}
+
+// Log pengiriman per event per endpoint — pola meniru PixelEventLog + cron
+// retry. Baris >30 hari dipurge oleh cron webhook-retry.
+model WebhookDelivery {
+  id          String                @id @default(cuid())
+  endpointId  String
+  eventType   String
+  payload     Json // envelope penuh yang dikirim (id, type, createdAt, data)
+  status      WebhookDeliveryStatus @default(PENDING)
+  attempt     Int                   @default(0)
+  // Klaim eksklusif: di-set saat deliverOne mulai mengirim, di-reset null saat
+  // gagal-retryable. Dua run cron yang tumpang-tindih tidak bisa sama-sama
+  // mengklaim baris yang sama (guard basi STALE_CLAIM_MS untuk proses mati).
+  claimedAt   DateTime?
+  httpStatus  Int?
+  error       String?               @db.VarChar(300)
+  nextRetryAt DateTime?
+  deliveredAt DateTime?
+  createdAt   DateTime              @default(now())
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId, createdAt])
+  @@index([status, nextRetryAt])
 }
 
 // ─────────────────────────────────────────
@@ -2426,6 +2812,13 @@ model FollowUpTemplate {
   scope       String  @default("GLOBAL") // GLOBAL, FORM
   orderFormId String?
 
+  // ── Cloud API (Trek 2B): template Meta yang dipakai bila sesi pengirim
+  // CLOUD_API dan window 24 jam customer tutup. metaParamMap = placeholder
+  // hulao per {{n}} (index 0 = {{1}}), mis. ["{nama}","{nama_toko}","{invoice}"].
+  metaTemplateId String?
+  metaTemplate   WabaTemplate? @relation(fields: [metaTemplateId], references: [id], onDelete: SetNull)
+  metaParamMap   Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2457,6 +2850,12 @@ model FollowUpQueue {
   customerPhone   String
 
   triggerEvent String // event yang trigger queue ini
+
+  // ── Jejak pengiriman provider-aware (Trek 2B) ──
+  waSessionId    String? // sesi yang dipakai kirim (diisi saat terkirim)
+  sentVia        String? // BAILEYS | CLOUD_TEXT | CLOUD_TEMPLATE
+  resolvedParams Json? // string[] nilai param template (sudah di-flatten)
+  externalMsgId  String?
 
   createdAt DateTime @default(now())
 

@@ -3,6 +3,9 @@
 // Card untuk satu WA session — tampilkan nomor, nama, status, dan aksi,
 // plus form pilihan Soul + Model AI.
 import {
+  BadgeCheck,
+  Copy,
+  LayoutTemplate,
   Loader2,
   MoreVertical,
   Phone,
@@ -11,17 +14,18 @@ import {
   Trash2,
   Unplug,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge as SharedStatusBadge } from '@/components/shared/StatusBadge'
+import {
+  CoexSyncStatus,
+  type CoexSyncSnapshot,
+} from '@/components/whatsapp/CoexSyncStatus'
 import { StatusBadge } from '@/components/whatsapp/StatusBadge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +33,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   Select,
   SelectContent,
@@ -53,6 +63,13 @@ export interface WaSessionData {
   createdAt: string
   soulId: string | null
   modelId: string | null
+  // BAILEYS (QR, unofficial) atau CLOUD_API (WhatsApp Business API resmi).
+  provider: 'BAILEYS' | 'CLOUD_API'
+  // Cloud API: nomor juga hidup di WA Business App di HP.
+  isCoexistence: boolean
+  lastError: string | null
+  // Status sync kontak/riwayat coexistence (null bila bukan coexistence).
+  coexSync: CoexSyncSnapshot | null
 }
 
 export interface SoulOption {
@@ -78,6 +95,32 @@ interface WaSessionCardProps {
 
 const NONE = '__NONE__' as const
 
+// Salin ke clipboard dengan fallback execCommand — Clipboard API butuh
+// secure context, sementara staging/LAN kadang diakses lewat http.
+async function copySessionId(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // jatuh ke fallback
+  }
+  try {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export function WaSessionCard({
   session,
   souls,
@@ -100,7 +143,13 @@ export function WaSessionCard({
     [soulId, modelId, session.soulId, session.modelId],
   )
 
+  const isCloud = session.provider === 'CLOUD_API'
+
   useEffect(() => {
+    // Sesi Cloud API tidak punya state realtime di wa-service (status hidup
+    // di DB) — skip subscribe supaya tidak spam token request.
+    if (isCloud) return
+
     const socket = getSocket()
     let cancelled = false
 
@@ -120,15 +169,23 @@ export function WaSessionCard({
       // Event 'connected' / 'disconnected' punya schema berbeda — tidak ada
       // 'status', tapi kita derive secara eksplisit di handler-nya sendiri.
       if (payload.status) setStatus(payload.status)
-      if (typeof payload.phoneNumber === 'string') setPhoneNumber(payload.phoneNumber)
-      if (typeof payload.displayName === 'string') setDisplayName(payload.displayName)
+      if (typeof payload.phoneNumber === 'string')
+        setPhoneNumber(payload.phoneNumber)
+      if (typeof payload.displayName === 'string')
+        setDisplayName(payload.displayName)
     }
 
-    function handleConnected(payload: { sessionId: string; phoneNumber?: string; displayName?: string | null }) {
+    function handleConnected(payload: {
+      sessionId: string
+      phoneNumber?: string
+      displayName?: string | null
+    }) {
       if (payload.sessionId !== session.id) return
       setStatus('CONNECTED')
-      if (typeof payload.phoneNumber === 'string') setPhoneNumber(payload.phoneNumber)
-      if (typeof payload.displayName === 'string') setDisplayName(payload.displayName)
+      if (typeof payload.phoneNumber === 'string')
+        setPhoneNumber(payload.phoneNumber)
+      if (typeof payload.displayName === 'string')
+        setDisplayName(payload.displayName)
     }
 
     function handleDisconnected(payload: { sessionId: string }) {
@@ -154,7 +211,7 @@ export function WaSessionCard({
       socket.off('subscribe-error', handleSubscribeError)
       socket.emit('unsubscribe', session.id)
     }
-  }, [session.id])
+  }, [session.id, isCloud])
 
   async function disconnect(wipe: boolean) {
     setBusy(true)
@@ -164,9 +221,10 @@ export function WaSessionCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wipe }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error || 'Gagal memutus koneksi')
         return
@@ -186,9 +244,10 @@ export function WaSessionCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ soulId, modelId }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error || 'Gagal menyimpan konfigurasi')
         return
@@ -201,139 +260,214 @@ export function WaSessionCard({
   }
 
   return (
-    <Card className="rounded-xl border-warm-200 shadow-sm hover-lift">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-primary-100 text-primary-500">
-            <Phone className="size-5" />
-          </div>
-          <div>
-            <CardTitle className="text-base">
-              {/* Fallback hierarchy: displayName (kalau Baileys sudah populate) →
+    <TooltipProvider>
+      <Card className="hover-lift">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary-100 text-primary-500 flex size-10 items-center justify-center rounded-xl">
+              <Phone className="size-5" />
+            </div>
+            <div>
+              <CardTitle className="text-base">
+                {/* Fallback hierarchy: displayName (kalau Baileys sudah populate) →
                  nomor (kalau sudah pair) → string default. */}
-              {displayName ||
-                (phoneNumber ? `+${phoneNumber}` : 'WhatsApp belum tertaut')}
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {phoneNumber
-                ? displayName
-                  ? `+${phoneNumber}`
-                  : 'Nama belum terdeteksi'
-                : 'Belum pair — scan QR dulu'}
-            </p>
+                {displayName ||
+                  (phoneNumber ? `+${phoneNumber}` : 'WhatsApp belum tertaut')}
+              </CardTitle>
+              <p className="text-muted-foreground text-xs">
+                {phoneNumber
+                  ? displayName
+                    ? `+${phoneNumber}`
+                    : 'Nama belum terdeteksi'
+                  : isCloud
+                    ? 'Menunggu data nomor dari Meta'
+                    : 'Belum pair — scan QR dulu'}
+              </p>
+            </div>
           </div>
-        </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Opsi WhatsApp" disabled={isBusy}>
-              {isBusy ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <MoreVertical className="size-4" />
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {/* Selalu tampilkan supaya user bisa repair kapan saja, termasuk
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Opsi WhatsApp"
+                disabled={isBusy}
+              >
+                {isBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <MoreVertical className="size-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {/* Selalu tampilkan supaya user bisa repair kapan saja, termasuk
                 kalau status CONNECTED tapi sebenarnya broken (mis. WA kick
-                device tanpa update status di sini). */}
-            {onRepair && (
-              <DropdownMenuItem onClick={() => onRepair(session.id)}>
-                <QrCode className="mr-2 size-4" />
-                Pair Ulang (scan QR baru)
+                device tanpa update status di sini). Sesi Cloud API tidak
+                memakai QR — repair-nya lewat Embedded Signup ulang. */}
+              {/* ID sesi dipakai sebagai `session_id` di API publik untuk memilih
+                  nomor pengirim. Sebelumnya nilai ini tidak muncul di UI mana
+                  pun, jadi satu-satunya cara mendapatkannya adalah memanggil
+                  GET /api/v1/senders manual. */}
+              <DropdownMenuItem
+                onClick={async () => {
+                  const ok = await copySessionId(session.id)
+                  if (ok) toast.success('ID sesi disalin — pakai sebagai session_id di API')
+                  else toast.error('Gagal menyalin — salin manual dari /api/v1/senders')
+                }}
+              >
+                <Copy className="mr-2 size-4" />
+                Salin ID sesi (untuk API)
               </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              disabled={status === 'DISCONNECTED'}
-              onClick={() => disconnect(false)}
-            >
-              <Unplug className="mr-2 size-4" />
-              Putuskan koneksi
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => disconnect(true)}
-              className="text-destructive focus:text-destructive"
-            >
-              <Trash2 className="mr-2 size-4" />
-              Hapus & logout
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </CardHeader>
+              {onRepair && !isCloud && (
+                <DropdownMenuItem onClick={() => onRepair(session.id)}>
+                  <QrCode className="mr-2 size-4" />
+                  Pair Ulang (scan QR baru)
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                disabled={status === 'DISCONNECTED'}
+                onClick={() => disconnect(false)}
+              >
+                <Unplug className="mr-2 size-4" />
+                Putuskan koneksi
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => disconnect(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 size-4" />
+                Hapus & logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </CardHeader>
 
-      <CardContent className="space-y-4 border-t pt-4">
-        <div className="flex items-center justify-between">
-          <StatusBadge status={status} />
-          <span className="text-xs text-muted-foreground">
-            Ditambahkan {formatDate(session.createdAt)}
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Soul</Label>
-            <Select
-              value={soulId ?? NONE}
-              onValueChange={(v) => setSoulId(v === NONE ? null : v)}
-              disabled={souls.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    souls.length === 0 ? 'Buat soul dulu di menu Soul' : 'Pilih soul'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Tidak pakai soul</SelectItem>
-                {souls.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                    {s.isDefault ? ' (default)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <CardContent className="space-y-4 border-t pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {status === 'ERROR' && session.lastError ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help">
+                      <StatusBadge status={status} />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    {session.lastError}
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <StatusBadge status={status} />
+              )}
+              {isCloud && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-default">
+                      <SharedStatusBadge
+                        tone="success"
+                        icon={BadgeCheck}
+                        label={
+                          session.isCoexistence ? 'Coexistence' : 'Cloud API'
+                        }
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-xs">
+                    {session.isCoexistence
+                      ? 'WhatsApp Business API resmi — nomor tetap aktif di WA Business App di HP'
+                      : 'WhatsApp Business API resmi (nomor khusus Cloud API)'}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            <span className="text-muted-foreground text-xs whitespace-nowrap">
+              Ditambahkan {formatDate(session.createdAt)}
+            </span>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs">Model AI</Label>
-            <Select
-              value={modelId ?? NONE}
-              onValueChange={(v) => setModelId(v === NONE ? null : v)}
-              disabled={models.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih model AI" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>Tidak pakai AI</SelectItem>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name} — {formatNumber(m.costPerMessage)} token/pesan
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {isCloud && session.isCoexistence && session.coexSync && (
+            <CoexSyncStatus sessionId={session.id} initial={session.coexSync} />
+          )}
 
-          <Button
-            size="sm"
-            onClick={saveConfig}
-            disabled={!dirty || isSaving}
-            className="w-full bg-primary-500 text-white hover:bg-primary-600 disabled:bg-warm-300"
-          >
-            {isSaving ? (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 size-4" />
-            )}
-            Simpan Konfigurasi
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+          {isCloud && (
+            <Link
+              href={`/whatsapp/templates?session=${session.id}`}
+              className="text-primary-600 inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+            >
+              <LayoutTemplate className="size-3.5" /> Kelola Template Meta
+              (broadcast, follow-up, OTP)
+            </Link>
+          )}
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Soul</Label>
+              <Select
+                value={soulId ?? NONE}
+                onValueChange={(v) => setSoulId(v === NONE ? null : v)}
+                disabled={souls.length === 0}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={
+                      souls.length === 0
+                        ? 'Buat soul dulu di menu Soul'
+                        : 'Pilih soul'
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Tidak pakai soul</SelectItem>
+                  {souls.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                      {s.isDefault ? ' (default)' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Model AI</Label>
+              <Select
+                value={modelId ?? NONE}
+                onValueChange={(v) => setModelId(v === NONE ? null : v)}
+                disabled={models.length === 0}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih model AI" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>Tidak pakai AI</SelectItem>
+                  {models.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name} — {formatNumber(m.costPerMessage)} token/pesan
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={saveConfig}
+              disabled={!dirty || isSaving}
+              className="w-full"
+            >
+              {isSaving ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 size-4" />
+              )}
+              Simpan Konfigurasi
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   )
 }
 

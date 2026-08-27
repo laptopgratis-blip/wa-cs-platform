@@ -23,6 +23,10 @@ export async function GET() {
         phoneNumber: true,
         displayName: true,
         updatedAt: true,
+        // Trek 2B: picker OTP perlu tahu provider (Cloud API = OTP di luar
+        // window butuh template AUTH_OTP ter-approve).
+        provider: true,
+        wabaId: true,
         user: { select: { email: true, role: true } },
       },
     })

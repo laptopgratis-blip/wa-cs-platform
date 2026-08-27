@@ -14,8 +14,17 @@
 // Kartu render <img thumbnailUrl> + overlay teks; kalau file belum ada /
 // gagal load (onError) → fallback ke kartu text-only (nama + vibe tag).
 
-import { Check, Sparkles, Image as ImageIcon } from 'lucide-react'
+import {
+  Ban,
+  Check,
+  Clapperboard,
+  Drama,
+  Image as ImageIcon,
+  Sparkles,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+
+import { TONES } from '@/lib/ui-tones'
 
 interface VisualHook {
   id: string
@@ -87,12 +96,17 @@ export function KlipLivePresetsPicker({
   useEffect(() => {
     void fetch('/api/host-presets')
       .then((r) => r.json())
-      .then((j: { success: boolean; data?: { hooks: VisualHook[]; backgrounds: Background[] } }) => {
-        if (j.success && j.data) {
-          setHooks(j.data.hooks)
-          setBackgrounds(j.data.backgrounds)
-        }
-      })
+      .then(
+        (j: {
+          success: boolean
+          data?: { hooks: VisualHook[]; backgrounds: Background[] }
+        }) => {
+          if (j.success && j.data) {
+            setHooks(j.data.hooks)
+            setBackgrounds(j.data.backgrounds)
+          }
+        },
+      )
       .catch(() => {
         setHooks([])
         setBackgrounds([])
@@ -113,19 +127,20 @@ export function KlipLivePresetsPicker({
         <div className="mb-2 flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5 text-sm font-semibold">
-              <Sparkles className="h-4 w-4 text-orange-500" />
+              <Sparkles className="text-primary-500 size-4" />
               Visual Hook — daya tarik visual host
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              Kostum/aksesoris/prop yang bikin host eye-catching di scroll. Pilih
-              berdasarkan nama (arahkan kursor untuk deskripsi), atau skip (no hook).
+            <p className="text-muted-foreground text-xs">
+              Kostum/aksesoris/prop yang bikin host eye-catching di scroll.
+              Pilih berdasarkan nama (arahkan kursor untuk deskripsi), atau skip
+              (no hook).
             </p>
           </div>
           {selection.visualHookId ? (
             <button
               type="button"
               onClick={() => onChange({ ...selection, visualHookId: null })}
-              className="text-[10px] font-semibold text-warm-600 hover:underline"
+              className="text-warm-600 text-xs font-semibold hover:underline"
             >
               Clear pilihan
             </button>
@@ -137,9 +152,9 @@ export function KlipLivePresetsPicker({
               key={c.value}
               type="button"
               onClick={() => setHookFilter(c.value)}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 hookFilter === c.value
-                  ? 'bg-orange-500 text-white'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -148,25 +163,29 @@ export function KlipLivePresetsPicker({
           ))}
         </div>
         {hooks === null ? (
-          <div className="py-4 text-center text-xs text-muted-foreground">Loading…</div>
+          <div className="text-muted-foreground py-4 text-center text-xs">
+            Memuat…
+          </div>
         ) : (
-          <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto rounded-lg border border-warm-200 bg-warm-50/50 p-2 sm:grid-cols-4 md:grid-cols-5">
+          <div className="border-warm-200 bg-warm-50/50 grid max-h-72 grid-cols-3 gap-2 overflow-y-auto rounded-lg border p-2 sm:grid-cols-4 md:grid-cols-5">
             {/* Card "Tidak ada hook" */}
             <button
               type="button"
               onClick={() => onChange({ ...selection, visualHookId: null })}
               className={`relative flex aspect-square flex-col items-center justify-center rounded-lg border-2 p-2 text-center transition ${
                 !selection.visualHookId
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-warm-200 bg-white hover:border-orange-300'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-warm-200 bg-card hover:border-primary-300'
               }`}
             >
               {!selection.visualHookId ? (
-                <Check className="absolute right-1 top-1 h-3 w-3 text-orange-600" />
+                <Check className="text-primary-600 absolute top-1 right-1 size-3" />
               ) : null}
-              <div className="text-lg">🚫</div>
-              <div className="mt-1 text-[10px] font-semibold leading-tight">Tanpa Hook</div>
-              <div className="text-[8px] text-warm-500">host clean</div>
+              <Ban className="text-warm-400 size-5" />
+              <div className="mt-1 text-xs leading-tight font-semibold">
+                Tanpa Hook
+              </div>
+              <div className="text-warm-500 text-xs">host clean</div>
             </button>
 
             {filteredHooks.map((h) => {
@@ -180,8 +199,8 @@ export function KlipLivePresetsPicker({
                   title={h.description}
                   className={`relative flex aspect-square flex-col justify-end gap-0.5 overflow-hidden rounded-lg border-2 p-2 text-left transition ${
                     active
-                      ? 'border-orange-500 bg-orange-50 shadow-md'
-                      : 'border-warm-200 bg-white hover:border-orange-300'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-warm-200 bg-card hover:border-primary-300'
                   }`}
                 >
                   {hasImg ? (
@@ -196,20 +215,22 @@ export function KlipLivePresetsPicker({
                       />
                       <div
                         aria-hidden
-                        className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/25 to-transparent"
+                        className="absolute inset-x-0 bottom-0 h-2/3 bg-linear-to-t from-black/75 via-black/25 to-transparent"
                       />
                     </>
                   ) : null}
                   {active ? (
-                    <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-white/90 p-0.5 text-orange-600" />
+                    <Check className="text-primary-600 absolute top-1 right-1 size-4 rounded-full bg-white/90 p-0.5" />
                   ) : null}
                   {h.cautionFlags.includes('seasonal-only') ? (
-                    <span className="absolute left-1 top-1 rounded bg-amber-500 px-1 py-px text-[8px] font-bold text-white">
+                    <span
+                      className={`absolute top-1 left-1 rounded px-1 py-px text-xs font-bold ${TONES.warning.solid}`}
+                    >
                       SEASONAL
                     </span>
                   ) : null}
                   <div
-                    className={`relative line-clamp-3 text-[10px] font-semibold leading-tight ${
+                    className={`relative line-clamp-3 text-xs leading-tight font-semibold ${
                       hasImg ? 'text-white drop-shadow' : 'text-warm-800'
                     }`}
                   >
@@ -217,7 +238,7 @@ export function KlipLivePresetsPicker({
                   </div>
                   {h.vibeTags.length > 0 ? (
                     <div
-                      className={`relative line-clamp-1 text-[8px] ${
+                      className={`relative line-clamp-1 text-xs ${
                         hasImg ? 'text-white/85' : 'text-warm-500'
                       }`}
                     >
@@ -236,19 +257,19 @@ export function KlipLivePresetsPicker({
         <div className="mb-2 flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-1.5 text-sm font-semibold">
-              <ImageIcon className="h-4 w-4 text-sky-500" />
+              <ImageIcon className="text-primary-500 size-4" />
               Background Scene
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              Suasana di belakang host. Trust/scale untuk gudang vibe, Premium untuk
-              skincare, dll. Riset TikTok ID conversion patterns.
+            <p className="text-muted-foreground text-xs">
+              Suasana di belakang host. Trust/scale untuk gudang vibe, Premium
+              untuk skincare, dll. Riset TikTok ID conversion patterns.
             </p>
           </div>
           {selection.backgroundId ? (
             <button
               type="button"
               onClick={() => onChange({ ...selection, backgroundId: null })}
-              className="text-[10px] font-semibold text-warm-600 hover:underline"
+              className="text-warm-600 text-xs font-semibold hover:underline"
             >
               Clear pilihan
             </button>
@@ -260,9 +281,9 @@ export function KlipLivePresetsPicker({
               key={c.value}
               type="button"
               onClick={() => setBgFilter(c.value)}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition ${
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${
                 bgFilter === c.value
-                  ? 'bg-sky-500 text-white'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -271,9 +292,11 @@ export function KlipLivePresetsPicker({
           ))}
         </div>
         {backgrounds === null ? (
-          <div className="py-4 text-center text-xs text-muted-foreground">Loading…</div>
+          <div className="text-muted-foreground py-4 text-center text-xs">
+            Memuat…
+          </div>
         ) : (
-          <div className="grid max-h-72 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-warm-200 bg-warm-50/50 p-2 sm:grid-cols-3 md:grid-cols-4">
+          <div className="border-warm-200 bg-warm-50/50 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto rounded-lg border p-2 sm:grid-cols-3 md:grid-cols-4">
             {filteredBgs.map((b) => {
               const active = selection.backgroundId === b.id
               const hasImg = Boolean(b.thumbnailUrl) && !broken.has(b.id)
@@ -285,8 +308,8 @@ export function KlipLivePresetsPicker({
                   title={b.description}
                   className={`relative flex aspect-[4/3] flex-col items-stretch overflow-hidden rounded-lg border-2 p-2 text-left transition ${
                     active
-                      ? 'border-sky-500 bg-sky-50 shadow-md'
-                      : 'border-warm-200 bg-white hover:border-sky-300'
+                      ? 'border-primary-500 bg-primary-50'
+                      : 'border-warm-200 bg-card hover:border-primary-300'
                   }`}
                 >
                   {hasImg ? (
@@ -301,16 +324,16 @@ export function KlipLivePresetsPicker({
                       />
                       <div
                         aria-hidden
-                        className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/75 via-black/25 to-transparent"
+                        className="absolute inset-x-0 bottom-0 h-2/3 bg-linear-to-t from-black/75 via-black/25 to-transparent"
                       />
                     </>
                   ) : null}
                   {active ? (
-                    <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-white/90 p-0.5 text-sky-600" />
+                    <Check className="text-primary-600 absolute top-1 right-1 size-4 rounded-full bg-white/90 p-0.5" />
                   ) : null}
                   <div className="relative flex flex-1 flex-col justify-end">
                     <div
-                      className={`line-clamp-2 text-[11px] font-semibold leading-tight ${
+                      className={`line-clamp-2 text-xs leading-tight font-semibold ${
                         hasImg ? 'text-white drop-shadow' : 'text-warm-800'
                       }`}
                     >
@@ -318,7 +341,7 @@ export function KlipLivePresetsPicker({
                     </div>
                     {b.vibeTags.length > 0 ? (
                       <div
-                        className={`mt-0.5 line-clamp-1 text-[8px] ${
+                        className={`mt-0.5 line-clamp-1 text-xs ${
                           hasImg ? 'text-white/85' : 'text-warm-500'
                         }`}
                       >
@@ -334,20 +357,24 @@ export function KlipLivePresetsPicker({
       </section>
 
       {/* Summary kalau ada pilihan */}
-      {(selection.visualHookId || selection.backgroundId) && hooks && backgrounds ? (
-        <div className="rounded-lg bg-gradient-to-r from-orange-50 to-sky-50 p-3 text-xs">
+      {(selection.visualHookId || selection.backgroundId) &&
+      hooks &&
+      backgrounds ? (
+        <div className="bg-primary-50 rounded-lg p-3 text-xs">
           <div className="font-semibold">Pilihan Klip Live:</div>
           <div className="mt-1 space-y-0.5">
-            <div>
-              🎭 Hook:{' '}
+            <div className="flex items-center gap-1.5">
+              <Drama className="text-primary-600 size-3.5" /> Hook:{' '}
               <span className="font-medium">
-                {hooks.find((h) => h.id === selection.visualHookId)?.nameId ?? 'Tanpa Hook'}
+                {hooks.find((h) => h.id === selection.visualHookId)?.nameId ??
+                  'Tanpa Hook'}
               </span>
             </div>
-            <div>
-              🎬 Background:{' '}
+            <div className="flex items-center gap-1.5">
+              <Clapperboard className="text-primary-600 size-3.5" /> Background:{' '}
               <span className="font-medium">
-                {backgrounds.find((b) => b.id === selection.backgroundId)?.nameId ?? '(belum dipilih)'}
+                {backgrounds.find((b) => b.id === selection.backgroundId)
+                  ?.nameId ?? '(belum dipilih)'}
               </span>
             </div>
           </div>

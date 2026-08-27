@@ -4,7 +4,14 @@
 // CRUD gudang + set default. Origin gudang dipilih via DestinationPicker
 // (reuse pencari destinasi Komerce). regionCode di-derive server-side dari
 // provinsi. Saat customer isi alamat, selector otomatis pilih gudang termurah.
-import { Edit3, MapPin, Plus, Star, Trash2, Warehouse as WarehouseIcon } from 'lucide-react'
+import {
+  Edit3,
+  MapPin,
+  Plus,
+  Star,
+  Trash2,
+  Warehouse as WarehouseIcon,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -12,6 +19,10 @@ import {
   DestinationPicker,
   type PickedDestination,
 } from '@/components/order-system/DestinationPicker'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -165,64 +176,59 @@ export function WarehousesClient({
   }
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-6 md:py-8">
-      <div className="mb-6 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-warm-900 md:text-3xl">
-            Gudang
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-warm-600">
+    <PageContainer width="narrow">
+      <PageHeader
+        icon={WarehouseIcon}
+        title="Gudang"
+        description={
+          <>
             Tambahkan gudang di beberapa kota. Saat customer isi alamat, sistem
             otomatis pilih gudang terdekat/termurah supaya ongkir lebih hemat.
-            <span className="ml-1 text-warm-500">
+            <span className="text-warm-500 ml-1">
               ({warehouses.length}/{limit})
             </span>
-          </p>
-        </div>
-        <Button onClick={openCreate} disabled={warehouses.length >= limit}>
-          <Plus className="mr-2 size-4" />
-          Tambah Gudang
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={openCreate} disabled={warehouses.length >= limit}>
+            <Plus className="mr-2 size-4" />
+            Tambah Gudang
+          </Button>
+        }
+      />
 
       {warehouses.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center py-12 text-center">
-            <WarehouseIcon className="mb-3 size-10 text-warm-400" />
-            <p className="font-medium text-warm-700">Belum ada gudang</p>
-            <p className="mt-1 max-w-md text-sm text-warm-500">
-              Tambahkan minimal 1 gudang (kota asal pengiriman). Kalau punya
-              lebih dari 1, sistem otomatis pilih yang termurah per order.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={WarehouseIcon}
+          title="Belum ada gudang"
+          description="Tambahkan minimal 1 gudang (kota asal pengiriman). Kalau punya lebih dari 1, sistem otomatis pilih yang termurah per order."
+        />
       ) : (
         <div className="space-y-3">
           {warehouses.map((w) => (
             <Card key={w.id} className={w.isActive ? '' : 'opacity-60'}>
               <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                  <div className="bg-primary-50 text-primary-600 flex size-10 shrink-0 items-center justify-center rounded-lg">
                     <WarehouseIcon className="size-5" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-warm-900">{w.name}</p>
+                      <p className="text-warm-900 font-semibold">{w.name}</p>
                       {w.isDefault && (
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                          <Star className="mr-1 size-3" /> Default
-                        </Badge>
+                        <StatusBadge tone="brand" icon={Star} label="Default" />
                       )}
                       {!w.isActive && (
                         <Badge variant="secondary">Tidak aktif</Badge>
                       )}
                     </div>
-                    <p className="flex items-center gap-1 text-sm text-warm-600">
+                    <p className="text-warm-600 flex items-center gap-1 text-sm">
                       <MapPin className="size-3.5 shrink-0" />
                       <span className="truncate">{w.cityName}</span>
                     </p>
                     {w.provinceName && (
-                      <p className="text-xs text-warm-500">{w.provinceName}</p>
+                      <p className="text-warm-500 text-xs">{w.provinceName}</p>
                     )}
                   </div>
                 </div>
@@ -237,7 +243,11 @@ export function WarehousesClient({
                       Set Default
                     </Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => openEdit(w)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEdit(w)}
+                  >
                     <Edit3 className="mr-1 size-3.5" />
                     Edit
                   </Button>
@@ -285,20 +295,24 @@ export function WarehousesClient({
                 Kota Asal Gudang
               </Label>
               <DestinationPicker value={origin} onChange={setOrigin} />
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Cari nama kota / kecamatan / kelurahan tempat gudang ini kirim
                 paket.
               </p>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm" htmlFor="wh-active">
                 Aktif (dipakai untuk hitung ongkir)
               </Label>
-              <Switch id="wh-active" checked={isActive} onCheckedChange={setIsActive} />
+              <Switch
+                id="wh-active"
+                checked={isActive}
+                onCheckedChange={setIsActive}
+              />
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm" htmlFor="wh-default">
                 Jadikan gudang default
               </Label>
@@ -324,6 +338,6 @@ export function WarehousesClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

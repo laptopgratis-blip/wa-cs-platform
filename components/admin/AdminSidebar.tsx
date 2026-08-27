@@ -1,6 +1,7 @@
 'use client'
 
-// Sidebar admin panel — light theme, accent merah supaya admin context jelas.
+// Sidebar admin panel — light theme, aksen brand orange (konsisten user sidebar);
+// konteks admin ditandai ikon Shield + label, bukan warna terpisah.
 // Menu di-grup berdasarkan kategori (MANAJEMEN, AI & SOUL, ANALISIS, SISTEM)
 // dari lib/navigation.ts. Filter per role: FINANCE hanya melihat item
 // yang `roles` mereka.
@@ -39,18 +40,20 @@ export function AdminSidebar({
   return (
     <aside
       className={cn(
-        'flex h-full w-60 flex-col border-r border-warm-200 bg-card text-warm-700',
+        'border-warm-200 bg-card text-warm-700 flex h-full w-60 flex-col border-r',
         className,
       )}
     >
       {/* Header */}
-      <div className="flex h-16 items-center gap-3 border-b border-warm-200 px-4">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-red-100 text-red-600">
+      <div className="border-warm-200 flex h-16 items-center gap-3 border-b px-4">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
           <Shield className="size-4" />
         </div>
         <div className="flex-1 leading-tight">
-          <p className="font-display text-base font-bold text-warm-900">Admin</p>
-          <p className="text-[11px] font-medium text-red-600">Hulao</p>
+          <p className="font-display text-warm-900 text-base font-bold">
+            Admin
+          </p>
+          <p className="text-primary-500 text-xs font-medium">Hulao</p>
         </div>
         {role === 'ADMIN' && <AlertsBell />}
       </div>
@@ -71,7 +74,7 @@ export function AdminSidebar({
 
         {groups.map((group) => (
           <div key={group.label} className="mt-4">
-            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-warm-400">
+            <p className="text-warm-400 px-3 pb-1 text-xs font-semibold tracking-wider uppercase">
               {group.label}
             </p>
             <ul className="space-y-1">
@@ -91,11 +94,11 @@ export function AdminSidebar({
         ))}
       </nav>
 
-      <div className="border-t border-warm-200 px-3 py-3">
+      <div className="border-warm-200 border-t px-3 py-3">
         <Link
           href="/dashboard"
           onClick={onNavigate}
-          className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-900"
+          className="text-warm-500 hover:bg-warm-100 hover:text-warm-900 flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors"
         >
           <ArrowLeft className="size-3.5" />
           Kembali ke User Dashboard
@@ -133,7 +136,7 @@ function AdminLink({
       {active && (
         <span
           aria-hidden
-          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full bg-primary-500"
+          className="bg-primary-500 absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full"
         />
       )}
       <Icon

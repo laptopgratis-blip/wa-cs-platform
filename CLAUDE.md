@@ -170,6 +170,112 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
 - Setiap WA session = 1 instance Baileys
 - Credentials disimpan di database agar reconnect otomatis
 
+## WABA Trek 2B — Template Meta & Kredit Pesan (2026-08-20)
+
+Dua jalur WA permanen: Baileys (unofficial) + Cloud API (resmi Meta). Sesi Cloud
+di luar window 24 jam wajib template ter-approve & berbayar per pesan — **sejak
+2026-08-25 biaya itu ditagih Meta LANGSUNG ke kartu seller di WhatsApp Manager**;
+dompet Kredit Pesan WA (Rp) NONAKTIF via `lib/billing/message-credit-mode.ts`
+(markup dilewati — Tech Provider tak bisa credit line sharing; infra dompet
+dibiarkan utuh untuk jalur Multi-Partner Solutions kelak). Kontrak satu-pintu:
+`assertCanSendCloud` (compliance) → `sendCloudTemplate` (never-throw, charge
+idempoten by wamid) → webhook `statuses[].pricing` merekonsiliasi. SEMUA jalur
+non-CS (OTP/follow-up/notif/handoff/LMS) lewat `smartSend` +
+`listSenderCandidates` — jangan `findFirst({status:'CONNECTED'})` buta provider.
+Broadcast Cloud = `BroadcastRecipient` + cron `broadcast-send` (1 menit).
+Detail: `docs/waba-templates.md`.
+
+## Design System UI (2026-08-21; rev Supabase-style 2026-08-25)
+
+Aturan konsistensi UI dashboard/admin/auth. Arah visual lengkap: `DESIGN.md`
+(root) — bahasa desain ala Supabase: kanvas PUTIH, ladder abu netral, hairline
+1px, orange = satu-satunya peristiwa kromatik. Registry tone: `lib/ui-tones.ts`
+(SATU-SATUNYA file yang boleh pakai palet Tailwind mentah untuk status).
+Scope aturan: `app/(dashboard)`, `app/(admin)`, `app/(auth)` + komponennya.
+Halaman publik (landing, /live, /embed, /order, /review, belajar, onboarding)
+punya gaya sendiri — JANGAN disapu aturan ini.
+
+### Warna
+- Kanvas halaman = `bg-background` (putih murni). Jangan hardcode `#fafaf9` /
+  tint latar halaman; band lembut → `bg-warm-50` (#fafafa).
+- Ladder `warm-*` kini abu NETRAL (nama kelas tetap, nilai berubah 2026-08-25):
+  warm-900 = ink #171717 · warm-500 = #707070 · warm-200 = hairline #e5e5e5.
+- On-primary = PUTIH (keputusan owner 2026-08-26, override signature Supabase):
+  teks/ikon di atas fill `bg-primary-*` memakai `text-white` /
+  `text-primary-foreground`. Kontras 2.8:1 — hanya untuk label tombol/badge
+  pendek ber-`font-medium`+; JANGAN teks kecil panjang di atas orange.
+  Hover menu (`--accent`) netral.
+- Brand/aksen dekoratif: `primary-*` (orange) atau token semantic (`bg-primary`,
+  `text-muted-foreground`, `bg-card`, `border-border`). DILARANG: `orange-*`
+  (duplikat primary), `blue|purple|violet|indigo|fuchsia|pink|rose|teal|cyan|lime-*`
+  dekoratif, `zinc|neutral|gray|slate|stone-*` (pakai `warm-*`).
+- Status HANYA via `lib/ui-tones.ts` / `<StatusBadge>` + registry `lib/status.ts`:
+  success=emerald · warning=amber · danger=red · info=sky · neutral=warm · brand=primary.
+  Plus satu tone NON-status: `whatsapp`=emerald, aksen kanal WA (kartu/CTA
+  "hubungi via WhatsApp"). Sehue dengan `success`, jadi jangan pakai untuk arti
+  "berhasil" dan jangan taruh badge success bersebelahan dengan CTA WhatsApp.
+- Chart (recharts): `var(--chart-1)`..`var(--chart-5)` — bukan hex literal.
+- EXEMPT: hex non-UI (wallpaper chat WA, brand Google OAuth, template OG/canvas di
+  `components/content/visual-templates/`, output LP `app/p/[slug]`), class-map
+  dinamis berbasis pilihan user (tag palette).
+
+### Typography
+- Body `text-sm`; `text-xs` hanya meta/caption/badge. FLOOR 12px: dilarang
+  `text-[8..11px]` (→ `text-xs`) dan `text-[13px]` (→ `text-sm`).
+- h1 = milik `<PageHeader>` (satu per halaman). h2 section:
+  `font-display text-xl font-semibold text-warm-900`; h3 `text-lg font-semibold`;
+  label field `text-sm font-medium text-warm-700`.
+- Weight: `font-medium` / `font-semibold` (maks untuk heading — display
+  mid-weight ala Supabase; h1 PageHeader kini `font-semibold`). `font-bold`
+  hanya untuk angka stat besar. Tanpa `font-extrabold`. `font-display` untuk
+  heading (alias `font-heading` dihapus). Tracking heading `-0.02em` global.
+
+### Layout & Komponen
+- Container halaman: `<PageContainer width>` (`components/shared/PageContainer.tsx`)
+  — narrow `max-w-3xl` (form/detail) · default `max-w-6xl` · wide `max-w-7xl`
+  (tabel/analytics) · full-bleed = tanpa container. Jangan dobel page+client.
+- `<Card>` polos (radix-nova: rounded-xl + ring + px-4). Dilarang menambah
+  `border-warm-200` (no-op), `rounded-xl` (redundan), `shadow-sm/md/lg/xl`
+  (shadow generik), `bg-white`. PENGECUALIAN: `shadow-orange` boleh — itu token
+  terdefinisi (`--shadow-orange` di globals.css), dipakai sebagai penanda paket
+  unggulan di halaman uang. Card butuh garis nyata → `ring-*`, BUKAN `border-*`
+  (Card pakai `ring-1` tanpa border-width, jadi `border-*` no-op senyap).
+  Panel hand-rolled → `<Card>`; tint dekoratif hanya `bg-primary-50`; panel
+  status → `TONES[tone].bg/border`.
+- Radius ikuti primitive (skala tajam 2026-08-25: sm 4 · md 6 · lg 8 · xl 12):
+  card/panel/dialog `rounded-xl` (12px) · input/button/select/chip `rounded-md`
+  (6px — signature, JANGAN pill untuk tombol) · menu/alert `rounded-lg` (8px)
+  · pill status/avatar `rounded-full`. Maks 2-3 radius per file.
+- Spacing: antar section `gap-6`; dalam card `space-y-4`; label→input `space-y-2`;
+  toolbar `gap-2`.
+- Button: filled default = maks SATU aksi utama per halaman/dialog, TANPA override
+  `bg-primary-500...` (default sudah orange dengan teks putih
+  `--primary-foreground`, termasuk `hover:bg-primary-600` yang
+  ditambahkan ke varian `default` di `ui/button.tsx` — semula varian itu cuma punya
+  hover lewat `[a]:` sehingga `<button>` biasa tidak beri umpan balik hover sama
+  sekali). Toolbar `outline`, tersier `ghost`, destruktif `destructive`.
+  Icon size diatur primitive — jangan `h-4 w-4` manual.
+- Badge status → `<StatusBadge>`; `ui/Badge` untuk label non-status tanpa warna raw.
+- Tabel: `space-y-4` → toolbar → wrapper `rounded-md border` → shadcn `<Table>` →
+  `<Pagination>` (components/shared).
+- Empty state: `<EmptyState bordered>`. Loading: skeleton shared /
+  `<Loader2 className="size-4 animate-spin" />` + label `"Memuat…"`.
+- Nav: aksen tunggal `NAV_ACCENT` (lib/navigation.ts) — grup dibedakan spacing,
+  bukan warna. Modal pakai `ui/dialog.tsx`/`ui/sheet.tsx`, bukan hand-rolled
+  `fixed inset-0`.
+- Icon: HANYA lucide-react. Emoji DILARANG di seluruh copy UI (chrome, toast,
+  notif in-app, empty state — termasuk halaman publik/landing, sapuan
+  2026-08-25): emoji-ikon → lucide, emoji dekoratif → hapus. PENGECUALIAN:
+  konten pesan WA keluar (template/follow-up/notif WA) & prompt AI — itu
+  konten chat, bukan tampilan aplikasi.
+- Dark mode: nonaktif (forcedTheme light). Jangan tulis class `dark:` baru;
+  hapus `dark:` di file yang disentuh. Blok `.dark` di globals.css dibiarkan —
+  begitu juga class `dark:` di `components/ui/**` (primitive radix-nova vendored:
+  mencabutnya bikin drift dari upstream tanpa efek visual apa pun).
+- Tabel di dalam `<Card>`: pakai `<Table>` langsung TANPA wrapper `rounded-md
+  border` (garis dobel). Primitive `<Table>` sudah membungkus dirinya dengan
+  `overflow-x-auto`, jadi jangan tambah wrapper scroll manual.
+
 ## Perintah Penting
 ```bash
 # Development

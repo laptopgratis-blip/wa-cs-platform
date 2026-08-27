@@ -7,12 +7,14 @@
 // Tab "Password" selalu ada untuk user existing.
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
-import { signIn } from 'next-auth/react'
+import { getSession, signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { toast } from 'sonner'
+
+import { resolveLoginRedirect } from '@/lib/auth-landing'
 import { z } from 'zod'
 
 import { OtpForm, type OtpRequestPayload } from '@/components/auth/OtpForm'
@@ -46,7 +48,16 @@ type IdentifierInput = { identifier: string }
 export function LoginForm({ googleEnabled, otpChannelMode }: LoginFormProps) {
   const router = useRouter()
   const params = useSearchParams()
-  const callbackUrl = params.get('callbackUrl') || '/dashboard'
+  // Simpan MENTAH (boleh null). Jangan default ke '/dashboard' di sini:
+  // resolveLoginRedirect butuh tahu bedanya "user memang minta /dashboard"
+  // vs "tidak ada tujuan" — kalau disamakan, ADMIN selalu tertahan di
+  // dashboard user meski seharusnya mendarat di /admin/dashboard.
+  const rawCallbackUrl = params.get('callbackUrl')
+  // Google OAuth melakukan redirect PENUH, jadi klien tak sempat membaca role.
+  // Lempar ke /post-login yang menghitung tujuan di server.
+  const googleCallbackUrl = rawCallbackUrl
+    ? `/post-login?next=${encodeURIComponent(rawCallbackUrl)}`
+    : '/post-login'
 
   const [otpPayload, setOtpPayload] = useState<OtpRequestPayload | null>(null)
   // Simpan request OTP terakhir supaya bisa di-resend tanpa user re-input.
@@ -74,7 +85,7 @@ export function LoginForm({ googleEnabled, otpChannelMode }: LoginFormProps) {
     return (
       <OtpForm
         initial={otpPayload}
-        callbackUrl={callbackUrl}
+        callbackUrl={rawCallbackUrl}
         onResend={() => requestOtp(lastRequest.channel, lastRequest.identifier)}
         onBack={() => {
           setOtpPayload(null)
@@ -121,7 +132,7 @@ export function LoginForm({ googleEnabled, otpChannelMode }: LoginFormProps) {
             }}
           />
           {googleEnabled && (
-            <GoogleSection callbackUrl={callbackUrl} className="mt-4" />
+            <GoogleSection callbackUrl={googleCallbackUrl} className="mt-4" />
           )}
         </TabsContent>
       )}
@@ -153,9 +164,9 @@ export function LoginForm({ googleEnabled, otpChannelMode }: LoginFormProps) {
 
       {/* TAB PASSWORD ─────────────────────────────────────── */}
       <TabsContent value="password" className="mt-4">
-        <PasswordLoginForm callbackUrl={callbackUrl} router={router} />
+        <PasswordLoginForm callbackUrl={rawCallbackUrl} router={router} />
         {googleEnabled && (
-          <GoogleSection callbackUrl={callbackUrl} className="mt-4" />
+          <GoogleSection callbackUrl={googleCallbackUrl} className="mt-4" />
         )}
       </TabsContent>
 
@@ -231,7 +242,7 @@ function IdentifierLoginForm({
       </div>
       <Button
         type="submit"
-        className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+        className="w-full"
         disabled={submitting}
       >
         {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -248,7 +259,7 @@ function PasswordLoginForm({
   callbackUrl,
   router,
 }: {
-  callbackUrl: string
+  callbackUrl: string | null
   router: ReturnType<typeof useRouter>
 }) {
   const [submitting, setSubmitting] = useState(false)
@@ -264,14 +275,18 @@ function PasswordLoginForm({
         email: values.email,
         password: values.password,
         redirect: false,
-        callbackUrl,
+        callbackUrl: callbackUrl ?? undefined,
       })
       if (res?.error) {
         toast.error('Email atau password salah')
         return
       }
       toast.success('Berhasil masuk')
-      router.push(res?.url || callbackUrl)
+      // Baca role dari session yang baru terbentuk supaya ADMIN/FINANCE
+      // mendarat di area admin, bukan dashboard user. res.url sengaja TIDAK
+      // dipakai — isinya callbackUrl mentah yang belum sadar role.
+      const fresh = await getSession()
+      router.push(resolveLoginRedirect(callbackUrl, fresh?.user?.role))
       router.refresh()
     } finally {
       setSubmitting(false)
@@ -322,7 +337,7 @@ function PasswordLoginForm({
 
       <Button
         type="submit"
-        className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+        className="w-full"
         disabled={submitting}
       >
         {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}

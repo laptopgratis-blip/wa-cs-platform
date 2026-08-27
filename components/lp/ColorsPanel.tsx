@@ -45,7 +45,9 @@ function toHexInput(color: string): string {
   const rgb = color.match(/rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/)
   if (rgb) {
     const hex = (n: string) =>
-      Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0')
+      Math.max(0, Math.min(255, parseInt(n, 10)))
+        .toString(16)
+        .padStart(2, '0')
     return `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`
   }
   return '#000000'
@@ -70,32 +72,32 @@ export function ColorsPanel({ html, onChange, initialOpen = true }: Props) {
   }
 
   return (
-    <div className="border-b border-warm-200 bg-card">
+    <div className="border-warm-200 bg-card border-b">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-warm-50"
+        className="hover:bg-warm-50 flex w-full items-center justify-between px-4 py-2 text-left"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
-          <Palette className="size-4 text-primary-500" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Palette className="text-primary-500 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Warna Halaman
           </span>
-          <span className="text-[10px] text-warm-500">
+          <span className="text-warm-500 text-xs">
             {colors.length} warna · klik untuk ganti
           </span>
         </div>
         {open ? (
-          <ChevronUp className="size-4 text-warm-500" />
+          <ChevronUp className="text-warm-500 size-4" />
         ) : (
-          <ChevronDown className="size-4 text-warm-500" />
+          <ChevronDown className="text-warm-500 size-4" />
         )}
       </button>
 
       {open && (
-        <div className="px-4 pb-3 pt-1">
+        <div className="px-4 pt-1 pb-3">
           {colors.length === 0 ? (
-            <p className="text-[11px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               Belum ada warna terdeteksi. Generate HTML dulu, atau ubah warna di
               tab HTML Lanjutan.
             </p>
@@ -108,12 +110,12 @@ export function ColorsPanel({ html, onChange, initialOpen = true }: Props) {
                     <button
                       type="button"
                       onClick={() => openPicker(c)}
-                      className="size-9 rounded-md border-2 border-warm-200 shadow-sm transition hover:scale-110 hover:border-warm-400 hover:shadow-md"
+                      className="border-warm-200 hover:border-warm-400 size-9 rounded-md border-2 shadow-sm transition hover:scale-110 hover:shadow-md"
                       style={{ backgroundColor: c }}
                       title={`${c}${label ? ` (${label})` : ''} — klik untuk ganti`}
                       aria-label={`Ganti warna ${c}`}
                     />
-                    <span className="font-mono text-[9px] text-warm-500">
+                    <span className="text-warm-500 font-mono text-xs">
                       {c.length > 7 ? c.slice(0, 7) : c}
                     </span>
                     {/* Hidden native color picker per swatch. */}
@@ -133,7 +135,7 @@ export function ColorsPanel({ html, onChange, initialOpen = true }: Props) {
               })}
             </div>
           )}
-          <p className="mt-2 text-[10px] text-warm-500">
+          <p className="text-warm-500 mt-2 text-xs">
             Tip: warna yang sama dipakai di banyak bagian akan ikut ter-update
             sekaligus.
           </p>

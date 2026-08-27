@@ -5,21 +5,40 @@
 //   Step 2: Claude suggest scripts → user review/edit/approve per item
 //   Step 3: Confirm + fire bulk-generate, kembali ke library dengan polling
 
+import type { LucideIcon } from 'lucide-react'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  CheckCircle2,
+  Bell,
+  Check,
+  Lightbulb,
+  MessageCircle,
   Loader2,
   Package,
+  Pencil,
+  Pill,
   Rocket,
+  ShieldCheck,
+  ShoppingCart,
+  Smile,
   Sparkles,
+  Tag,
   Trash2,
-  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface ProductOption {
   id: string
@@ -37,26 +56,89 @@ interface SuggestedScript {
   kpi_goal?: string
 }
 
-const CATEGORY_META: Record<string, { emoji: string; label: string; color: string }> = {
-  GREETING: { emoji: '🔔', label: 'Sapaan', color: 'bg-sky-100 text-sky-700' },
-  PRODUCT_DEMO: { emoji: '💊', label: 'Demo Produk', color: 'bg-purple-100 text-purple-700' },
-  PRICE: { emoji: '💰', label: 'Harga', color: 'bg-emerald-100 text-emerald-700' },
-  OBJECTION: { emoji: '🛡️', label: 'Objection', color: 'bg-amber-100 text-amber-700' },
-  CLOSING: { emoji: '🛒', label: 'Closing', color: 'bg-red-100 text-red-700' },
-  GENERAL: { emoji: '💬', label: 'Umum', color: 'bg-warm-100 text-warm-700' },
-  IDLE: { emoji: '😊', label: 'Idle (diam)', color: 'bg-warm-100 text-warm-500' },
+const CATEGORY_META: Record<
+  string,
+  { icon: LucideIcon; label: string; color: string }
+> = {
+  GREETING: {
+    icon: Bell,
+    label: 'Sapaan',
+    color: 'bg-primary-100 text-primary-700',
+  },
+  PRODUCT_DEMO: {
+    icon: Pill,
+    label: 'Demo Produk',
+    color: 'bg-primary-100 text-primary-700',
+  },
+  PRICE: {
+    icon: Tag,
+    label: 'Harga',
+    color: 'bg-primary-100 text-primary-700',
+  },
+  OBJECTION: {
+    icon: ShieldCheck,
+    label: 'Objection',
+    color: 'bg-primary-100 text-primary-700',
+  },
+  CLOSING: {
+    icon: ShoppingCart,
+    label: 'Closing',
+    color: 'bg-primary-100 text-primary-700',
+  },
+  GENERAL: {
+    icon: MessageCircle,
+    label: 'Umum',
+    color: 'bg-warm-100 text-warm-700',
+  },
+  IDLE: {
+    icon: Smile,
+    label: 'Idle (diam)',
+    color: 'bg-warm-100 text-warm-500',
+  },
 }
 
+// Skala kualitas coverage. `smoothnessMarks` = berapa kali ikon centang diulang
+// (0 = tingkat terendah, ditandai ikon peringatan) — pengganti "✓/✓✓/✓✓✓".
 const COUNT_OPTIONS: Array<{
   value: 5 | 10 | 15 | 20
   label: string
   desc: string
   smoothness: string
+  smoothnessTone: Tone
+  smoothnessMarks: number
 }> = [
-  { value: 5, label: '5 klip', desc: 'Starter — coverage minimum', smoothness: '⚠️ Banyak fallback' },
-  { value: 10, label: '10 klip', desc: 'Balanced — siap live', smoothness: '✓ OK responsive' },
-  { value: 15, label: '15 klip', desc: 'Rich library — natural', smoothness: '✓✓ Smooth' },
-  { value: 20, label: '20 klip', desc: 'Premium coverage', smoothness: '✓✓✓ Very smooth' },
+  {
+    value: 5,
+    label: '5 klip',
+    desc: 'Starter — coverage minimum',
+    smoothness: 'Banyak fallback',
+    smoothnessTone: 'warning',
+    smoothnessMarks: 0,
+  },
+  {
+    value: 10,
+    label: '10 klip',
+    desc: 'Balanced — siap live',
+    smoothness: 'OK responsive',
+    smoothnessTone: 'success',
+    smoothnessMarks: 1,
+  },
+  {
+    value: 15,
+    label: '15 klip',
+    desc: 'Rich library — natural',
+    smoothness: 'Smooth',
+    smoothnessTone: 'success',
+    smoothnessMarks: 2,
+  },
+  {
+    value: 20,
+    label: '20 klip',
+    desc: 'Premium coverage',
+    smoothness: 'Very smooth',
+    smoothnessTone: 'success',
+    smoothnessMarks: 3,
+  },
 ]
 
 export function BulkGenerateModal({
@@ -76,13 +158,17 @@ export function BulkGenerateModal({
 
   // Step 1: product input
   const [products, setProducts] = useState<ProductOption[] | null>(null)
-  const [selectedProductId, setSelectedProductId] = useState<string | 'manual'>('manual')
+  const [selectedProductId, setSelectedProductId] = useState<string | 'manual'>(
+    'manual',
+  )
   const [productName, setProductName] = useState('')
   const [productDesc, setProductDesc] = useState('')
   const [price, setPrice] = useState<string>('')
   const [benefits, setBenefits] = useState<string[]>([''])
   const [targetCustomer, setTargetCustomer] = useState('')
-  const [brandTone, setBrandTone] = useState('casual energetic Indonesian TikTok Live')
+  const [brandTone, setBrandTone] = useState(
+    'casual energetic Indonesian TikTok Live',
+  )
   const [count, setCount] = useState<5 | 10 | 15 | 20>(10)
 
   // Step 2: suggested scripts
@@ -129,19 +215,22 @@ export function BulkGenerateModal({
     setSuggesting(true)
     try {
       const cleanBenefits = benefits.map((b) => b.trim()).filter(Boolean)
-      const res = await fetch(`/api/host-templates/${hostId}/clips/bulk-suggest`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          productName: productName.trim(),
-          productDescription: productDesc.trim() || undefined,
-          price: price.trim() ? Number(price) : undefined,
-          benefits: cleanBenefits.length > 0 ? cleanBenefits : undefined,
-          targetCustomer: targetCustomer.trim() || undefined,
-          brandTone: brandTone.trim() || undefined,
-          count,
-        }),
-      })
+      const res = await fetch(
+        `/api/host-templates/${hostId}/clips/bulk-suggest`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            productName: productName.trim(),
+            productDescription: productDesc.trim() || undefined,
+            price: price.trim() ? Number(price) : undefined,
+            benefits: cleanBenefits.length > 0 ? cleanBenefits : undefined,
+            targetCustomer: targetCustomer.trim() || undefined,
+            brandTone: brandTone.trim() || undefined,
+            count,
+          }),
+        },
+      )
       const j = (await res.json()) as {
         success: boolean
         data?: { scripts: SuggestedScript[] }
@@ -160,12 +249,16 @@ export function BulkGenerateModal({
   }
 
   function toggleApproval(idx: number) {
-    setScripts((s) => s.map((x, i) => (i === idx ? { ...x, approved: !x.approved } : x)))
+    setScripts((s) =>
+      s.map((x, i) => (i === idx ? { ...x, approved: !x.approved } : x)),
+    )
   }
   function editScript(idx: number, newScript: string) {
     setScripts((s) =>
       s.map((x, i) =>
-        i === idx ? { ...x, script: newScript, charCount: newScript.length } : x,
+        i === idx
+          ? { ...x, script: newScript, charCount: newScript.length }
+          : x,
       ),
     )
   }
@@ -180,28 +273,40 @@ export function BulkGenerateModal({
       return
     }
     // Validate budget per script
-    const overBudget = approved.filter((s) => s.charCount > 129 && s.category !== 'IDLE')
+    const overBudget = approved.filter(
+      (s) => s.charCount > 129 && s.category !== 'IDLE',
+    )
     if (overBudget.length > 0) {
-      toast.error(`${overBudget.length} script over budget (max 129 char untuk baseline 10dtk)`)
+      toast.error(
+        `${overBudget.length} script over budget (max 129 char untuk baseline 10dtk)`,
+      )
       return
     }
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/host-templates/${hostId}/clips/bulk-generate`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          scripts: approved.map((s) => ({ category: s.category, script: s.script })),
-          voiceId,
-        }),
-      })
+      const res = await fetch(
+        `/api/host-templates/${hostId}/clips/bulk-generate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            scripts: approved.map((s) => ({
+              category: s.category,
+              script: s.script,
+            })),
+            voiceId,
+          }),
+        },
+      )
       const j = (await res.json()) as {
         success: boolean
         data?: { queued: number }
         error?: string
       }
       if (j.success && j.data) {
-        toast.success(`${j.data.queued} klip masuk antrian. Refresh halaman berkala — klip muncul satu per satu (~2-3 menit per klip).`)
+        toast.success(
+          `${j.data.queued} klip masuk antrian. Refresh halaman berkala — klip muncul satu per satu (~2-3 menit per klip).`,
+        )
         onStarted()
       } else {
         toast.error(j.error ?? 'Submit gagal')
@@ -212,51 +317,52 @@ export function BulkGenerateModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
       }}
     >
-      <div className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         {/* Header */}
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold">🚀 Bulk Generate Klip Live</h2>
-            <p className="text-xs text-muted-foreground">
-              Claude bikin draft script otomatis. Kamu review/edit, klik generate — sistem auto bikin semua klip.
-            </p>
-            {/* Step indicator */}
-            <div className="mt-3 flex items-center gap-2">
-              {[1, 2, 3].map((s) => (
-                <div key={s} className="flex items-center gap-1">
-                  <div
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                      step >= s ? 'bg-orange-500 text-white' : 'bg-warm-200 text-warm-500'
-                    }`}
-                  >
-                    {step > s ? '✓' : s}
-                  </div>
-                  {s < 3 ? (
-                    <div className={`h-0.5 w-10 ${step > s ? 'bg-orange-500' : 'bg-warm-200'}`} />
-                  ) : null}
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
+            <Rocket className="text-primary-500 size-5" aria-hidden />
+            Bulk Generate Klip Live
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Claude bikin draft script otomatis. Kamu review/edit, klik generate
+            — sistem auto bikin semua klip.
+          </DialogDescription>
+          {/* Step indicator */}
+          <div className="mt-1 flex items-center gap-2">
+            {[1, 2, 3].map((s) => (
+              <div key={s} className="flex items-center gap-1">
+                <div
+                  className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold ${
+                    step >= s
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-warm-200 text-warm-500'
+                  }`}
+                >
+                  {step > s ? <Check className="size-3.5" aria-hidden /> : s}
                 </div>
-              ))}
-              <span className="ml-2 text-xs font-semibold text-warm-700">
-                {step === 1 ? 'Detail Produk' : step === 2 ? 'Review Script' : 'Generate'}
-              </span>
-            </div>
+                {s < 3 ? (
+                  <div
+                    className={`h-0.5 w-10 ${step > s ? 'bg-primary-500' : 'bg-warm-200'}`}
+                  />
+                ) : null}
+              </div>
+            ))}
+            <span className="text-warm-700 ml-2 text-xs font-semibold">
+              {step === 1
+                ? 'Detail Produk'
+                : step === 2
+                  ? 'Review Script'
+                  : 'Generate'}
+            </span>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Tutup"
-            className="rounded-full p-1.5 hover:bg-warm-100"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* STEP 1: Product detail input */}
         {step === 1 ? (
@@ -264,20 +370,21 @@ export function BulkGenerateModal({
             {/* Source picker */}
             {products && products.length > 0 ? (
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Sumber produk
                 </label>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => setSelectedProductId('manual')}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                       selectedProductId === 'manual'
-                        ? 'bg-orange-500 text-white'
+                        ? 'bg-primary-500 text-white'
                         : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                     }`}
                   >
-                    ✏️ Input Manual
+                    <Pencil className="size-3" aria-hidden />
+                    Input Manual
                   </button>
                   {products.map((p) => (
                     <button
@@ -286,11 +393,11 @@ export function BulkGenerateModal({
                       onClick={() => handlePickProduct(p)}
                       className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                         selectedProductId === p.id
-                          ? 'bg-orange-500 text-white'
+                          ? 'bg-primary-500 text-white'
                           : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
                       }`}
                     >
-                      <Package className="h-3 w-3" />
+                      <Package className="size-3" />
                       {p.name.slice(0, 30)}
                     </button>
                   ))}
@@ -301,7 +408,7 @@ export function BulkGenerateModal({
             {/* Form fields */}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Nama produk *
                 </label>
                 <input
@@ -309,12 +416,12 @@ export function BulkGenerateModal({
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                   placeholder="Cleanoz Pembersih Mesin"
-                  className="mt-1 w-full rounded-md border border-warm-200 px-3 py-2 text-sm"
+                  className="border-warm-200 mt-1 w-full rounded-md border px-3 py-2 text-sm"
                   maxLength={200}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Deskripsi singkat
                 </label>
                 <textarea
@@ -322,12 +429,12 @@ export function BulkGenerateModal({
                   onChange={(e) => setProductDesc(e.target.value)}
                   rows={2}
                   placeholder="Pembersih mesin berbahan dasar minyak atsiri olahan, lunturkan kerak piston, irit BBM..."
-                  className="mt-1 w-full rounded-md border border-warm-200 px-3 py-2 text-sm"
+                  className="border-warm-200 mt-1 w-full rounded-md border px-3 py-2 text-sm"
                   maxLength={1000}
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Harga (Rp)
                 </label>
                 <input
@@ -335,11 +442,11 @@ export function BulkGenerateModal({
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   placeholder="65000"
-                  className="mt-1 w-full rounded-md border border-warm-200 px-3 py-2 text-sm"
+                  className="border-warm-200 mt-1 w-full rounded-md border px-3 py-2 text-sm"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Target customer
                 </label>
                 <input
@@ -347,12 +454,12 @@ export function BulkGenerateModal({
                   value={targetCustomer}
                   onChange={(e) => setTargetCustomer(e.target.value)}
                   placeholder="Pemilik motor, suka touring"
-                  className="mt-1 w-full rounded-md border border-warm-200 px-3 py-2 text-sm"
+                  className="border-warm-200 mt-1 w-full rounded-md border px-3 py-2 text-sm"
                   maxLength={200}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Manfaat utama (max 5)
                 </label>
                 <div className="mt-1 space-y-1">
@@ -363,16 +470,16 @@ export function BulkGenerateModal({
                         value={b}
                         onChange={(e) => setBenefitAt(i, e.target.value)}
                         placeholder={`Manfaat ${i + 1} (mis: hemat BBM 25%)`}
-                        className="flex-1 rounded-md border border-warm-200 px-3 py-1.5 text-xs"
+                        className="border-warm-200 flex-1 rounded-md border px-3 py-1.5 text-xs"
                         maxLength={200}
                       />
                       {benefits.length > 1 ? (
                         <button
                           type="button"
                           onClick={() => removeBenefit(i)}
-                          className="rounded-md border border-warm-200 px-2 text-warm-600 hover:bg-red-50"
+                          className="border-warm-200 text-warm-600 hover:bg-destructive/10 rounded-md border px-2"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="size-3" />
                         </button>
                       ) : null}
                     </div>
@@ -381,7 +488,7 @@ export function BulkGenerateModal({
                     <button
                       type="button"
                       onClick={addBenefit}
-                      className="text-xs font-semibold text-orange-600 hover:underline"
+                      className="text-primary-600 text-xs font-semibold hover:underline"
                     >
                       + Tambah manfaat
                     </button>
@@ -389,7 +496,7 @@ export function BulkGenerateModal({
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+                <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                   Brand tone
                 </label>
                 <input
@@ -397,7 +504,7 @@ export function BulkGenerateModal({
                   value={brandTone}
                   onChange={(e) => setBrandTone(e.target.value)}
                   placeholder="casual energetic Indonesian TikTok Live"
-                  className="mt-1 w-full rounded-md border border-warm-200 px-3 py-2 text-sm"
+                  className="border-warm-200 mt-1 w-full rounded-md border px-3 py-2 text-sm"
                   maxLength={200}
                 />
               </div>
@@ -405,7 +512,7 @@ export function BulkGenerateModal({
 
             {/* Count picker */}
             <div>
-              <label className="text-xs font-semibold uppercase tracking-wide text-warm-600">
+              <label className="text-warm-600 text-xs font-semibold tracking-wide uppercase">
                 Jumlah klip
               </label>
               <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -416,37 +523,66 @@ export function BulkGenerateModal({
                     onClick={() => setCount(opt.value)}
                     className={`rounded-lg border-2 p-2.5 text-left transition ${
                       count === opt.value
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-warm-200 bg-white hover:border-orange-300'
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-warm-200 hover:border-primary-300 bg-card'
                     }`}
                   >
-                    <div className="font-bold">{opt.label}</div>
-                    <div className="text-[10px] text-warm-600">{opt.desc}</div>
-                    <div className="mt-0.5 text-[9px] text-emerald-600">{opt.smoothness}</div>
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="text-warm-600 text-xs">{opt.desc}</div>
+                    <div
+                      className={cn(
+                        'mt-0.5 flex items-center gap-1 text-xs',
+                        TONES[opt.smoothnessTone].text,
+                      )}
+                    >
+                      {opt.smoothnessMarks > 0 ? (
+                        <span className="inline-flex shrink-0" aria-hidden>
+                          {Array.from({ length: opt.smoothnessMarks }).map(
+                            (_, i) => (
+                              <Check
+                                key={i}
+                                className="-ml-1.5 size-3 first:ml-0"
+                              />
+                            ),
+                          )}
+                        </span>
+                      ) : (
+                        <AlertTriangle
+                          className="size-3 shrink-0"
+                          aria-hidden
+                        />
+                      )}
+                      <span>{opt.smoothness}</span>
+                    </div>
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-[10px] text-muted-foreground">
+              <p className="text-muted-foreground mt-1.5 text-xs">
                 Voice: <strong>{voiceName}</strong> · Cost estimate ~Rp{' '}
-                {Math.round(count * 2.5)}rb · Time ~{Math.round((count * 3) / 60) || 1}-{Math.round(count * 3 / 60) + 5} menit total
+                {Math.round(count * 2.5)}rb · Time ~
+                {Math.round((count * 3) / 60) || 1}-
+                {Math.round((count * 3) / 60) + 5} menit total
               </p>
             </div>
 
-            <div className="flex justify-between gap-2 border-t border-warm-200 pt-3">
+            <div className="border-warm-200 flex justify-between gap-2 border-t pt-3">
               <Button variant="outline" onClick={onClose}>
                 Batal
               </Button>
-              <Button onClick={() => void suggestNow()} disabled={suggesting || productName.trim().length < 2}>
+              <Button
+                onClick={() => void suggestNow()}
+                disabled={suggesting || productName.trim().length < 2}
+              >
                 {suggesting ? (
                   <>
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="mr-2 size-3.5 animate-spin" />
                     Claude generate…
                   </>
                 ) : (
                   <>
-                    <Sparkles className="mr-2 h-3.5 w-3.5" />
+                    <Sparkles className="mr-2 size-3.5" />
                     Generate Saran ({count} script)
-                    <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    <ArrowRight className="ml-1.5 size-3.5" />
                   </>
                 )}
               </Button>
@@ -457,8 +593,10 @@ export function BulkGenerateModal({
         {/* STEP 2: Review scripts */}
         {step === 2 ? (
           <div className="space-y-3">
-            <div className="rounded-lg bg-warm-50 p-2.5 text-[11px] text-warm-700">
-              <strong>{scripts.filter((s) => s.approved).length}</strong> dari {scripts.length} klip dipilih · Uncheck untuk skip · Klik teks untuk edit · Hapus yang gak suka
+            <div className="bg-warm-50 text-warm-700 rounded-lg p-2.5 text-xs">
+              <strong>{scripts.filter((s) => s.approved).length}</strong> dari{' '}
+              {scripts.length} klip dipilih · Uncheck untuk skip · Klik teks
+              untuk edit · Hapus yang gak suka
             </div>
 
             <div className="space-y-2">
@@ -469,27 +607,39 @@ export function BulkGenerateModal({
                   <div
                     key={i}
                     className={`flex gap-2 rounded-lg border p-2.5 ${
-                      s.approved ? 'border-warm-200 bg-white' : 'border-warm-200 bg-warm-50 opacity-50'
+                      s.approved
+                        ? 'border-warm-200 bg-card'
+                        : 'border-warm-200 bg-warm-50 opacity-50'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={s.approved}
                       onChange={() => toggleApproval(i)}
-                      className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer accent-orange-500"
+                      className="accent-primary-500 mt-1 size-4 flex-shrink-0 cursor-pointer"
                     />
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${meta.color}`}>
-                          {meta.emoji} {meta.label}
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${meta.color}`}
+                        >
+                          <meta.icon className="size-3" aria-hidden />
+                          {meta.label}
                         </span>
-                        <span className={`text-[10px] ${overBudget ? 'font-bold text-red-600' : 'text-warm-500'}`}>
-                          {s.charCount}/129 {overBudget ? '⚠️ over' : ''}
+                        <span
+                          className={cn(
+                            'text-xs',
+                            overBudget
+                              ? cn('font-semibold', TONES.danger.text)
+                              : 'text-warm-500',
+                          )}
+                        >
+                          {s.charCount}/129 {overBudget ? 'over' : ''}
                         </span>
                         {/* Trigger + kpi_goal disembunyikan — info AI internal, gak action-able buat owner */}
                       </div>
                       {s.category === 'IDLE' ? (
-                        <div className="mt-1 text-xs italic text-warm-500">
+                        <div className="text-warm-500 mt-1 text-xs italic">
                           (Host diam senyum loop saat sepi — gak perlu script)
                         </div>
                       ) : (
@@ -497,7 +647,7 @@ export function BulkGenerateModal({
                           value={s.script}
                           onChange={(e) => editScript(i, e.target.value)}
                           rows={2}
-                          className="mt-1 w-full resize-none rounded border border-warm-200 bg-white px-2 py-1 text-xs"
+                          className="border-warm-200 mt-1 w-full resize-none rounded border bg-white px-2 py-1 text-xs"
                           maxLength={200}
                         />
                       )}
@@ -505,19 +655,19 @@ export function BulkGenerateModal({
                     <button
                       type="button"
                       onClick={() => removeScript(i)}
-                      className="flex-shrink-0 self-start rounded p-1 text-warm-500 hover:bg-red-50 hover:text-red-600"
+                      className="text-warm-500 hover:bg-destructive/10 hover:text-destructive flex-shrink-0 self-start rounded p-1"
                       aria-label="Hapus"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="size-3" />
                     </button>
                   </div>
                 )
               })}
             </div>
 
-            <div className="flex justify-between gap-2 border-t border-warm-200 pt-3">
+            <div className="border-warm-200 flex justify-between gap-2 border-t pt-3">
               <Button variant="outline" onClick={() => setStep(1)}>
-                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                <ArrowLeft className="mr-1.5 size-3.5" />
                 Back
               </Button>
               <Button
@@ -525,7 +675,7 @@ export function BulkGenerateModal({
                 disabled={scripts.filter((s) => s.approved).length === 0}
               >
                 Lanjut ({scripts.filter((s) => s.approved).length} klip)
-                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                <ArrowRight className="ml-1.5 size-3.5" />
               </Button>
             </div>
           </div>
@@ -534,15 +684,17 @@ export function BulkGenerateModal({
         {/* STEP 3: Confirm */}
         {step === 3 ? (
           <div className="space-y-3">
-            <div className="rounded-xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
+            <div className="border-primary-200 from-primary-50 to-primary-100 rounded-xl border-2 bg-linear-to-br p-4">
               <div className="flex items-center gap-2 text-base font-semibold">
-                <Rocket className="h-5 w-5 text-orange-500" />
+                <Rocket className="text-primary-500 size-5" />
                 Siap fire bulk generate
               </div>
               <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                 <div>
                   <div className="font-semibold">Total klip:</div>
-                  <div className="text-warm-700">{scripts.filter((s) => s.approved).length} klip</div>
+                  <div className="text-warm-700">
+                    {scripts.filter((s) => s.approved).length} klip
+                  </div>
                 </div>
                 <div>
                   <div className="font-semibold">Voice:</div>
@@ -551,7 +703,9 @@ export function BulkGenerateModal({
                 <div>
                   <div className="font-semibold">Estimate waktu:</div>
                   <div className="text-warm-700">
-                    ~{Math.round((scripts.filter((s) => s.approved).length * 2.5))} menit (sequential)
+                    ~
+                    {Math.round(scripts.filter((s) => s.approved).length * 2.5)}{' '}
+                    menit (sequential)
                   </div>
                 </div>
                 <div>
@@ -561,33 +715,40 @@ export function BulkGenerateModal({
                   </div>
                 </div>
               </div>
-              <div className="mt-3 text-[11px] text-warm-600">
-                💡 Pipeline jalan di background. Klip akan muncul satu per satu di Library bawah. Refresh halaman berkala (atau auto-poll).
+              <div className="text-warm-600 mt-3 flex items-start gap-1.5 text-xs">
+                <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>
+                  Pipeline jalan di background. Klip akan muncul satu per satu
+                  di Library bawah. Refresh halaman berkala (atau auto-poll).
+                </span>
               </div>
             </div>
 
-            <div className="flex justify-between gap-2 border-t border-warm-200 pt-3">
+            <div className="border-warm-200 flex justify-between gap-2 border-t pt-3">
               <Button variant="outline" onClick={() => setStep(2)}>
-                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
+                <ArrowLeft className="mr-1.5 size-3.5" />
                 Back
               </Button>
-              <Button onClick={() => void submitGenerate()} disabled={submitting}>
+              <Button
+                onClick={() => void submitGenerate()}
+                disabled={submitting}
+              >
                 {submitting ? (
                   <>
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="mr-2 size-3.5 animate-spin" />
                     Submitting…
                   </>
                 ) : (
                   <>
-                    <Rocket className="mr-2 h-3.5 w-3.5" />
-                    🚀 Generate {scripts.filter((s) => s.approved).length} Klip
+                    <Rocket className="mr-2 size-3.5" />
+                    Generate {scripts.filter((s) => s.approved).length} Klip
                   </>
                 )}
               </Button>
             </div>
           </div>
         ) : null}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

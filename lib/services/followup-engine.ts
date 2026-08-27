@@ -16,7 +16,9 @@ import {
   ensureReviewTemplates,
 } from './followup-defaults'
 import {
+  resolveLeadTemplateParams,
   resolveLeadTemplateVariables,
+  resolveTemplateParams,
   resolveTemplateVariables,
 } from './followup-variables'
 
@@ -163,12 +165,17 @@ export async function generateQueueForOrder(
     scheduledAt.setMinutes(scheduledAt.getMinutes() + 0)
     scheduledAt.setDate(scheduledAt.getDate() + template.delayDays)
 
-    const resolvedMessage = resolveTemplateVariables(template.message, {
+    const resolveCtx = {
       order,
       user: order.user,
       bankAccounts,
       shippingProfile,
-    })
+    }
+    const resolvedMessage = resolveTemplateVariables(template.message, resolveCtx)
+    // Cloud API: kalau template punya metaParamMap, hitung param sekarang.
+    const metaParamMap = Array.isArray(template.metaParamMap) ? (template.metaParamMap as string[]) : null
+    const resolvedParams =
+      template.metaTemplateId && metaParamMap ? resolveTemplateParams(metaParamMap, resolveCtx) : undefined
 
     await prisma.followUpQueue.create({
       data: {
@@ -177,6 +184,7 @@ export async function generateQueueForOrder(
         templateId: template.id,
         scheduledAt,
         resolvedMessage,
+        ...(resolvedParams ? { resolvedParams } : {}),
         customerPhone: order.customerPhone,
         triggerEvent: event,
       },
@@ -259,12 +267,16 @@ export async function generateQueueForLead(
     const scheduledAt = new Date()
     scheduledAt.setDate(scheduledAt.getDate() + template.delayDays)
 
-    const resolvedMessage = resolveLeadTemplateVariables(template.message, {
+    const leadCtx = {
       customerName: lead.customerName,
       productInterest: lead.productInterest,
       storeName: lead.user.name,
       orderLink,
-    })
+    }
+    const resolvedMessage = resolveLeadTemplateVariables(template.message, leadCtx)
+    const metaParamMap = Array.isArray(template.metaParamMap) ? (template.metaParamMap as string[]) : null
+    const resolvedParams =
+      template.metaTemplateId && metaParamMap ? resolveLeadTemplateParams(metaParamMap, leadCtx) : undefined
 
     await prisma.followUpQueue.create({
       data: {
@@ -273,6 +285,7 @@ export async function generateQueueForLead(
         templateId: template.id,
         scheduledAt,
         resolvedMessage,
+        ...(resolvedParams ? { resolvedParams } : {}),
         customerPhone: phone,
         triggerEvent: 'DAYS_AFTER_LIVE_LEAD',
       },

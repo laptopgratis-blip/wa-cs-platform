@@ -6,6 +6,7 @@ import type { NextResponse } from 'next/server'
 import { jsonError, jsonOk, requireFinanceOrAdmin } from '@/lib/api'
 import { sendManualPaymentConfirmedEmail } from '@/lib/email'
 import { prisma } from '@/lib/prisma'
+import { applyPaymentCredit, unitLabelForPurpose } from '@/lib/billing/apply-payment-credit'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -29,8 +30,12 @@ export async function POST(_req: Request, { params }: Params) {
       },
     })
     if (!payment) return jsonError('Order tidak ditemukan', 404)
-    // Endpoint ini khusus token. LP upgrade pakai /api/admin/lp-upgrades/:id/confirm.
-    if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) {
+    // Endpoint ini khusus paket token / kredit pesan. LP upgrade pakai
+    // /api/admin/lp-upgrades/:id/confirm.
+    if (
+      (payment.purpose !== 'TOKEN_PURCHASE' && payment.purpose !== 'MESSAGE_CREDIT_PURCHASE') ||
+      !payment.package
+    ) {
       return jsonError(
         'Order ini bukan pembelian token. Gunakan menu Upgrade LP.',
         409,
@@ -56,27 +61,12 @@ export async function POST(_req: Request, { params }: Params) {
         },
       })
 
-      await tx.tokenBalance.upsert({
-        where: { userId: payment.userId },
-        create: {
-          userId: payment.userId,
-          balance: payment.tokenAmount,
-          totalPurchased: payment.tokenAmount,
-        },
-        update: {
-          balance: { increment: payment.tokenAmount },
-          totalPurchased: { increment: payment.tokenAmount },
-        },
-      })
-
-      await tx.tokenTransaction.create({
-        data: {
-          userId: payment.userId,
-          amount: payment.tokenAmount,
-          type: 'PURCHASE',
-          description: `Transfer manual — ${pkg.name}`,
-          reference: payment.id,
-        },
+      await applyPaymentCredit(tx, {
+        userId: payment.userId,
+        purpose: payment.purpose,
+        amount: payment.tokenAmount,
+        reference: payment.id,
+        description: `Transfer manual — ${pkg.name}`,
       })
     })
 
@@ -91,6 +81,7 @@ export async function POST(_req: Request, { params }: Params) {
         packageName: pkg.name,
         tokenAmount: payment.tokenAmount,
         totalAmount: payment.totalAmount,
+        unitLabel: unitLabelForPurpose(payment.purpose),
       })
     } catch (mailErr) {
       console.error(

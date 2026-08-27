@@ -12,6 +12,8 @@ import { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
+import { listSenderCandidates } from '@/lib/wa-session'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { triggerEntitlementsForOrderSafe } from '@/lib/services/entitlement-hook'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
@@ -111,15 +113,23 @@ async function sendAutoPaidNotification(order: {
   customerName: string
   totalRp: number
 }) {
-  const waUrl = process.env.WA_SERVICE_URL || 'http://wa-service:3001'
-  const secret = process.env.WA_SERVICE_SECRET || ''
+  // Bug lama (2026-08): endpoint POST `${WA_SERVICE_URL}/send` TIDAK ADA di
+  // wa-service (yang benar /sessions/:id/send-message) → notif tak pernah
+  // terkirim, error ditelan .catch(). Kini lewat smartSend (provider-aware:
+  // Baileys / Cloud dalam window teks; Cloud di luar window → INFO_GENERIC).
+  const phone = normalizePhone(order.customerPhone)
+  if (!phone) return
 
-  // Cari WA session aktif user (untuk kirim atas nama user).
-  const session = await prisma.whatsappSession.findFirst({
-    where: { userId: order.userId, status: 'CONNECTED' },
-    select: { id: true },
+  const candidates = await listSenderCandidates({
+    userId: order.userId,
+    preferContactPhone: phone,
   })
-  if (!session) return // user belum connect WA, skip diam-diam
+  if (candidates.length === 0) return // user belum connect WA, skip diam-diam
+
+  const storeName = await prisma.user
+    .findUnique({ where: { id: order.userId }, select: { name: true } })
+    .then((u) => u?.name ?? 'Toko Kami')
+    .catch(() => 'Toko Kami')
 
   const message = [
     `Halo ${order.customerName}, pembayaran transfer Anda untuk order *${order.invoiceNumber ?? order.id}*`,
@@ -128,27 +138,19 @@ async function sendAutoPaidNotification(order: {
     'Pesanan Anda akan segera diproses. Terima kasih!',
   ].join('\n')
 
-  // Wa-service expect endpoint /send (sesuai pattern existing). Format
-  // nomor: 62xxx tanpa +. Helper ada di submit endpoint, tapi inline
-  // saja di sini supaya simple.
-  const phone = normalizePhone(order.customerPhone)
-  if (!phone) return
+  const summary = `pembayaran order ${order.invoiceNumber ?? order.id} senilai Rp ${order.totalRp.toLocaleString('id-ID')} sudah kami terima dan dikonfirmasi`
 
-  await fetch(`${waUrl}/send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-service-secret': secret,
+  await smartSend({
+    candidates,
+    to: phone,
+    text: message,
+    template: {
+      purposeKey: 'INFO_GENERIC',
+      params: { body: [order.customerName, storeName, summary] },
     },
-    body: JSON.stringify({
-      sessionId: session.id,
-      to: phone,
-      message,
-    }),
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => {
-    // best-effort
-  })
+    purpose: 'NOTIF',
+    source: 'SYSTEM',
+  }).catch(() => undefined) // best-effort
 }
 
 function normalizePhone(p: string): string | null {

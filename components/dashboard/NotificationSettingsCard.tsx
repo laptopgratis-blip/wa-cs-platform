@@ -140,7 +140,7 @@ export function NotificationSettingsCard() {
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Klik untuk preview. Sound disintesis langsung oleh browser (Web
             Audio API), tidak butuh download.
           </p>
@@ -153,7 +153,7 @@ export function NotificationSettingsCard() {
           type="button"
           variant="default"
           size="sm"
-          className="w-full bg-emerald-600 hover:bg-emerald-700"
+          className="w-full"
           onClick={() => {
             // Bypass polling — dispatch custom event langsung ke popup
             // component. Kalau popup MUNCUL → component working, masalah di
@@ -196,7 +196,7 @@ export function NotificationSettingsCard() {
         >
           Reset baseline → reload
         </Button>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           <strong>Demo Popup</strong> bypass polling — kalau muncul = render
           OK, masalah di poll/auth. <strong>Reset baseline</strong> + reload
           → popup dari 5 order test akan muncul beruntun.

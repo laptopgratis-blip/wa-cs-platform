@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface HostTitleEditableProps {
   hostId: string
@@ -110,26 +112,26 @@ export function HostTitleEditable({
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="size-8"
           onClick={() => void save()}
           disabled={saving}
           title="Simpan nama"
         >
           {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin" />
           ) : (
-            <Check className="h-4 w-4 text-emerald-600" />
+            <Check className={cn('size-4', TONES.success.text)} />
           )}
         </Button>
         <Button
           size="icon"
           variant="ghost"
-          className="h-8 w-8"
+          className="size-8"
           onClick={cancelEdit}
           disabled={saving}
           title="Batal"
         >
-          <X className="h-4 w-4" />
+          <X className="size-4" />
         </Button>
       </div>
     )
@@ -144,11 +146,11 @@ export function HostTitleEditable({
       <Button
         size="icon"
         variant="ghost"
-        className="h-7 w-7 text-warm-400 hover:text-warm-700"
+        className="text-warm-400 hover:text-warm-700 size-7"
         onClick={startEdit}
         title="Edit nama host"
       >
-        <Pencil className="h-3.5 w-3.5" />
+        <Pencil className="size-3.5" />
       </Button>
     </span>
   )

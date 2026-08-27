@@ -19,10 +19,11 @@ import { generateQueueForLead } from '@/lib/services/followup-engine'
 import {
   buildHandoffMessage,
   buildWaMeFallback,
+  findHandoffCandidates,
+  sendHandoffWa,
 } from '@/lib/services/live/handoff'
 import { checkLeadRateLimit, maybeCleanup } from '@/lib/services/live/rate-limit'
 import { buildTranscript, logLiveEvent } from '@/lib/services/live/tangkap'
-import { waService } from '@/lib/wa-service'
 
 const leadSchema = z.object({
   clientSessionId: z.string().trim().min(8).max(64),
@@ -153,11 +154,10 @@ export async function POST(
   // ── Handoff WA (best-effort) ────────────────────────────────────────
   // Cari WA session CONNECTED milik owner. Kalau gak ada, skip — owner
   // bisa follow-up manual dari /live-rooms/[id]/leads.
-  const waSession = await prisma.whatsappSession.findFirst({
-    where: { userId: room.userId, status: 'CONNECTED' },
-    orderBy: { updatedAt: 'desc' },
-    select: { id: true },
-  })
+  // Provider-aware (Trek 2B): Baileys / Cloud API. Kandidat pertama dipakai
+  // untuk pin Contact; pengiriman via sendHandoffWa (smartSend).
+  const candidates = await findHandoffCandidates(room.userId, waNumber)
+  const waSession = candidates[0] ? { id: candidates[0].sessionId } : null
 
   if (!waSession) {
     await logLiveEvent({
@@ -220,7 +220,14 @@ export async function POST(
     roomName: room.name,
     productInterest: productName,
   })
-  const sendResult = await waService.sendMessage(waSession.id, waNumber, waMessage)
+  const sendResult = await sendHandoffWa({
+    candidates,
+    to: waNumber,
+    text: waMessage,
+    customerName: data.name,
+    roomName: room.name,
+    productInterest: productName,
+  })
 
   if (sendResult.success) {
     await prisma.liveLead.update({

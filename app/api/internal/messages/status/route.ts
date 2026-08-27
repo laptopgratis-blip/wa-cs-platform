@@ -7,11 +7,26 @@ import { z } from 'zod'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
+import { emitWebhookEvent } from '@/lib/services/webhooks/dispatch'
 
 const bodySchema = z.object({
   externalMsgId: z.string().min(1),
   status: z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']),
 })
+
+// Guard progresi (cermin lib/services/waba/statuses.ts): status baru hanya
+// menimpa pendahulunya. Mencegah ack Baileys yang dobel/basi (resync
+// reconnect, retry) MEMUNDURKAN status DAN mencegah webhook duplikat —
+// updateMany hanya count>0 saat benar-benar ada transisi maju.
+const OVERWRITABLE: Record<
+  string,
+  ('SENT' | 'DELIVERED' | 'READ' | 'FAILED')[]
+> = {
+  SENT: [],
+  DELIVERED: ['SENT'],
+  READ: ['SENT', 'DELIVERED'],
+  FAILED: ['SENT', 'DELIVERED'],
+}
 
 export async function POST(req: Request) {
   const blocked = requireServiceSecret(req)
@@ -30,10 +45,35 @@ export async function POST(req: Request) {
 
   try {
     // updateMany: 0..n baris bisa cocok (externalMsgId tidak dijamin unik).
+    // Guard progresi: hanya menimpa status pendahulu (lihat OVERWRITABLE) —
+    // tidak memundurkan READ→DELIVERED & tidak menghitung ack yang tak berubah.
     const r = await prisma.message.updateMany({
-      where: { externalMsgId: body.externalMsgId },
+      where: {
+        externalMsgId: body.externalMsgId,
+        status: { in: OVERWRITABLE[body.status] },
+      },
       data: { status: body.status },
     })
+
+    // Webhook keluar seller. Message tidak punya userId — ambil lewat
+    // relasi kontak dari salah satu baris yang barusan berubah.
+    if (r.count > 0) {
+      const msg = await prisma.message.findFirst({
+        where: { externalMsgId: body.externalMsgId },
+        select: { waSessionId: true, contact: { select: { userId: true } } },
+      })
+      if (msg) {
+        emitWebhookEvent({
+          userId: msg.contact.userId,
+          type: 'message.status.updated',
+          data: {
+            externalMsgId: body.externalMsgId,
+            status: body.status,
+            sessionId: msg.waSessionId,
+          },
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,

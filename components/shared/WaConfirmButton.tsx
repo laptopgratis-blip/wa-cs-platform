@@ -88,14 +88,19 @@ export function buildTokenConfirmMessage(input: {
   totalAmount: number
   uniqueCode: number
   hasProof: boolean
+  unitLabel?: string
 }): string {
   const today = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
+  const unitText =
+    input.unitLabel && input.unitLabel !== 'token'
+      ? `${input.unitLabel} Rp ${input.tokenAmount.toLocaleString('id-ID')}`
+      : `${input.tokenAmount.toLocaleString('id-ID')} token`
   const lines = [
-    `Halo Admin Hulao, saya sudah transfer untuk pembelian ${input.packageName} ${input.tokenAmount.toLocaleString('id-ID')} token.`,
+    `Halo Admin Hulao, saya sudah transfer untuk pembelian ${input.packageName} ${unitText}.`,
     '',
     `Nama: ${input.userName ?? '-'}`,
     `Email: ${input.userEmail}`,

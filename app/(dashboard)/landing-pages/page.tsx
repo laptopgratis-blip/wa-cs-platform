@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { LpManager } from '@/components/lp/LpManager'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -12,8 +13,8 @@ export default async function LandingPagesPage() {
   if (!session) redirect('/login')
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <LpManager />
-    </div>
+    </PageContainer>
   )
 }

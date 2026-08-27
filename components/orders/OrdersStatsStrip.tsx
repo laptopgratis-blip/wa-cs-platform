@@ -8,6 +8,7 @@
 import { AlertCircle, Clock3, ShoppingBag, TrendingUp } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
+import { TONES, type Tone } from '@/lib/ui-tones'
 
 import type { StatsRange } from './types'
 
@@ -65,7 +66,7 @@ export function OrdersStatsStrip({
     <div className="space-y-2">
       {/* ── Pemilih periode strip ── */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-medium text-warm-500">Periode:</span>
+        <span className="text-warm-500 text-xs font-medium">Periode:</span>
         {RANGE_OPTIONS.map((opt) => (
           <button
             key={opt.key}
@@ -75,7 +76,7 @@ export function OrdersStatsStrip({
             className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
               range === opt.key
                 ? 'border-primary-500 bg-primary-500 text-white'
-                : 'border-warm-300 bg-white text-warm-700 hover:bg-warm-50 dark:bg-warm-900 dark:text-warm-200'
+                : 'border-warm-300 text-warm-700 hover:bg-warm-50 bg-white'
             }`}
           >
             {opt.label}
@@ -90,7 +91,7 @@ export function OrdersStatsStrip({
               className="h-7 w-auto px-2 text-xs"
               aria-label="Statistik dari tanggal"
             />
-            <span className="text-xs text-warm-500">—</span>
+            <span className="text-warm-500 text-xs">—</span>
             <Input
               type="date"
               value={customTo}
@@ -108,28 +109,28 @@ export function OrdersStatsStrip({
           label={`Total pesanan (${desc})`}
           value={formatRp(todayTotalRp)}
           sub={`${todayCount.toLocaleString('id-ID')} order masuk`}
-          accent="primary"
+          accent="brand"
         />
         <Stat
           icon={<TrendingUp className="size-4" />}
           label="Sudah dibayar"
           value={formatRp(todayPaidRp)}
           sub="Dilunasi dalam periode ini"
-          accent="emerald"
+          accent="success"
         />
         <Stat
           icon={<Clock3 className="size-4" />}
           label="Belum dibayar (COD + transfer)"
           value={formatRp(todayUnpaidRp)}
           sub="Potensi revenue periode ini"
-          accent="sky"
+          accent="info"
         />
         <Stat
           icon={<AlertCircle className="size-4" />}
           label="Urgent (>12 jam)"
           value={urgentCount.toLocaleString('id-ID')}
           sub={urgentCount > 0 ? 'Klik untuk lihat' : 'Aman'}
-          accent={urgentCount > 0 ? 'amber' : 'neutral'}
+          accent={urgentCount > 0 ? 'warning' : 'neutral'}
           onClick={urgentCount > 0 ? onClickUrgent : undefined}
         />
       </div>
@@ -149,16 +150,11 @@ function Stat({
   label: string
   value: string
   sub?: string
-  accent: 'primary' | 'emerald' | 'sky' | 'amber' | 'neutral'
+  accent: Extract<Tone, 'brand' | 'success' | 'info' | 'warning' | 'neutral'>
   onClick?: () => void
 }) {
-  const tone = {
-    primary: 'border-primary-200 bg-primary-50 text-primary-900',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    sky: 'border-sky-200 bg-sky-50 text-sky-900',
-    amber: 'border-amber-300 bg-amber-50 text-amber-900',
-    neutral: 'border-warm-200 bg-warm-50 text-warm-700',
-  }[accent]
+  const t = TONES[accent]
+  const tone = `${t.border} ${t.bg} ${t.text}`
   const Tag = onClick ? 'button' : 'div'
   return (
     <Tag
@@ -172,7 +168,7 @@ function Stat({
       <div className="min-w-0">
         <p className="truncate text-xs opacity-70">{label}</p>
         <p className="truncate text-base font-bold sm:text-lg">{value}</p>
-        {sub ? <p className="truncate text-[11px] opacity-60">{sub}</p> : null}
+        {sub ? <p className="truncate text-xs opacity-60">{sub}</p> : null}
       </div>
     </Tag>
   )

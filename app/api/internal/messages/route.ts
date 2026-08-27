@@ -2,11 +2,17 @@
 // Simpan satu pesan masuk/keluar. Auto-create Contact kalau belum ada.
 // Juga return contact + last 10 messages supaya wa-service tidak perlu hit API
 // lagi untuk dapat history.
+//
+// Wrapper tipis di atas lib/services/cs-pipeline/message-store — logika
+// dipakai bersama dengan webhook Cloud API (tanpa HTTP).
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
-import { prisma } from '@/lib/prisma'
+import {
+  isDuplicateExternalMessageError,
+  saveMessage,
+} from '@/lib/services/cs-pipeline/message-store'
 
 const bodySchema = z.object({
   sessionId: z.string().min(1),
@@ -34,18 +40,6 @@ const bodySchema = z.object({
   profitRp: z.number().optional(), // boleh negatif (= rugi)
 })
 
-// Normalisasi phoneNumber sebelum lookup/create kontak supaya tidak duplikat.
-// @s.whatsapp.net → ambil digit sebelum @ (dan sebelum :deviceId kalau ada).
-// @lid → biarkan as-is karena LID adalah ID opaque, bukan nomor asli.
-function normalizePhoneNumber(input: string): string {
-  if (input.endsWith('@lid')) return input
-  if (input.includes('@')) {
-    const beforeAt = input.split('@')[0] ?? input
-    return beforeAt.split(':')[0] ?? beforeAt
-  }
-  return input
-}
-
 export async function POST(req: Request) {
   const blocked = requireServiceSecret(req)
   if (blocked) return blocked
@@ -62,94 +56,35 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Cari WA session dulu untuk dapat userId.
-    const wa = await prisma.whatsappSession.findUnique({
-      where: { id: body.sessionId },
-      select: { id: true, userId: true },
+    const result = await saveMessage({
+      ...body,
+      externalMsgId: body.externalMsgId ?? null,
     })
-    if (!wa) {
+    if (!result) {
       return NextResponse.json(
         { success: false, error: 'session tidak ditemukan' },
         { status: 404 },
       )
     }
 
-    // Upsert Contact: kalau belum ada → buat; kalau sudah → update name
-    // (bila baru ada pushName) dan lastMessageAt.
-    // Cari kontak existing berdasarkan userId + phoneNumber (bukan waSessionId)
-    // supaya tidak duplikat saat session berganti.
-    const phoneNumber = normalizePhoneNumber(body.phoneNumber)
-    let contact = await prisma.contact.findFirst({
-      where: { userId: wa.userId, phoneNumber },
-    })
-    if (!contact) {
-      contact = await prisma.contact.create({
-        data: {
-          userId: wa.userId,
-          waSessionId: body.sessionId,
-          phoneNumber,
-          name: body.pushName ?? null,
-          lastMessageAt: new Date(),
-        },
-      })
-    } else {
-      contact = await prisma.contact.update({
-        where: { id: contact.id },
-        data: {
-          name: body.pushName ?? undefined,
-          lastMessageAt: new Date(),
-          waSessionId: body.sessionId,
-        },
-      })
-    }
-
-    const message = await prisma.message.create({
-      data: {
-        contactId: contact.id,
-        waSessionId: body.sessionId,
-        content: body.content,
-        role: body.role,
-        tokensUsed: body.tokensUsed ?? null,
-        apiInputTokens: body.apiInputTokens ?? null,
-        apiOutputTokens: body.apiOutputTokens ?? null,
-        apiCostRp: body.apiCostRp ?? null,
-        tokensCharged: body.tokensCharged ?? null,
-        revenueRp: body.revenueRp ?? null,
-        profitRp: body.profitRp ?? null,
-        source: body.source ?? null,
-        externalMsgId: body.externalMsgId ?? null,
-        // Absent → biarkan default schema (SENT).
-        status: body.status ?? undefined,
-      },
-    })
-
-    let history: { role: string; content: string; createdAt: Date }[] = []
-    if (body.withHistory) {
-      // Ambil 10 pesan terakhir (terbaru dulu), lalu balik ke kronologis untuk AI.
-      // Kecualikan pesan FAILED (balasan yang TIDAK terkirim ke customer) supaya
-      // AI tidak mengira sudah menjawab hal yang sebenarnya tak pernah diterima.
-      const recent = await prisma.message.findMany({
-        where: { contactId: contact.id, status: { not: 'FAILED' } },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        select: { role: true, content: true, createdAt: true },
-      })
-      history = recent.reverse()
-    }
-
     return NextResponse.json({
       success: true,
       data: {
-        messageId: message.id,
-        contactId: contact.id,
-        contact: {
-          aiPaused: contact.aiPaused,
-          isResolved: contact.isResolved,
-        },
-        history,
+        messageId: result.messageId,
+        contactId: result.contactId,
+        contact: result.contact,
+        history: result.history,
       },
     })
   } catch (err) {
+    // externalMsgId unique: pesan yang sama sudah tersimpan (echo/retry).
+    // 409 supaya wa-service memperlakukannya sebagai skip, bukan gagal.
+    if (isDuplicateExternalMessageError(err)) {
+      return NextResponse.json(
+        { success: false, error: 'duplicate', externalMsgId: err.externalMsgId },
+        { status: 409 },
+      )
+    }
     console.error('[POST /api/internal/messages] gagal:', err)
     return NextResponse.json(
       { success: false, error: 'internal error' },

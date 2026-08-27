@@ -17,11 +17,13 @@ export type AiModelCreateInput = z.infer<typeof aiModelCreateSchema>
 
 export const tokenPackageCreateSchema = z.object({
   name: z.string().trim().min(2).max(80),
-  tokenAmount: z.number().int().positive().max(10_000_000),
+  // TOKEN: jumlah token AI · MESSAGE_CREDIT: Rp kredit pesan WA yang diterima.
+  tokenAmount: z.number().int().positive().max(100_000_000),
   price: z.number().int().positive().max(100_000_000),
   isPopular: z.boolean().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(1000).optional(),
+  kind: z.enum(['TOKEN', 'MESSAGE_CREDIT']).optional(),
 })
 export const tokenPackageUpdateSchema = tokenPackageCreateSchema.partial()
 export type TokenPackageCreateInput = z.infer<typeof tokenPackageCreateSchema>
@@ -29,6 +31,8 @@ export type TokenPackageCreateInput = z.infer<typeof tokenPackageCreateSchema>
 export const userTopupSchema = z.object({
   amount: z.number().int().positive().max(10_000_000),
   description: z.string().max(200).optional(),
+  // TOKEN (default) = token AI; MESSAGE_CREDIT = Kredit Pesan WA (Rp).
+  wallet: z.enum(['TOKEN', 'MESSAGE_CREDIT']).default('TOKEN'),
 })
 
 // Edit user dari /admin/users. Semua field opsional — admin boleh ubah

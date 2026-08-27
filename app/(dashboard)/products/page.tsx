@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { CsAiPromoBanner } from '@/components/products/CsAiPromoBanner'
 import { ProductsClient } from '@/components/products/ProductsClient'
 import { UpgradeRequired } from '@/components/order-system/UpgradeRequired'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
@@ -33,7 +34,7 @@ export default async function ProductsPage() {
   })
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <CsAiPromoBanner userId={session.user.id} />
       <ProductsClient
         initialProducts={products.map((p) => ({
@@ -58,6 +59,6 @@ export default async function ProductsPage() {
         }))}
         limit={PRODUCT_LIMIT_PER_USER}
       />
-    </div>
+    </PageContainer>
   )
 }

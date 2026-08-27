@@ -178,8 +178,8 @@ export function EbookSection({
         </Label>
         <p className="mt-1 text-xs text-amber-800">
           Optional. Hubungkan file PDF/EPUB — pembeli otomatis dapat link
-          download di Perpustakaan setelah pembayaran dikonfirmasi. COD
-          otomatis dinonaktifkan untuk produk ini.
+          download di Perpustakaan setelah pembayaran dikonfirmasi. COD otomatis
+          dinonaktifkan untuk produk ini.
         </p>
       </div>
 
@@ -191,8 +191,8 @@ export function EbookSection({
         <div className="space-y-3 rounded-lg border bg-white p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-medium text-warm-900">{selected.title}</p>
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-900 font-medium">{selected.title}</p>
+              <p className="text-warm-500 text-xs">
                 {selected.fileFormat} · {formatSize(selected.fileSizeBytes)} ·{' '}
                 {selected.fileName}
               </p>
@@ -248,7 +248,7 @@ export function EbookSection({
             ) : null}
             Simpan Pengaturan Akses
           </Button>
-          <p className="text-[11px] text-warm-500">
+          <p className="text-warm-500 text-xs">
             Berlaku untuk pembeli BARU — hak pembeli lama tidak berubah.
           </p>
         </div>

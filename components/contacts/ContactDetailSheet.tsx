@@ -146,7 +146,7 @@ export function ContactDetailSheet({
     <Sheet open={Boolean(contactId)} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col overflow-hidden sm:max-w-xl px-6"
+        className="flex w-full flex-col overflow-hidden px-6 sm:max-w-xl"
       >
         <SheetHeader className="px-0">
           <SheetTitle>Detail Kontak</SheetTitle>
@@ -156,9 +156,9 @@ export function ContactDetailSheet({
         </SheetHeader>
 
         {isLoading || !detail ? (
-          <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <div className="text-muted-foreground flex flex-1 items-center justify-center">
             <Loader2 className="mr-2 size-5 animate-spin" />
-            Memuat...
+            Memuat…
           </div>
         ) : (
           <ScrollArea className="-mx-6 flex-1">
@@ -169,14 +169,16 @@ export function ContactDetailSheet({
                     <AvatarImage src={detail.avatar} alt={detail.name ?? ''} />
                   )}
                   <AvatarFallback>
-                    {(detail.name || detail.phoneNumber).slice(0, 2).toUpperCase()}
+                    {(detail.name || detail.phoneNumber)
+                      .slice(0, 2)
+                      .toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {detail.name || `+${detail.phoneNumber}`}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">
+                  <p className="text-muted-foreground truncate text-xs">
                     +{detail.phoneNumber}
                   </p>
                 </div>
@@ -205,7 +207,10 @@ export function ContactDetailSheet({
 
               <div className="space-y-2">
                 <Label>Pipeline Stage</Label>
-                <Select value={stage} onValueChange={(v) => setStage(v as PipelineStage)}>
+                <Select
+                  value={stage}
+                  onValueChange={(v) => setStage(v as PipelineStage)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -223,7 +228,7 @@ export function ContactDetailSheet({
                 <Label>Tags</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {tags.length === 0 && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       Belum ada tag.
                     </span>
                   )}
@@ -234,7 +239,7 @@ export function ContactDetailSheet({
                       <button
                         type="button"
                         onClick={() => removeTag(t)}
-                        className="rounded-full p-0.5 hover:bg-muted-foreground/20"
+                        className="hover:bg-muted-foreground/20 rounded-full p-0.5"
                         aria-label={`Hapus tag ${t}`}
                       >
                         <X className="size-3" />
@@ -276,16 +281,23 @@ export function ContactDetailSheet({
               <div className="space-y-2">
                 <h3 className="text-sm font-medium">Pesan Terbaru</h3>
                 {detail.messages.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Belum ada pesan.</p>
+                  <p className="text-muted-foreground text-xs">
+                    Belum ada pesan.
+                  </p>
                 ) : (
-                  <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-xs">
+                  <div className="bg-muted/30 space-y-1 rounded-md border p-3 text-xs">
                     {detail.messages.slice(-10).map((m) => (
                       <div key={m.id} className="flex gap-2">
-                        <span className="shrink-0 text-muted-foreground">
+                        <span className="text-muted-foreground shrink-0">
                           {formatChatTime(m.createdAt)}
                         </span>
                         <span className="font-medium">
-                          {m.role === 'USER' ? 'Customer' : m.role === 'AI' ? 'AI' : 'CS'}:
+                          {m.role === 'USER'
+                            ? 'Customer'
+                            : m.role === 'AI'
+                              ? 'AI'
+                              : 'CS'}
+                          :
                         </span>
                         <span className="line-clamp-2 flex-1">{m.content}</span>
                       </div>
@@ -297,7 +309,7 @@ export function ContactDetailSheet({
           </ScrollArea>
         )}
 
-        <div className="flex justify-end gap-2 border-t bg-background py-3">
+        <div className="bg-background flex justify-end gap-2 border-t py-3">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Tutup
           </Button>

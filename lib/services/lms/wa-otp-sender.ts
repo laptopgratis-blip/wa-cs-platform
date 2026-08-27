@@ -7,7 +7,7 @@
 //   - Log OTP plaintext ke server console (admin lihat via docker logs
 //     supaya bisa kasih OTP manual via chat lain)
 //   - Tidak throw — student tetap dapat respons sukses dari API
-import { waService } from '@/lib/wa-service'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
 
 import { findStudentWaSenders } from './wa-sender-pool'
 
@@ -50,27 +50,26 @@ export async function sendOtpViaWa(input: {
   }
 
   const text = buildOtpMessage(input.otpPlaintext)
-  let lastError: string | undefined
-  for (const sender of senders) {
-    const send = await waService.sendMessage(
-      sender.sessionId,
-      input.studentPhone,
-      text,
-    )
-    if (send.success) {
-      if (sender.label === 'penjual') {
-        console.warn(
-          `[lms-otp] OTP terkirim via sesi PENJUAL (admin down) ke ${input.studentPhone}`,
-        )
-      }
-      return { delivered: true, channel: 'WA' }
+  // smartSend (provider-aware): Baileys / Cloud dalam window → teks; Cloud
+  // di luar window → template AUTHENTICATION (kode = parameter, tombol salin).
+  const send = await smartSend({
+    candidates: senders,
+    to: input.studentPhone,
+    text,
+    template: { purposeKey: 'AUTH_OTP', params: { body: [input.otpPlaintext] } },
+    purpose: 'OTP',
+    source: 'SYSTEM',
+  })
+  if (send.success) {
+    const winner = senders.find((c) => c.sessionId === send.sessionId)
+    if (winner?.label === 'penjual') {
+      console.warn(
+        `[lms-otp] OTP terkirim via sesi PENJUAL (admin down) ke ${input.studentPhone}`,
+      )
     }
-    lastError = send.error ?? 'Gagal kirim WA'
-    console.warn(
-      `[lms-otp] gagal kirim via sesi ${sender.label} ke ${input.studentPhone}:`,
-      send.error,
-    )
+    return { delivered: true, channel: 'WA' }
   }
+  const lastError = send.error ?? 'Gagal kirim WA'
 
   console.warn(
     `[lms-otp] semua sesi gagal — OTP untuk ${input.studentPhone}: ${input.otpPlaintext}`,

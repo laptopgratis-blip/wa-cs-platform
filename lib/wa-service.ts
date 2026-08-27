@@ -1,7 +1,14 @@
-// Helper untuk komunikasi Next.js → wa-service (HTTP).
-// Semua API route di app/api/whatsapp/* lewat sini supaya konsisten.
+// Adapter pengiriman/lifecycle WhatsApp — dispatcher per provider sesi:
+// - BAILEYS   → HTTP ke wa-service (perilaku lama, tidak berubah)
+// - CLOUD_API → langsung Graph API Meta (lib/services/waba/*)
+// Semua pemanggil tetap memakai interface `waService` yang sama.
+// KONTRAK PENTING: tidak ada method yang boleh throw — pemanggil (mis. cron
+// followup) mengandalkan bentuk { success:false, error } saat gagal.
 
-import type { WaStatus } from '@prisma/client'
+import type { WaProvider, WaStatus } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { sendCloudText } from '@/lib/services/waba/send'
+import { sendCloudTemplate, type SendCloudTemplateInput } from '@/lib/services/waba/send-template'
 
 const BASE = process.env.WA_SERVICE_URL || 'http://localhost:3001'
 const SECRET = process.env.WA_SERVICE_SECRET || ''
@@ -57,23 +64,103 @@ async function request<T>(
   }
 }
 
+// Cache provider per sesi (30 dtk) — sendMessage dipanggil beruntun oleh
+// cron followup/broadcast; jangan query DB tiap pesan. Provider praktis
+// tidak pernah berubah selama sesi hidup.
+const PROVIDER_CACHE_TTL_MS = 30_000
+const providerCache = new Map<string, { provider: WaProvider; at: number }>()
+
+async function resolveProvider(sessionId: string): Promise<WaProvider> {
+  const cached = providerCache.get(sessionId)
+  if (cached && Date.now() - cached.at < PROVIDER_CACHE_TTL_MS) return cached.provider
+  try {
+    const row = await prisma.whatsappSession.findUnique({
+      where: { id: sessionId },
+      select: { provider: true },
+    })
+    // Sesi tidak ditemukan → anggap BAILEYS: jalur lama yang akan
+    // menghasilkan error "session not found" dari wa-service (perilaku lama).
+    const provider = row?.provider ?? 'BAILEYS'
+    providerCache.set(sessionId, { provider, at: Date.now() })
+    return provider
+  } catch (err) {
+    // DB error tidak boleh mematahkan kontrak never-throw — fallback jalur lama.
+    console.error('[wa-service] resolveProvider gagal:', err)
+    return 'BAILEYS'
+  }
+}
+
+// Sintesis WaServiceSession dari row DB — sesi Cloud API tidak punya state
+// in-memory di wa-service, DB adalah sumber kebenarannya.
+async function cloudStatus(sessionId: string): Promise<ServiceResponse<WaServiceSession>> {
+  try {
+    const s = await prisma.whatsappSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        status: true,
+        phoneNumber: true,
+        displayName: true,
+        lastError: true,
+        updatedAt: true,
+      },
+    })
+    if (!s) return { success: false, error: 'Sesi tidak ditemukan' }
+    return {
+      success: true,
+      data: {
+        sessionId: s.id,
+        status: s.status,
+        phoneNumber: s.phoneNumber,
+        displayName: s.displayName,
+        qr: null,
+        qrDataUrl: null,
+        lastError: s.lastError,
+        updatedAt: s.updatedAt.toISOString(),
+      },
+    }
+  } catch (err) {
+    return { success: false, error: `Gagal baca status sesi: ${(err as Error).message}` }
+  }
+}
+
 export const waService = {
-  connect(sessionId: string) {
+  async connect(sessionId: string) {
+    if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
+      return {
+        success: false,
+        error: 'Sesi Cloud API tidak memakai QR pairing — kelola koneksi via Embedded Signup',
+      } satisfies ServiceResponse<WaServiceSession>
+    }
     return request<WaServiceSession>('/sessions/connect', {
       method: 'POST',
       body: JSON.stringify({ sessionId }),
     })
   },
-  disconnect(sessionId: string, wipe = false) {
+  async disconnect(sessionId: string, wipe = false) {
+    if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
+      // Route disconnect menangani sesi cloud sendiri (update DB) — sampai
+      // di sini berarti pemanggil salah jalur; tolak defensif.
+      return {
+        success: false,
+        error: 'Sesi Cloud API diputus lewat route disconnect, bukan wa-service',
+      } satisfies ServiceResponse<WaServiceSession | null>
+    }
     return request<WaServiceSession | null>('/sessions/disconnect', {
       method: 'POST',
       body: JSON.stringify({ sessionId, wipe }),
     })
   },
-  status(sessionId: string) {
+  async status(sessionId: string) {
+    if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
+      return cloudStatus(sessionId)
+    }
     return request<WaServiceSession>(`/sessions/${encodeURIComponent(sessionId)}`)
   },
-  sendMessage(sessionId: string, phoneNumber: string, content: string) {
+  async sendMessage(sessionId: string, phoneNumber: string, content: string) {
+    if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
+      return sendCloudText({ sessionId, phoneNumber, content })
+    }
     return request<{
       sessionId: string
       phoneNumber: string
@@ -83,11 +170,34 @@ export const waService = {
       body: JSON.stringify({ phoneNumber, content }),
     })
   },
-  startBroadcast(input: {
+  /**
+   * Kirim pesan TEMPLATE Meta (hanya sesi CLOUD_API). Baileys tidak punya
+   * konsep template → ditolak jelas; pemanggil non-CS pakai smartSend.
+   */
+  async sendTemplate(input: SendCloudTemplateInput) {
+    if ((await resolveProvider(input.sessionId)) !== 'CLOUD_API') {
+      return {
+        success: false,
+        error: 'Template Meta hanya untuk sesi Cloud API — sesi Baileys kirim teks biasa',
+        code: 'SESSION_UNAVAILABLE' as const,
+      }
+    }
+    return sendCloudTemplate(input)
+  },
+  async startBroadcast(input: {
     sessionId: string
     broadcastId: string
     items: { phoneNumber: string; content: string }[]
   }) {
+    if ((await resolveProvider(input.sessionId)) === 'CLOUD_API') {
+      // Broadcast Cloud API TIDAK lewat wa-service — jalurnya
+      // lib/services/broadcast/start.ts → cloud-runner (template Meta +
+      // Kredit Pesan). Sampai di sini berarti pemanggil salah jalur.
+      return {
+        success: false,
+        error: 'Broadcast Cloud API dijalankan via startBroadcast (lib/services/broadcast), bukan wa-service',
+      } satisfies ServiceResponse<{ broadcastId: string; total: number }>
+    }
     return request<{ broadcastId: string; total: number }>(
       `/sessions/${encodeURIComponent(input.sessionId)}/broadcast`,
       {

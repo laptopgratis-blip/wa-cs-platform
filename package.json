@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx lib/host-gen-gate.test.ts && tsx lib/services/host-gen/kling-retry.test.ts && tsx lib/services/subscription-entitlement.test.ts && tsx lib/services/lms/lms-entitlement.test.ts && tsx lib/validations/order-form-limit.test.ts"
+    "test": "tsx lib/host-gen-gate.test.ts && tsx lib/services/host-gen/kling-retry.test.ts && tsx lib/services/subscription-entitlement.test.ts && tsx lib/services/lms/lms-entitlement.test.ts && tsx lib/validations/order-form-limit.test.ts && tsx lib/services/public-api/sender-selection.test.ts && tsx lib/auth-landing.test.ts && tsx lib/fetch-json.test.ts && tsx lib/services/inbox/sender-options.test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -57,6 +57,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "node-addon-api": "^8.7.0",
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"

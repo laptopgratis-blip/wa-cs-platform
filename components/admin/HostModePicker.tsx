@@ -5,13 +5,22 @@
 //
 // UX rationale:
 // - Dipisah upfront jadi flow per mode jelas, gak nyampur di 1 wizard.
-// - Card-style besar (touch-friendly) + emoji badge biar contrast jelas.
+// - Card-style besar (touch-friendly) + icon badge biar contrast jelas.
 // - Cost estimate inline jadi owner aware sebelum commit.
 // - "Coming Soon" badge buat Klip Live (Sprint 2 baru aktif full pipeline).
 
-import { Sparkles, Mic, Lock } from 'lucide-react'
+import { Bot, Check, Lightbulb, Sparkles, Mic, Lock, Minus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export type HostMode = 'TTS_GENERATIVE' | 'NATIVE_LIBRARY'
 
@@ -25,28 +34,25 @@ interface Props {
 
 export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="mode-picker-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
       }}
     >
-      <div className="w-full max-w-3xl rounded-2xl bg-background p-6 shadow-2xl">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h2
-              id="mode-picker-title"
-              className="text-xl font-semibold"
-            >
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[85vh] overflow-y-auto sm:max-w-3xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">
               Pilih jenis host
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription>
               Cara host bicara di live menentukan setup & cost yang dibutuhkan.
-            </p>
-          </div>
+            </DialogDescription>
+          </DialogHeader>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Batal
           </Button>
@@ -57,44 +63,53 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
           <button
             type="button"
             onClick={() => onSelect('TTS_GENERATIVE')}
-            className="group flex flex-col rounded-xl border-2 border-warm-200 bg-white p-5 text-left transition hover:border-orange-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+            className="group border-warm-200 bg-card hover:border-primary-400 focus-visible:ring-primary-400 flex flex-col rounded-xl border-2 p-5 text-left transition hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
           >
             <div className="mb-3 flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-100 text-2xl">
-                🤖
+              <div className="bg-warm-100 flex size-12 items-center justify-center rounded-xl">
+                <Bot className="text-warm-600 size-6" aria-hidden />
               </div>
-              <span className="rounded-full bg-warm-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warm-700">
+              <span className="bg-warm-100 text-warm-700 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase">
                 Existing
               </span>
             </div>
-            <h3 className="text-base font-semibold">TTS Host</h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <h3 className="text-lg font-semibold">TTS Host</h3>
+            <p className="text-muted-foreground mt-1 text-xs">
               AI jawab semua pertanyaan customer, suara dihasilkan real-time
               dari TTS.
             </p>
-            <ul className="mt-3 space-y-1 text-xs text-warm-700">
+            <ul className="text-warm-700 mt-3 space-y-1 text-xs">
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Bisa jawab pertanyaan apa pun
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Setup cepat — 1 video loop saja
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-amber-600">~</span>
+                <Minus
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.warning.text)}
+                  aria-hidden
+                />
                 Suara TTS realtime, sedikit delay
               </li>
             </ul>
-            <div className="mt-4 border-t border-warm-100 pt-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-warm-500">
+            <div className="border-warm-100 mt-4 border-t pt-3">
+              <div className="text-warm-500 text-xs font-semibold tracking-wider uppercase">
                 Estimasi cost setup
               </div>
-              <div className="mt-0.5 text-sm font-bold text-orange-600">
+              <div className="text-primary-600 mt-0.5 text-sm font-semibold">
                 ~10 token (1 video loop)
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-orange-600 group-hover:underline">
+            <div className="text-primary-600 mt-3 flex items-center gap-1.5 text-xs font-semibold group-hover:underline">
               Pilih TTS Host →
             </div>
           </button>
@@ -104,61 +119,73 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
             type="button"
             onClick={() => !klipLiveDisabled && onSelect('NATIVE_LIBRARY')}
             disabled={klipLiveDisabled}
-            className={`group flex flex-col rounded-xl border-2 p-5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 ${
+            className={`group focus-visible:ring-primary-400 flex flex-col rounded-xl border-2 p-5 text-left transition focus-visible:ring-2 focus-visible:outline-none ${
               klipLiveDisabled
-                ? 'cursor-not-allowed border-warm-100 bg-warm-50/50 opacity-70'
-                : 'border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 hover:border-orange-500 hover:shadow-lg'
+                ? 'border-warm-100 bg-warm-50/50 cursor-not-allowed opacity-70'
+                : 'border-primary-300 from-primary-50 to-primary-100 hover:border-primary-500 bg-linear-to-br hover:shadow-lg'
             }`}
           >
             <div className="mb-3 flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-200 text-2xl">
-                🎙️
+              <div className="bg-primary-100 flex size-12 items-center justify-center rounded-xl">
+                <Mic className="text-primary-600 size-6" aria-hidden />
               </div>
               {klipLiveDisabled ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-warm-200 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-warm-700">
-                  <Lock className="h-2.5 w-2.5" /> Soon
+                <span className="bg-warm-200 text-warm-700 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase">
+                  <Lock className="size-2.5" /> Soon
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow">
-                  <Sparkles className="h-2.5 w-2.5" /> Baru
+                <span className="inline-flex items-center gap-1 rounded-full bg-linear-to-r from-primary-500 to-primary-600 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-white shadow">
+                  <Sparkles className="size-2.5" /> Baru
                 </span>
               )}
             </div>
-            <h3 className="text-base font-semibold">
-              Klip Live <span className="text-xs font-normal text-orange-600">⭐</span>
+            <h3 className="flex items-center gap-1 text-lg font-semibold">
+              Klip Live
+              <Sparkles className="text-primary-600 size-3.5" aria-hidden />
             </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs">
               Library klip pre-baked dengan suara natural. AI match pertanyaan
               customer ke klip yang cocok. Latency rendah, lip-sync presisi.
             </p>
-            <ul className="mt-3 space-y-1 text-xs text-warm-700">
+            <ul className="text-warm-700 mt-3 space-y-1 text-xs">
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 Suara natural (ElevenLabs) + lip-sync presisi
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-emerald-600">✓</span>
+                <Check
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.success.text)}
+                  aria-hidden
+                />
                 <span className="inline-flex items-center gap-0.5">
-                  <Mic className="h-3 w-3 text-orange-500" />
+                  <Mic className="text-primary-500 size-3" />
                   Visual hook + background TikTok-optimized
                 </span>
               </li>
               <li className="flex items-start gap-1.5">
-                <span className="text-amber-600">~</span>
+                <Minus
+                  className={cn('mt-0.5 size-3 shrink-0', TONES.warning.text)}
+                  aria-hidden
+                />
                 Jawaban terbatas pada library klip
               </li>
             </ul>
-            <div className="mt-4 border-t border-orange-200/60 pt-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-warm-500">
+            <div className="border-primary-200/60 mt-4 border-t pt-3">
+              <div className="text-warm-500 text-xs font-semibold tracking-wider uppercase">
                 Estimasi cost setup
               </div>
-              <div className="mt-0.5 text-sm font-bold text-orange-600">
+              <div className="text-primary-600 mt-0.5 text-sm font-semibold">
                 ~50-100 token (~8-10 klip)
               </div>
             </div>
             <div
               className={`mt-3 flex items-center gap-1.5 text-xs font-semibold ${
-                klipLiveDisabled ? 'text-warm-400' : 'text-orange-600 group-hover:underline'
+                klipLiveDisabled
+                  ? 'text-warm-400'
+                  : 'text-primary-600 group-hover:underline'
               }`}
             >
               {klipLiveDisabled
@@ -168,11 +195,14 @@ export function HostModePicker({ onSelect, onClose, klipLiveDisabled }: Props) {
           </button>
         </div>
 
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          💡 Bisa upgrade dari TTS Host → Klip Live nanti (re-use persona +
-          background).
+        <p className="text-muted-foreground flex items-center justify-center gap-1.5 text-center text-xs">
+          <Lightbulb className="size-3.5 shrink-0" aria-hidden />
+          <span>
+            Bisa upgrade dari TTS Host → Klip Live nanti (re-use persona +
+            background).
+          </span>
         </p>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

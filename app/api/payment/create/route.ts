@@ -8,6 +8,7 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { createTransaction } from '@/lib/tripay'
 
 const bodySchema = z.object({
@@ -50,6 +51,13 @@ export async function POST(req: Request) {
 
     // Buat row Payment dulu — kalau Tripay gagal, status berubah jadi FAILED
     // dan order ID-nya unik (constraint) jadi aman untuk retry.
+    // Paket Kredit Pesan WA (kind MESSAGE_CREDIT) → purpose khusus supaya
+    // webhook/reconcile mengkredit dompet yang benar (Trek 2B).
+    if (pkg.kind === 'MESSAGE_CREDIT' && !MESSAGE_CREDIT_BILLING_ENABLED) {
+      // Billing kredit nonaktif — paket ini tidak dijual.
+      return jsonError('Paket ini sedang tidak tersedia', 400)
+    }
+    const purpose = pkg.kind === 'MESSAGE_CREDIT' ? 'MESSAGE_CREDIT_PURCHASE' : 'TOKEN_PURCHASE'
     const payment = await prisma.payment.create({
       data: {
         userId: user.id,
@@ -58,6 +66,7 @@ export async function POST(req: Request) {
         tokenAmount: pkg.tokenAmount,
         status: 'PENDING',
         expiredAt,
+        purpose,
       },
     })
 

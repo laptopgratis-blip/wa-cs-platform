@@ -23,7 +23,13 @@ import {
   Underline,
   X,
 } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +47,7 @@ import {
   PIXEL_EVENT_PRESETS,
   type SwappableTag,
 } from '@/lib/lp/html-mutation'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface SelectedSnapshot extends EditableSnapshot {
@@ -161,7 +168,9 @@ export function InlineEditPopover({
 
   const [href, setHref] = useState(snapshot.href ?? '')
   const [waNumber, setWaNumber] = useState(initialWa ?? '')
-  const [linkMode, setLinkMode] = useState<'wa' | 'url'>(isWaLink ? 'wa' : 'url')
+  const [linkMode, setLinkMode] = useState<'wa' | 'url'>(
+    isWaLink ? 'wa' : 'url',
+  )
   const [currentTag, setCurrentTag] = useState<SwappableTag | null>(
     swappable ? (snapshot.tagName as SwappableTag) : null,
   )
@@ -179,13 +188,15 @@ export function InlineEditPopover({
     Boolean(snapshot.pixelEvent && snapshot.pixelEvent.trim()),
   )
 
-  const [pos, setPos] = useState<{ top: number; left: number; placement: 'below' | 'above' }>(
-    () => ({
-      top: snapshot.absRect.top + snapshot.absRect.height + POPOVER_OFFSET,
-      left: snapshot.absRect.left,
-      placement: 'below',
-    }),
-  )
+  const [pos, setPos] = useState<{
+    top: number
+    left: number
+    placement: 'below' | 'above'
+  }>(() => ({
+    top: snapshot.absRect.top + snapshot.absRect.height + POPOVER_OFFSET,
+    left: snapshot.absRect.left,
+    placement: 'below',
+  }))
 
   useEffect(() => {
     if (editableRef.current && isTextBearing) {
@@ -334,7 +345,8 @@ export function InlineEditPopover({
     }
 
     if (isImage) {
-      if (imgSrc.trim() !== (snapshot.src ?? '').trim()) patch.src = imgSrc.trim()
+      if (imgSrc.trim() !== (snapshot.src ?? '').trim())
+        patch.src = imgSrc.trim()
       if (imgAlt !== (snapshot.alt ?? '')) patch.alt = imgAlt
     }
 
@@ -371,30 +383,26 @@ export function InlineEditPopover({
   return (
     <div
       ref={popRef}
-      className="fixed z-50 flex max-h-[calc(100vh-32px)] flex-col rounded-lg border border-warm-300 bg-card shadow-xl"
+      className="border-warm-300 bg-card fixed z-50 flex max-h-[calc(100vh-32px)] flex-col rounded-lg border shadow-xl"
       style={{ top: pos.top, left: pos.left, width: POPOVER_WIDTH }}
       role="dialog"
       aria-label="Edit elemen"
     >
       {/* Header (sticky atas — selalu visible) */}
-      <div className="flex shrink-0 items-center justify-between border-b border-warm-200 px-3 py-2">
+      <div className="border-warm-200 flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <span className="rounded-full bg-primary-50 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase text-primary-700">
+          <span className="bg-primary-50 text-primary-700 rounded-full px-2 py-0.5 font-mono text-xs font-semibold uppercase">
             {snapshot.tagName}
           </span>
-          <span className="text-[11px] text-warm-500">
-            {isImage
-              ? 'Gambar'
-              : isAnchor
-                ? 'Tombol / link'
-                : 'Teks'}
+          <span className="text-warm-500 text-xs">
+            {isImage ? 'Gambar' : isAnchor ? 'Tombol / link' : 'Teks'}
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
           aria-label="Tutup"
-          className="rounded p-1 text-warm-500 hover:bg-warm-100 hover:text-warm-900"
+          className="text-warm-500 hover:bg-warm-100 hover:text-warm-900 rounded p-1"
         >
           <X className="size-3.5" />
         </button>
@@ -404,355 +412,362 @@ export function InlineEditPopover({
           kalau total tinggi > viewport, content scroll internal & footer tetap
           terlihat (tidak ter-clip di bawah). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-
-      {/* Action bar — Move/Duplicate/Cut/Delete (selalu ada) */}
-      <div
-        className="flex shrink-0 items-center gap-0.5 border-b border-warm-200 bg-warm-50/30 px-2 py-1.5"
-        onMouseDown={(e) => e.preventDefault()}
-      >
-        <ToolbarBtn
-          label="Geser ke atas"
-          onClick={() => onAction('move-up')}
-          disabled={!snapshot.hasPrev}
-        >
-          <ArrowUp className="size-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn
-          label="Geser ke bawah"
-          onClick={() => onAction('move-down')}
-          disabled={!snapshot.hasNext}
-        >
-          <ArrowDown className="size-3.5" />
-        </ToolbarBtn>
-        <span className="mx-1 h-4 w-px bg-warm-200" aria-hidden />
-        <ToolbarBtn
-          label="Duplikat (gandakan)"
-          onClick={() => onAction('duplicate')}
-        >
-          <Copy className="size-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn label="Potong (cut)" onClick={() => onAction('cut')}>
-          <Scissors className="size-3.5" />
-        </ToolbarBtn>
-        <ToolbarBtn label="Hapus" onClick={() => onAction('delete')} danger>
-          <Trash2 className="size-3.5" />
-        </ToolbarBtn>
-
-        {clipboardActive && (
-          <div className="ml-auto flex items-center gap-0.5">
-            <span className="hidden text-[10px] text-warm-500 sm:inline">
-              Tempel:
-            </span>
-            <ToolbarBtn
-              label="Tempel sebelum bagian ini"
-              onClick={() => onAction('paste-before')}
-              accent
-            >
-              <ClipboardPaste className="size-3.5 -scale-y-100" />
-            </ToolbarBtn>
-            <ToolbarBtn
-              label="Tempel sesudah bagian ini"
-              onClick={() => onAction('paste-after')}
-              accent
-            >
-              <ClipboardPaste className="size-3.5" />
-            </ToolbarBtn>
-          </div>
-        )}
-      </div>
-
-      {/* Format toolbar (hanya untuk text-bearing) */}
-      {isTextBearing && (
+        {/* Action bar — Move/Duplicate/Cut/Delete (selalu ada) */}
         <div
-          className="flex items-center gap-1 border-b border-warm-200 bg-warm-50/30 px-2 py-1.5"
+          className="border-warm-200 bg-warm-50/30 flex shrink-0 items-center gap-0.5 border-b px-2 py-1.5"
           onMouseDown={(e) => e.preventDefault()}
         >
-          {swappable && (
-            <Select
-              value={currentTag ?? undefined}
-              onValueChange={(v) => setCurrentTag(v as SwappableTag)}
-            >
-              <SelectTrigger className="h-7 w-[145px] text-[11px]">
-                <SelectValue placeholder="Ukuran" />
-              </SelectTrigger>
-              <SelectContent>
-                {(['h1', 'h2', 'h3', 'h4', 'p'] as const).map((t) => (
-                  <SelectItem key={t} value={t} className="text-xs">
-                    {TAG_LABEL[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <ToolbarBtn
+            label="Geser ke atas"
+            onClick={() => onAction('move-up')}
+            disabled={!snapshot.hasPrev}
+          >
+            <ArrowUp className="size-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn
+            label="Geser ke bawah"
+            onClick={() => onAction('move-down')}
+            disabled={!snapshot.hasNext}
+          >
+            <ArrowDown className="size-3.5" />
+          </ToolbarBtn>
+          <span className="bg-warm-200 mx-1 h-4 w-px" aria-hidden />
+          <ToolbarBtn
+            label="Duplikat (gandakan)"
+            onClick={() => onAction('duplicate')}
+          >
+            <Copy className="size-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn label="Potong (cut)" onClick={() => onAction('cut')}>
+            <Scissors className="size-3.5" />
+          </ToolbarBtn>
+          <ToolbarBtn label="Hapus" onClick={() => onAction('delete')} danger>
+            <Trash2 className="size-3.5" />
+          </ToolbarBtn>
 
-          <div className="ml-auto flex items-center gap-0.5">
-            <ToolbarBtn
-              label="Bold (tebal)"
-              onClick={() => handleFormat('strong')}
-            >
-              <Bold className="size-3.5" />
-            </ToolbarBtn>
-            <ToolbarBtn
-              label="Italic (miring)"
-              onClick={() => handleFormat('em')}
-            >
-              <Italic className="size-3.5" />
-            </ToolbarBtn>
-            <ToolbarBtn
-              label="Underline (garis bawah)"
-              onClick={() => handleFormat('u')}
-            >
-              <Underline className="size-3.5" />
-            </ToolbarBtn>
-            <ToolbarBtn
-              label="Stabilo (highlight)"
-              onClick={() => handleFormat('mark')}
-              highlight
-            >
-              <Highlighter className="size-3.5" />
-            </ToolbarBtn>
-          </div>
-        </div>
-      )}
-
-      {/* Editor area */}
-      {isTextBearing ? (
-        <div className="px-3 py-2">
-          <Label className="text-[10px] text-warm-500">
-            Teks · pilih bagian, lalu klik tombol di atas untuk format
-          </Label>
-          <div
-            ref={editableRef}
-            contentEditable
-            suppressContentEditableWarning
-            onPaste={handlePaste}
-            className="mt-1 max-h-40 min-h-[60px] overflow-auto rounded-md border border-warm-200 bg-card px-2 py-1.5 text-xs text-warm-900 focus:outline-none focus:ring-2 focus:ring-primary-200 [&_mark]:bg-yellow-200 [&_mark]:px-0.5"
-          />
-        </div>
-      ) : (
-        <div className="space-y-2 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded border border-warm-200 bg-warm-50">
-              {imgSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={imgSrc}
-                  alt={imgAlt}
-                  className="size-full object-cover"
-                />
-              ) : (
-                <ImageIcon className="size-6 text-warm-400" />
-              )}
-            </div>
-            <div className="flex-1 space-y-1">
-              <Label htmlFor="lp-img-src" className="text-[10px] text-warm-500">
-                URL gambar
-              </Label>
-              <Input
-                id="lp-img-src"
-                value={imgSrc}
-                onChange={(e) => setImgSrc(e.target.value)}
-                placeholder="https://..."
-                className="h-7 font-mono text-[11px]"
-              />
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="lp-img-alt" className="text-[10px] text-warm-500">
-              Alt (deskripsi singkat — bagus untuk SEO)
-            </Label>
-            <Input
-              id="lp-img-alt"
-              value={imgAlt}
-              onChange={(e) => setImgAlt(e.target.value)}
-              placeholder="Gambar produk..."
-              className="h-7 text-[11px]"
-            />
-          </div>
-          <p className="text-[10px] text-warm-500">
-            Tip: copy URL dari panel Image Manager di kiri, paste ke sini.
-          </p>
-        </div>
-      )}
-
-      {/* Link section (kalau anchor) */}
-      {isAnchor && (
-        <div className="space-y-1.5 border-t border-warm-200 px-3 py-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-xs">Tujuan link</Label>
-            <div className="flex rounded-md border border-warm-200 bg-warm-50 p-0.5">
-              <button
-                type="button"
-                onClick={() => setLinkMode('wa')}
-                className={
-                  linkMode === 'wa'
-                    ? 'rounded bg-card px-2 py-0.5 text-[10px] font-semibold text-warm-900 shadow-sm'
-                    : 'px-2 py-0.5 text-[10px] text-warm-500 hover:text-warm-900'
-                }
-              >
-                WhatsApp
-              </button>
-              <button
-                type="button"
-                onClick={() => setLinkMode('url')}
-                className={
-                  linkMode === 'url'
-                    ? 'rounded bg-card px-2 py-0.5 text-[10px] font-semibold text-warm-900 shadow-sm'
-                    : 'px-2 py-0.5 text-[10px] text-warm-500 hover:text-warm-900'
-                }
-              >
-                URL
-              </button>
-            </div>
-          </div>
-
-          {linkMode === 'wa' ? (
-            <div>
-              <div className="flex items-stretch overflow-hidden rounded-md border border-warm-200">
-                <span className="flex items-center bg-warm-50 px-2 text-xs text-warm-600">
-                  +
-                </span>
-                <Input
-                  placeholder="6281234567890"
-                  value={waNumber}
-                  onChange={(e) => setWaNumber(e.target.value.replace(/\D/g, ''))}
-                  maxLength={15}
-                  className="h-8 rounded-none border-0 font-mono text-xs focus-visible:ring-0"
-                />
-              </div>
-              <p className="mt-1 text-[10px] text-warm-500">
-                Format: 62 + nomor tanpa 0 di depan (mis. 6281234567890)
-              </p>
-            </div>
-          ) : (
-            <Input
-              placeholder="https://contoh.com"
-              value={href}
-              onChange={(e) => setHref(e.target.value)}
-              className="h-8 text-xs"
-            />
-          )}
-        </div>
-      )}
-
-      {/* Tracking Pixel section — collapse default, expand kalau sudah ada event */}
-      <div className="border-t border-warm-200">
-        <button
-          type="button"
-          onClick={() => setPixelOpen((v) => !v)}
-          className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-warm-50"
-          aria-expanded={pixelOpen}
-        >
-          <span className="flex items-center gap-1.5 text-xs font-medium text-warm-900">
-            <Target className="size-3.5 text-primary-600" />
-            Tracking Pixel
-            {pixelEvent.trim() && (
-              <span className="ml-1 rounded-full bg-primary-50 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-primary-700">
-                {pixelEvent.trim()}
+          {clipboardActive && (
+            <div className="ml-auto flex items-center gap-0.5">
+              <span className="text-warm-500 hidden text-xs sm:inline">
+                Tempel:
               </span>
-            )}
-          </span>
-          <span className="text-[10px] text-warm-500">
-            {pixelOpen ? 'Tutup' : 'Atur event'}
-          </span>
-        </button>
-        {pixelOpen && (
-          <div className="space-y-2 px-3 pb-3">
-            <p className="text-[10px] leading-relaxed text-warm-500">
-              Saat user klik elemen ini di LP live, event di-kirim ke pixel
-              Meta/TikTok/Google Ads yang aktif di akun kamu. Kosongkan untuk
-              non-aktifkan.
-            </p>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-warm-500">Event</Label>
-              <Select
-                value={pixelEvent || '__none'}
-                onValueChange={(v) => setPixelEvent(v === '__none' ? '' : v)}
+              <ToolbarBtn
+                label="Tempel sebelum bagian ini"
+                onClick={() => onAction('paste-before')}
+                accent
               >
-                <SelectTrigger className="h-8 text-[11px]">
-                  <SelectValue placeholder="Pilih event…" />
+                <ClipboardPaste className="size-3.5 -scale-y-100" />
+              </ToolbarBtn>
+              <ToolbarBtn
+                label="Tempel sesudah bagian ini"
+                onClick={() => onAction('paste-after')}
+                accent
+              >
+                <ClipboardPaste className="size-3.5" />
+              </ToolbarBtn>
+            </div>
+          )}
+        </div>
+
+        {/* Format toolbar (hanya untuk text-bearing) */}
+        {isTextBearing && (
+          <div
+            className="border-warm-200 bg-warm-50/30 flex items-center gap-1 border-b px-2 py-1.5"
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {swappable && (
+              <Select
+                value={currentTag ?? undefined}
+                onValueChange={(v) => setCurrentTag(v as SwappableTag)}
+              >
+                <SelectTrigger className="h-7 w-[145px] text-xs">
+                  <SelectValue placeholder="Ukuran" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none" className="text-xs">
-                    <span className="text-warm-500">Tidak track</span>
-                  </SelectItem>
-                  {PIXEL_EVENT_PRESETS.map((ev) => (
-                    <SelectItem key={ev} value={ev} className="text-xs">
-                      <span className="font-mono font-semibold">{ev}</span>
-                      <span className="ml-2 text-[10px] text-warm-500">
-                        {PIXEL_EVENT_HINTS[ev]}
-                      </span>
+                  {(['h1', 'h2', 'h3', 'h4', 'p'] as const).map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs">
+                      {TAG_LABEL[t]}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            )}
+
+            <div className="ml-auto flex items-center gap-0.5">
+              <ToolbarBtn
+                label="Bold (tebal)"
+                onClick={() => handleFormat('strong')}
+              >
+                <Bold className="size-3.5" />
+              </ToolbarBtn>
+              <ToolbarBtn
+                label="Italic (miring)"
+                onClick={() => handleFormat('em')}
+              >
+                <Italic className="size-3.5" />
+              </ToolbarBtn>
+              <ToolbarBtn
+                label="Underline (garis bawah)"
+                onClick={() => handleFormat('u')}
+              >
+                <Underline className="size-3.5" />
+              </ToolbarBtn>
+              <ToolbarBtn
+                label="Stabilo (highlight)"
+                onClick={() => handleFormat('mark')}
+                highlight
+              >
+                <Highlighter className="size-3.5" />
+              </ToolbarBtn>
+            </div>
+          </div>
+        )}
+
+        {/* Editor area */}
+        {isTextBearing ? (
+          <div className="px-3 py-2">
+            <Label className="text-warm-500 text-xs">
+              Teks · pilih bagian, lalu klik tombol di atas untuk format
+            </Label>
+            <div
+              ref={editableRef}
+              contentEditable
+              suppressContentEditableWarning
+              onPaste={handlePaste}
+              className="border-warm-200 bg-card text-warm-900 focus:ring-primary-200 [&_mark]:bg-primary-200 mt-1 max-h-40 min-h-[60px] overflow-auto rounded-md border px-2 py-1.5 text-xs focus:ring-2 focus:outline-none [&_mark]:px-0.5"
+            />
+          </div>
+        ) : (
+          <div className="space-y-2 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <div className="border-warm-200 bg-warm-50 flex size-14 shrink-0 items-center justify-center overflow-hidden rounded border">
+                {imgSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imgSrc}
+                    alt={imgAlt}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <ImageIcon className="text-warm-400 size-6" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="lp-img-src" className="text-warm-500 text-xs">
+                  URL gambar
+                </Label>
+                <Input
+                  id="lp-img-src"
+                  value={imgSrc}
+                  onChange={(e) => setImgSrc(e.target.value)}
+                  placeholder="https://..."
+                  className="h-7 font-mono text-xs"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="lp-img-alt" className="text-warm-500 text-xs">
+                Alt (deskripsi singkat — bagus untuk SEO)
+              </Label>
               <Input
-                value={pixelEvent}
-                onChange={(e) => setPixelEvent(e.target.value)}
-                placeholder="Atau ketik event custom (mis. ChatStarted)"
-                className="h-7 font-mono text-[11px]"
+                id="lp-img-alt"
+                value={imgAlt}
+                onChange={(e) => setImgAlt(e.target.value)}
+                placeholder="Gambar produk..."
+                className="h-7 text-xs"
               />
             </div>
-            {pixelEvent.trim() && (
-              <div className="grid grid-cols-[1fr_85px] gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-warm-500">
-                    Nilai (opsional)
-                  </Label>
-                  <Input
-                    value={pixelValue}
-                    onChange={(e) =>
-                      setPixelValue(e.target.value.replace(/[^\d.]/g, ''))
-                    }
-                    placeholder="100000"
-                    inputMode="decimal"
-                    className="h-7 font-mono text-[11px]"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] text-warm-500">Mata uang</Label>
-                  <Select
-                    value={pixelCurrency}
-                    onValueChange={(v) => setPixelCurrency(v)}
-                  >
-                    <SelectTrigger className="h-7 text-[11px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CURRENCY_OPTIONS.map((c) => (
-                        <SelectItem key={c} value={c} className="text-xs">
-                          {c}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-            <p className="text-[10px] text-warm-500">
-              Tip: pakai{' '}
-              <span className="font-mono font-semibold">Lead</span> untuk tombol
-              WA/form,{' '}
-              <span className="font-mono font-semibold">InitiateCheckout</span>{' '}
-              untuk tombol order,{' '}
-              <span className="font-mono font-semibold">Purchase</span> di
-              halaman success.
+            <p className="text-warm-500 text-xs">
+              Tip: copy URL dari panel Image Manager di kiri, paste ke sini.
             </p>
           </div>
         )}
-      </div>
 
-      </div>{/* end scrollable body */}
+        {/* Link section (kalau anchor) */}
+        {isAnchor && (
+          <div className="border-warm-200 space-y-1.5 border-t px-3 py-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Tujuan link</Label>
+              <div className="border-warm-200 bg-warm-50 flex rounded-md border p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setLinkMode('wa')}
+                  className={
+                    linkMode === 'wa'
+                      ? 'bg-card text-warm-900 rounded px-2 py-0.5 text-xs font-semibold shadow-sm'
+                      : 'text-warm-500 hover:text-warm-900 px-2 py-0.5 text-xs'
+                  }
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLinkMode('url')}
+                  className={
+                    linkMode === 'url'
+                      ? 'bg-card text-warm-900 rounded px-2 py-0.5 text-xs font-semibold shadow-sm'
+                      : 'text-warm-500 hover:text-warm-900 px-2 py-0.5 text-xs'
+                  }
+                >
+                  URL
+                </button>
+              </div>
+            </div>
+
+            {linkMode === 'wa' ? (
+              <div>
+                <div className="border-warm-200 flex items-stretch overflow-hidden rounded-md border">
+                  <span className="bg-warm-50 text-warm-600 flex items-center px-2 text-xs">
+                    +
+                  </span>
+                  <Input
+                    placeholder="6281234567890"
+                    value={waNumber}
+                    onChange={(e) =>
+                      setWaNumber(e.target.value.replace(/\D/g, ''))
+                    }
+                    maxLength={15}
+                    className="h-8 rounded-none border-0 font-mono text-xs focus-visible:ring-0"
+                  />
+                </div>
+                <p className="text-warm-500 mt-1 text-xs">
+                  Format: 62 + nomor tanpa 0 di depan (mis. 6281234567890)
+                </p>
+              </div>
+            ) : (
+              <Input
+                placeholder="https://contoh.com"
+                value={href}
+                onChange={(e) => setHref(e.target.value)}
+                className="h-8 text-xs"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Tracking Pixel section — collapse default, expand kalau sudah ada event */}
+        <div className="border-warm-200 border-t">
+          <button
+            type="button"
+            onClick={() => setPixelOpen((v) => !v)}
+            className="hover:bg-warm-50 flex w-full items-center justify-between px-3 py-2 text-left"
+            aria-expanded={pixelOpen}
+          >
+            <span className="text-warm-900 flex items-center gap-1.5 text-xs font-medium">
+              <Target className="text-primary-600 size-3.5" />
+              Tracking Pixel
+              {pixelEvent.trim() && (
+                <span className="bg-primary-50 text-primary-700 ml-1 rounded-full px-1.5 py-0.5 font-mono text-xs font-semibold">
+                  {pixelEvent.trim()}
+                </span>
+              )}
+            </span>
+            <span className="text-warm-500 text-xs">
+              {pixelOpen ? 'Tutup' : 'Atur event'}
+            </span>
+          </button>
+          {pixelOpen && (
+            <div className="space-y-2 px-3 pb-3">
+              <p className="text-warm-500 text-xs leading-relaxed">
+                Saat user klik elemen ini di LP live, event di-kirim ke pixel
+                Meta/TikTok/Google Ads yang aktif di akun kamu. Kosongkan untuk
+                non-aktifkan.
+              </p>
+              <div className="space-y-1">
+                <Label className="text-warm-500 text-xs">Event</Label>
+                <Select
+                  value={pixelEvent || '__none'}
+                  onValueChange={(v) => setPixelEvent(v === '__none' ? '' : v)}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="Pilih event…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none" className="text-xs">
+                      <span className="text-warm-500">Tidak track</span>
+                    </SelectItem>
+                    {PIXEL_EVENT_PRESETS.map((ev) => (
+                      <SelectItem key={ev} value={ev} className="text-xs">
+                        <span className="font-mono font-semibold">{ev}</span>
+                        <span className="text-warm-500 ml-2 text-xs">
+                          {PIXEL_EVENT_HINTS[ev]}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={pixelEvent}
+                  onChange={(e) => setPixelEvent(e.target.value)}
+                  placeholder="Atau ketik event custom (mis. ChatStarted)"
+                  className="h-7 font-mono text-xs"
+                />
+              </div>
+              {pixelEvent.trim() && (
+                <div className="grid grid-cols-[1fr_85px] gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-warm-500 text-xs">
+                      Nilai (opsional)
+                    </Label>
+                    <Input
+                      value={pixelValue}
+                      onChange={(e) =>
+                        setPixelValue(e.target.value.replace(/[^\d.]/g, ''))
+                      }
+                      placeholder="100000"
+                      inputMode="decimal"
+                      className="h-7 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-warm-500 text-xs">Mata uang</Label>
+                    <Select
+                      value={pixelCurrency}
+                      onValueChange={(v) => setPixelCurrency(v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((c) => (
+                          <SelectItem key={c} value={c} className="text-xs">
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              <p className="text-warm-500 text-xs">
+                Tip: pakai <span className="font-mono font-semibold">Lead</span>{' '}
+                untuk tombol WA/form,{' '}
+                <span className="font-mono font-semibold">
+                  InitiateCheckout
+                </span>{' '}
+                untuk tombol order,{' '}
+                <span className="font-mono font-semibold">Purchase</span> di
+                halaman success.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* end scrollable body */}
 
       {/* Footer (sticky bawah — selalu visible walaupun body scroll) */}
-      <div className="flex shrink-0 justify-end gap-1.5 border-t border-warm-200 bg-card px-3 py-2">
-        <Button variant="ghost" size="sm" onClick={onClose} className="h-7 text-xs">
+      <div className="border-warm-200 bg-card flex shrink-0 justify-end gap-1.5 border-t px-3 py-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="h-7 text-xs"
+        >
           Batal
         </Button>
         <Button
           size="sm"
           onClick={handleSubmit}
-          className="h-7 bg-primary-500 text-xs text-white hover:bg-primary-600"
+          className="h-7 text-xs"
         >
           <Save className="mr-1 size-3" />
           Simpan
@@ -791,9 +806,9 @@ function ToolbarBtn({
         disabled && 'cursor-not-allowed opacity-30',
         !disabled &&
           (danger
-            ? 'text-destructive hover:bg-red-50'
+            ? 'text-destructive hover:bg-destructive/10'
             : highlight
-              ? 'text-amber-600 hover:bg-amber-50'
+              ? cn(TONES.warning.text, 'hover:bg-warm-100')
               : accent
                 ? 'text-primary-600 hover:bg-primary-50'
                 : 'text-warm-700 hover:bg-warm-100'),

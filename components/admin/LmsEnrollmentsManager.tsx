@@ -152,7 +152,6 @@ export function LmsEnrollmentsManager() {
               void loadCourses()
               setAddOpen(true)
             }}
-            className="bg-primary-500 text-white hover:bg-primary-600"
           >
             <Plus className="mr-2 size-4" />
             Manual Add
@@ -229,7 +228,7 @@ export function LmsEnrollmentsManager() {
               />
             )
           ) : (
-            <div className="divide-y divide-warm-100">
+            <div className="divide-warm-100 divide-y">
               {enrollments.map((e) => (
                 <div
                   key={e.id}
@@ -241,7 +240,7 @@ export function LmsEnrollmentsManager() {
                         {e.studentPhone}
                       </span>
                       {e.studentName && (
-                        <span className="text-sm text-warm-700">
+                        <span className="text-warm-700 text-sm">
                           · {e.studentName}
                         </span>
                       )}
@@ -250,17 +249,15 @@ export function LmsEnrollmentsManager() {
                         label={statusMeta(enrollmentMeta, e.status).label}
                       />
                     </div>
-                    <div className="text-xs text-warm-600">
+                    <div className="text-warm-600 text-xs">
                       Course: <strong>{e.course.title}</strong> ·{' '}
                       <span className="text-warm-400">/{e.course.slug}</span>
                     </div>
-                    <div className="text-xs text-warm-500">
+                    <div className="text-warm-500 text-xs">
                       Enrolled{' '}
                       {new Date(e.enrolledAt).toLocaleDateString('id-ID')}
                       {e.invoiceNumber && <> · Invoice {e.invoiceNumber}</>}
-                      {e.revokeReason && (
-                        <> · Revoke: {e.revokeReason}</>
-                      )}
+                      {e.revokeReason && <> · Revoke: {e.revokeReason}</>}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -361,7 +358,7 @@ function ManualAddDialog({
               placeholder="cmoxxx... (copy dari /lms/courses URL)"
               className="font-mono text-xs"
             />
-            <p className="text-[11px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               Phase 1 — copy course ID dari URL halaman edit course. Phase 2
               dropdown picker.
             </p>
@@ -393,11 +390,7 @@ function ManualAddDialog({
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>
-          <Button
-            onClick={save}
-            disabled={submitting}
-            className="bg-primary-500 text-white hover:bg-primary-600"
-          >
+          <Button onClick={save} disabled={submitting}>
             {submitting ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (

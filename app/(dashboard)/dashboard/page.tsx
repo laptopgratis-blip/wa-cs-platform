@@ -5,10 +5,14 @@ import { redirect } from 'next/navigation'
 
 import { BalanceBanner } from '@/components/dashboard/BalanceBanner'
 import { LpGratisHero } from '@/components/dashboard/LpGratisHero'
-import { MessagesChart, type ChartPoint } from '@/components/dashboard/MessagesChart'
+import {
+  MessagesChart,
+  type ChartPoint,
+} from '@/components/dashboard/MessagesChart'
 import { NotificationSettingsCard } from '@/components/dashboard/NotificationSettingsCard'
 import { EmbeddedOnboardingGuide } from '@/components/onboarding/EmbeddedOnboardingGuide'
 import { OnboardingGoalSelector } from '@/components/onboarding/OnboardingGoalSelector'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import {
   Card,
@@ -23,7 +27,12 @@ import { type OnboardingGoal } from '@/lib/onboarding/checklists'
 import { prisma } from '@/lib/prisma'
 import { cn } from '@/lib/utils'
 
-const VALID_GOALS = new Set<OnboardingGoal>(['CS_AI', 'SELL_LP', 'SELL_WA', 'LMS'])
+const VALID_GOALS = new Set<OnboardingGoal>([
+  'CS_AI',
+  'SELL_LP',
+  'SELL_WA',
+  'LMS',
+])
 
 // Cek ringan: apakah user sudah punya goal aktif (non-dismissed). Dipakai
 // untuk decide rendering EmbeddedOnboardingGuide vs hanya goal selector.
@@ -112,7 +121,9 @@ interface DashboardPageProps {
   searchParams: Promise<{ step?: string }>
 }
 
-export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
@@ -125,14 +136,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     loadHasActiveGoal(session.user.id),
   ])
   const onboardingGoal = userMeta?.onboardingGoal as
-    | OnboardingGoal
-    | null
-    | undefined
+    OnboardingGoal | null | undefined
   const params = await searchParams
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-7 overflow-y-auto p-4 md:p-6">
-      <div className="opacity-0 animate-fade-slide-up">
+    <PageContainer>
+      <div className="animate-fade-slide-up opacity-0">
         <PageHeader
           title={`Selamat datang, ${firstName(session.user.name)}`}
           description="Berikut ringkasan akunmu hari ini — saldo, koneksi WA, dan aktivitas pesan."
@@ -150,10 +159,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           dashboard, supaya user tidak perlu pindah halaman. Kalau user belum
           pilih goal atau dismiss, EmbeddedOnboardingGuide return null. */}
       {hasActiveGoal && (
-        <EmbeddedOnboardingGuide
-          step={params.step}
-          basePath="/dashboard"
-        />
+        <EmbeddedOnboardingGuide step={params.step} basePath="/dashboard" />
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -187,9 +193,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         />
       </div>
 
-      <Card className="opacity-0 animate-fade-slide-up rounded-xl border-warm-200 shadow-sm" style={{ animationDelay: '250ms' }}>
+      <Card
+        className="animate-fade-slide-up opacity-0"
+        style={{ animationDelay: '250ms' }}
+      >
         <CardHeader>
-          <CardTitle className="font-display">Aktivitas Pesan 7 Hari Terakhir</CardTitle>
+          <CardTitle className="font-display">
+            Aktivitas Pesan 7 Hari Terakhir
+          </CardTitle>
           <CardDescription>
             Jumlah pesan masuk dari customer dan balasan AI per hari.
           </CardDescription>
@@ -206,7 +217,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           pun (asumsi: pakai LP gratis dulu). Auto-expand kalau ada goal aktif
           supaya user lihat status & bisa switch. */}
       <OnboardingGoalSelector currentGoal={onboardingGoal ?? null} compact />
-    </div>
+    </PageContainer>
   )
 }
 
@@ -222,23 +233,23 @@ function StatCard({ icon, label, value, hint, stagger }: StatCardProps) {
   return (
     <Card
       className={cn(
-        'group rounded-xl border-warm-200 shadow-sm hover-lift opacity-0 animate-fade-slide-up',
+        'group hover-lift animate-fade-slide-up opacity-0',
         stagger,
       )}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-xs font-medium uppercase tracking-wider text-warm-500">
+        <CardTitle className="text-warm-500 text-xs font-medium tracking-wider uppercase">
           {label}
         </CardTitle>
-        <span className="flex size-9 items-center justify-center rounded-lg bg-primary-100 text-primary-500 transition-colors group-hover:bg-primary-500 group-hover:text-white">
+        <span className="bg-primary-100 text-primary-500 group-hover:bg-primary-500 flex size-9 items-center justify-center rounded-lg transition-colors group-hover:text-white">
           {icon}
         </span>
       </CardHeader>
       <CardContent>
-        <div className="font-display text-3xl font-bold text-warm-900 dark:text-warm-50 tabular-nums">
+        <div className="font-display text-warm-900 text-3xl font-semibold tabular-nums">
           {value}
         </div>
-        {hint && <p className="mt-1 text-xs text-warm-500">{hint}</p>}
+        {hint && <p className="text-warm-500 mt-1 text-xs">{hint}</p>}
       </CardContent>
     </Card>
   )

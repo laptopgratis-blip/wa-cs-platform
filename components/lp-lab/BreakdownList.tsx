@@ -27,23 +27,23 @@ export function BreakdownList({ items, maxRows = 10 }: Props) {
           <div key={it.key} className="text-xs">
             <div className="mb-0.5 flex items-baseline justify-between gap-2">
               <span
-                className="truncate font-medium text-warm-700 dark:text-warm-200"
+                className="text-warm-700 truncate font-medium"
                 title={it.key}
               >
                 {it.key}
               </span>
-              <span className="shrink-0 tabular-nums text-warm-500">
-                <span className="font-semibold text-warm-900 dark:text-warm-50">
+              <span className="text-warm-500 shrink-0 tabular-nums">
+                <span className="text-warm-900 font-semibold">
                   {it.count.toLocaleString('id-ID')}
                 </span>
-                <span className="ml-1 text-warm-400">
+                <span className="text-warm-400 ml-1">
                   ({sharePct.toFixed(1)}%)
                 </span>
               </span>
             </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-warm-100 dark:bg-warm-800">
+            <div className="bg-warm-100 h-1.5 w-full overflow-hidden rounded-full">
               <div
-                className="h-full rounded-full bg-primary-400"
+                className="bg-primary-400 h-full rounded-full"
                 style={{ width: `${Math.max(2, pct)}%` }}
               />
             </div>
@@ -51,7 +51,7 @@ export function BreakdownList({ items, maxRows = 10 }: Props) {
         )
       })}
       {items.length > maxRows && (
-        <p className="pt-1 text-[11px] text-warm-400">
+        <p className="text-warm-400 pt-1 text-xs">
           +{items.length - maxRows} lainnya tidak ditampilkan
         </p>
       )}

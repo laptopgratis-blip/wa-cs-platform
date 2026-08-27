@@ -10,6 +10,8 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Status {
   total: number
@@ -83,7 +85,7 @@ export function PresetThumbnailsCard() {
         }
         await loadStatus()
         if (d.remaining <= 0) {
-          toast.success('Semua thumbnail preset sudah ter-generate 🎉')
+          toast.success('Semua thumbnail preset sudah ter-generate')
           break
         }
       }
@@ -101,25 +103,25 @@ export function PresetThumbnailsCard() {
     <Card className="border-dashed">
       <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-500/10">
-            <ImageIcon className="size-4 text-sky-600 dark:text-sky-300" aria-hidden />
+          <div className="bg-primary-50 flex size-9 shrink-0 items-center justify-center rounded-lg">
+            <ImageIcon className="text-primary-600 size-4" aria-hidden />
           </div>
           <div>
             <p className="text-sm font-semibold">
               Thumbnail Preset Klip Live{' '}
               {status ? (
-                <span className="font-normal text-muted-foreground">
+                <span className="text-muted-foreground font-normal">
                   — {status.done}/{status.total} tersedia
                 </span>
               ) : null}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               {complete
                 ? 'Semua visual hook & background sudah punya thumbnail.'
                 : 'Generate gambar thumbnail (Gemini) untuk picker visual hook & background di wizard Klip Live.'}
             </p>
             {running && (
-              <p className="mt-1 text-xs text-sky-600 dark:text-sky-300">
+              <p className={cn('mt-1 text-xs', TONES.warning.text)}>
                 Sedang generate{lastSlug ? ` — ${lastSlug}` : ''}… biarkan tab
                 terbuka. Bisa dihentikan & dilanjut kapan saja.
               </p>
@@ -140,12 +142,16 @@ export function PresetThumbnailsCard() {
                 Hentikan
               </Button>
             ) : (
-              <Button size="sm" onClick={() => void runAll()} disabled={!status}>
+              <Button
+                size="sm"
+                onClick={() => void runAll()}
+                disabled={!status}
+              >
                 {running && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Generate{status ? ` ${status.missing.length} thumbnail` : ''}
               </Button>
             )}
-            {running && <Loader2 className="size-4 animate-spin text-sky-500" />}
+            {running && <Loader2 className="size-4 animate-spin" />}
           </div>
         )}
       </CardContent>

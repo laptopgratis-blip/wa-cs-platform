@@ -8,13 +8,16 @@
 import {
   Activity,
   Banknote,
+  Webhook,
   BarChart3,
   BellRing,
+  BookMarked,
   BookOpen,
   Bot,
   Box,
   Building2,
   Calculator,
+  Code2,
   Compass,
   Cpu,
   CreditCard,
@@ -27,12 +30,15 @@ import {
   Inbox,
   Key,
   LayoutTemplate,
+  LifeBuoy,
   LineChart,
   MapPin,
   MessageCircle,
   Package,
   Palette,
+  Plug,
   Receipt,
+  RefreshCw,
   Rocket,
   Send,
   Settings,
@@ -58,11 +64,15 @@ export interface NavItem {
   icon: LucideIcon
   // Role yang boleh lihat — kosong = semua role yang punya akses ke parent.
   roles?: Role[]
+  // Item hanya untuk paket POWER (Order System). Gating per-ITEM: dipakai saat
+  // integrasi POWER (Pixel, Auto Confirm) berada di grup yang tampil untuk
+  // semua user — hanya item-nya yang disembunyikan bila user tak punya akses.
+  requiresOrderSystem?: boolean
 }
 
-// Aksen warna per grup — full class literal supaya kebaca Tailwind JIT.
-// Dipakai Sidebar (desktop) + MobileDrawer supaya grup gampang dibedakan
-// secara visual (chunking), bukan satu daftar abu-abu panjang.
+// Aksen nav TUNGGAL — brand orange untuk state aktif, netral untuk sisanya.
+// Grup dibedakan lewat spacing + header uppercase, bukan warna-warni
+// (pelangi 9-hue sebelumnya = sumber utama kesan UI berantakan).
 export interface NavAccent {
   /** Warna teks header grup (uppercase kecil). */
   header: string
@@ -76,57 +86,12 @@ export interface NavAccent {
   bar: string
 }
 
-export const NAV_ACCENTS: Record<string, NavAccent> = {
-  teal: {
-    header: 'text-teal-600',
-    icon: 'text-teal-600/70',
-    active: 'bg-teal-50 text-teal-700',
-    activeIcon: 'text-teal-600',
-    bar: 'bg-teal-500',
-  },
-  orange: {
-    header: 'text-primary-600',
-    icon: 'text-primary-500/80',
-    active: 'bg-primary-50 text-primary-700',
-    activeIcon: 'text-primary-600',
-    bar: 'bg-primary-500',
-  },
-  violet: {
-    header: 'text-violet-600',
-    icon: 'text-violet-500/80',
-    active: 'bg-violet-50 text-violet-700',
-    activeIcon: 'text-violet-600',
-    bar: 'bg-violet-500',
-  },
-  sky: {
-    header: 'text-sky-600',
-    icon: 'text-sky-600/80',
-    active: 'bg-sky-50 text-sky-700',
-    activeIcon: 'text-sky-600',
-    bar: 'bg-sky-500',
-  },
-  emerald: {
-    header: 'text-emerald-600',
-    icon: 'text-emerald-600/80',
-    active: 'bg-emerald-50 text-emerald-700',
-    activeIcon: 'text-emerald-600',
-    bar: 'bg-emerald-500',
-  },
-  amber: {
-    header: 'text-amber-600',
-    icon: 'text-amber-600/80',
-    active: 'bg-amber-50 text-amber-700',
-    activeIcon: 'text-amber-600',
-    bar: 'bg-amber-500',
-  },
-  // Netral — grup AKUN & fallback grup admin (tanpa accent).
-  neutral: {
-    header: 'text-warm-400',
-    icon: 'text-warm-500',
-    active: 'bg-primary-50 text-primary-700',
-    activeIcon: 'text-primary-600',
-    bar: 'bg-primary-500',
-  },
+export const NAV_ACCENT: NavAccent = {
+  header: 'text-warm-400',
+  icon: 'text-warm-500',
+  active: 'bg-primary-50 text-primary-700',
+  activeIcon: 'text-primary-600',
+  bar: 'bg-primary-500',
 }
 
 export interface NavGroup {
@@ -135,8 +100,6 @@ export interface NavGroup {
   // Group hanya tampil kalau user punya akses Order System (paket POWER).
   // Filter dilakukan di komponen yang konsumsi (Sidebar, MobileDrawer).
   requiresOrderSystem?: boolean
-  // Key ke NAV_ACCENTS — warna pembeda grup. Undefined = neutral.
-  accent?: keyof typeof NAV_ACCENTS
 }
 
 // ─── USER (dashboard) ─────────────────────────────────────────────────
@@ -145,12 +108,11 @@ export interface NavGroup {
 // - "Pesanan" pindah dari Produktivitas ke ORDER SYSTEM (kontekstual cocok)
 // - "Rekening" → "Pengaturan" (label, route tetap /bank-accounts) karena
 //   page itu juga berisi pengaturan pengiriman (origin city, kurir aktif)
-// - Pixel Tracking + Auto Confirm Bank pindah ke group "INTEGRASI" terpisah
-//   supaya ORDER SYSTEM fokus ke operasional jualan
+// - Pixel Tracking + Auto Confirm Bank pindah dari ORDER SYSTEM ke grup
+//   integrasi (2026-08-26: kini item POWER-gated di grup "INTEGRASI")
 export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'CHAT & CS',
-    accent: 'teal',
     items: [
       { label: 'WhatsApp', href: '/whatsapp', icon: MessageCircle },
       { label: 'Inbox', href: '/inbox', icon: Inbox },
@@ -159,6 +121,13 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Cara Jualan', href: '/cara-jualan', icon: ShoppingBag },
       { label: 'Kontak', href: '/contacts', icon: Users },
       { label: 'Broadcast', href: '/broadcast', icon: Send },
+      // Template Meta (Trek 2B, 2026-08-20) — template pesan WhatsApp Cloud
+      // API (wajib untuk pesan di luar window 24 jam pada nomor resmi Meta).
+      {
+        label: 'Template Meta',
+        href: '/whatsapp/templates',
+        icon: LayoutTemplate,
+      },
       // CS Live AI rooms (PR-0b, 2026-06-01). Avatar live shopping dengan
       // chat AI + TTS. Customer akses URL publik /live/<slug>.
       { label: 'Live Rooms', href: '/live-rooms', icon: Video },
@@ -173,7 +142,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   {
     label: 'ORDER SYSTEM',
     requiresOrderSystem: true,
-    accent: 'orange',
     items: [
       { label: 'Pesanan', href: '/pesanan', icon: Package },
       { label: 'Produk', href: '/products', icon: ShoppingCart },
@@ -203,7 +171,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   {
     label: 'LANDING PAGE',
-    accent: 'violet',
     items: [
       { label: 'Landing Page', href: '/landing-pages', icon: Globe },
       { label: 'Content Studio', href: '/content', icon: Palette },
@@ -213,7 +180,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Customer beli produk linked → otomatis enroll.
   {
     label: 'LMS',
-    accent: 'sky',
     items: [
       { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
     ],
@@ -221,35 +187,53 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
   // supaya scope grup itu fokus ke operasional jualan harian.
   {
-    label: 'INTEGRASI',
-    requiresOrderSystem: true,
-    accent: 'emerald',
-    items: [
-      { label: 'Pixel Tracking', href: '/integrations/pixels', icon: Activity },
-      // Phase 1 BETA, 2026-05-08 — auto-confirm pembayaran transfer via
-      // scraping mutasi BCA. Disclaimer & risk handling di halaman tujuan.
-      {
-        label: 'Auto Confirm (BETA)',
-        href: '/integrations/bank-mutation',
-        icon: Banknote,
-      },
-    ],
-  },
-  {
     label: 'LAPORAN',
-    accent: 'amber',
     items: [{ label: 'Analytics', href: '/analytics', icon: BarChart3 }],
   },
   // Upgrade LP/LMS dipindah ke sini (2026-07-10) — upsell dipisah dari grup
   // fitur supaya grup fitur murni navigasi operasional.
   {
     label: 'AKUN',
-    accent: 'neutral',
     items: [
       { label: 'Billing', href: '/billing', icon: CreditCard },
       { label: 'Riwayat Pembelian', href: '/purchases', icon: Receipt },
       { label: 'Upgrade LP', href: '/pricing', icon: TrendingUp },
       { label: 'Upgrade LMS', href: '/pricing-lms', icon: Rocket },
+    ],
+  },
+  // INTEGRASI (2026-08-26; dulu "PENGEMBANG") — satu grup berisi TIAP integrasi
+  // sebagai item terpisah. API/Webhook/Script&Embed tampil untuk SEMUA user
+  // (kunci API tetap dibuat sendiri). Pixel & Auto Confirm khusus POWER via
+  // requiresOrderSystem per-item (grup ini sendiri tidak POWER-gated).
+  {
+    label: 'INTEGRASI',
+    items: [
+      { label: 'API', href: '/pengembang/api', icon: Code2 },
+      { label: 'Webhook', href: '/pengembang/webhook', icon: Webhook },
+      { label: 'Script & Embed', href: '/pengembang/integrasi', icon: Plug },
+      {
+        label: 'Pixel Tracking',
+        href: '/integrations/pixels',
+        icon: Activity,
+        requiresOrderSystem: true,
+      },
+      // Phase 1 BETA, 2026-05-08 — auto-confirm transfer via scraping mutasi
+      // BCA. Disclaimer & risk handling di halaman tujuan.
+      {
+        label: 'Auto Confirm (BETA)',
+        href: '/integrations/bank-mutation',
+        icon: Banknote,
+        requiresOrderSystem: true,
+      },
+    ],
+  },
+  // DUKUNGAN — sengaja TIDAK pernah disembunyikan oleh HIDDEN_GROUPS_BY_GOAL:
+  // user yang paling butuh bantuan justru yang menyederhanakan menunya.
+  {
+    label: 'DUKUNGAN',
+    items: [
+      { label: 'Dokumentasi', href: '/dokumentasi', icon: BookMarked },
+      { label: 'Bantuan & Dukungan', href: '/bantuan', icon: LifeBuoy },
     ],
   },
 ]
@@ -292,6 +276,13 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         icon: Box,
         roles: ['ADMIN'],
       },
+      // Trek 2B — harga Kredit Pesan WA per kategori template Meta.
+      {
+        label: 'Kredit Pesan WA',
+        href: '/admin/message-credits',
+        icon: MessageCircle,
+        roles: ['ADMIN'],
+      },
       {
         label: 'Paket LP',
         href: '/admin/lp-packages',
@@ -303,6 +294,16 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
         href: '/admin/lp-upgrades',
         icon: TrendingUp,
         roles: ['ADMIN', 'FINANCE'],
+      },
+      // Approve/extend/cancel subscription + verifikasi transfer manual.
+      // Sebelumnya halaman ini hanya bisa dicapai lewat deep-link notifikasi
+      // upload bukti transfer — admin yang melewatkan notif kehilangan akses.
+      // ADMIN saja: middleware membatasi FINANCE ke /admin/finance/*.
+      {
+        label: 'Subscriptions',
+        href: '/admin/subscriptions',
+        icon: RefreshCw,
+        roles: ['ADMIN'],
       },
       // LMS Phase 1 — admin manual add/revoke enrollment student per course.
       {
@@ -336,7 +337,12 @@ export const ADMIN_NAV_GROUPS: NavGroup[] = [
   {
     label: 'AI & SOUL',
     items: [
-      { label: 'AI Models', href: '/admin/models', icon: Cpu, roles: ['ADMIN'] },
+      {
+        label: 'AI Models',
+        href: '/admin/models',
+        icon: Cpu,
+        roles: ['ADMIN'],
+      },
       {
         label: 'Pricing Database',
         href: '/admin/ai-pricing',
@@ -442,10 +448,46 @@ export const BOTTOM_NAV_ITEMS: Array<{
 ]
 
 // Helper: filter NavGroup by role.
-export function filterGroupsByRole(
-  groups: NavGroup[],
-  role: Role,
-): NavGroup[] {
+
+// ─── Judul halaman dari nav (dipakai Topbar) ─────────────────────────
+// Satu sumber kebenaran: cari item nav dengan href terpanjang yang
+// prefix-match pathname. Fallback: kapitalisasi segmen terakhir.
+//
+// Halaman yang SENGAJA di luar menu (dicapai lewat menu avatar / CTA /
+// deep-link) tidak punya item nav, jadi fallback-nya menghasilkan judul
+// Inggris atau ber-tanda-hubung ("Profile", "Upgrade-lms"). Untuk itu saja
+// ada override di bawah — bukan pengganti PAGE_TITLES lama yang meng-hardcode
+// SEMUA rute. Jangan tambah entri di sini untuk halaman yang seharusnya
+// memang muncul di sidebar; daftarkan di NAV_GROUPS.
+const NAV_TITLE_OVERRIDES: Record<string, string> = {
+  '/profile': 'Profil Saya',
+  '/upgrade': 'Upgrade Paket',
+  '/upgrade-lms': 'Upgrade LMS',
+}
+
+export function getNavTitle(pathname: string | null): string {
+  if (!pathname) return 'Dashboard'
+  const allItems: NavItem[] = [
+    USER_NAV_HOME,
+    ADMIN_NAV_HOME,
+    ...USER_NAV_GROUPS.flatMap((g) => g.items),
+    ...ADMIN_NAV_GROUPS.flatMap((g) => g.items),
+  ]
+  let best: NavItem | null = null
+  for (const item of allItems) {
+    const match = pathname === item.href || pathname.startsWith(item.href + '/')
+    if (match && (!best || item.href.length > best.href.length)) {
+      best = item
+    }
+  }
+  if (best) return best.label
+  const override = NAV_TITLE_OVERRIDES[pathname]
+  if (override) return override
+  const seg = pathname.split('/').filter(Boolean).pop() ?? 'Dashboard'
+  return seg.charAt(0).toUpperCase() + seg.slice(1)
+}
+
+export function filterGroupsByRole(groups: NavGroup[], role: Role): NavGroup[] {
   return groups
     .map((g) => ({
       ...g,
@@ -460,7 +502,16 @@ export function filterGroupsByOrderSystem(
   groups: NavGroup[],
   hasOrderSystemAccess: boolean,
 ): NavGroup[] {
-  return groups.filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
+  return groups
+    .filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
+    .map((g) => {
+      // Gating per-ITEM: buang item POWER dari grup non-POWER (mis. Pixel &
+      // Auto Confirm di grup INTEGRASI). Grup yang seluruhnya POWER sudah
+      // lolos filter di atas, jadi item-nya dibiarkan.
+      if (hasOrderSystemAccess || !g.items.some((i) => i.requiresOrderSystem)) return g
+      return { ...g, items: g.items.filter((i) => !i.requiresOrderSystem) }
+    })
+    .filter((g) => g.items.length > 0)
 }
 
 // ─── ONBOARDING GOAL FILTER ───────────────────────────────────────────
@@ -475,7 +526,7 @@ export type OnboardingGoal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
 // di-update di mapping ini juga.
 const HIDDEN_GROUPS_BY_GOAL: Record<OnboardingGoal, string[]> = {
   // CS AI saja → tidak butuh jualan / course / integrasi pixel.
-  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS', 'INTEGRASI'],
+  CS_AI: ['ORDER SYSTEM', 'LANDING PAGE', 'LMS'],
   // Jualan + LP → tidak butuh LMS.
   SELL_LP: ['LMS'],
   // Jualan WA only → tidak butuh LP & LMS. Content Studio (di group LP)

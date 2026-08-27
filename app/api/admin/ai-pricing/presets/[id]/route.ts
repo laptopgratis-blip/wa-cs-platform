@@ -13,8 +13,9 @@ interface Params {
 
 const updateSchema = z.object({
   displayName: z.string().min(1).max(200).optional(),
-  inputPricePer1M: z.number().nonnegative().max(10_000).optional(),
-  outputPricePer1M: z.number().nonnegative().max(10_000).optional(),
+  // Cap 1M: model media pakai konvensi "USD/unit × 1_000_000" (mis. Kling 100_000).
+  inputPricePer1M: z.number().nonnegative().max(1_000_000).optional(),
+  outputPricePer1M: z.number().nonnegative().max(1_000_000).optional(),
   contextWindow: z.number().int().positive().nullable().optional(),
   notes: z.string().max(500).nullable().optional(),
   isAvailable: z.boolean().optional(),

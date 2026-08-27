@@ -7,18 +7,25 @@
 //   3. Klik "Buka 12 sisa" → kalau saldo cukup, POST /unlock; kalau kurang,
 //      redirect ke /billing dengan ?from=post-publish&lpId=X.
 //   4. Setelah unlock sukses, refresh state.
-import { CheckCircle2, Copy, Loader2, Lock, Send, Share2, Sparkles } from 'lucide-react'
+import {
+  CheckCircle2,
+  Copy,
+  Loader2,
+  Lock,
+  Send,
+  Share2,
+  Sparkles,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { PageContainer } from '@/components/shared/PageContainer'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { StatusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface PieceBody {
@@ -59,10 +66,11 @@ interface Props {
   initialBalance: number
 }
 
-const FUNNEL_BADGE: Record<string, { label: string; cls: string }> = {
-  TOFU: { label: 'Awareness', cls: 'bg-blue-100 text-blue-700' },
-  MOFU: { label: 'Consideration', cls: 'bg-amber-100 text-amber-700' },
-  BOFU: { label: 'Closing', cls: 'bg-emerald-100 text-emerald-700' },
+// Label lokal (istilah funnel versi post-publish) + tone dari registry.
+const FUNNEL_BADGE: Record<string, StatusMeta> = {
+  TOFU: { label: 'Awareness', tone: 'info' },
+  MOFU: { label: 'Consideration', tone: 'warning' },
+  BOFU: { label: 'Closing', tone: 'success' },
 }
 
 function formatStatusText(piece: Piece, lpUrl: string): string {
@@ -209,35 +217,37 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
 
   const samplesReady = state.pieces.filter((p) => !p.isPaid)
   const unlockedPieces = state.pieces.filter((p) => p.isPaid)
-  const lockedCount = Math.max(
-    0,
-    state.totalExpected - state.totalGenerated,
-  )
+  const lockedCount = Math.max(0, state.totalExpected - state.totalGenerated)
 
   return (
-    <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="default">
       {/* Header hero */}
-      <Card className="overflow-hidden rounded-2xl border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-50">
+      <Card className={cn('overflow-hidden', TONES.success.bg)}>
         <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
             <div className="mb-1 flex items-center gap-2">
-              <CheckCircle2 className="size-5 text-emerald-600" />
-              <span className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
+              <CheckCircle2 className={cn('size-5', TONES.success.text)} />
+              <span
+                className={cn(
+                  'text-sm font-semibold tracking-wider uppercase',
+                  TONES.success.text,
+                )}
+              >
                 LP Live & Siap Jualan
               </span>
             </div>
-            <h1 className="font-display text-2xl font-extrabold text-warm-900 md:text-3xl">
+            <h1 className="font-display text-warm-900 text-2xl font-bold tracking-tight md:text-3xl">
               {lp.title}
             </h1>
             <Link
               href={lpUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-sm font-mono text-warm-600 hover:text-primary-600"
+              className="text-warm-600 hover:text-primary-600 mt-1 inline-flex items-center gap-1 font-mono text-sm"
             >
               {lpUrl} ↗
             </Link>
-            <p className="mt-3 max-w-xl text-sm text-warm-600">
+            <p className="text-warm-600 mt-3 max-w-xl text-sm">
               Tinggal datengin pembeli. Saya buatkan{' '}
               <strong>15 status WhatsApp siap pakai</strong> dari LP kamu —
               tinggal salin, buka WA, posting di Status. Pengunjung tahu produk
@@ -245,11 +255,7 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
             </p>
           </div>
           <div className="flex flex-col gap-2 md:w-52">
-            <Button
-              onClick={shareLpToWa}
-              size="lg"
-              className="rounded-full bg-emerald-500 font-semibold text-white shadow-md hover:bg-emerald-600"
-            >
+            <Button onClick={shareLpToWa} size="lg" variant="outline">
               <Share2 className="mr-2 size-4" />
               Bagikan LP ke WA
             </Button>
@@ -257,7 +263,7 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
               href={lpUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-full border border-warm-300 bg-card px-4 py-2 text-center text-xs font-semibold text-warm-700 hover:bg-warm-50"
+              className="border-warm-300 bg-card text-warm-700 hover:bg-warm-50 rounded-lg border px-4 py-2 text-center text-xs font-semibold"
             >
               Lihat LP →
             </Link>
@@ -266,60 +272,60 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
       </Card>
 
       {/* Progress + unlock CTA */}
-      <div className="rounded-xl border border-warm-200 bg-card p-4">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="font-display text-lg font-bold text-warm-900">
-              {state.totalGenerated} dari {state.totalExpected} status siap
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="font-display text-warm-900 text-lg font-semibold">
+                {state.totalGenerated} dari {state.totalExpected} status siap
+              </div>
+              <p className="text-warm-500 text-xs">
+                {state.totalGenerated < 3 &&
+                  'Lagi disiapkan… (~30 detik untuk 3 sample)'}
+                {state.totalGenerated >= 3 &&
+                  state.totalGenerated < 15 &&
+                  `${samplesReady.length} sample gratis dari Hulao. ${lockedCount} sisa terkunci.`}
+                {state.totalGenerated >= 15 &&
+                  'Semua status sudah siap. Tinggal posting harian.'}
+              </p>
             </div>
-            <p className="text-xs text-warm-500">
-              {state.totalGenerated < 3 && 'Lagi disiapkan… (~30 detik untuk 3 sample)'}
-              {state.totalGenerated >= 3 && state.totalGenerated < 15 &&
-                `${samplesReady.length} sample gratis dari Hulao. ${lockedCount} sisa terkunci.`}
-              {state.totalGenerated >= 15 && 'Semua status sudah siap. Tinggal posting harian.'}
-            </p>
+            {state.totalGenerated >= 3 && state.totalGenerated < 15 && (
+              <Button onClick={handleUnlock} disabled={unlocking} size="lg">
+                {unlocking ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Membuka {lockedCount} sisa…
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 size-4" />
+                    Buka {lockedCount} status sisa
+                  </>
+                )}
+              </Button>
+            )}
           </div>
-          {state.totalGenerated >= 3 && state.totalGenerated < 15 && (
-            <Button
-              onClick={handleUnlock}
-              disabled={unlocking}
-              size="lg"
-              className="rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
-            >
-              {unlocking ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  Membuka {lockedCount} sisa…
-                </>
-              ) : (
-                <>
-                  <Lock className="mr-2 size-4" />
-                  Buka {lockedCount} status sisa
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-        {/* Progress bar */}
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-warm-100">
-          <div
-            className="h-full bg-gradient-to-r from-emerald-400 to-primary-500 transition-all duration-500"
-            style={{
-              width: `${Math.min(100, (state.totalGenerated / state.totalExpected) * 100)}%`,
-            }}
-          />
-        </div>
-      </div>
+          {/* Progress bar */}
+          <div className="bg-warm-100 mt-3 h-2 overflow-hidden rounded-full">
+            <div
+              className="from-primary-400 to-primary-600 h-full bg-linear-to-r transition-all duration-500"
+              style={{
+                width: `${Math.min(100, (state.totalGenerated / state.totalExpected) * 100)}%`,
+              }}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Loading state untuk 3 sample */}
       {generatingSamples && state.totalGenerated === 0 && (
-        <Card className="rounded-xl border-warm-200">
+        <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12">
-            <Loader2 className="size-8 animate-spin text-primary-500" />
-            <p className="text-sm font-medium text-warm-700">
+            <Loader2 className="text-primary-500 size-8 animate-spin" />
+            <p className="text-warm-700 text-sm font-medium">
               AI lagi nulis 3 sample status WA dari LP kamu…
             </p>
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Ini gratis dari Hulao. ~30 detik.
             </p>
           </CardContent>
@@ -351,21 +357,23 @@ export function PostPublishClient({ lp, initialState, initialBalance }: Props) {
       )}
 
       {/* Footer tips */}
-      <div className="rounded-xl border border-warm-200 bg-warm-50/40 p-4">
-        <div className="flex items-start gap-2.5">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-primary-500" />
-          <div className="text-sm text-warm-700">
-            <p className="font-semibold">Tips bikin status convert:</p>
-            <ul className="mt-1.5 space-y-1 text-xs text-warm-600">
-              <li>· Posting 2-3 status sehari, bukan sekaligus 15</li>
-              <li>· Pilih jam sibuk WA: 07-09, 12-13, 19-22</li>
-              <li>· Selingi dengan foto produk, jangan teks doang</li>
-              <li>· Setelah ada chat masuk → balas cepat (max 5 menit)</li>
-            </ul>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-start gap-2.5">
+            <Sparkles className="text-primary-500 mt-0.5 size-4 shrink-0" />
+            <div className="text-warm-700 text-sm">
+              <p className="font-semibold">Tips bikin status convert:</p>
+              <ul className="text-warm-600 mt-1.5 space-y-1 text-xs">
+                <li>· Posting 2-3 status sehari, bukan sekaligus 15</li>
+                <li>· Pilih jam sibuk WA: 07-09, 12-13, 19-22</li>
+                <li>· Selingi dengan foto produk, jangan teks doang</li>
+                <li>· Setelah ada chat masuk → balas cepat (max 5 menit)</li>
+              </ul>
+            </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </CardContent>
+      </Card>
+    </PageContainer>
   )
 }
 
@@ -382,52 +390,40 @@ function StatusCard({
 }) {
   const badge = FUNNEL_BADGE[piece.funnelStage] ?? FUNNEL_BADGE.TOFU
   return (
-    <Card
-      className={cn(
-        'flex flex-col overflow-hidden rounded-xl border-warm-200 transition-shadow hover:shadow-md',
-      )}
-    >
+    <Card className="flex flex-col overflow-hidden">
       <CardHeader className="flex flex-row items-start justify-between gap-2 pb-3">
         <div className="flex items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-100 font-mono text-xs font-bold text-primary-700">
+          <span className="bg-primary-100 text-primary-700 flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold">
             {index + 1}
           </span>
-          <CardTitle className="text-sm font-semibold text-warm-900 line-clamp-1">
+          <CardTitle className="text-warm-900 line-clamp-1 text-sm font-semibold">
             {piece.title}
           </CardTitle>
         </div>
-        <span
-          className={cn(
-            'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider',
-            badge.cls,
-          )}
-        >
-          {badge.label}
-        </span>
+        <StatusBadge
+          tone={badge.tone}
+          label={badge.label}
+          className="shrink-0"
+        />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
-        <div className="rounded-lg border border-warm-200 bg-warm-50/40 p-3 text-sm">
+        <div className="border-warm-200 bg-warm-50/40 rounded-lg border p-3 text-sm">
           {piece.bodyJson.hook && (
-            <p className="font-semibold text-warm-900">{piece.bodyJson.hook}</p>
+            <p className="text-warm-900 font-semibold">{piece.bodyJson.hook}</p>
           )}
           {piece.bodyJson.body && (
-            <p className="mt-2 whitespace-pre-line text-warm-700">
+            <p className="text-warm-700 mt-2 whitespace-pre-line">
               {piece.bodyJson.body}
             </p>
           )}
           {piece.bodyJson.cta && (
-            <p className="mt-2 text-warm-600 italic">{piece.bodyJson.cta}</p>
+            <p className="text-warm-600 mt-2 italic">{piece.bodyJson.cta}</p>
           )}
         </div>
         <Button
           onClick={onCopy}
           size="sm"
-          className={cn(
-            'mt-auto w-full rounded-full font-semibold transition-colors',
-            copied
-              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-              : 'bg-primary-500 text-white hover:bg-primary-600',
-          )}
+          className={cn('mt-auto w-full', copied && TONES.success.solid)}
         >
           {copied ? (
             <>
@@ -446,9 +442,16 @@ function StatusCard({
   )
 }
 
-function LockedCard({ index, onClick }: { index: number; onClick: () => void }) {
+function LockedCard({
+  index,
+  onClick,
+}: {
+  index: number
+  onClick: () => void
+}) {
   return (
-    <Card className="relative flex cursor-pointer flex-col overflow-hidden rounded-xl border-2 border-dashed border-warm-300 bg-warm-50/40 transition-all hover:border-primary-300 hover:bg-warm-50/60"
+    <Card
+      className="bg-warm-50/40 hover:bg-warm-50/60 relative flex cursor-pointer flex-col overflow-hidden transition-all"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -456,23 +459,23 @@ function LockedCard({ index, onClick }: { index: number; onClick: () => void }) 
     >
       <CardHeader className="flex flex-row items-start justify-between gap-2 pb-3">
         <div className="flex items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-warm-200 font-mono text-xs font-bold text-warm-600">
+          <span className="bg-warm-200 text-warm-600 flex size-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold">
             {index + 1}
           </span>
-          <CardTitle className="text-sm font-semibold text-warm-500">
+          <CardTitle className="text-warm-500 text-sm font-semibold">
             Status #{index + 1}
           </CardTitle>
         </div>
-        <Lock className="size-4 text-warm-400" />
+        <Lock className="text-warm-400 size-4" />
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-warm-300 bg-card/60 p-4 text-center">
+        <div className="border-warm-300 bg-card/60 flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center">
           <div className="space-y-1.5">
-            <div className="mx-auto h-3 w-32 rounded bg-warm-200/70" />
-            <div className="mx-auto h-2.5 w-40 rounded bg-warm-200/60" />
-            <div className="mx-auto h-2.5 w-28 rounded bg-warm-200/60" />
+            <div className="bg-warm-200/70 mx-auto h-3 w-32 rounded" />
+            <div className="bg-warm-200/60 mx-auto h-2.5 w-40 rounded" />
+            <div className="bg-warm-200/60 mx-auto h-2.5 w-28 rounded" />
           </div>
-          <p className="mt-2 text-[11px] text-warm-500">Klik untuk buka</p>
+          <p className="text-warm-500 mt-2 text-xs">Klik untuk buka</p>
         </div>
       </CardContent>
     </Card>

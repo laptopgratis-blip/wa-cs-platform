@@ -27,6 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 const MIN_HTML_LENGTH = 100
 
@@ -106,7 +108,13 @@ export function PublishDialog({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2.5 text-xl">
-              <span className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <span
+                className={cn(
+                  'flex size-9 items-center justify-center rounded-full',
+                  TONES.success.bg,
+                  TONES.success.text,
+                )}
+              >
                 <Check className="size-5" strokeWidth={3} />
               </span>
               <span>Selamat! LP Kamu Live</span>
@@ -119,18 +127,18 @@ export function PublishDialog({
 
           <div className="space-y-3">
             {/* URL public */}
-            <div className="rounded-lg border border-warm-200 bg-warm-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
+            <div className="border-warm-200 bg-warm-50 rounded-lg border p-3">
+              <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
                 URL Public
               </div>
-              <div className="mt-1 break-all font-mono text-sm font-semibold text-warm-900">
+              <div className="text-warm-900 mt-1 font-mono text-sm font-semibold break-all">
                 {fullUrl}
               </div>
               <div className="mt-2 flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-8 text-xs"
+                  className="h-8 flex-1 text-xs"
                   onClick={copyUrl}
                 >
                   <Copy className="mr-1.5 size-3.5" />
@@ -140,7 +148,7 @@ export function PublishDialog({
                   asChild
                   variant="outline"
                   size="sm"
-                  className="flex-1 h-8 text-xs"
+                  className="h-8 flex-1 text-xs"
                 >
                   <a href={fullUrl} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="mr-1.5 size-3.5" />
@@ -151,30 +159,32 @@ export function PublishDialog({
             </div>
 
             {/* CTA utama: topup token → otomatis dibawa ke generator setelah berhasil */}
-            <div className="overflow-hidden rounded-xl border-2 border-primary-300 bg-gradient-to-br from-primary-50 via-white to-amber-50 p-4">
+            <div className="border-primary-200 bg-primary-50 overflow-hidden rounded-xl border p-4">
               <div className="flex items-start gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-500 text-white shadow-orange">
+                <span className="bg-primary-500 flex size-10 shrink-0 items-center justify-center rounded-full text-white">
                   <Sparkles className="size-5" />
                 </span>
                 <div className="flex-1">
-                  <div className="font-display text-base font-bold text-warm-900">
+                  <div className="font-display text-warm-900 text-base font-semibold">
                     Mau saya bantu datengin pembeli?
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-warm-700">
+                  <p className="text-warm-700 mt-1 text-xs leading-relaxed">
                     Saya buatkan <strong>15 status WhatsApp siap pakai</strong>{' '}
                     dari LP kamu — tinggal salin, posting Status, chat masuk
                     dalam hitungan jam. Butuh saldo token dulu.
                   </p>
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <div
+                    className={cn(
+                      'mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold',
+                      TONES.success.bg,
+                      TONES.success.text,
+                    )}
+                  >
                     Setelah top-up berhasil, kamu langsung dibawa ke generator
                   </div>
                 </div>
               </div>
-              <Button
-                asChild
-                size="lg"
-                className="mt-3 w-full rounded-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
-              >
+              <Button asChild size="lg" className="mt-3 w-full font-semibold">
                 <Link
                   href={`/billing?from=post-publish&lpId=${lpId}`}
                   onClick={handleClose}
@@ -187,7 +197,7 @@ export function PublishDialog({
                 asChild
                 variant="ghost"
                 size="sm"
-                className="mt-1.5 w-full text-xs text-warm-600 hover:text-primary-700"
+                className="text-warm-600 hover:text-primary-700 mt-1.5 w-full text-xs"
               >
                 <Link
                   href={`/content/post-publish/${lpId}`}
@@ -217,12 +227,12 @@ export function PublishDialog({
           <DialogTitle className="flex items-center gap-2">
             {mode === 'publish' ? (
               <>
-                <Globe className="size-5 text-emerald-600" />
+                <Globe className={cn('size-5', TONES.success.text)} />
                 Publish Landing Page?
               </>
             ) : (
               <>
-                <PackageOpen className="size-5 text-warm-600" />
+                <PackageOpen className="text-warm-600 size-5" />
                 Unpublish Landing Page?
               </>
             )}
@@ -235,24 +245,34 @@ export function PublishDialog({
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="rounded-lg border border-warm-200 bg-warm-50 p-3">
-            <div className="text-xs font-medium uppercase tracking-wider text-warm-500">
+          <div className="border-warm-200 bg-warm-50 rounded-lg border p-3">
+            <div className="text-warm-500 text-xs font-medium tracking-wider uppercase">
               URL
             </div>
-            <div className="mt-1 break-all font-mono text-sm text-warm-900">
+            <div className="text-warm-900 mt-1 font-mono text-sm break-all">
               {fullUrl}
             </div>
           </div>
 
           {validationError ? (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <div className="border-destructive/30 bg-destructive/5 text-destructive flex items-start gap-2 rounded-md border p-3 text-sm">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               <div>{validationError}</div>
             </div>
           ) : mode === 'publish' ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-              ✓ HTML konten cukup ({htmlLength.toLocaleString('id-ID')}{' '}
-              karakter) — siap untuk dipublish.
+            <div
+              className={cn(
+                'flex items-start gap-2 rounded-md border p-3 text-sm',
+                TONES.success.bg,
+                TONES.success.border,
+                TONES.success.text,
+              )}
+            >
+              <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <div>
+                HTML konten cukup ({htmlLength.toLocaleString('id-ID')}{' '}
+                karakter) — siap untuk dipublish.
+              </div>
             </div>
           ) : null}
         </div>
@@ -264,11 +284,7 @@ export function PublishDialog({
           <Button
             onClick={handleConfirm}
             disabled={isWorking || Boolean(validationError)}
-            className={
-              mode === 'publish'
-                ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-warm-700 text-white hover:bg-warm-800'
-            }
+            variant={mode === 'publish' ? 'default' : 'secondary'}
           >
             {isWorking && <Loader2 className="mr-2 size-4 animate-spin" />}
             {mode === 'publish' ? 'Ya, Publish Sekarang' : 'Ya, Unpublish'}

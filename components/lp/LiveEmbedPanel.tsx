@@ -6,6 +6,7 @@
 // (hulao-live-embed.js) mengganti marker dengan iframe room saat LP dipublish.
 // Pengaturan lanjutan (gate form, ukuran, floating) ada di halaman config lama.
 import {
+  Check,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -16,12 +17,15 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   hasLiveEmbedMarker,
   insertLiveEmbedMarker,
   removeLiveEmbedMarker,
 } from '@/lib/lp/html-mutation'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface RoomOption {
   id: string
@@ -73,7 +77,9 @@ export function LiveEmbedPanel({
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/lp/${lpId}/live-embed`, { cache: 'no-store' })
+      const res = await fetch(`/api/lp/${lpId}/live-embed`, {
+        cache: 'no-store',
+      })
       const json = (await res.json()) as {
         success?: boolean
         data?: {
@@ -89,7 +95,10 @@ export function LiveEmbedPanel({
       const rs = (payload.availableRooms ?? []).filter((r) => r.isActive)
       setRooms(rs)
       const e = payload.embed
-        ? { liveRoomId: payload.embed.liveRoomId, isActive: payload.embed.isActive }
+        ? {
+            liveRoomId: payload.embed.liveRoomId,
+            isActive: payload.embed.isActive,
+          }
         : null
       setEmbed(e)
       setEmbedFull((payload.embed as EmbedConfig | null) ?? null)
@@ -179,51 +188,47 @@ export function LiveEmbedPanel({
   const currentRoom = rooms.find((r) => r.id === embed?.liveRoomId)
 
   return (
-    <div className="border-b border-warm-200 bg-card">
+    <div className="border-warm-200 bg-card border-b">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-warm-50"
+        className="hover:bg-warm-50 flex w-full items-center justify-between px-4 py-2 text-left"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
-          <Video className="size-4 text-primary-500" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Video className="text-primary-500 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Embed Live Room
           </span>
-          {active ? (
-            <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-700">
-              Aktif
-            </span>
-          ) : null}
+          {active ? <StatusBadge tone="success" label="Aktif" /> : null}
         </div>
         {open ? (
-          <ChevronUp className="size-4 text-warm-500" />
+          <ChevronUp className="text-warm-500 size-4" />
         ) : (
-          <ChevronDown className="size-4 text-warm-500" />
+          <ChevronDown className="text-warm-500 size-4" />
         )}
       </button>
 
       {open && (
-        <div className="space-y-3 px-4 pb-3 pt-1">
+        <div className="space-y-3 px-4 pt-1 pb-3">
           {loading ? (
-            <div className="flex items-center gap-2 py-3 text-xs text-warm-500">
+            <div className="text-warm-500 flex items-center gap-2 py-3 text-xs">
               <Loader2 className="size-4 animate-spin" /> Memuat Live Room…
             </div>
           ) : rooms.length === 0 ? (
-            <p className="rounded-md bg-warm-50 px-3 py-2 text-[11px] leading-relaxed text-warm-600">
+            <p className="bg-warm-50 text-warm-600 rounded-md px-3 py-2 text-xs leading-relaxed">
               Belum ada Live Room aktif.{' '}
               <a
                 href="/live-rooms/new"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold text-primary-600 underline"
+                className="text-primary-600 font-semibold underline"
               >
                 Buat Live Room dulu →
               </a>
             </p>
           ) : (
             <>
-              <p className="text-[11px] leading-relaxed text-warm-600">
+              <p className="text-warm-600 text-xs leading-relaxed">
                 Pilih host/room yang mau tampil. Embed disisipkan{' '}
                 <span className="font-semibold">tepat di bawah headline</span>{' '}
                 halaman.
@@ -244,16 +249,21 @@ export function LiveEmbedPanel({
                       <input
                         type="radio"
                         name="live-embed-room"
-                        className="size-4 accent-primary-500"
+                        className="accent-primary-500 size-4"
                         checked={checked}
                         onChange={() => setSelectedRoomId(r.id)}
                       />
-                      <Video className="size-4 flex-shrink-0 text-warm-400" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-warm-800">
+                      <Video className="text-warm-400 size-4 flex-shrink-0" />
+                      <span className="text-warm-800 min-w-0 flex-1 truncate text-sm">
                         {r.name}
                       </span>
                       {embed?.liveRoomId === r.id && active ? (
-                        <span className="flex-shrink-0 text-[10px] font-semibold text-emerald-600">
+                        <span
+                          className={cn(
+                            'flex-shrink-0 text-xs font-semibold',
+                            TONES.success.text,
+                          )}
+                        >
                           terpasang
                         </span>
                       ) : null}
@@ -268,7 +278,7 @@ export function LiveEmbedPanel({
                   type="button"
                   onClick={handleInsert}
                   disabled={saving || !selectedRoomId}
-                  className="bg-primary-500 text-xs text-white hover:bg-primary-600"
+                  className="text-xs"
                 >
                   {saving ? (
                     <Loader2 className="mr-1 size-3.5 animate-spin" />
@@ -284,7 +294,7 @@ export function LiveEmbedPanel({
                     variant="outline"
                     onClick={handleRemove}
                     disabled={saving}
-                    className="text-xs text-red-600 hover:bg-red-50"
+                    className="text-destructive hover:bg-destructive/10 text-xs"
                   >
                     <Trash2 className="mr-1 size-3.5" /> Hapus dari halaman
                   </Button>
@@ -292,15 +302,22 @@ export function LiveEmbedPanel({
               </div>
 
               {active && currentRoom ? (
-                <p className="rounded-md bg-emerald-50 px-3 py-2 text-[10px] leading-relaxed text-emerald-700">
-                  ✓ <strong>{currentRoom.name}</strong> tampil di bawah headline.
-                  Penanda 📺 di preview hanya petunjuk posisi — room asli muncul
-                  saat LP dipublish.
+                <p
+                  className={cn(
+                    'rounded-md px-3 py-2 text-xs leading-relaxed',
+                    TONES.success.bg,
+                    TONES.success.text,
+                  )}
+                >
+                  <Check className="mr-1 inline size-3" aria-hidden />
+                  <strong>{currentRoom.name}</strong> tampil di bawah headline.
+                  Penanda LIVE ROOM di preview hanya petunjuk posisi — room
+                  asli muncul saat LP dipublish.
                 </p>
               ) : (
-                <p className="text-[10px] leading-relaxed text-warm-500">
+                <p className="text-warm-500 text-xs leading-relaxed">
                   Embed tampil saat LP <strong>dipublish</strong>. Di editor ini
-                  hanya muncul penanda posisi (📺).
+                  hanya muncul penanda posisi bertuliskan LIVE ROOM.
                 </p>
               )}
 
@@ -308,7 +325,7 @@ export function LiveEmbedPanel({
                 href={`/landing-pages/${lpId}/live-embed`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary-600 hover:underline"
+                className="text-primary-600 inline-flex items-center gap-1 text-xs font-medium hover:underline"
               >
                 Pengaturan lanjutan (gate form, ukuran, floating)
                 <ExternalLink className="size-3" />

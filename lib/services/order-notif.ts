@@ -5,7 +5,8 @@
 //   - Kirim ke shippingProfile.waConfirmNumber via waService.sendMessage
 //   - Kalau tidak ada WA session aktif / waConfirm not setup → silent skip
 import { prisma } from '@/lib/prisma'
-import { waService } from '@/lib/wa-service'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
+import { listSenderCandidates } from '@/lib/wa-session'
 
 interface OrderNotifData {
   invoiceNumber: string
@@ -21,12 +22,9 @@ function formatRp(n: number): string {
   return n.toLocaleString('id-ID')
 }
 
-async function getActiveSession(userId: string) {
-  return prisma.whatsappSession.findFirst({
-    where: { userId, status: 'CONNECTED', isActive: true },
-    select: { id: true },
-    orderBy: { updatedAt: 'desc' },
-  })
+async function getStoreName(userId: string): Promise<string> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } })
+  return u?.name ?? 'Toko Kami'
 }
 
 async function getNotifTarget(userId: string) {
@@ -71,8 +69,8 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
 
     const target = await getNotifTarget(order.userId)
     if (!target) return
-    const session = await getActiveSession(order.userId)
-    if (!session) return
+    const candidates = await listSenderCandidates({ userId: order.userId, preferContactPhone: target })
+    if (candidates.length === 0) return
 
     // Klaim atomik anti dobel-kirim (submit-path & cron bisa overlap).
     const claimed = await prisma.userOrder.updateMany({
@@ -117,7 +115,18 @@ export async function notifyNewOrder(orderId: string): Promise<void> {
       .filter(Boolean)
       .join('\n')
 
-    const sendResult = await waService.sendMessage(session.id, target, message)
+    const storeName = await getStoreName(order.userId)
+    const sendResult = await smartSend({
+      candidates,
+      to: target,
+      text: message,
+      template: {
+        purposeKey: 'INFO_GENERIC',
+        params: { body: [storeName, storeName, `order baru ${data.invoiceNumber} dari ${data.customerName}, total Rp ${formatRp(data.totalRp)}`] },
+      },
+      purpose: 'NOTIF',
+      source: 'SYSTEM',
+    })
     if (!sendResult.success) {
       // Lepas klaim supaya disweep ulang cron followup-send.
       await prisma.userOrder.updateMany({
@@ -157,8 +166,8 @@ export async function notifyProofUploaded(orderId: string): Promise<void> {
 
     const target = await getNotifTarget(order.userId)
     if (!target) return
-    const session = await getActiveSession(order.userId)
-    if (!session) return
+    const candidates = await listSenderCandidates({ userId: order.userId, preferContactPhone: target })
+    if (candidates.length === 0) return
 
     const message = [
       '💳 *Bukti Transfer Diterima*',
@@ -175,7 +184,18 @@ export async function notifyProofUploaded(orderId: string): Promise<void> {
       .filter(Boolean)
       .join('\n')
 
-    await waService.sendMessage(session.id, target, message)
+    const storeName = await getStoreName(order.userId)
+    await smartSend({
+      candidates,
+      to: target,
+      text: message,
+      template: {
+        purposeKey: 'INFO_GENERIC',
+        params: { body: [storeName, storeName, `bukti transfer order ${order.invoiceNumber} dari ${order.customerName} sudah masuk — mohon dicek`] },
+      },
+      purpose: 'NOTIF',
+      source: 'SYSTEM',
+    })
   } catch (err) {
     console.error('[notifyProofUploaded] gagal kirim WA:', err)
   }

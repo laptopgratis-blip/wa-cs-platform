@@ -1,5 +1,7 @@
 // Tipe shared untuk komponen broadcast.
-import type { BroadcastStatus, PipelineStage } from '@prisma/client'
+import type { BroadcastStatus, PipelineStage, WaProvider } from '@prisma/client'
+
+export type BroadcastCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
 
 export interface BroadcastListItem {
   id: string
@@ -15,7 +17,22 @@ export interface BroadcastListItem {
   totalSent: number
   totalFailed: number
   createdAt: string
-  waSession: { id: string; displayName: string | null; phoneNumber: string | null } | null
+  // Cloud API (Trek 2B)
+  provider: WaProvider
+  category: BroadcastCategory | null
+  estimatedCreditRp: number
+  chargedCreditRp: number
+  totalDelivered: number
+  totalRead: number
+  totalSkipped: number
+  pausedReason: string | null
+  template: { id: string; name: string; category: BroadcastCategory; status: string } | null
+  waSession: {
+    id: string
+    displayName: string | null
+    phoneNumber: string | null
+    provider?: WaProvider
+  } | null
 }
 
 export interface SessionOption {
@@ -23,4 +40,6 @@ export interface SessionOption {
   displayName: string | null
   phoneNumber: string | null
   status: string
+  provider: WaProvider
+  wabaId: string | null
 }

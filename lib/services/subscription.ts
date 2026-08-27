@@ -20,7 +20,8 @@ import type {
 
 import { TIER_ENTITLEMENTS } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
-import { waService } from '@/lib/wa-service'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
+import { listSenderCandidates } from '@/lib/wa-session'
 
 // Subset Prisma client kompatibel dengan global `prisma` & `tx` dari
 // $transaction(callback). Dipakai untuk fungsi yang opsional bisa dipanggil
@@ -218,18 +219,11 @@ function addMonths(from: Date, months: number): Date {
   return d
 }
 
-// Cari session WA ADMIN yg currently CONNECTED. Return null kalau tidak ada
-// (cron akan skip WA notification, tetap kirim IN_APP).
-async function findAdminWaSessionId(): Promise<string | null> {
-  const session = await prisma.whatsappSession.findFirst({
-    where: {
-      status: 'CONNECTED',
-      user: { role: 'ADMIN' },
-    },
-    select: { id: true },
-    orderBy: { updatedAt: 'desc' },
-  })
-  return session?.id ?? null
+// Kandidat sesi WA ADMIN yg currently CONNECTED — provider-aware (Trek 2B):
+// smartSend memilih free-text (Baileys / Cloud dalam window) atau template
+// INFO_GENERIC (Cloud di luar window). Kosong → cron skip WA, tetap IN_APP.
+async function findAdminWaCandidates() {
+  return listSenderCandidates({ adminSessions: true })
 }
 
 // Cari nomor WA user dari WhatsappSession-nya yg aktif. Return null kalau
@@ -280,13 +274,27 @@ export async function sendWaNotificationToUser(
   userId: string,
   input: { title: string; message: string; subscriptionId?: string | null },
 ): Promise<boolean> {
-  const adminSessionId = await findAdminWaSessionId()
-  if (!adminSessionId) return false
+  const candidates = await findAdminWaCandidates()
+  if (candidates.length === 0) return false
   const userPhone = await findUserWaPhone(userId)
   if (!userPhone) return false
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true },
+  })
   const text = `*${input.title}*\n\n${input.message}\n\n_— Hulao_`
-  const send = await waService.sendMessage(adminSessionId, userPhone, text)
+  const send = await smartSend({
+    candidates,
+    to: userPhone,
+    text,
+    template: {
+      purposeKey: 'INFO_GENERIC',
+      params: { body: [user?.name || 'Kak', input.title, input.message] },
+    },
+    purpose: 'NOTIF',
+    source: 'SYSTEM',
+  })
   if (!send.success) {
     console.warn(
       `[subscription] WA notif gagal ke ${userId} (${userPhone}):`,
@@ -320,7 +328,13 @@ export async function sendWaNotificationToUser(
 async function activateSubscriptionCore(
   subscriptionId: string,
   db: Db,
-): Promise<{ ok: boolean; userId?: string; packageName?: string; endDate?: Date; durationMonths?: number }> {
+): Promise<{
+  ok: boolean
+  userId?: string
+  packageName?: string
+  endDate?: Date
+  durationMonths?: number
+}> {
   const sub = await db.subscription.findUnique({
     where: { id: subscriptionId },
     include: { user: true, lpPackage: true },
@@ -403,7 +417,7 @@ export async function activateSubscription(
     subscriptionId,
     type: 'PAYMENT_SUCCESS',
     channel: 'IN_APP',
-    title: '✅ Subscription Aktif!',
+    title: 'Subscription Aktif',
     message: `Plan ${result.packageName} (${result.durationMonths} bulan) sudah aktif sampai ${formatDateId(result.endDate)}.`,
     link: '/billing/subscription',
   })
@@ -561,7 +575,9 @@ export async function checkoutSubscriptionWithTokens(input: {
     throw new Error('Paket tidak ditemukan atau tidak aktif')
   }
   if (pkg.priceMonthly <= 0) {
-    throw new Error('Paket ini belum bisa di-subscribe (harga belum disetel admin)')
+    throw new Error(
+      'Paket ini belum bisa di-subscribe (harga belum disetel admin)',
+    )
   }
 
   // Pricing snapshot — pakai pricePerToken aktif saat checkout. Kalau setting
@@ -763,7 +779,7 @@ export async function checkoutSubscriptionWithTokens(input: {
     subscriptionId: result.subscriptionId,
     type: 'PAYMENT_SUCCESS',
     channel: 'IN_APP',
-    title: '✅ Subscription Aktif!',
+    title: 'Subscription Aktif',
     message: `Plan ${pkg.name} (${input.durationMonths} bulan) sudah aktif sampai ${formatDateId(endDate)}. Dipotong ${result.tokensDue.toLocaleString('id-ID')} token dari saldo${result.appliedCredit > 0 ? ` (sudah termasuk kredit upgrade ${result.appliedCredit.toLocaleString('id-ID')} token)` : ''}.`,
     link: '/billing/subscription',
   }).catch((err) => console.error('[subscription] notif gagal:', err))
@@ -797,7 +813,9 @@ export async function checkoutSubscriptionWithTokens(input: {
 // sini). Dipanggil cron daily /api/cron/subscription-expire.
 // ─────────────────────────────────────────────────────────────────────────
 
-export async function expireSubscription(subscriptionId: string): Promise<void> {
+export async function expireSubscription(
+  subscriptionId: string,
+): Promise<void> {
   const sub = await prisma.subscription.findUnique({
     where: { id: subscriptionId },
     include: { user: true, lpPackage: true },
@@ -907,7 +925,7 @@ export async function extendSubscription(
     subscriptionId,
     type: 'EXTENDED_BY_ADMIN',
     channel: 'IN_APP',
-    title: '🎁 Subscription Diperpanjang',
+    title: 'Subscription Diperpanjang',
     message: `Admin memperpanjang plan ${sub.lpPackage.name} sebanyak ${months} bulan. Sekarang aktif sampai ${formatDateId(newEndDate)}. Catatan: ${reason}`,
     link: '/billing/subscription',
   })
@@ -945,7 +963,7 @@ export async function cancelSubscription(
     subscriptionId,
     type: 'CANCELLED',
     channel: 'IN_APP',
-    title: '❎ Subscription Dibatalkan',
+    title: 'Subscription Dibatalkan',
     message: `Subscription kamu dibatalkan. Akses fitur premium tetap aktif sampai ${formatDateId(sub.endDate)}, setelah itu turun ke FREE plan.`,
     link: '/billing/subscription',
   })

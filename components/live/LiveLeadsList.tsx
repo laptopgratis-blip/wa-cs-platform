@@ -1,6 +1,17 @@
 'use client'
 
-import { ArrowLeft, CheckCircle2, ExternalLink, Loader2, MessageCircle, RefreshCw, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+  ThumbsDown,
+  ThumbsUp,
+  XCircle,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -8,16 +19,20 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { liveLeadStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Lead {
   id: string
   customerName: string
   customerPhone: string
   productInterest: string | null
-  status: 'NEW' | 'HANDOFF_SENT' | 'HANDOFF_FAILED' | 'CLOSED_WON' | 'CLOSED_LOST'
+  status:
+    'NEW' | 'HANDOFF_SENT' | 'HANDOFF_FAILED' | 'CLOSED_WON' | 'CLOSED_LOST'
   contactId: string | null
   handoffError: string | null
   createdAt: string
@@ -38,20 +53,13 @@ interface Response {
   leads: Lead[]
 }
 
-const STATUS_BADGE: Record<Lead['status'], { label: string; cls: string; icon: typeof CheckCircle2 }> = {
-  NEW: { label: 'Baru', cls: 'bg-sky-100 text-sky-700', icon: MessageCircle },
-  HANDOFF_SENT: {
-    label: 'Handoff WA ✓',
-    cls: 'bg-emerald-100 text-emerald-700',
-    icon: CheckCircle2,
-  },
-  HANDOFF_FAILED: {
-    label: 'Handoff WA gagal',
-    cls: 'bg-red-100 text-red-700',
-    icon: XCircle,
-  },
-  CLOSED_WON: { label: 'Closed Won', cls: 'bg-emerald-200 text-emerald-800', icon: CheckCircle2 },
-  CLOSED_LOST: { label: 'Closed Lost', cls: 'bg-warm-100 text-warm-600', icon: XCircle },
+// Ikon per status — label & tone-nya dari registry lib/status.ts.
+const STATUS_ICON: Record<Lead['status'], typeof CheckCircle2> = {
+  NEW: MessageCircle,
+  HANDOFF_SENT: CheckCircle2,
+  HANDOFF_FAILED: XCircle,
+  CLOSED_WON: CheckCircle2,
+  CLOSED_LOST: XCircle,
 }
 
 export function LiveLeadsList({ roomId }: { roomId: string }) {
@@ -74,7 +82,10 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
     void fetchData()
   }, [fetchData])
 
-  async function markOutcome(leadId: string, status: 'CLOSED_WON' | 'CLOSED_LOST') {
+  async function markOutcome(
+    leadId: string,
+    status: 'CLOSED_WON' | 'CLOSED_LOST',
+  ) {
     setMarking(leadId)
     try {
       const res = await fetch(`/api/live-rooms/${roomId}/leads/${leadId}`, {
@@ -84,7 +95,9 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
       })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (json.success) {
-        toast.success(status === 'CLOSED_WON' ? 'Mark sebagai Won' : 'Mark sebagai Lost')
+        toast.success(
+          status === 'CLOSED_WON' ? 'Mark sebagai Won' : 'Mark sebagai Lost',
+        )
         await fetchData()
       } else {
         toast.error(json.error ?? 'Gagal mark')
@@ -103,16 +116,25 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
       <div>
         <Link
           href="/live-rooms"
-          className="mb-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1 text-xs"
         >
-          <ArrowLeft className="h-3 w-3" /> Live Rooms
+          <ArrowLeft className="size-3" /> Live Rooms
         </Link>
         <PageHeader
           title={`Leads — ${data.room.name}`}
-          description={<span className="font-mono">/live/{data.room.slug}</span>}
+          description={
+            <span className="font-mono">/live/{data.room.slug}</span>
+          }
           actions={
-            <Button variant="outline" size="sm" onClick={() => void fetchData()} disabled={refreshing}>
-              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void fetchData()}
+              disabled={refreshing}
+            >
+              <RefreshCw
+                className={`mr-2 size-3.5 ${refreshing ? 'animate-spin' : ''}`}
+              />
               Refresh
             </Button>
           }
@@ -122,20 +144,30 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4">
-            <div className="text-xs uppercase text-muted-foreground">Sessions</div>
-            <div className="mt-1 text-2xl font-semibold">{data.stats.totalSessions}</div>
+            <div className="text-muted-foreground text-xs uppercase">
+              Sessions
+            </div>
+            <div className="mt-1 text-2xl font-semibold">
+              {data.stats.totalSessions}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-xs uppercase text-muted-foreground">Leads</div>
-            <div className="mt-1 text-2xl font-semibold">{data.stats.totalLeads}</div>
+            <div className="text-muted-foreground text-xs uppercase">Leads</div>
+            <div className="mt-1 text-2xl font-semibold">
+              {data.stats.totalLeads}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-xs uppercase text-muted-foreground">Conversion</div>
-            <div className="mt-1 text-2xl font-semibold">{data.stats.conversionRate}%</div>
+            <div className="text-muted-foreground text-xs uppercase">
+              Conversion
+            </div>
+            <div className="mt-1 text-2xl font-semibold">
+              {data.stats.conversionRate}%
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -153,8 +185,7 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
       ) : (
         <div className="space-y-2">
           {data.leads.map((l) => {
-            const badge = STATUS_BADGE[l.status]
-            const Icon = badge.icon
+            const badge = statusMeta(liveLeadStatusMeta, l.status)
             const date = new Date(l.createdAt).toLocaleString('id-ID', {
               dateStyle: 'short',
               timeStyle: 'short',
@@ -165,24 +196,38 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="truncate text-base font-medium">{l.customerName}</h3>
-                        <Badge className={badge.cls}>
-                          <Icon className="mr-1 h-3 w-3" />
-                          {badge.label}
-                        </Badge>
+                        <h3 className="truncate text-base font-medium">
+                          {l.customerName}
+                        </h3>
+                        <StatusBadge
+                          tone={badge.tone}
+                          label={badge.label}
+                          icon={STATUS_ICON[l.status]}
+                        />
                       </div>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <div className="text-muted-foreground mt-1 flex flex-wrap gap-3 text-xs">
                         <span className="font-mono">{l.customerPhone}</span>
                         {l.productInterest ? (
-                          <span>Minat: <strong>{l.productInterest}</strong></span>
+                          <span>
+                            Minat: <strong>{l.productInterest}</strong>
+                          </span>
                         ) : null}
                         <span>{l.messageCount} pesan</span>
                         <span>{l.productClicks} klik produk</span>
                         <span>{date}</span>
                       </div>
                       {l.handoffError ? (
-                        <div className="mt-2 text-xs text-red-600">
-                          ⚠ WA gagal: {l.handoffError}
+                        <div
+                          className={cn(
+                            'mt-2 flex items-center gap-1 text-xs',
+                            TONES.danger.text,
+                          )}
+                        >
+                          <AlertTriangle
+                            className="size-3 shrink-0"
+                            aria-hidden
+                          />
+                          WA gagal: {l.handoffError}
                         </div>
                       ) : null}
                     </div>
@@ -190,7 +235,8 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
                       {l.contactId ? (
                         <Link href={`/contacts/${l.contactId}`}>
                           <Button size="sm" variant="outline">
-                            <ExternalLink className="mr-1 h-3 w-3" /> Buka chat WA
+                            <ExternalLink className="mr-1 size-3" /> Buka chat
+                            WA
                           </Button>
                         </Link>
                       ) : null}
@@ -200,7 +246,7 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
                         rel="noreferrer"
                       >
                         <Button size="sm" variant="outline">
-                          <MessageCircle className="mr-1 h-3 w-3" /> wa.me
+                          <MessageCircle className="mr-1 size-3" /> wa.me
                         </Button>
                       </a>
                     </div>
@@ -209,26 +255,28 @@ export function LiveLeadsList({ roomId }: { roomId: string }) {
                   {/* Outcome tracking */}
                   {l.status !== 'CLOSED_WON' && l.status !== 'CLOSED_LOST' ? (
                     <div className="flex items-center gap-2 border-t pt-2">
-                      <span className="text-xs text-muted-foreground">Status order:</span>
+                      <span className="text-muted-foreground text-xs">
+                        Status order:
+                      </span>
                       {marking === l.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <Loader2 className="size-3.5 animate-spin" />
                       ) : (
                         <>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 text-emerald-700 hover:bg-emerald-50"
+                            className={cn('h-7', TONES.success.text)}
                             onClick={() => markOutcome(l.id, 'CLOSED_WON')}
                           >
-                            <ThumbsUp className="mr-1 h-3.5 w-3.5" /> Closing
+                            <ThumbsUp className="mr-1 size-3.5" /> Closing
                           </Button>
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 text-warm-700 hover:bg-warm-100"
+                            className="text-warm-700 hover:bg-warm-100 h-7"
                             onClick={() => markOutcome(l.id, 'CLOSED_LOST')}
                           >
-                            <ThumbsDown className="mr-1 h-3.5 w-3.5" /> Gagal
+                            <ThumbsDown className="mr-1 size-3.5" /> Gagal
                           </Button>
                         </>
                       )}

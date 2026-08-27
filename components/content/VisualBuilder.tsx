@@ -10,10 +10,7 @@ import { Download, Loader2, Palette } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import {
-  TEMPLATES,
-  getTemplateComponent,
-} from './visual-templates/templates'
+import { TEMPLATES, getTemplateComponent } from './visual-templates/templates'
 import type { TemplateProps } from './visual-templates/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,7 +100,7 @@ export function VisualBuilder({
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       {/* Preview */}
       <div className="flex flex-col items-center gap-3">
-        <div className="text-xs text-warm-500">
+        <div className="text-warm-500 text-xs">
           Preview {channel.replace('_', ' ').toLowerCase()} ({realDim.width}×
           {realDim.height})
         </div>
@@ -134,15 +131,10 @@ export function VisualBuilder({
             </div>
           </div>
         </div>
-        <Button
-          onClick={handleDownload}
-          disabled={downloading}
-          size="lg"
-          className="bg-primary-500 text-white hover:bg-primary-600"
-        >
+        <Button onClick={handleDownload} disabled={downloading} size="lg">
           {downloading ? (
             <>
-              <Loader2 className="mr-2 size-4 animate-spin" /> Generating...
+              <Loader2 className="mr-2 size-4 animate-spin" /> Generating…
             </>
           ) : (
             <>
@@ -155,7 +147,7 @@ export function VisualBuilder({
       {/* Controls */}
       <div className="space-y-4">
         <section className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+          <Label className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
             Template
           </Label>
           <div className="grid grid-cols-2 gap-2">
@@ -167,14 +159,12 @@ export function VisualBuilder({
                   onClick={() => setTemplateId(t.id)}
                   className={`rounded-md border p-2 text-left text-xs transition-all ${
                     templateId === t.id
-                      ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
+                      ? 'border-primary-500 bg-primary-50 ring-primary-200 ring-2'
                       : 'border-warm-200 hover:bg-warm-50'
                   }`}
                 >
-                  <div className="font-semibold text-warm-900">{t.name}</div>
-                  <div className="text-[10px] text-warm-500">
-                    {t.description}
-                  </div>
+                  <div className="text-warm-900 font-semibold">{t.name}</div>
+                  <div className="text-warm-500 text-xs">{t.description}</div>
                 </button>
               ),
             )}
@@ -182,7 +172,7 @@ export function VisualBuilder({
         </section>
 
         <section className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+          <Label className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
             Warna utama
           </Label>
           <div className="flex flex-wrap gap-2">
@@ -196,7 +186,7 @@ export function VisualBuilder({
                 }}
                 className={`size-8 rounded-full border-2 transition-all ${
                   props.accent === color
-                    ? 'border-warm-900 ring-2 ring-primary-200'
+                    ? 'border-warm-900 ring-primary-200 ring-2'
                     : 'border-warm-200'
                 }`}
                 style={{ backgroundColor: color }}
@@ -210,14 +200,14 @@ export function VisualBuilder({
                 patch('accent', e.target.value)
                 patch('background', e.target.value)
               }}
-              className="size-8 cursor-pointer rounded-full border-2 border-warm-200"
+              className="border-warm-200 size-8 cursor-pointer rounded-full border-2"
               title="Custom"
             />
           </div>
         </section>
 
         <section className="space-y-2">
-          <Label className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+          <Label className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
             Konten
           </Label>
           <FieldText
@@ -250,8 +240,8 @@ export function VisualBuilder({
           />
         </section>
 
-        <div className="rounded-md border border-warm-200 bg-warm-50 p-3 text-[11px] text-warm-600">
-          <Palette className="mr-1 inline size-3 text-primary-500" />
+        <div className="border-warm-200 bg-warm-50 text-warm-600 rounded-md border p-3 text-xs">
+          <Palette className="text-primary-500 mr-1 inline size-3" />
           Edit text & warna di sini, preview real-time. Klik download untuk
           export PNG resolusi {realDim.width}×{realDim.height}.
         </div>
@@ -273,7 +263,7 @@ function FieldText({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-[11px] text-warm-600">{label}</Label>
+      <Label className="text-warm-600 text-xs">{label}</Label>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -295,12 +285,12 @@ function FieldTextarea({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-[11px] text-warm-600">{label}</Label>
+      <Label className="text-warm-600 text-xs">{label}</Label>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={3}
-        className="w-full rounded-md border border-warm-300 bg-white px-3 py-2 text-sm"
+        className="border-warm-300 w-full rounded-md border bg-white px-3 py-2 text-sm"
       />
     </div>
   )

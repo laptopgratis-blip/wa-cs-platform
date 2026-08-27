@@ -17,7 +17,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/shared/EmptyState'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface LpPkg {
@@ -135,25 +136,29 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
             className={cn(
               // overflow-visible — base Card pakai overflow-hidden default;
               // tanpa override badge "Paling Populer" / "Paket Kamu" ke-clip.
-              'relative flex flex-col overflow-visible rounded-xl border-warm-200 transition-all',
-              pkg.isPopular &&
-                'scale-[1.02] border-2 border-primary-400 shadow-orange',
-              isCurrent && 'ring-2 ring-emerald-300',
+              // pt-4: badge "Paling Hemat/Populer" menggantung -top-3.5 dan
+              // menimpa judul kartu (terukur 10px). Headroom dikasih ke
+              // SEMUA kartu supaya judul antar-kartu tetap sejajar.
+              'relative flex flex-col overflow-visible pt-8 transition-all',
+              pkg.isPopular && 'ring-primary-400 scale-[1.02] ring-2',
+              isCurrent && 'ring-primary-200 ring-2',
             )}
           >
             {pkg.isPopular && (
-              <span className="absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-500 px-4 py-1 text-xs font-semibold text-white shadow-orange">
+              <span className="bg-primary-500 absolute -top-3.5 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1 rounded-full px-4 py-1 text-xs font-semibold text-white">
                 <Sparkles className="size-3" />
                 Paling Populer
               </span>
             )}
             {isCurrent && (
-              <Badge className="absolute -top-3 right-4 z-10 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
-                Paket Kamu
-              </Badge>
+              <StatusBadge
+                tone="success"
+                label="Paket Kamu"
+                className="absolute -top-3 right-4 z-10"
+              />
             )}
             <CardHeader>
-              <CardTitle className="font-display text-xl font-bold text-warm-900 dark:text-warm-50">
+              <CardTitle className="font-display text-warm-900 text-xl font-semibold">
                 {pkg.name}
               </CardTitle>
               <CardDescription className="text-warm-500">
@@ -162,15 +167,15 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
             </CardHeader>
             <CardContent className="flex flex-1 flex-col gap-4">
               <div>
-                <div className="font-display text-3xl font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
+                <div className="font-display text-warm-900 text-3xl font-bold tabular-nums">
                   {formatRupiah(pkg.price)}
                 </div>
-                <div className="text-xs text-warm-500">sekali bayar</div>
+                <div className="text-warm-500 text-xs">sekali bayar</div>
               </div>
 
-              <ul className="space-y-2.5 text-sm text-warm-600">
+              <ul className="text-warm-600 space-y-2.5 text-sm">
                 <li className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                  <span className="bg-primary-100 text-primary-600 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full">
                     <Layers className="size-3" />
                   </span>
                   <span>
@@ -180,19 +185,19 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
                   </span>
                 </li>
                 <li className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                  <span className="bg-primary-100 text-primary-600 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full">
                     <HardDrive className="size-3" />
                   </span>
                   <span>{pkg.maxStorageMB} MB storage gambar</span>
                 </li>
                 <li className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                  <span className="bg-primary-100 text-primary-600 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full">
                     <Check className="size-3" strokeWidth={3} />
                   </span>
                   <span>AI HTML generator + image library</span>
                 </li>
                 <li className="flex items-start gap-2.5">
-                  <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+                  <span className="bg-primary-100 text-primary-600 mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full">
                     <Check className="size-3" strokeWidth={3} />
                   </span>
                   <span>Custom slug & meta SEO</span>
@@ -203,12 +208,7 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
                 <Button
                   onClick={() => void handleTripay(pkg)}
                   disabled={isLowerOrEqual || isLoading}
-                  className={cn(
-                    'w-full rounded-full font-semibold',
-                    pkg.isPopular
-                      ? 'bg-primary-500 text-white shadow-orange hover:bg-primary-600'
-                      : 'bg-card border border-warm-200 text-warm-800 hover:bg-warm-50',
-                  )}
+                  className="w-full font-semibold"
                   variant={pkg.isPopular ? 'default' : 'outline'}
                 >
                   {loadingId === tripayKey ? (
@@ -222,7 +222,7 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
                   onClick={() => void handleManual(pkg)}
                   disabled={isLowerOrEqual || isLoading}
                   variant="outline"
-                  className="w-full rounded-full border-warm-200 bg-card font-medium text-warm-700 hover:bg-warm-50"
+                  className="w-full rounded-full font-medium"
                 >
                   {loadingId === manualKey ? (
                     <Loader2 className="mr-2 size-4 animate-spin" />
@@ -232,12 +232,12 @@ export function LpUpgradePicker({ currentTier, packages }: Props) {
                   Transfer Manual
                 </Button>
                 {isCurrent && (
-                  <p className="text-center text-xs text-emerald-600">
+                  <p className={cn('text-center text-xs', TONES.success.text)}>
                     Ini paket kamu sekarang
                   </p>
                 )}
                 {isLowerOrEqual && !isCurrent && (
-                  <p className="text-center text-xs text-warm-500">
+                  <p className="text-warm-500 text-center text-xs">
                     Kamu sudah di tier yang lebih tinggi
                   </p>
                 )}

@@ -2,33 +2,14 @@
 // Dipanggil wa-service tiap pesan masuk untuk dapat knowledge entries yang
 // match keyword di pesan customer. Body: { message: string }.
 //
-// Response sekarang juga include:
-//   - bank account block (kalau user punya UserBankAccount aktif) — supaya AI
-//     bisa langsung kasih nomor rekening tanpa minta admin
-//   - behavior rules — anti-escalate, auto-close, proactive asset send
-//   - attachments[] — items knowledge dengan fileUrl IMAGE/FILE yang akan
-//     dikirim wa-manager OTOMATIS setelah balasan teks AI (tidak butuh AI
-//     "request" attachment)
-//
-// Side-effect: kalau ada match, increment triggerCount + lastTriggeredAt
-// supaya counter di UI dashboard up-to-date.
+// Wrapper tipis di atas lib/services/cs-pipeline/knowledge — logika dipakai
+// bersama dengan webhook Cloud API (tanpa HTTP). Detail komposisi promptBlock
+// (waktu, bank, katalog, ongkir, rules) ada di lib tersebut.
 import { NextResponse } from 'next/server'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
-import {
-  formatCurrentTimeForPrompt,
-  formatProductCatalogForPrompt,
-  formatShippingInstructionForPrompt,
-  resolveShippingFromMessage,
-} from '@/lib/services/cs-ai-context'
-import {
-  defaultBehaviorRules,
-  formatBankAccountsForPrompt,
-  formatKnowledgeForPrompt,
-  incrementTriggerCount,
-  retrieveRelevantKnowledge,
-} from '@/lib/services/knowledge-retriever'
+import { getKnowledgeForMessage } from '@/lib/services/cs-pipeline/knowledge'
 
 interface Params {
   params: Promise<{ sessionId: string }>
@@ -43,8 +24,7 @@ export async function POST(req: Request, { params }: Params) {
   const body = (await req.json().catch(() => null)) as
     | { message?: unknown }
     | null
-  const message =
-    body && typeof body.message === 'string' ? body.message : ''
+  const message = body && typeof body.message === 'string' ? body.message : ''
 
   try {
     // Resolve userId dari sessionId — wa-service hanya tahu sessionId.
@@ -59,79 +39,8 @@ export async function POST(req: Request, { params }: Params) {
       )
     }
 
-    // Ambil setting integrasi CS AI (katalog produk, hitung ongkir) +
-    // knowledge dalam satu paralel batch supaya tidak nambah RTT serial.
-    const integration = await prisma.csAiIntegration.findUnique({
-      where: { userId: wa.userId },
-    })
-
-    const [items, bankBlock, productBlock, shippingInstrBlock, shippingResolved] =
-      await Promise.all([
-        retrieveRelevantKnowledge(wa.userId, message),
-        formatBankAccountsForPrompt(wa.userId),
-        integration?.productCatalogEnabled
-          ? formatProductCatalogForPrompt(wa.userId, {
-              applyFlashSale: integration.applyFlashSaleDiscount,
-            })
-          : Promise.resolve(''),
-        integration?.shippingCalcEnabled
-          ? formatShippingInstructionForPrompt(wa.userId, {
-              applySubsidyRules: integration.applySubsidyRules,
-            })
-          : Promise.resolve(''),
-        integration?.shippingCalcEnabled && message
-          ? resolveShippingFromMessage(wa.userId, message, {
-              applySubsidyRules: integration.applySubsidyRules,
-            })
-          : Promise.resolve(null),
-      ])
-
-    // Kumpulkan attachments: knowledge IMAGE/FILE yang match → wa-manager
-    // akan kirim otomatis setelah balasan teks AI.
-    const attachments = items
-      .filter(
-        (it) =>
-          !!it.fileUrl &&
-          (it.contentType === 'IMAGE' || it.contentType === 'FILE'),
-      )
-      .map((it) => ({
-        fileUrl: it.fileUrl as string,
-        title: it.title,
-        caption: it.caption,
-        contentType: it.contentType,
-      }))
-
-    const knowledgeBlock = formatKnowledgeForPrompt(items)
-    const rulesBlock = defaultBehaviorRules({
-      hasAttachments: attachments.length > 0,
-    })
-
-    // Urutan: waktu sekarang > bank > katalog produk > knowledge user >
-    // ongkir (instruksi + resolved kalau ada) > rules. Waktu paling atas
-    // karena jadi acuan semua batas promo; bank di atas karena pertanyaan
-    // transfer sering muncul; produk & ongkir konteks domain spesifik;
-    // rules di paling bawah sebagai guard rail terakhir.
-    const promptBlock = [
-      formatCurrentTimeForPrompt(),
-      bankBlock,
-      productBlock,
-      knowledgeBlock,
-      shippingInstrBlock,
-      shippingResolved ?? '',
-      rulesBlock,
-    ]
-      .filter((s) => s.trim().length > 0)
-      .join('\n')
-
-    // Best-effort increment — tidak menahan response.
-    if (items.length > 0) {
-      void incrementTriggerCount(items.map((it) => it.id))
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: { items, promptBlock, attachments },
-    })
+    const result = await getKnowledgeForMessage(wa.userId, message)
+    return NextResponse.json({ success: true, data: result })
   } catch (err) {
     console.error('[POST /api/internal/knowledge/:sessionId] gagal:', err)
     return NextResponse.json(

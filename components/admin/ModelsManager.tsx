@@ -2,7 +2,16 @@
 
 // CRUD AI Models — list + sheet form (create/edit) + toggle aktif + delete.
 import type { AiProvider } from '@prisma/client'
-import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  BarChart3,
+  Bot,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -50,6 +59,7 @@ import {
   calcBreakdown,
   calcRecommendedTokens,
 } from '@/lib/pricing-settings'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface AiModelRow {
@@ -159,7 +169,10 @@ export function ModelsManager() {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/models')
-      const json = (await res.json()) as { success: boolean; data?: AiModelRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: AiModelRow[]
+      }
       if (json.success && json.data) setModels(json.data)
     } finally {
       setLoading(false)
@@ -253,8 +266,7 @@ export function ModelsManager() {
     }
     setSaving(true)
     try {
-      const finalCost =
-        costMode === 'AUTO' ? preview.recommended : Number(cost)
+      const finalCost = costMode === 'AUTO' ? preview.recommended : Number(cost)
       const body = {
         name: name.trim(),
         provider,
@@ -365,10 +377,7 @@ export function ModelsManager() {
               )}
               Re-calculate Token Otomatis
             </Button>
-            <Button
-              onClick={openCreate}
-              className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-            >
+            <Button onClick={openCreate}>
               <Plus className="mr-2 size-4" /> Tambah Model
             </Button>
           </>
@@ -382,7 +391,12 @@ export function ModelsManager() {
               <TableHead>Nama</TableHead>
               <TableHead>Provider</TableHead>
               <TableHead>Model ID</TableHead>
-              <TableHead className="text-right" title="Legacy: dipakai sebagai pre-flight floor saja. CS Reply charge real dihitung server proporsional dari (input+output tokens) × margin AiFeatureConfig['CS_REPLY'].">Cost/pesan (legacy)</TableHead>
+              <TableHead
+                className="text-right"
+                title="Legacy: dipakai sebagai pre-flight floor saja. CS Reply charge real dihitung server proporsional dari (input+output tokens) × margin AiFeatureConfig['CS_REPLY']."
+              >
+                Cost/pesan (legacy)
+              </TableHead>
               <TableHead className="text-right">Dipakai</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
@@ -409,18 +423,28 @@ export function ModelsManager() {
                       {m.provider}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{m.modelId}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {m.modelId}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatNumber(m.costPerMessage)}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right">
                     {m._count.waSessions}
                   </TableCell>
                   <TableCell>
-                    <Switch checked={m.isActive} onCheckedChange={() => toggleActive(m)} />
+                    <Switch
+                      checked={m.isActive}
+                      onCheckedChange={() => toggleActive(m)}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" aria-label="Edit model" onClick={() => openEdit(m)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Edit model"
+                      onClick={() => openEdit(m)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -442,7 +466,7 @@ export function ModelsManager() {
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md px-6">
+        <SheetContent side="right" className="w-full px-6 sm:max-w-md">
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Model' : 'Tambah Model'}</SheetTitle>
             <SheetDescription>
@@ -486,7 +510,7 @@ export function ModelsManager() {
                   </SelectTrigger>
                   <SelectContent>
                     {presetsForProvider.length === 0 ? (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      <div className="text-muted-foreground px-2 py-1.5 text-xs">
                         Belum ada preset. Tambah di /admin/ai-pricing.
                       </div>
                     ) : (
@@ -497,7 +521,7 @@ export function ModelsManager() {
                               <span className="font-mono text-xs">
                                 {m.modelId}
                               </span>
-                              <span className="ml-2 text-muted-foreground">
+                              <span className="text-muted-foreground ml-2">
                                 — {m.displayName}
                               </span>
                             </SelectItem>
@@ -507,9 +531,10 @@ export function ModelsManager() {
                               ${m.inputPricePer1M.toFixed(2)} input / $
                               {m.outputPricePer1M.toFixed(2)} output / 1M tok
                             </div>
-                            <div className="text-[10px] opacity-75">
+                            <div className="text-xs opacity-75">
                               Update {m.daysSinceUpdate}h lalu
-                              {m.lastUpdatedSource && ` (${m.lastUpdatedSource})`}
+                              {m.lastUpdatedSource &&
+                                ` (${m.lastUpdatedSource})`}
                             </div>
                           </TooltipContent>
                         </Tooltip>
@@ -518,7 +543,7 @@ export function ModelsManager() {
                   </SelectContent>
                 </Select>
               </TooltipProvider>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Pilih dari preset atau ketik manual:
               </p>
               <Input
@@ -556,8 +581,9 @@ export function ModelsManager() {
               const matched = findPresetByModelId(modelId)
               if (!matched) return null
               return (
-                <p className="text-[10px] text-muted-foreground">
-                  ℹ️ Harga diambil dari preset · Last update{' '}
+                <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                  <Info className="size-3 shrink-0" aria-hidden />
+                  Harga diambil dari preset · Last update{' '}
                   {matched.daysSinceUpdate} hari lalu
                   {matched.lastUpdatedSource &&
                     ` (${matched.lastUpdatedSource})`}
@@ -572,7 +598,7 @@ export function ModelsManager() {
                   <span
                     className={cn(
                       costMode === 'AUTO'
-                        ? 'font-semibold text-warm-900'
+                        ? 'text-warm-900 font-semibold'
                         : 'text-muted-foreground',
                     )}
                   >
@@ -587,7 +613,7 @@ export function ModelsManager() {
                   <span
                     className={cn(
                       costMode === 'MANUAL'
-                        ? 'font-semibold text-warm-900'
+                        ? 'text-warm-900 font-semibold'
                         : 'text-muted-foreground',
                     )}
                   >
@@ -602,8 +628,9 @@ export function ModelsManager() {
                     Token per pesan (dipotong dari user)
                   </Label>
                   {costMode === 'AUTO' && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      🤖 Auto-set untuk margin {ps.marginTarget}%
+                    <Badge variant="secondary" className="gap-1 text-xs">
+                      <Bot className="size-3" aria-hidden />
+                      Auto-set untuk margin {ps.marginTarget}%
                     </Badge>
                   )}
                 </div>
@@ -622,9 +649,10 @@ export function ModelsManager() {
               </div>
 
               {/* Preview profitabilitas */}
-              <div className="rounded-md bg-warm-50 p-3 text-xs dark:bg-warm-900/30">
-                <p className="mb-1 font-semibold text-warm-700 dark:text-warm-200">
-                  📊 Estimasi per Pesan
+              <div className="bg-warm-50 rounded-md p-3 text-xs">
+                <p className="text-warm-700 mb-1 flex items-center gap-1 font-semibold">
+                  <BarChart3 className="size-3.5" aria-hidden />
+                  Estimasi per Pesan
                 </p>
                 <div className="space-y-0.5 font-mono">
                   <div className="flex justify-between">
@@ -643,28 +671,26 @@ export function ModelsManager() {
                     <span>Profit:</span>
                     <span
                       className={cn(
-                        preview.profitRp < 0 && 'text-red-600 font-semibold',
+                        preview.profitRp < 0 && cn('font-semibold', TONES.danger.text),
                       )}
                     >
                       {formatRupiah(preview.profitRp)}
                     </span>
                   </div>
-                  <div className="flex justify-between border-t border-warm-200 pt-1 dark:border-warm-700">
+                  <div className="border-warm-200 flex justify-between border-t pt-1">
                     <span>Margin:</span>
                     <span
                       className={cn(
                         'font-semibold',
-                        preview.status === 'AMAN' && 'text-emerald-600',
-                        preview.status === 'TIPIS' && 'text-amber-600',
-                        preview.status === 'RUGI' && 'text-red-600',
+                        preview.status === 'AMAN' && TONES.success.text,
+                        preview.status === 'TIPIS' && TONES.warning.text,
+                        preview.status === 'RUGI' && TONES.danger.text,
                       )}
                     >
                       {Number.isFinite(preview.marginPct)
                         ? `${preview.marginPct.toFixed(1)}%`
                         : '—'}{' '}
-                      {preview.status === 'AMAN' && '🟢 AMAN'}
-                      {preview.status === 'TIPIS' && '🟡 TIPIS'}
-                      {preview.status === 'RUGI' && '🔴 RUGI'}
+                      {preview.status}
                     </span>
                   </div>
                 </div>
@@ -693,7 +719,7 @@ export function ModelsManager() {
               disabled={isSaving}
               className={cn(
                 preview.status === 'RUGI' &&
-                  'bg-destructive text-white hover:bg-destructive/90',
+                  'bg-destructive hover:bg-destructive/90 text-white',
               )}
             >
               {isSaving && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -711,8 +737,8 @@ export function ModelsManager() {
         title="Hapus model ini?"
         description={
           <>
-            Hapus model <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
-            bisa dibatalkan.
+            Hapus model <strong>{deleteTarget?.name}</strong>? Tindakan ini
+            tidak bisa dibatalkan.
           </>
         }
         isLoading={isDeleting}

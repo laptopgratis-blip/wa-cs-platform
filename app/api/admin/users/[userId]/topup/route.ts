@@ -1,10 +1,14 @@
 // POST /api/admin/users/[userId]/topup — admin top-up manual.
-// Body: { amount: int positive, description?: string }
-// Buat TokenTransaction type=BONUS atau ADJUSTMENT (pakai BONUS untuk MVP).
+// Body: { amount: int positive, description?: string, wallet?: 'TOKEN'|'MESSAGE_CREDIT' }
+// Buat TokenTransaction type=BONUS (token AI) atau MessageCreditTransaction
+// BONUS (Kredit Pesan WA, Rp) — Trek 2B.
+import { randomUUID } from 'node:crypto'
+
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireAdmin } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { creditMessageCredits } from '@/lib/services/message-credits'
 import { userTopupSchema } from '@/lib/validations/admin'
 
 interface Params {
@@ -28,6 +32,31 @@ export async function POST(req: Request, { params }: Params) {
     const target = await prisma.user.findUnique({ where: { id: userId } })
     if (!target) return jsonError('User tidak ditemukan', 404)
 
+    const wallet = parsed.data.wallet
+    const description =
+      parsed.data.description ??
+      `Top-up manual oleh admin (${admin.user.email ?? admin.user.id})`
+
+    if (wallet === 'MESSAGE_CREDIT') {
+      // Dompet Kredit Pesan WA (Rp) — BONUS admin.
+      const result = await prisma.$transaction(async (tx) => {
+        await creditMessageCredits(tx, {
+          userId,
+          amountRp: parsed.data.amount,
+          type: 'BONUS',
+          reference: `admin-bonus:${randomUUID()}`,
+          description,
+        })
+        return tx.tokenBalance.findUnique({ where: { userId } })
+      })
+      return jsonOk({
+        userId,
+        wallet,
+        balance: result?.messageCreditRp ?? 0,
+        added: parsed.data.amount,
+      })
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       await tx.tokenBalance.upsert({
         where: { userId },
@@ -46,9 +75,7 @@ export async function POST(req: Request, { params }: Params) {
           userId,
           amount: parsed.data.amount,
           type: 'BONUS',
-          description:
-            parsed.data.description ??
-            `Top-up manual oleh admin (${admin.user.email ?? admin.user.id})`,
+          description,
         },
       })
       return tx.tokenBalance.findUnique({ where: { userId } })
@@ -56,6 +83,7 @@ export async function POST(req: Request, { params }: Params) {
 
     return jsonOk({
       userId,
+      wallet,
       balance: result?.balance ?? 0,
       added: parsed.data.amount,
     })

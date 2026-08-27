@@ -5,10 +5,11 @@
 // (dengan tombol apply rekomendasi), C warning banner kalau ada surface rugi,
 // D simulasi paket, E section "AI Features" (Content Studio dst) dengan
 // breakdown margin & tombol "Set margin global" untuk apply ke semua sekaligus.
-import { AlertTriangle, Check, Loader2, Wand2 } from 'lucide-react'
+import { AlertTriangle, Check, Lightbulb, Loader2, Wand2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -39,6 +40,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { pricingMarginMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface ModelRow {
@@ -95,25 +98,7 @@ const DEFAULTS: Assumptions = {
 
 const STORAGE_KEY = 'pricingCalc.v1'
 
-const PROVIDER_COLOR: Record<ModelRow['provider'], string> = {
-  ANTHROPIC: 'bg-orange-100 text-orange-700 hover:bg-orange-100',
-  OPENAI: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  GOOGLE: 'bg-blue-100 text-blue-700 hover:bg-blue-100',
-}
-
 type StatusKind = 'AMAN' | 'TIPIS' | 'RUGI'
-
-const STATUS_STYLE: Record<StatusKind, string> = {
-  AMAN: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  TIPIS: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-  RUGI: 'bg-red-100 text-red-700 hover:bg-red-100',
-}
-
-const STATUS_LABEL: Record<StatusKind, string> = {
-  AMAN: '🟢 AMAN',
-  TIPIS: '🟡 TIPIS',
-  RUGI: '🔴 RUGI',
-}
 
 function clampPositive(v: number, fallback: number): number {
   return Number.isFinite(v) && v >= 0 ? v : fallback
@@ -167,7 +152,8 @@ export function PricingCalculator({
     return models.map((m) => {
       // Biaya API per pesan dalam IDR.
       const apiCostUsd =
-        (a.inputTokens * m.inputPricePer1M + a.outputTokens * m.outputPricePer1M) /
+        (a.inputTokens * m.inputPricePer1M +
+          a.outputTokens * m.outputPricePer1M) /
         1_000_000
       const apiCostIdr = apiCostUsd * a.usdToIdr
 
@@ -181,7 +167,10 @@ export function PricingCalculator({
       const targetFrac = a.marginTarget / 100
       const recommendedTokens =
         a.pricePerToken > 0 && targetFrac < 1 && targetFrac >= 0
-          ? Math.max(1, Math.ceil(apiCostIdr / a.pricePerToken / (1 - targetFrac)))
+          ? Math.max(
+              1,
+              Math.ceil(apiCostIdr / a.pricePerToken / (1 - targetFrac)),
+            )
           : 0
 
       let status: StatusKind
@@ -209,14 +198,11 @@ export function PricingCalculator({
   async function applyRecommendation(modelId: string, recommended: number) {
     setApplyingId(modelId)
     try {
-      const res = await fetch(
-        `/api/admin/models/${modelId}/cost-per-message`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ costPerMessage: recommended }),
-        },
-      )
+      const res = await fetch(`/api/admin/models/${modelId}/cost-per-message`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ costPerMessage: recommended }),
+      })
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
         toast.error(json.error || 'Gagal apply rekomendasi')
@@ -332,7 +318,12 @@ export function PricingCalculator({
       {(losers.length > 0 || featureLosers.length > 0) && (
         <div
           role="alert"
-          className="rounded-md border border-red-300 bg-red-50 p-4 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
+          className={cn(
+            'rounded-md border p-4',
+            TONES.danger.bg,
+            TONES.danger.border,
+            TONES.danger.text,
+          )}
         >
           <p className="flex items-center gap-2 font-semibold">
             <AlertTriangle className="size-4" />
@@ -370,7 +361,9 @@ export function PricingCalculator({
                 type="number"
                 min={0}
                 value={a.inputTokens}
-                onChange={(e) => setField('inputTokens', Number(e.target.value))}
+                onChange={(e) =>
+                  setField('inputTokens', Number(e.target.value))
+                }
               />
             </div>
             <div className="space-y-1">
@@ -380,7 +373,9 @@ export function PricingCalculator({
                 type="number"
                 min={0}
                 value={a.outputTokens}
-                onChange={(e) => setField('outputTokens', Number(e.target.value))}
+                onChange={(e) =>
+                  setField('outputTokens', Number(e.target.value))
+                }
               />
             </div>
             <div className="space-y-1">
@@ -442,7 +437,9 @@ export function PricingCalculator({
                   <TableHead className="text-right">Token sekarang</TableHead>
                   <TableHead className="text-right">Pendapatan</TableHead>
                   <TableHead className="text-right">Margin %</TableHead>
-                  <TableHead className="text-right">Token rekomendasi</TableHead>
+                  <TableHead className="text-right">
+                    Token rekomendasi
+                  </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -452,10 +449,7 @@ export function PricingCalculator({
                   <TableRow key={b.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className={cn('font-normal', PROVIDER_COLOR[b.provider])}
-                        >
+                        <Badge variant="secondary" className="font-normal">
                           {b.provider}
                         </Badge>
                         <span className="text-sm font-medium">{b.name}</span>
@@ -472,11 +466,12 @@ export function PricingCalculator({
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right tabular-nums font-medium',
-                        b.marginPct < 20 && 'text-red-600',
-                        b.marginPct >= 20 && b.marginPct < a.marginTarget &&
-                          'text-amber-700',
-                        b.marginPct >= a.marginTarget && 'text-emerald-600',
+                        'text-right font-medium tabular-nums',
+                        b.marginPct < 20 && TONES.danger.text,
+                        b.marginPct >= 20 &&
+                          b.marginPct < a.marginTarget &&
+                          TONES.warning.text,
+                        b.marginPct >= a.marginTarget && TONES.success.text,
                       )}
                     >
                       {Number.isFinite(b.marginPct)
@@ -487,12 +482,10 @@ export function PricingCalculator({
                       {formatNumber(b.recommendedTokens)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn('font-normal', STATUS_STYLE[b.status])}
-                      >
-                        {STATUS_LABEL[b.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingMarginMeta, b.status).tone}
+                        label={statusMeta(pricingMarginMeta, b.status).label}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -519,7 +512,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada model aktif.
                     </TableCell>
@@ -536,8 +529,8 @@ export function PricingCalculator({
         <CardHeader>
           <CardTitle>Simulasi Paket</CardTitle>
           <CardDescription>
-            Estimasi jumlah pesan AI yang user dapat per paket × model
-            (token paket ÷ <code>costPerMessage</code>).
+            Estimasi jumlah pesan AI yang user dapat per paket × model (token
+            paket ÷ <code>costPerMessage</code>).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -582,7 +575,7 @@ export function PricingCalculator({
                       return (
                         <TableCell
                           key={m.id}
-                          className="text-right tabular-nums text-sm"
+                          className="text-right text-sm tabular-nums"
                         >
                           {formatNumber(msgs)} pesan
                         </TableCell>
@@ -594,7 +587,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={3 + models.length}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada paket aktif.
                     </TableCell>
@@ -610,19 +603,18 @@ export function PricingCalculator({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Wand2 className="size-5 text-primary-500" />
+            <Wand2 className="text-primary-500 size-5" />
             AI Features (Content Studio &amp; lainnya)
           </CardTitle>
           <CardDescription>
-            Pricing per feature pakai{' '}
-            <code>platformMargin</code> multiplier (1.3 = +30%). Tabel ini
-            preview margin pakai asumsi token di atas. Kalau ada yang
-            🔴 RUGI, naikkan margin di sini.
+            Pricing per feature pakai <code>platformMargin</code> multiplier
+            (1.3 = +30%). Tabel ini preview margin pakai asumsi token di atas.
+            Kalau ada yang RUGI, naikkan margin di sini.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Bulk-margin control */}
-          <div className="rounded-lg border border-warm-200 bg-warm-50 p-3 dark:border-warm-700 dark:bg-warm-900/30">
+          <div className="border-warm-200 bg-warm-50 rounded-lg border p-3">
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
               <div className="space-y-1">
                 <Label htmlFor="globalMargin" className="text-xs">
@@ -641,7 +633,7 @@ export function PricingCalculator({
                     )
                   }
                 />
-                <p className="text-[10px] text-warm-500">
+                <p className="text-warm-500 text-xs">
                   1.3 = +30% margin · 2.0 = +100% (2× cost API)
                 </p>
               </div>
@@ -663,7 +655,6 @@ export function PricingCalculator({
               <Button
                 onClick={() => setMarginConfirmOpen(true)}
                 disabled={applyingMargin || features.length === 0}
-                className="bg-primary-500 hover:bg-primary-600"
               >
                 {applyingMargin && (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -700,17 +691,17 @@ export function PricingCalculator({
                         {!b.isActive && (
                           <Badge
                             variant="secondary"
-                            className="bg-warm-100 text-[9px] font-normal text-warm-600"
+                            className="bg-warm-100 text-warm-600 text-xs font-normal"
                           >
                             disabled
                           </Badge>
                         )}
                       </div>
-                      <div className="font-mono text-[10px] text-muted-foreground">
+                      <div className="text-muted-foreground font-mono text-xs">
                         {b.featureKey}
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground font-mono text-xs">
                       {b.modelName}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
@@ -727,23 +718,21 @@ export function PricingCalculator({
                     </TableCell>
                     <TableCell
                       className={cn(
-                        'text-right tabular-nums font-medium',
-                        b.marginPct < 20 && 'text-red-600',
+                        'text-right font-medium tabular-nums',
+                        b.marginPct < 20 && TONES.danger.text,
                         b.marginPct >= 20 &&
                           b.marginPct < a.marginTarget &&
-                          'text-amber-700',
-                        b.marginPct >= a.marginTarget && 'text-emerald-600',
+                          TONES.warning.text,
+                        b.marginPct >= a.marginTarget && TONES.success.text,
                       )}
                     >
                       {b.marginPct.toFixed(1)}%
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn('font-normal', STATUS_STYLE[b.status])}
-                      >
-                        {STATUS_LABEL[b.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingMarginMeta, b.status).tone}
+                        label={statusMeta(pricingMarginMeta, b.status).label}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -751,7 +740,7 @@ export function PricingCalculator({
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="py-12 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-12 text-center text-sm"
                     >
                       Belum ada AI feature config. Buat di /admin/ai-features.
                     </TableCell>
@@ -761,22 +750,25 @@ export function PricingCalculator({
             </Table>
           </div>
 
-          <p className="text-[11px] text-warm-500">
-            💡 Edit per-feature (margin, floor, cap) di{' '}
-            <a
-              href="/admin/ai-features"
-              className="text-primary-600 underline"
-            >
-              /admin/ai-features
-            </a>
-            . Harga input/output otomatis sync dari{' '}
-            <a
-              href="/admin/ai-pricing"
-              className="text-primary-600 underline"
-            >
-              /admin/ai-pricing
-            </a>
-            .
+          <p className="text-warm-500 flex items-start gap-1.5 text-xs">
+            <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              Edit per-feature (margin, floor, cap) di{' '}
+              <a
+                href="/admin/ai-features"
+                className="text-primary-600 underline"
+              >
+                /admin/ai-features
+              </a>
+              . Harga input/output otomatis sync dari{' '}
+              <a
+                href="/admin/ai-pricing"
+                className="text-primary-600 underline"
+              >
+                /admin/ai-pricing
+              </a>
+              .
+            </span>
           </p>
         </CardContent>
       </Card>

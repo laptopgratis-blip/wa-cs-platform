@@ -9,7 +9,6 @@ import {
   MessagesSquare,
   PenLine,
   Pencil,
-  Plus,
   ShoppingBag,
   Truck,
   type LucideIcon,
@@ -34,6 +33,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { TONES } from '@/lib/ui-tones'
 import {
   type SalesFlowFinalActionInput,
   type SalesFlowStepInput,
@@ -102,9 +102,10 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
     void (async () => {
       try {
         const res = await fetch('/api/sales-flows/templates')
-        const json = (await res.json().catch(() => null)) as
-          | { success: boolean; data?: { templates: TemplatePreview[] } }
-          | null
+        const json = (await res.json().catch(() => null)) as {
+          success: boolean
+          data?: { templates: TemplatePreview[] }
+        } | null
         if (!cancelled && json?.success && json.data) {
           setTemplates(json.data.templates)
         }
@@ -133,9 +134,10 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: next }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal mengubah status')
         return
@@ -162,7 +164,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
           <>
             Atur AI untuk terima pesanan otomatis dari customer — COD, Transfer,
             Booking, atau buat alur sendiri.
-            <span className="mt-1 block text-xs text-muted-foreground">
+            <span className="text-muted-foreground mt-1 block text-xs">
               {activeCount} dari {limit} flow aktif
             </span>
           </>
@@ -171,7 +173,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
 
       {/* Template picker */}
       <div className="space-y-3">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide text-warm-500">
+        <h2 className="font-display text-warm-500 text-sm font-semibold tracking-wide uppercase">
           Pilih template
         </h2>
         {loadingTpl ? (
@@ -181,37 +183,39 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
             {templates.map((tpl) => {
               const TplIcon = TEMPLATE_ICON[tpl.template] ?? PenLine
               return (
-              <Card key={tpl.template} className="rounded-xl border-warm-200">
-                <CardContent className="space-y-3 p-5">
-                  <div className="flex items-center gap-2.5">
-                    <span
-                      aria-hidden
-                      className="flex size-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-300"
+                <Card key={tpl.template}>
+                  <CardContent className="space-y-3 p-5">
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        aria-hidden
+                        className="bg-primary-50 text-primary-600 flex size-9 items-center justify-center rounded-lg"
+                      >
+                        <TplIcon className="size-5" />
+                      </span>
+                      <h3 className="font-display text-base font-semibold">
+                        {tpl.name}
+                      </h3>
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {tpl.description}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => openTemplate(tpl)}
+                      disabled={isFull && tpl.template !== 'CUSTOM'}
+                      className="w-full"
                     >
-                      <TplIcon className="size-5" />
-                    </span>
-                    <h3 className="font-display font-bold">{tpl.name}</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {tpl.description}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => openTemplate(tpl)}
-                    disabled={isFull && tpl.template !== 'CUSTOM'}
-                    className="w-full"
-                  >
-                    {tpl.template === 'CUSTOM' ? 'Buat Baru' : 'Aktifkan'}
-                  </Button>
-                </CardContent>
-              </Card>
+                      {tpl.template === 'CUSTOM' ? 'Buat Baru' : 'Aktifkan'}
+                    </Button>
+                  </CardContent>
+                </Card>
               )
             })}
           </div>
         )}
         {isFull && (
-          <p className="text-xs text-amber-700 dark:text-amber-300">
+          <p className={`text-xs ${TONES.warning.text}`}>
             Sudah mencapai batas {limit} flow aktif — nonaktifkan salah satu di
             bawah dulu kalau mau aktifkan template lain.
           </p>
@@ -220,31 +224,25 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
 
       {/* List flow user */}
       <div className="space-y-3">
-        <h2 className="font-display text-sm font-bold uppercase tracking-wide text-warm-500">
+        <h2 className="font-display text-warm-500 text-sm font-semibold tracking-wide uppercase">
           Flow saya
         </h2>
         {flows.length === 0 ? (
-          <Card>
-            <CardContent>
-              <EmptyState
-                icon={ShoppingBag}
-                title="Belum ada flow yang dibuat"
-                description="Pilih template di atas untuk mulai, atau buat alur custom dari nol."
-              />
-            </CardContent>
-          </Card>
+          <EmptyState
+            bordered
+            icon={ShoppingBag}
+            title="Belum ada flow yang dibuat"
+            description="Pilih template di atas untuk mulai, atau buat alur custom dari nol."
+          />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {flows.map((f) => (
-              <Card
-                key={f.id}
-                className="rounded-xl border-warm-200 shadow-sm hover-lift"
-              >
+              <Card key={f.id} className="hover-lift">
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="truncate font-display font-bold">
+                        <h3 className="font-display truncate text-base font-semibold">
                           {f.name}
                         </h3>
                         {!f.isActive && (
@@ -253,7 +251,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         {f.template} · {f.steps.length} pertanyaan
                       </p>
                     </div>
@@ -268,7 +266,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
                   </div>
 
                   {f.description && (
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                    <p className="text-muted-foreground line-clamp-2 text-sm">
                       {f.description}
                     </p>
                   )}
@@ -293,7 +291,7 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
                   )}
 
                   <div className="flex items-center justify-between border-t pt-3">
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-muted-foreground text-xs">
                       {f.finalAction.notifyAdmin && f.finalAction.adminPhone
                         ? `Notif admin: ${f.finalAction.adminPhone}`
                         : 'Tanpa notif admin'}
@@ -312,10 +310,13 @@ export function SalesFlowList({ flows, activeCount, limit }: Props) {
         )}
       </div>
 
-      <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
+      <Sheet
+        open={editing !== null}
+        onOpenChange={(o) => !o && setEditing(null)}
+      >
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-2xl px-6"
+          className="w-full overflow-y-auto px-6 sm:max-w-2xl"
         >
           <SheetHeader className="px-0">
             <SheetTitle>

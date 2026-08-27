@@ -25,23 +25,22 @@ export async function CsAiPromoBanner({ userId }: { userId: string }) {
   return (
     <Link
       href="/knowledge"
-      className="group flex items-start gap-3 rounded-xl border-2 border-primary-200 bg-gradient-to-br from-primary-50 to-orange-50 p-4 transition hover:border-primary-400 hover:shadow-md"
+      className="group border-primary-200 bg-primary-50 hover:border-primary-400 flex items-start gap-3 rounded-xl border-2 p-4 transition hover:shadow-md"
     >
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
+      <div className="bg-primary-500 shadow-orange flex size-10 shrink-0 items-center justify-center rounded-lg text-white">
         <Sparkles className="size-5" />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-display text-sm font-extrabold text-warm-900">
+      <div className="min-w-0 flex-1">
+        <p className="font-display text-warm-900 text-sm font-semibold">
           Biar CS AI bisa jawab pertanyaan produk otomatis?
         </p>
-        <p className="mt-0.5 text-xs leading-relaxed text-warm-600">
-          Aktifkan{' '}
-          <strong>Akses Katalog Produk</strong> di halaman Pengetahuan —
-          sekali klik, CS AI langsung tahu harga, stok, dan varian semua
+        <p className="text-warm-600 mt-0.5 text-xs leading-relaxed">
+          Aktifkan <strong>Akses Katalog Produk</strong> di halaman Pengetahuan
+          — sekali klik, CS AI langsung tahu harga, stok, dan varian semua
           produkmu. Customer tanya, AI jawab sendiri tanpa nunggu admin.
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1 self-center text-xs font-semibold text-primary-600 transition group-hover:translate-x-0.5">
+      <div className="text-primary-600 flex shrink-0 items-center gap-1 self-center text-xs font-semibold transition group-hover:translate-x-0.5">
         Aktifkan
         <ArrowRight className="size-3.5" />
       </div>

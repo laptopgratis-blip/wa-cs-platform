@@ -65,15 +65,16 @@ export function OnboardingProgressCard({ initialData }: Props) {
     return (
       <Card className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm">
         <div className="flex items-center gap-4 p-5">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-orange">
+          <div className="shadow-orange flex size-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
             <PartyPopper className="size-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="font-display text-base font-extrabold text-warm-900">
-              Setup selesai 🎉
+            <h2 className="font-display text-warm-900 text-base font-extrabold">
+              Setup selesai
             </h2>
-            <p className="text-sm text-warm-600">
-              Semua langkah utama untuk <strong>{data.title}</strong> sudah selesai.
+            <p className="text-warm-600 text-sm">
+              Semua langkah utama untuk <strong>{data.title}</strong> sudah
+              selesai.
             </p>
           </div>
           <Button asChild variant="outline" size="sm">
@@ -82,7 +83,7 @@ export function OnboardingProgressCard({ initialData }: Props) {
           <Button
             variant="ghost"
             size="sm"
-            className="size-8 p-0 text-warm-500 hover:text-rose-600"
+            className="text-warm-500 size-8 p-0 hover:text-rose-600"
             onClick={dismiss}
             disabled={busy}
             aria-label="Tutup permanen"
@@ -97,10 +98,10 @@ export function OnboardingProgressCard({ initialData }: Props) {
 
   // ─── Variant IN PROGRESS — selalu standout, tidak bisa dismiss ──────
   return (
-    <Card className="relative overflow-hidden rounded-2xl border-2 border-primary-300 bg-gradient-to-br from-primary-50 via-orange-50 to-amber-50 shadow-lg">
+    <Card className="border-primary-300 from-primary-50 relative overflow-hidden rounded-2xl border-2 bg-gradient-to-br via-orange-50 to-amber-50 shadow-lg">
       <div
         aria-hidden
-        className="absolute -right-16 -top-16 size-48 rounded-full bg-primary-200/40 blur-3xl"
+        className="bg-primary-200/40 absolute -top-16 -right-16 size-48 rounded-full blur-3xl"
       />
       <div
         aria-hidden
@@ -108,32 +109,32 @@ export function OnboardingProgressCard({ initialData }: Props) {
       />
 
       <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-        <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-orange-500 text-white shadow-orange">
+        <div className="from-primary-500 shadow-orange flex size-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br to-orange-500 text-white">
           <Rocket className="size-7" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-2">
-            <h2 className="font-display text-lg font-extrabold tracking-tight text-warm-900 sm:text-xl">
+            <h2 className="font-display text-warm-900 text-lg font-extrabold tracking-tight sm:text-xl">
               Lanjutkan goal kamu
             </h2>
-            <span className="rounded-full bg-primary-500 px-2.5 py-0.5 text-xs font-bold text-white">
+            <span className="bg-primary-500 rounded-full px-2.5 py-0.5 text-xs font-bold text-white">
               {data.remainingSteps > 0
                 ? `${data.remainingSteps} langkah lagi`
                 : 'Hampir selesai!'}
             </span>
           </div>
-          <p className="mt-0.5 text-sm font-medium text-warm-700">
+          <p className="text-warm-700 mt-0.5 text-sm font-medium">
             {data.title}
           </p>
           <div className="mt-2.5 flex items-center gap-3">
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/70 ring-1 ring-warm-200">
+            <div className="ring-warm-200 h-2 flex-1 overflow-hidden rounded-full bg-white/70 ring-1">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-primary-500 to-orange-500 transition-all"
+                className="from-primary-500 h-full rounded-full bg-gradient-to-r to-orange-500 transition-all"
                 style={{ width: `${data.progressPct}%` }}
               />
             </div>
-            <span className="text-xs font-bold text-warm-800 tabular-nums">
+            <span className="text-warm-800 text-xs font-bold tabular-nums">
               {data.completedSteps}/{data.totalSteps} ({data.progressPct}%)
             </span>
           </div>
@@ -142,7 +143,7 @@ export function OnboardingProgressCard({ initialData }: Props) {
         <Button
           asChild
           size="lg"
-          className="shrink-0 bg-primary-500 px-5 font-bold shadow-orange hover:bg-primary-600"
+          className="bg-primary-500 shadow-orange hover:bg-primary-600 shrink-0 px-5 font-bold"
         >
           <Link href="/onboarding/guide">
             Lanjut setup <ArrowRight className="ml-1.5 size-4" />

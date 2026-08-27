@@ -85,7 +85,7 @@ export function ColumnPickerModal({
         </DialogHeader>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-warm-400" />
+          <Search className="text-warm-400 pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             placeholder="Cari kolom…"
             value={search}
@@ -95,36 +95,38 @@ export function ColumnPickerModal({
         </div>
 
         <div className="max-h-[55vh] space-y-5 overflow-y-auto pr-1">
-          {(Object.entries(grouped) as Array<[OrderColumnCategory, OrderColumn[]]>).map(
-            ([cat, cols]) => {
-              if (cols.length === 0) return null
-              return (
-                <div key={cat}>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-warm-500">
-                    {ORDER_COLUMN_CATEGORIES[cat]}
-                  </h3>
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {cols.map((col) => (
-                      <label
-                        key={col.key}
-                        className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 hover:bg-warm-50 dark:hover:bg-warm-900/40"
-                      >
-                        <Checkbox
-                          checked={selected.includes(col.key)}
-                          onCheckedChange={() => toggle(col.key)}
-                        />
-                        <span className="text-sm">{col.label}</span>
-                      </label>
-                    ))}
-                  </div>
+          {(
+            Object.entries(grouped) as Array<
+              [OrderColumnCategory, OrderColumn[]]
+            >
+          ).map(([cat, cols]) => {
+            if (cols.length === 0) return null
+            return (
+              <div key={cat}>
+                <h3 className="text-warm-500 mb-2 text-xs font-semibold tracking-wide uppercase">
+                  {ORDER_COLUMN_CATEGORIES[cat]}
+                </h3>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  {cols.map((col) => (
+                    <label
+                      key={col.key}
+                      className="hover:bg-warm-50 flex cursor-pointer items-center gap-2 rounded-md p-1.5"
+                    >
+                      <Checkbox
+                        checked={selected.includes(col.key)}
+                        onCheckedChange={() => toggle(col.key)}
+                      />
+                      <span className="text-sm">{col.label}</span>
+                    </label>
+                  ))}
                 </div>
-              )
-            },
-          )}
+              </div>
+            )
+          })}
         </div>
 
         <DialogFooter className="flex flex-row items-center justify-between border-t pt-3 sm:justify-between">
-          <span className="text-xs text-warm-500">
+          <span className="text-warm-500 text-xs">
             {selected.length} kolom dipilih
           </span>
           <div className="flex gap-2">

@@ -14,6 +14,13 @@ export const SETTING_KEYS = {
   // WA (WhatsApp saja, email fallback darurat kalau WA gagal),
   // BOTH (dual-send, perilaku lama). Diset via /admin/settings.
   OTP_CHANNEL_MODE: 'OTP_CHANNEL_MODE',
+  // URL situs dokumentasi eksternal (mis. https://docs.hulao.id). Kosong =
+  // halaman /dokumentasi hanya menampilkan sumber internal — menu tetap
+  // berguna, tidak terasa rusak.
+  DOCS_URL: 'DOCS_URL',
+  // Jam operasional support (teks bebas) — tampil di /bantuan supaya user
+  // tahu kapan admin membalas.
+  SUPPORT_HOURS: 'SUPPORT_HOURS',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
@@ -27,6 +34,8 @@ const DEFAULTS: Record<SettingKey, string> = {
   SUPPORT_EMAIL: '',
   OTP_WA_SESSION_ID: '',
   OTP_CHANNEL_MODE: 'BOTH',
+  DOCS_URL: '',
+  SUPPORT_HOURS: 'Senin–Jumat, 09.00–17.00 WIB',
 }
 
 export async function getOtpChannelMode(): Promise<OtpChannelMode> {

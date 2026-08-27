@@ -2,11 +2,13 @@
 
 // Dashboard testimoni owner (/pesanan/testimoni). List + kurasi (approve) +
 // hapus. Data dari /api/reviews. POWER only (gating di page).
+import type { LucideIcon } from 'lucide-react'
 import { Check, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
@@ -94,25 +96,25 @@ export function TestimoniClient() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-3xl overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <PageHeader
         title="Testimoni"
         description="Testimoni masuk otomatis dari link follow-up setelah customer terima pesanan. Setujui yang mau dipakai sebagai social proof."
-        className="mb-4"
       />
 
       {stats ? (
-        <div className="mb-4 grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <StatCard label="Total" value={String(stats.total)} />
           <StatCard
             label="Rata-rata"
-            value={stats.avgRating ? `${stats.avgRating} ★` : '—'}
+            value={stats.avgRating ? String(stats.avgRating) : '—'}
+            icon={stats.avgRating ? Star : undefined}
           />
           <StatCard label="Disetujui" value={String(stats.approved)} />
         </div>
       ) : null}
 
-      <div className="mb-4 flex gap-2">
+      <div className="flex gap-2">
         {(['all', 'pending', 'approved'] as Filter[]).map((f) => (
           <button
             key={f}
@@ -122,10 +124,14 @@ export function TestimoniClient() {
               'cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition',
               filter === f
                 ? 'bg-primary-500 text-white'
-                : 'bg-warm-100 text-warm-600 hover:bg-warm-200 dark:bg-warm-800 dark:text-warm-300 dark:hover:bg-warm-700',
+                : 'bg-warm-100 text-warm-600 hover:bg-warm-200',
             )}
           >
-            {f === 'all' ? 'Semua' : f === 'pending' ? 'Belum disetujui' : 'Disetujui'}
+            {f === 'all'
+              ? 'Semua'
+              : f === 'pending'
+                ? 'Belum disetujui'
+                : 'Disetujui'}
           </button>
         ))}
       </div>
@@ -133,15 +139,12 @@ export function TestimoniClient() {
       {loading ? (
         <CardGridSkeleton count={4} />
       ) : items.length === 0 ? (
-        <Card>
-          <CardContent>
-            <EmptyState
-              icon={Star}
-              title="Belum ada testimoni"
-              description="Testimoni terkumpul otomatis saat customer isi link review dari pesan follow-up."
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={Star}
+          title="Belum ada testimoni"
+          description="Testimoni terkumpul otomatis saat customer isi link review dari pesan follow-up."
+        />
       ) : (
         <div className="space-y-3">
           {items.map((r) => (
@@ -163,29 +166,27 @@ export function TestimoniClient() {
                         <Star
                           key={n}
                           className={cn(
-                            'h-4 w-4',
+                            'size-4',
                             r.rating >= n
-                              ? 'fill-amber-400 text-amber-400'
+                              ? 'fill-primary-400 text-primary-400'
                               : 'text-warm-300',
                           )}
                         />
                       ))}
                     </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     {new Date(r.createdAt).toLocaleDateString('id-ID')}
                   </span>
                 </div>
 
                 {r.productName ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="text-muted-foreground mt-1 text-xs">
                     Produk: {r.productName}
                   </p>
                 ) : null}
                 {r.reviewText ? (
-                  <p className="mt-2 text-sm text-warm-700 dark:text-warm-200">
-                    {r.reviewText}
-                  </p>
+                  <p className="text-warm-700 mt-2 text-sm">{r.reviewText}</p>
                 ) : null}
 
                 {r.photoUrls.length > 0 ? (
@@ -196,7 +197,7 @@ export function TestimoniClient() {
                         key={url}
                         src={url}
                         alt="Foto testimoni"
-                        className="h-20 w-20 rounded-lg object-cover"
+                        className="size-20 rounded-lg object-cover"
                       />
                     ))}
                   </div>
@@ -208,13 +209,8 @@ export function TestimoniClient() {
                     variant={r.approved ? 'outline' : 'default'}
                     disabled={actionId === r.id}
                     onClick={() => toggleApprove(r)}
-                    className={
-                      r.approved
-                        ? ''
-                        : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    }
                   >
-                    <Check className="mr-1 h-3.5 w-3.5" />
+                    <Check className="mr-1 size-3.5" />
                     {r.approved ? 'Batalkan' : 'Setujui'}
                   </Button>
                   <Button
@@ -224,7 +220,7 @@ export function TestimoniClient() {
                     onClick={() => setDeleteTarget(r)}
                     className="text-destructive hover:text-destructive"
                   >
-                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Hapus
+                    <Trash2 className="mr-1 size-3.5" /> Hapus
                   </Button>
                 </div>
               </CardContent>
@@ -243,16 +239,27 @@ export function TestimoniClient() {
         isLoading={isDeleting}
         onConfirm={remove}
       />
-    </div>
+    </PageContainer>
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  icon?: LucideIcon
+}) {
   return (
     <Card>
       <CardContent className="p-3 text-center">
-        <div className="text-lg font-semibold">{value}</div>
-        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="flex items-center justify-center gap-1 text-lg font-semibold">
+          {value}
+          {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+        </div>
+        <div className="text-muted-foreground text-xs">{label}</div>
       </CardContent>
     </Card>
   )

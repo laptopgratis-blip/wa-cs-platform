@@ -2,13 +2,16 @@
 
 // Pixel Event Logs viewer — tabel paginated dengan filter platform/event/
 // status/pixel. Click row → modal detail payload+response.
-import { ArrowLeft, CheckCircle2, ChevronLeft, ChevronRight, Filter, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Filter, Loader2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Pagination } from '@/components/shared/Pagination'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -26,7 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatRelativeTime } from '@/lib/format-time'
+import { TONES } from '@/lib/ui-tones'
 
 interface LogItem {
   id: string
@@ -56,13 +68,6 @@ interface PixelLogsClientProps {
   pixels: PixelLite[]
 }
 
-const PLATFORM_EMOJI: Record<string, string> = {
-  META: '📘',
-  GOOGLE_ADS: '🎯',
-  GA4: '📊',
-  TIKTOK: '🎵',
-}
-
 const EVENT_OPTIONS = [
   'Purchase',
   'Lead',
@@ -78,6 +83,9 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
+  // pageSize ikut `limit` dari respons API (default server = 50) supaya teks
+  // "Menampilkan x–y dari N" di <Pagination> selalu sinkron dengan backend.
+  const [pageSize, setPageSize] = useState(50)
   const [totalPages, setTotalPages] = useState(1)
 
   const [platform, setPlatform] = useState<string>('')
@@ -108,6 +116,7 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
       }
       setItems(data.data.items)
       setTotal(data.data.pagination.total)
+      setPageSize(data.data.pagination.limit ?? 50)
       setTotalPages(data.data.pagination.totalPages)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
@@ -132,9 +141,9 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
   }
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       {/* Header */}
-      <div className="mb-4">
+      <div>
         <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2">
           <Link href="/integrations/pixels">
             <ArrowLeft className="mr-1 size-4" />
@@ -148,11 +157,11 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
       </div>
 
       {/* Filter bar */}
-      <Card className="mb-4">
+      <Card>
         <CardContent className="space-y-3 p-4">
           <div className="flex items-center gap-2">
-            <Filter className="size-4 text-warm-500" />
-            <p className="text-sm font-medium text-warm-700">Filter</p>
+            <Filter className="text-warm-500 size-4" />
+            <p className="text-warm-700 text-sm font-medium">Filter</p>
             <Button
               variant="ghost"
               size="sm"
@@ -220,8 +229,8 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua</SelectItem>
-                  <SelectItem value="succeeded">✅ Sukses</SelectItem>
-                  <SelectItem value="failed">❌ Gagal</SelectItem>
+                  <SelectItem value="succeeded">Sukses</SelectItem>
+                  <SelectItem value="failed">Gagal</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -241,7 +250,7 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
                   <SelectItem value="all">Semua</SelectItem>
                   {pixels.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {PLATFORM_EMOJI[p.platform] ?? '📊'} {p.displayName}
+                      {p.platform} · {p.displayName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -279,102 +288,93 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="p-8 text-center text-sm text-warm-500">
+            <div className="text-warm-500 flex items-center justify-center gap-2 p-8 text-sm">
+              <Loader2 className="size-4 animate-spin" />
               Memuat…
             </div>
           ) : items.length === 0 ? (
-            <div className="p-8 text-center text-sm text-warm-500">
-              Tidak ada event yang cocok dengan filter.
-            </div>
+            <EmptyState
+              icon={Filter}
+              title="Tidak ada event"
+              description="Tidak ada event yang cocok dengan filter."
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-warm-50 text-xs uppercase tracking-wider text-warm-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Waktu</th>
-                    <th className="px-3 py-2 text-left">Platform</th>
-                    <th className="px-3 py-2 text-left">Event</th>
-                    <th className="px-3 py-2 text-left">Source</th>
-                    <th className="px-3 py-2 text-left">Status</th>
-                    <th className="px-3 py-2 text-left">Order</th>
-                    <th className="px-3 py-2 text-right">Retry</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((log) => (
-                    <tr
-                      key={log.id}
-                      onClick={() => setDetail(log)}
-                      className="cursor-pointer border-b hover:bg-warm-50"
-                    >
-                      <td className="px-3 py-2 text-xs text-warm-600">
-                        {formatRelativeTime(log.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        {PLATFORM_EMOJI[log.platform] ?? '📊'}{' '}
-                        <span className="font-mono text-xs">{log.platform}</span>
-                      </td>
-                      <td className="px-3 py-2 font-medium">{log.eventName}</td>
-                      <td className="px-3 py-2 text-xs text-warm-600">
-                        {log.source}
-                      </td>
-                      <td className="px-3 py-2">
-                        {log.succeeded ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                            <CheckCircle2 className="mr-1 size-3" />
-                            Sukses
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">
-                            <XCircle className="mr-1 size-3" />
-                            Gagal
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {log.orderId ? (
-                          <span className="text-warm-600">
-                            {log.orderId.slice(0, 8)}…
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs text-warm-500">
-                        {log.retryCount > 0 ? `×${log.retryCount}` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Waktu</TableHead>
+                  <TableHead>Platform</TableHead>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Order</TableHead>
+                  <TableHead className="text-right">Retry</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((log) => (
+                  <TableRow
+                    key={log.id}
+                    onClick={() => setDetail(log)}
+                    className="cursor-pointer"
+                  >
+                    <TableCell className="text-warm-600 text-xs">
+                      {formatRelativeTime(log.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <span className="font-mono text-xs">{log.platform}</span>
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {log.eventName}
+                    </TableCell>
+                    <TableCell className="text-warm-600 text-xs">
+                      {log.source}
+                    </TableCell>
+                    <TableCell>
+                      {log.succeeded ? (
+                        <StatusBadge
+                          tone="success"
+                          icon={CheckCircle2}
+                          label="Sukses"
+                        />
+                      ) : (
+                        <StatusBadge
+                          tone="danger"
+                          icon={XCircle}
+                          label="Gagal"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {log.orderId ? (
+                        <span className="text-warm-600">
+                          {log.orderId.slice(0, 8)}…
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="text-warm-500 text-right text-xs">
+                      {log.retryCount > 0 ? `×${log.retryCount}` : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="text-sm text-warm-600">
-            Hal {page} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          isLoading={loading}
+          onPageChange={setPage}
+          noun="event"
+        />
       )}
 
       {/* Detail dialog */}
@@ -390,58 +390,62 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <Label className="text-xs text-warm-500">Event ID</Label>
+                  <Label className="text-warm-500 text-xs">Event ID</Label>
                   <p className="font-mono break-all">{detail.eventId}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-warm-500">Order ID</Label>
-                  <p className="font-mono break-all">
-                    {detail.orderId ?? '—'}
-                  </p>
+                  <Label className="text-warm-500 text-xs">Order ID</Label>
+                  <p className="font-mono break-all">{detail.orderId ?? '—'}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-warm-500">Source</Label>
+                  <Label className="text-warm-500 text-xs">Source</Label>
                   <p>{detail.source}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-warm-500">Status</Label>
-                  <p>
-                    {detail.succeeded ? '✅ Sukses' : '❌ Gagal'}
-                    {detail.retryCount > 0 && ` (retry ×${detail.retryCount})`}
+                  <Label className="text-warm-500 text-xs">Status</Label>
+                  <p className="flex flex-wrap items-center gap-1.5">
+                    <StatusBadge
+                      tone={detail.succeeded ? 'success' : 'danger'}
+                      icon={detail.succeeded ? CheckCircle2 : XCircle}
+                      label={detail.succeeded ? 'Sukses' : 'Gagal'}
+                    />
+                    {detail.retryCount > 0 && `(retry ×${detail.retryCount})`}
                   </p>
                 </div>
                 {detail.responseStatus != null && (
                   <div>
-                    <Label className="text-xs text-warm-500">HTTP Status</Label>
+                    <Label className="text-warm-500 text-xs">HTTP Status</Label>
                     <p className="font-mono">{detail.responseStatus}</p>
                   </div>
                 )}
                 <div>
-                  <Label className="text-xs text-warm-500">Waktu</Label>
+                  <Label className="text-warm-500 text-xs">Waktu</Label>
                   <p>{new Date(detail.createdAt).toLocaleString('id-ID')}</p>
                 </div>
               </div>
 
               {detail.errorMessage && (
                 <div>
-                  <Label className="text-xs text-warm-500">Error</Label>
-                  <pre className="mt-1 max-h-40 overflow-auto rounded bg-rose-50 p-2 font-mono text-xs text-rose-900">
+                  <Label className="text-warm-500 text-xs">Error</Label>
+                  <pre
+                    className={`mt-1 max-h-40 overflow-auto rounded p-2 font-mono text-xs ${TONES.danger.bg} ${TONES.danger.text}`}
+                  >
                     {detail.errorMessage}
                   </pre>
                 </div>
               )}
 
               <div>
-                <Label className="text-xs text-warm-500">Payload (sent)</Label>
-                <pre className="mt-1 max-h-60 overflow-auto rounded bg-warm-50 p-2 font-mono text-xs">
+                <Label className="text-warm-500 text-xs">Payload (sent)</Label>
+                <pre className="bg-warm-50 mt-1 max-h-60 overflow-auto rounded p-2 font-mono text-xs">
                   {JSON.stringify(detail.payload, null, 2)}
                 </pre>
               </div>
 
               {detail.responseBody && (
                 <div>
-                  <Label className="text-xs text-warm-500">Response</Label>
-                  <pre className="mt-1 max-h-60 overflow-auto rounded bg-warm-50 p-2 font-mono text-xs">
+                  <Label className="text-warm-500 text-xs">Response</Label>
+                  <pre className="bg-warm-50 mt-1 max-h-60 overflow-auto rounded p-2 font-mono text-xs">
                     {detail.responseBody}
                   </pre>
                 </div>
@@ -450,6 +454,6 @@ export function PixelLogsClient({ pixels }: PixelLogsClientProps) {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

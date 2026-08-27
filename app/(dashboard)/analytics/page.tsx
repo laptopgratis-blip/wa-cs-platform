@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { AnalyticsView } from '@/components/dashboard/AnalyticsView'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 
 export const dynamic = 'force-dynamic'
@@ -13,8 +14,8 @@ export default async function AnalyticsPage() {
   if (!session) redirect('/login')
 
   return (
-    <div className="mx-auto h-full max-w-7xl overflow-y-auto p-4 md:p-6">
+    <PageContainer width="wide">
       <AnalyticsView />
-    </div>
+    </PageContainer>
   )
 }

@@ -73,7 +73,7 @@ export function ReviewFormPublic({
 
   async function handleSubmit() {
     if (rating < 1) {
-      setError('Kasih bintang dulu ya ⭐')
+      setError('Kasih bintang dulu ya')
       return
     }
     setSubmitting(true)
@@ -108,11 +108,11 @@ export function ReviewFormPublic({
       <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-white p-6 text-center">
         <CheckCircle2 className="h-16 w-16 text-emerald-500" aria-hidden="true" />
         <h1 className="mt-4 text-xl font-semibold text-zinc-900">
-          Terima kasih, {customerName}! 🙏
+          Terima kasih, {customerName}!
         </h1>
         <p className="mt-2 max-w-sm text-sm text-zinc-600">
           Testimoni kamu sudah kami terima. Sangat membantu {storeName} jadi lebih
-          baik. Sampai jumpa di order berikutnya ✨
+          baik. Sampai jumpa di order berikutnya.
         </p>
       </div>
     )

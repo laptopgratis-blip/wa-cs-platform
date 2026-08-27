@@ -16,6 +16,8 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -140,7 +142,7 @@ export function HostTemplatesManager({
         description={subtitle}
         actions={
           <Button onClick={() => setShowModePicker(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Bikin Host Baru
+            <Plus className="mr-2 size-4" /> Bikin Host Baru
           </Button>
         }
       />
@@ -156,7 +158,7 @@ export function HostTemplatesManager({
               description="Host avatar dipakai untuk live shopping AI. Bikin yang pertama sekarang."
               action={
                 <Button onClick={() => setShowModePicker(true)}>
-                  <Plus className="mr-2 h-4 w-4" /> Bikin Host Baru
+                  <Plus className="mr-2 size-4" /> Bikin Host Baru
                 </Button>
               }
             />
@@ -256,11 +258,11 @@ function HostCard({
             />
           ) : row.status === 'GENERATING_IMAGE' ? (
             <div className="flex flex-col items-center gap-2 text-warm-500">
-              <Loader2 className="h-8 w-8 animate-spin" />
+              <Loader2 className="size-8 animate-spin" />
               <span className="text-xs">Generate gambar…</span>
             </div>
           ) : (
-            <ImageIcon className="h-10 w-10 text-warm-300" />
+            <ImageIcon className="size-10 text-warm-300" />
           )}
           <StatusBadge
             tone={badge.tone}
@@ -277,7 +279,7 @@ function HostCard({
           >
             <div className="flex items-center gap-1 truncate text-sm font-medium group-hover:text-primary-600">
               {row.name}
-              <ChevronRight className="h-3 w-3 opacity-50" />
+              <ChevronRight className="size-3 opacity-50" />
             </div>
             {row.visualStyle ? (
               <div className="truncate text-xs text-muted-foreground">{row.visualStyle}</div>
@@ -291,13 +293,19 @@ function HostCard({
             onClick={() => onDelete(row.id)}
             title="Hapus"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="size-4" />
           </Button>
         </div>
 
         {row.errorMessage ? (
-          <div className="flex items-start gap-2 rounded-md bg-red-50 p-2 text-xs text-red-700">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+          <div
+            className={cn(
+              'flex items-start gap-2 rounded-md p-2 text-xs',
+              TONES.danger.bg,
+              TONES.danger.text,
+            )}
+          >
+            <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0" />
             <span className="break-all">{row.errorMessage}</span>
           </div>
         ) : null}
@@ -305,7 +313,7 @@ function HostCard({
         {row.status === 'IMAGE_READY' || row.status === 'READY' ? (
           <Link href={detailHref}>
             <Button size="sm" variant="outline" className="w-full">
-              Kelola scenes <ChevronRight className="ml-1 h-3.5 w-3.5" />
+              Kelola scenes <ChevronRight className="ml-1 size-3.5" />
             </Button>
           </Link>
         ) : null}

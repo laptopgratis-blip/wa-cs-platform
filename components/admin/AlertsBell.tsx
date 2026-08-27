@@ -12,6 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface AlertItem {
@@ -25,9 +26,9 @@ interface AlertItem {
 }
 
 const LEVEL_DOT: Record<AlertItem['level'], string> = {
-  RED: 'bg-red-500',
-  YELLOW: 'bg-amber-400',
-  GREEN: 'bg-emerald-500',
+  RED: TONES.danger.dot,
+  YELLOW: TONES.warning.dot,
+  GREEN: TONES.success.dot,
 }
 
 export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
@@ -80,7 +81,12 @@ export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
         >
           <Bell className="size-5" />
           {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            <span
+              className={cn(
+                'absolute -top-0.5 -right-0.5 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-xs font-bold',
+                TONES.danger.solid,
+              )}
+            >
               {unread > 99 ? '99+' : unread}
             </span>
           )}
@@ -104,7 +110,7 @@ export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
         </div>
         <div className="max-h-80 overflow-y-auto">
           {items.length === 0 ? (
-            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+            <p className="text-muted-foreground px-3 py-6 text-center text-xs">
               Belum ada alert.
             </p>
           ) : (
@@ -113,7 +119,7 @@ export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
                 key={a.id}
                 className={cn(
                   'group flex items-start gap-2 border-b px-3 py-2 last:border-b-0',
-                  !a.isRead && 'bg-amber-50/40 dark:bg-amber-950/20',
+                  !a.isRead && 'bg-primary-50/40',
                 )}
               >
                 <span
@@ -124,10 +130,10 @@ export function AlertsBell({ collapsed = false }: { collapsed?: boolean }) {
                 />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium">{a.title}</p>
-                  <p className="text-[11px] text-muted-foreground line-clamp-2">
+                  <p className="text-muted-foreground line-clamp-2 text-xs">
                     {a.message}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                  <p className="text-muted-foreground mt-0.5 text-xs">
                     {new Date(a.createdAt).toLocaleString('id-ID')}
                   </p>
                 </div>

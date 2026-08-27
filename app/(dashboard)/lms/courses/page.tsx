@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth'
 
 import { CoursesList } from '@/components/lms/CoursesList'
 import { OnboardingHint } from '@/components/onboarding/OnboardingHint'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
@@ -13,6 +14,8 @@ import {
   PHASE1_FREE_MAX_COURSES,
   listCoursesForOwner,
 } from '@/lib/services/lms/course'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +27,7 @@ export default async function LmsCoursesPage() {
   const activeCount = courses.filter((c) => c.status !== 'ARCHIVED').length
 
   return (
-    <div className="mx-auto flex min-h-full max-w-5xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <OnboardingHint
         hintId="lms-courses"
         relevantFor={['LMS']}
@@ -35,11 +38,7 @@ export default async function LmsCoursesPage() {
         title="Course Saya"
         description="Bikin produk digital dan e-course. Customer yang beli produk yang di-link ke course otomatis dapat akses."
         actions={
-          <Button
-            asChild
-            disabled={activeCount >= PHASE1_FREE_MAX_COURSES}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button asChild disabled={activeCount >= PHASE1_FREE_MAX_COURSES}>
             <Link href="/lms/courses/new">
               <Plus className="mr-2 size-4" />
               Buat Course Baru
@@ -48,7 +47,15 @@ export default async function LmsCoursesPage() {
         }
       />
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+      {/* Panel catatan beta — warna lewat registry tone, bukan palet mentah. */}
+      <div
+        className={cn(
+          'rounded-xl border p-3 text-sm',
+          TONES.warning.bg,
+          TONES.warning.border,
+          TONES.warning.text,
+        )}
+      >
         <strong>Phase 1 BETA</strong> — limit {PHASE1_FREE_MAX_COURSES} course
         aktif & 5 lesson per course. Plan upgrade dgn token unlock di Phase 3.
         Phase 1 hanya support video embed (YouTube/Vimeo) + teks; upload file
@@ -56,6 +63,6 @@ export default async function LmsCoursesPage() {
       </div>
 
       <CoursesList courses={courses} />
-    </div>
+    </PageContainer>
   )
 }

@@ -17,9 +17,10 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -34,6 +35,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format-time'
+import { TONES } from '@/lib/ui-tones'
 import {
   PIXEL_PLATFORMS,
   PIXEL_PLATFORM_HELPER,
@@ -68,11 +70,12 @@ interface PixelsClientProps {
 }
 
 // Inisial platform sebagai avatar huruf — ikon brand tidak tersedia di lucide.
-const PLATFORM_INITIAL: Record<string, { label: string; cls: string }> = {
-  META: { label: 'M', cls: 'bg-blue-100 text-blue-700' },
-  GOOGLE_ADS: { label: 'G', cls: 'bg-amber-100 text-amber-700' },
-  GA4: { label: 'GA', cls: 'bg-emerald-100 text-emerald-700' },
-  TIKTOK: { label: 'T', cls: 'bg-warm-900 text-white' },
+// Warna sengaja seragam (netral): identitas platform dibawa hurufnya, bukan hue.
+const PLATFORM_INITIAL: Record<string, string> = {
+  META: 'M',
+  GOOGLE_ADS: 'G',
+  GA4: 'GA',
+  TIKTOK: 'T',
 }
 
 interface FormState {
@@ -110,23 +113,22 @@ const EMPTY_FORM: FormState = {
   isActive: true,
 }
 
-function StatusBadge({ item }: { item: PixelItem }) {
+// Status pemasangan pixel: mati / browser-only / browser + server-side.
+function PixelStatusBadge({ item }: { item: PixelItem }) {
   if (!item.isActive) {
-    return <Badge variant="secondary">Off</Badge>
+    return <StatusBadge tone="neutral" label="Off" />
   }
   if (item.serverSideEnabled && item.accessTokenSet) {
     return (
-      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-        <CheckCircle2 className="mr-1 size-3" />
-        Browser + Server-side
-      </Badge>
+      <StatusBadge
+        tone="success"
+        icon={CheckCircle2}
+        label="Browser + Server-side"
+      />
     )
   }
   return (
-    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-      <AlertCircle className="mr-1 size-3" />
-      Browser pixel only
-    </Badge>
+    <StatusBadge tone="warning" icon={AlertCircle} label="Browser pixel only" />
   )
 }
 
@@ -160,7 +162,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
       displayName: p.displayName,
       pixelId: p.pixelId,
       serverSideEnabled: p.serverSideEnabled,
-      accessToken: '',  // sengaja kosong — user kalau mau ganti, isi baru
+      accessToken: '', // sengaja kosong — user kalau mau ganti, isi baru
       conversionLabelInitiateCheckout: p.conversionLabelInitiateCheckout ?? '',
       conversionLabelLead: p.conversionLabelLead ?? '',
       conversionLabelPurchase: p.conversionLabelPurchase ?? '',
@@ -241,7 +243,9 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
         return
       }
       await refreshList()
-      toast.success(editingId ? 'Integrasi diperbarui' : 'Integrasi ditambahkan')
+      toast.success(
+        editingId ? 'Integrasi diperbarui' : 'Integrasi ditambahkan',
+      )
       setDialogOpen(false)
     } catch {
       toast.error('Terjadi kesalahan jaringan')
@@ -274,7 +278,9 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
 
   async function handleTest(item: PixelItem) {
     if (!item.serverSideEnabled || !item.accessTokenSet) {
-      toast.error('Aktifkan server-side & set access token dulu untuk test event')
+      toast.error(
+        'Aktifkan server-side & set access token dulu untuk test event',
+      )
       return
     }
     setTesting(item.id)
@@ -318,15 +324,14 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
   )
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
-        className="mb-6"
         title="Pixel Tracking"
         description={
           <>
             Pasang pixel iklan untuk track conversion dari Meta, Google, dan
             TikTok. Server-side (CAPI) lebih akurat & tidak terblok adblock.
-            <span className="ml-1 text-warm-500">
+            <span className="text-warm-500 ml-1">
               ({items.length}/{limit} integrasi)
             </span>
           </>
@@ -350,45 +355,49 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                 <div className="mb-3 flex items-center gap-2">
                   <span
                     aria-hidden
-                    className={`flex size-7 items-center justify-center rounded-lg text-xs font-bold ${
-                      PLATFORM_INITIAL[platform]?.cls ?? 'bg-warm-100 text-warm-700'
-                    }`}
+                    className="bg-warm-100 text-warm-700 flex size-7 items-center justify-center rounded-lg text-xs font-semibold"
                   >
-                    {PLATFORM_INITIAL[platform]?.label ?? '?'}
+                    {PLATFORM_INITIAL[platform] ?? '?'}
                   </span>
-                  <h2 className="font-semibold text-warm-900">
+                  <h2 className="text-warm-900 font-semibold">
                     {PIXEL_PLATFORM_LABELS[platform]}
                   </h2>
                 </div>
 
                 {list.length === 0 ? (
-                  <div className="mb-3 rounded-lg border border-dashed bg-warm-50 p-3 text-center">
-                    <p className="text-sm text-warm-500">Belum dipasang</p>
+                  <div className="bg-warm-50 mb-3 rounded-lg border border-dashed p-3 text-center">
+                    <p className="text-warm-500 text-sm">Belum dipasang</p>
                   </div>
                 ) : (
                   <ul className="mb-3 space-y-2">
                     {list.map((item) => (
                       <li
                         key={item.id}
-                        className="rounded-lg border bg-warm-50 p-2.5"
+                        className="bg-warm-50 rounded-lg border p-2.5"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-medium text-warm-900">
+                            <p className="text-warm-900 truncate text-sm font-medium">
                               {item.displayName}
                             </p>
-                            <p className="truncate font-mono text-xs text-warm-600">
+                            <p className="text-warm-600 truncate font-mono text-xs">
                               {item.pixelId}
                             </p>
                           </div>
-                          <StatusBadge item={item} />
+                          <PixelStatusBadge item={item} />
                         </div>
-                        <div className="mt-1.5 flex items-center justify-between text-xs text-warm-500">
-                          <span>
+                        <div className="text-warm-500 mt-1.5 flex items-center justify-between text-xs">
+                          <span className="inline-flex items-center gap-1">
                             {item.totalEvents} event
                             {item.lastEventAt &&
                               ` · ${formatRelativeTime(item.lastEventAt)}`}
-                            {item.isTestMode && ' · 🧪 Test mode'}
+                            {item.isTestMode && (
+                              <>
+                                {' · '}
+                                <TestTube className="size-3" aria-hidden /> Test
+                                mode
+                              </>
+                            )}
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -415,7 +424,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                            className="text-destructive hover:bg-destructive/10 h-7 px-2 text-xs"
                             onClick={() =>
                               setDeleteTarget({
                                 id: item.id,
@@ -446,12 +455,14 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
         })}
       </div>
 
-      <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+      <div
+        className={`rounded-lg border p-4 text-sm ${TONES.info.border} ${TONES.info.bg} ${TONES.info.text}`}
+      >
         <p className="flex items-center gap-2 font-semibold">
           <Activity className="size-4" />
           Cara kerja
         </p>
-        <ul className="mt-2 space-y-1 text-blue-800">
+        <ul className="mt-2 space-y-1">
           <li>
             • <strong>Browser pixel</strong>: script otomatis terpasang di Form
             Order publik. Track PageView, ViewContent, AddToCart,
@@ -459,16 +470,16 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
           </li>
           <li>
             • <strong>Server-side (CAPI)</strong>: server kami kirim event
-            langsung ke Meta/TikTok. Lebih akurat — tidak terblok adblock,
-            tidak hilang saat customer block cookies.
+            langsung ke Meta/TikTok. Lebih akurat — tidak terblok adblock, tidak
+            hilang saat customer block cookies.
           </li>
           <li>
             • <strong>COD</strong>: Purchase fire saat order dibuat.
           </li>
           <li>
             • <strong>Transfer</strong>: Lead fire saat order dibuat. Purchase
-            fire sesuai trigger yang kamu pilih per-pixel (upload bukti
-            pembeli, upload bukti admin, atau saat di-tandai PAID).
+            fire sesuai trigger yang kamu pilih per-pixel (upload bukti pembeli,
+            upload bukti admin, atau saat di-tandai PAID).
           </li>
         </ul>
       </div>
@@ -497,7 +508,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                 }
                 placeholder="Mis. Meta - Akun Cleanoz"
               />
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Untuk identifikasi di list — bukan dipakai oleh platform.
               </p>
             </div>
@@ -525,12 +536,13 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
               />
             </div>
 
-            <div className="space-y-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 p-3">
+            <div className="border-primary-200 bg-primary-50 space-y-3 rounded-lg border-2 p-3">
               <div className="flex items-center justify-between">
-                <Label className="cursor-pointer text-sm font-semibold text-emerald-900">
+                <Label className="text-primary-900 cursor-pointer text-sm font-semibold">
                   Aktifkan Server-side ({form.platform === 'META' && 'CAPI'}
                   {form.platform === 'TIKTOK' && 'Events API'}
-                  {(form.platform === 'GOOGLE_ADS' || form.platform === 'GA4') &&
+                  {(form.platform === 'GOOGLE_ADS' ||
+                    form.platform === 'GA4') &&
                     'Measurement Protocol'}
                   )
                 </Label>
@@ -541,14 +553,14 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                   }
                 />
               </div>
-              <p className="text-xs text-emerald-800">
-                Direkomendasikan — tracking lebih akurat & tidak terblok
-                adblock customer.
+              <p className="text-primary-800 text-xs">
+                Direkomendasikan — tracking lebih akurat & tidak terblok adblock
+                customer.
               </p>
 
               {form.serverSideEnabled && (
                 <div className="space-y-1.5">
-                  <Label htmlFor="px-token" className="text-emerald-900">
+                  <Label htmlFor="px-token" className="text-primary-900">
                     Access Token
                   </Label>
                   {/* Status badge — kasih user kepastian token sudah ke-save atau belum.
@@ -559,22 +571,27 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                       const existing = items.find((i) => i.id === editingId)
                       if (existing?.accessTokenSet) {
                         return (
-                          <div className="flex items-center justify-between rounded-md border border-emerald-300 bg-emerald-100 px-3 py-2 text-xs text-emerald-900">
+                          <div
+                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${TONES.success.border} ${TONES.success.bg} ${TONES.success.text}`}
+                          >
                             <span className="flex items-center gap-1.5">
                               <CheckCircle2 className="size-3.5" />
-                              <strong>Token sudah tersimpan</strong> (terenkripsi)
+                              <strong>Token sudah tersimpan</strong>{' '}
+                              (terenkripsi)
                             </span>
-                            <span className="text-emerald-700">
+                            <span>
                               Kosongkan field di bawah jika tidak ingin diganti
                             </span>
                           </div>
                         )
                       }
                       return (
-                        <div className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                        <div
+                          className={`flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs ${TONES.warning.border} ${TONES.warning.bg} ${TONES.warning.text}`}
+                        >
                           <AlertCircle className="size-3.5" />
-                          <strong>Token belum di-set</strong> — server-side belum
-                          akan jalan tanpa token
+                          <strong>Token belum di-set</strong> — server-side
+                          belum akan jalan tanpa token
                         </div>
                       )
                     })()}
@@ -592,7 +609,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                     }
                     autoComplete="off"
                   />
-                  <p className="text-xs text-emerald-800">
+                  <p className="text-primary-800 text-xs">
                     {PIXEL_PLATFORM_HELPER[form.platform].tokenHelp}
                   </p>
                 </div>
@@ -600,11 +617,11 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
             </div>
 
             {form.platform === 'GOOGLE_ADS' && (
-              <div className="space-y-3 rounded-lg border bg-warm-50 p-3">
-                <p className="text-sm font-semibold text-warm-900">
+              <div className="bg-warm-50 space-y-3 rounded-lg border p-3">
+                <p className="text-warm-900 text-sm font-semibold">
                   Conversion Labels
                 </p>
-                <p className="text-xs text-warm-600">
+                <p className="text-warm-600 text-xs">
                   Buat 3 conversion action di Google Ads, copy label-nya ke
                   sini.
                 </p>
@@ -654,11 +671,11 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
             )}
 
             {form.platform === 'META' && (
-              <div className="space-y-3 rounded-lg border bg-warm-50 p-3">
-                <p className="text-sm font-semibold text-warm-900">
+              <div className="bg-warm-50 space-y-3 rounded-lg border p-3">
+                <p className="text-warm-900 text-sm font-semibold">
                   Test Event (opsional)
                 </p>
-                <p className="text-xs text-warm-600">
+                <p className="text-warm-600 text-xs">
                   Sebelum live, kirim event ke Test Events Tool dulu. Aktifkan
                   test mode supaya semua event di-mark sebagai test.
                 </p>
@@ -690,19 +707,21 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
               </div>
             )}
 
-            <div className="space-y-3 rounded-lg border-2 border-purple-200 bg-purple-50 p-3">
+            <div className="border-primary-200 bg-primary-50 space-y-3 rounded-lg border-2 p-3">
               <div>
-                <p className="text-sm font-semibold text-purple-900">
-                  Kapan event <span className="font-mono">Purchase</span> di-fire?
+                <p className="text-primary-900 text-sm font-semibold">
+                  Kapan event <span className="font-mono">Purchase</span>{' '}
+                  di-fire?
                 </p>
-                <p className="mt-0.5 text-xs text-purple-800">
+                <p className="text-primary-800 mt-0.5 text-xs">
                   Untuk metode TRANSFER, pilih satu atau lebih momen di bawah.
-                  Order COD selalu fire Purchase saat dibuat (tidak terpengaruh).
-                  Dedup otomatis — order yang sama tidak di-fire dobel.
+                  Order COD selalu fire Purchase saat dibuat (tidak
+                  terpengaruh). Dedup otomatis — order yang sama tidak di-fire
+                  dobel.
                 </p>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+              <label className="border-primary-200 hover:bg-primary-50/50 flex cursor-pointer items-start gap-2 rounded-md border bg-white px-3 py-2 transition">
                 <input
                   type="checkbox"
                   checked={form.triggerOnBuyerProofUpload}
@@ -712,13 +731,13 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                       triggerOnBuyerProofUpload: e.target.checked,
                     }))
                   }
-                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                  className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-warm-900">
+                  <p className="text-warm-900 text-sm font-medium">
                     Bukti transfer diupload oleh pembeli
                   </p>
-                  <p className="text-xs text-warm-600">
+                  <p className="text-warm-600 text-xs">
                     Paling cepat — fire saat pembeli upload bukti via halaman
                     invoice (status jadi WAITING_CONFIRMATION). Belum
                     diverifikasi admin.
@@ -726,7 +745,7 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                 </div>
               </label>
 
-              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+              <label className="border-primary-200 hover:bg-primary-50/50 flex cursor-pointer items-start gap-2 rounded-md border bg-white px-3 py-2 transition">
                 <input
                   type="checkbox"
                   checked={form.triggerOnAdminProofUpload}
@@ -736,20 +755,20 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                       triggerOnAdminProofUpload: e.target.checked,
                     }))
                   }
-                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                  className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-warm-900">
+                  <p className="text-warm-900 text-sm font-medium">
                     Bukti transfer diupload oleh admin sendiri
                   </p>
-                  <p className="text-xs text-warm-600">
+                  <p className="text-warm-600 text-xs">
                     Saat admin terima bukti via WA/email lalu input manual URL
                     bukti di dialog detail order.
                   </p>
                 </div>
               </label>
 
-              <label className="flex cursor-pointer items-start gap-2 rounded-md border border-purple-200 bg-white px-3 py-2 transition hover:bg-purple-50/50">
+              <label className="border-primary-200 hover:bg-primary-50/50 flex cursor-pointer items-start gap-2 rounded-md border bg-white px-3 py-2 transition">
                 <input
                   type="checkbox"
                   checked={form.triggerOnAdminMarkPaid}
@@ -759,15 +778,18 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
                       triggerOnAdminMarkPaid: e.target.checked,
                     }))
                   }
-                  className="mt-0.5 size-4 cursor-pointer accent-purple-600"
+                  className="accent-primary-500 mt-0.5 size-4 cursor-pointer"
                 />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-warm-900">
+                  <p className="text-warm-900 text-sm font-medium">
                     Order ditandai PAID oleh admin
                   </p>
-                  <p className="text-xs text-warm-600">
-                    Paling akurat — fire saat admin konfirmasi pembayaran
-                    valid & ubah status ke PAID. <span className="font-semibold">Default direkomendasikan.</span>
+                  <p className="text-warm-600 text-xs">
+                    Paling akurat — fire saat admin konfirmasi pembayaran valid
+                    & ubah status ke PAID.{' '}
+                    <span className="font-semibold">
+                      Default direkomendasikan.
+                    </span>
                   </p>
                 </div>
               </label>
@@ -775,22 +797,23 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
               {!form.triggerOnBuyerProofUpload &&
                 !form.triggerOnAdminProofUpload &&
                 !form.triggerOnAdminMarkPaid && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    ⚠ Tidak ada trigger aktif — Purchase TIDAK akan pernah
-                    di-fire ke pixel ini untuk order TRANSFER.
+                  <div
+                    className={`flex items-start gap-1.5 rounded-md border px-3 py-2 text-xs ${TONES.warning.border} ${TONES.warning.bg} ${TONES.warning.text}`}
+                  >
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+                    Tidak ada trigger aktif — Purchase TIDAK akan pernah di-fire
+                    ke pixel ini untuk order TRANSFER.
                   </div>
                 )}
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm">
                 Aktif (tampil sebagai pilihan di Form Order)
               </Label>
               <Switch
                 checked={form.isActive}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, isActive: v }))
-                }
+                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
           </div>
@@ -820,6 +843,6 @@ export function PixelsClient({ initialItems, limit }: PixelsClientProps) {
         isLoading={isDeleting}
         onConfirm={handleDelete}
       />
-    </div>
+    </PageContainer>
   )
 }

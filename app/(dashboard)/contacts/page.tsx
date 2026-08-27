@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { ContactsView } from '@/components/contacts/ContactsView'
 import type { ContactRow } from '@/components/contacts/types'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -60,12 +61,12 @@ export default async function ContactsPage() {
   }))
 
   return (
-    <div className="mx-auto h-full max-w-7xl overflow-y-auto p-4 md:p-6">
+    <PageContainer width="wide">
       <ContactsView
         initialContacts={initialContacts}
         initialTags={[...tagSet].sort()}
         initialTotal={total}
       />
-    </div>
+    </PageContainer>
   )
 }

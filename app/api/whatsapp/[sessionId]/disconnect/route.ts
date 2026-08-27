@@ -5,6 +5,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { unsubscribeAppFromWaba } from '@/lib/services/waba/resources'
 import { waService } from '@/lib/wa-service'
 
 interface Params {
@@ -23,12 +24,41 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const wa = await prisma.whatsappSession.findFirst({
       where: { id: sessionId, userId: session.user.id },
-      select: { id: true },
+      select: { id: true, provider: true },
     })
     if (!wa) return jsonError('Session tidak ditemukan', 404)
 
     const body = (await req.json().catch(() => ({}))) as { wipe?: boolean }
     const wipe = Boolean(body.wipe)
+
+    if (wa.provider === 'CLOUD_API') {
+      // Sesi Cloud API tidak punya state di wa-service — cukup update DB.
+      // wipe = lepas kredensial + kosongkan phoneNumberId (unique) supaya
+      // nomor yang sama bisa di-onboard ulang nanti. Sebelum kredensial
+      // dibuang, lepas subscription webhook (best-effort) supaya WABA tidak
+      // terus mengirim event ke hulao (dibuang) dan platform lain di Meta App
+      // yang sama bisa menerimanya kembali.
+      if (wipe) {
+        await unsubscribeAppFromWaba(sessionId).catch((err) =>
+          console.warn('[disconnect] unsubscribe webhook gagal (diabaikan):', err),
+        )
+      }
+      await prisma.whatsappSession.update({
+        where: { id: sessionId },
+        data: wipe
+          ? {
+              status: 'DISCONNECTED',
+              isActive: false,
+              wabaTokenEnc: null,
+              wabaTokenExpiresAt: null,
+              phoneNumberId: null,
+              wabaId: null,
+              lastError: null,
+            }
+          : { status: 'DISCONNECTED' },
+      })
+      return jsonOk({ id: sessionId, wiped: wipe })
+    }
 
     const svc = await waService.disconnect(sessionId, wipe)
     if (!svc.success) {

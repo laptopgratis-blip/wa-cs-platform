@@ -11,7 +11,7 @@
 // — wrap caller dgn try/catch + log, jangan throw.
 import { sendStudentMagicLinkEmail } from '@/lib/email'
 import { prisma } from '@/lib/prisma'
-import { waService } from '@/lib/wa-service'
+import { smartSend } from '@/lib/services/wa-send/smart-send'
 
 import { upsertEnrollment } from './enrollment'
 import { issueMagicLink } from './student-magic'
@@ -77,17 +77,24 @@ async function sendCourseAccessNotif(input: {
       '',
       `_— Hulao Belajar_`,
     ].join('\n')
-    for (const sender of senders) {
-      const send = await waService.sendMessage(
-        sender.sessionId,
-        input.studentPhone,
-        text,
-      )
-      if (send.success) {
-        waDelivered = true
-        break
-      }
-    }
+    const send = await smartSend({
+      candidates: senders,
+      to: input.studentPhone,
+      text,
+      template: {
+        purposeKey: 'INFO_GENERIC',
+        params: {
+          body: [
+            input.studentName || 'Kak',
+            `akses course ${input.courseTitle} sudah aktif — login pakai nomor WA ini via OTP`,
+            `${PORTAL_URL}/belajar`,
+          ],
+        },
+      },
+      purpose: 'LMS',
+      source: 'SYSTEM',
+    })
+    waDelivered = send.success
   }
 
   // Email fallback: kirim kalau (a) WA gagal sampai DAN (b) email tersedia.

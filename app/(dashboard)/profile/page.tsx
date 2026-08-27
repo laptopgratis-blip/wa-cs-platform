@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 
 import { PasswordCard } from '@/components/profile/PasswordCard'
 import { ProfileInfoCard } from '@/components/profile/ProfileInfoCard'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -30,14 +31,14 @@ export default async function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-2xl p-4 md:p-6">
-        <p className="text-sm text-muted-foreground">Akun tidak ditemukan.</p>
-      </div>
+      <PageContainer width="narrow">
+        <p className="text-muted-foreground text-sm">Akun tidak ditemukan.</p>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="mx-auto h-full max-w-2xl space-y-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <PageHeader
         title="Profil Saya"
         description="Kelola informasi akun dan keamanan login kamu."
@@ -57,7 +58,10 @@ export default async function ProfilePage() {
           year: 'numeric',
         })}
       />
-      <PasswordCard initialHasPassword={Boolean(user.password)} email={user.email} />
-    </div>
+      <PasswordCard
+        initialHasPassword={Boolean(user.password)}
+        email={user.email}
+      />
+    </PageContainer>
   )
 }

@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -45,6 +46,9 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { formatRupiah } from '@/lib/format'
+import { courseStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Lesson {
   id: string
@@ -156,7 +160,9 @@ export function CourseBuilder({
         return
       }
       setCourse({ ...course, status: 'PUBLISHED' })
-      toast.success('Course di-publish! Customer yg beli produk linked auto-enroll.')
+      toast.success(
+        'Course di-publish! Customer yg beli produk linked auto-enroll.',
+      )
       router.refresh()
     } finally {
       setPublishing(false)
@@ -257,125 +263,114 @@ export function CourseBuilder({
   return (
     <div className="space-y-6">
       {/* HEADER */}
-      <div className="space-y-3 rounded-xl border border-warm-200 bg-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1">
-            <Label htmlFor="title" className="text-xs text-warm-500">
-              Judul Course
+      <Card>
+        <CardContent className="space-y-3 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              <Label htmlFor="title" className="text-warm-500 text-xs">
+                Judul Course
+              </Label>
+              <Input
+                id="title"
+                value={course.title}
+                onChange={(e) =>
+                  setCourse({ ...course, title: e.target.value })
+                }
+                onBlur={(e) => {
+                  if (e.target.value !== initial.title) {
+                    saveCourseMeta({ title: e.target.value })
+                  }
+                }}
+                className="font-display mt-1 text-xl font-semibold"
+              />
+              <p className="text-warm-500 mt-1 text-xs">
+                URL portal: /belajar/{course.slug}
+              </p>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <StatusBadge
+                tone={statusMeta(courseStatusMeta, course.status).tone}
+                label={statusMeta(courseStatusMeta, course.status).label}
+              />
+              <Button
+                onClick={publish}
+                disabled={publishing}
+                size="sm"
+                variant={course.status === 'PUBLISHED' ? 'outline' : 'default'}
+              >
+                {publishing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : course.status === 'PUBLISHED' ? (
+                  <>
+                    <EyeOff className="mr-1.5 size-4" />
+                    Unpublish
+                  </>
+                ) : (
+                  <>
+                    <Eye className="mr-1.5 size-4" />
+                    Publish
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="desc" className="text-warm-500 text-xs">
+              Deskripsi
             </Label>
-            <Input
-              id="title"
-              value={course.title}
-              onChange={(e) => setCourse({ ...course, title: e.target.value })}
+            <Textarea
+              id="desc"
+              value={course.description ?? ''}
+              onChange={(e) =>
+                setCourse({ ...course, description: e.target.value })
+              }
               onBlur={(e) => {
-                if (e.target.value !== initial.title) {
-                  saveCourseMeta({ title: e.target.value })
+                if (e.target.value !== (initial.description ?? '')) {
+                  saveCourseMeta({ description: e.target.value || null })
                 }
               }}
-              className="mt-1 font-display text-xl font-bold"
+              rows={3}
+              placeholder="Apa yg akan dipelajari student?"
             />
-            <p className="mt-1 text-xs text-warm-500">
-              URL portal: /belajar/{course.slug}
+          </div>
+
+          <div>
+            <Label className="text-warm-500 text-xs">Linked Product</Label>
+            <Select
+              value={course.productId ?? NONE}
+              onValueChange={(v) => {
+                const newProductId = v === NONE ? null : v
+                saveCourseMeta({ productId: newProductId })
+                setCourse({ ...course, productId: newProductId })
+              }}
+              disabled={savingMeta}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Belum di-link" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>— Belum di-link —</SelectItem>
+                {availableProducts.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                    {p.price > 0 && ` · ${formatRupiah(p.price)}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-warm-500 mt-1 text-xs">
+              Saat customer beli produk yg di-link, akses course aktif otomatis.
+              Untuk publish, course wajib di-link ke produk.
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <Badge
-              className={
-                course.status === 'PUBLISHED'
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : course.status === 'ARCHIVED'
-                    ? 'bg-rose-100 text-rose-700'
-                    : 'bg-warm-100 text-warm-700'
-              }
-            >
-              {course.status === 'PUBLISHED'
-                ? 'Tayang'
-                : course.status === 'ARCHIVED'
-                  ? 'Arsip'
-                  : 'Draft'}
-            </Badge>
-            <Button
-              onClick={publish}
-              disabled={publishing}
-              size="sm"
-              className={
-                course.status === 'PUBLISHED'
-                  ? 'bg-warm-600 text-white hover:bg-warm-700'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
-              }
-            >
-              {publishing ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : course.status === 'PUBLISHED' ? (
-                <>
-                  <EyeOff className="mr-1.5 size-4" />
-                  Unpublish
-                </>
-              ) : (
-                <>
-                  <Eye className="mr-1.5 size-4" />
-                  Publish
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="desc" className="text-xs text-warm-500">
-            Deskripsi
-          </Label>
-          <Textarea
-            id="desc"
-            value={course.description ?? ''}
-            onChange={(e) =>
-              setCourse({ ...course, description: e.target.value })
-            }
-            onBlur={(e) => {
-              if (e.target.value !== (initial.description ?? '')) {
-                saveCourseMeta({ description: e.target.value || null })
-              }
-            }}
-            rows={3}
-            placeholder="Apa yg akan dipelajari student?"
-          />
-        </div>
-
-        <div>
-          <Label className="text-xs text-warm-500">Linked Product</Label>
-          <Select
-            value={course.productId ?? NONE}
-            onValueChange={(v) => {
-              const newProductId = v === NONE ? null : v
-              saveCourseMeta({ productId: newProductId })
-              setCourse({ ...course, productId: newProductId })
-            }}
-            disabled={savingMeta}
-          >
-            <SelectTrigger className="mt-1">
-              <SelectValue placeholder="Belum di-link" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>— Belum di-link —</SelectItem>
-              {availableProducts.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                  {p.price > 0 && ` · ${formatRupiah(p.price)}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="mt-1 text-[11px] text-warm-500">
-            Saat customer beli produk yg di-link, akses course aktif otomatis.
-            Untuk publish, course wajib di-link ke produk.
-          </p>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* MODULES */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 text-xl font-semibold">
             Modules &amp; Lessons
           </h2>
           <Button onClick={addModule} size="sm" variant="outline">
@@ -399,7 +394,9 @@ export function CourseBuilder({
               key={m.id}
               mod={m}
               onRename={() => renameModule(m.id, m.title)}
-              onDelete={() => setPendingDelete({ kind: 'module', moduleId: m.id })}
+              onDelete={() =>
+                setPendingDelete({ kind: 'module', moduleId: m.id })
+              }
               onAddLesson={() =>
                 setLessonDialog({ moduleId: m.id, lesson: null })
               }
@@ -407,7 +404,11 @@ export function CourseBuilder({
                 setLessonDialog({ moduleId: m.id, lesson: l })
               }
               onDeleteLesson={(lId) =>
-                setPendingDelete({ kind: 'lesson', moduleId: m.id, lessonId: lId })
+                setPendingDelete({
+                  kind: 'lesson',
+                  moduleId: m.id,
+                  lessonId: lId,
+                })
               }
             />
           ))
@@ -467,12 +468,12 @@ function ModuleBlock({
   onDeleteLesson: (id: string) => void
 }) {
   return (
-    <Card className="overflow-visible rounded-xl border-warm-200">
+    <Card className="overflow-visible">
       <CardContent className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-semibold text-warm-900 dark:text-warm-50">
+          <h3 className="text-warm-900 text-lg font-semibold">
             {mod.title}
-            <span className="ml-2 text-xs font-normal text-warm-500">
+            <span className="text-warm-500 ml-2 text-xs font-normal">
               {mod.lessons.length} lesson
             </span>
           </h3>
@@ -481,7 +482,7 @@ function ModuleBlock({
               <Pencil className="size-3.5" />
             </Button>
             <Button onClick={onDelete} variant="ghost" size="sm">
-              <Trash2 className="size-3.5 text-rose-500" />
+              <Trash2 className="text-destructive size-3.5" />
             </Button>
           </div>
         </div>
@@ -491,29 +492,22 @@ function ModuleBlock({
             {mod.lessons.map((l) => (
               <li
                 key={l.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-warm-100 bg-warm-50 p-2 text-sm"
+                className="border-warm-100 bg-warm-50 flex items-center justify-between gap-2 rounded-md border p-2 text-sm"
               >
                 <div className="flex flex-1 items-center gap-2">
-                  <Badge
-                    variant="secondary"
-                    className="bg-purple-100 text-purple-700"
-                  >
+                  <Badge variant="secondary">
                     {l.contentType === 'VIDEO_EMBED'
                       ? 'Video'
                       : l.contentType === 'TEXT'
                         ? 'Teks'
                         : 'File'}
                   </Badge>
-                  <span className="flex-1 text-warm-900">{l.title}</span>
+                  <span className="text-warm-900 flex-1">{l.title}</span>
                   {l.isFreePreview && (
-                    <Badge className="bg-emerald-100 text-emerald-700">
-                      Free
-                    </Badge>
+                    <StatusBadge tone="success" label="Free" />
                   )}
                   {l.dripDays && l.dripDays > 0 ? (
-                    <Badge className="bg-amber-100 text-amber-700">
-                      Drip {l.dripDays}d
-                    </Badge>
+                    <StatusBadge tone="warning" label={`Drip ${l.dripDays}d`} />
                   ) : null}
                 </div>
                 <div className="flex gap-1">
@@ -529,7 +523,7 @@ function ModuleBlock({
                     size="sm"
                     onClick={() => onDeleteLesson(l.id)}
                   >
-                    <Trash2 className="size-3.5 text-rose-500" />
+                    <Trash2 className="text-destructive size-3.5" />
                   </Button>
                 </div>
               </li>
@@ -649,15 +643,15 @@ function LessonDialog({
             <Label>Tipe Konten</Label>
             <Select
               value={contentType}
-              onValueChange={(v) =>
-                setContentType(v as 'VIDEO_EMBED' | 'TEXT')
-              }
+              onValueChange={(v) => setContentType(v as 'VIDEO_EMBED' | 'TEXT')}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="VIDEO_EMBED">Video Embed (YT/Vimeo)</SelectItem>
+                <SelectItem value="VIDEO_EMBED">
+                  Video Embed (YT/Vimeo)
+                </SelectItem>
                 <SelectItem value="TEXT">Teks / Markdown</SelectItem>
               </SelectContent>
             </Select>
@@ -671,9 +665,9 @@ function LessonDialog({
                 onChange={(e) => setVideoEmbedUrl(e.target.value)}
                 placeholder="https://www.youtube.com/embed/..."
               />
-              <p className="text-[11px] text-warm-500">
-                Pakai URL embed (YouTube: ganti /watch?v= jadi /embed/).
-                Vimeo: pakai player.vimeo.com/video/...
+              <p className="text-warm-500 text-xs">
+                Pakai URL embed (YouTube: ganti /watch?v= jadi /embed/). Vimeo:
+                pakai player.vimeo.com/video/...
               </p>
             </div>
           )}
@@ -715,11 +709,17 @@ function LessonDialog({
           </div>
 
           {/* Drip schedule — Phase 4. Plan PRO/UNLIMITED only. */}
-          <div className="space-y-1.5 rounded-lg border border-warm-200 bg-warm-50 p-3">
-            <Label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-warm-700">
+          <div className="border-warm-200 bg-warm-50 space-y-1.5 rounded-lg border p-3">
+            <Label className="text-warm-700 flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
               Drip Schedule
               {!quota.canUseDripSchedule && (
-                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900">
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-semibold',
+                    TONES.brand.bg,
+                    TONES.brand.text,
+                  )}
+                >
                   Plan PRO+
                 </span>
               )}
@@ -736,11 +736,11 @@ function LessonDialog({
                 }
                 className="w-24"
               />
-              <span className="text-xs text-warm-600">
+              <span className="text-warm-600 text-xs">
                 hari sejak student enroll
               </span>
             </div>
-            <p className="text-[11px] text-warm-500">
+            <p className="text-warm-500 text-xs">
               {!quota.canUseDripSchedule
                 ? `Tier ${quota.tier} tidak support drip schedule. Upgrade ke PRO/UNLIMITED di /pricing-lms.`
                 : dripDays > 0
@@ -754,11 +754,7 @@ function LessonDialog({
           <Button variant="outline" onClick={onClose}>
             Batal
           </Button>
-          <Button
-            onClick={save}
-            disabled={submitting}
-            className="bg-primary-500 text-white hover:bg-primary-600"
-          >
+          <Button onClick={save} disabled={submitting}>
             {submitting ? (
               <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (

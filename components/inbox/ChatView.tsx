@@ -12,6 +12,7 @@ import {
   FileArchive,
   FileText,
   Hand,
+  LayoutTemplate,
   Loader2,
   RotateCcw,
   Send,
@@ -19,7 +20,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { fetchJson } from '@/lib/fetch-json'
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { StatusBadge as SharedStatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,18 +33,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  formatChatDateLabel,
-  formatChatTime,
-} from '@/lib/format-time'
+import { formatChatDateLabel, formatChatTime } from '@/lib/format-time'
 import {
   getSocket,
   subscribeWaSession,
   type InboxMessagePayload,
   type InboxStatusPayload,
 } from '@/lib/socket-client'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
+import { senderName } from './SenderLabel'
+import { SendTemplateDialog } from './SendTemplateDialog'
 import type { ChatContact, ChatMessage } from './types'
 
 interface ChatViewProps {
@@ -59,6 +63,11 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   const [isSending, setSending] = useState(false)
   const [isToggling, setToggling] = useState(false)
   const [isDownloading, setDownloading] = useState(false)
+  // Dialog kirim template Meta (sesi Cloud API, window 24 jam tutup).
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(
+    null,
+  )
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch detail tiap kali contactId berubah.
@@ -69,24 +78,18 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setDraft('')
     ;(async () => {
       try {
-        const res = await fetch(`/api/inbox/${contactId}/messages`)
-        const json = (await res.json()) as {
+        const r = await fetchJson<{
           success: boolean
-          data?: {
-            contact: ChatContact
-            messages: ChatMessage[]
-            isAdmin?: boolean
-          }
-          error?: string
-        }
+          data?: { contact: ChatContact; messages: ChatMessage[]; isAdmin?: boolean }
+        }>(`/api/inbox/${contactId}/messages`, undefined, 'Gagal memuat percakapan')
         if (aborted) return
-        if (!res.ok || !json.success || !json.data) {
-          toast.error(json.error || 'Gagal memuat percakapan')
+        if (!r.ok || !r.data?.data) {
+          toast.error(r.error ?? 'Gagal memuat percakapan')
           return
         }
-        setContact(json.data.contact)
-        setMessages(json.data.messages)
-        setIsAdmin(Boolean(json.data.isAdmin))
+        setContact(r.data.data.contact)
+        setMessages(r.data.data.messages)
+        setIsAdmin(Boolean(r.data.data.isAdmin))
       } finally {
         if (!aborted) setLoading(false)
       }
@@ -173,18 +176,32 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     if (!content || isSending) return
     setSending(true)
     try {
-      const res = await fetch(`/api/inbox/${contactId}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      })
-      const json = (await res.json()) as {
+      const r = await fetchJson<{
         success: boolean
         data?: ChatMessage
-        error?: string
-      }
-      if (!res.ok || !json.success || !json.data) {
-        toast.error(json.error || 'Gagal kirim pesan')
+        code?: string
+        sessionId?: string
+      }>(
+        `/api/inbox/${contactId}/send`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        },
+        'Gagal kirim pesan',
+      )
+      const json = r.data
+      if (!r.ok || !json?.data) {
+        // Sesi Cloud API di luar window 24 jam → tawarkan kirim template.
+        if (r.status === 409 && json?.code === 'WINDOW_CLOSED') {
+          setTemplateSessionId(json.sessionId ?? null)
+          setTemplateOpen(true)
+          toast.info(
+            'Window 24 jam Meta sudah tutup — kirim lewat template yang disetujui.',
+          )
+          return
+        }
+        toast.error(r.error ?? 'Gagal kirim pesan')
         return
       }
       setMessages((prev) => [...prev, json.data!])
@@ -200,14 +217,19 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setToggling(true)
     try {
       const next = !contact.aiPaused
-      const res = await fetch(`/api/inbox/${contact.id}/takeover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paused: next }),
-      })
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!res.ok || !json.success) {
-        toast.error(json.error || 'Gagal mengubah status')
+      // Kegagalan diam di sini bikin badge AI/Manual desync dari server:
+      // UI menampilkan status baru padahal server masih status lama.
+      const r = await fetchJson(
+        `/api/inbox/${contact.id}/takeover`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paused: next }),
+        },
+        'Gagal mengubah status',
+      )
+      if (!r.ok) {
+        toast.error(r.error ?? 'Gagal mengubah status')
         return
       }
       setContact({ ...contact, aiPaused: next })
@@ -223,7 +245,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
     setDownloading(true)
     try {
       const url =
-        type === 'single' ? `/api/inbox/${contactId}/export` : `/api/inbox/export-all`
+        type === 'single'
+          ? `/api/inbox/${contactId}/export`
+          : `/api/inbox/export-all`
       const res = await fetch(url)
       if (!res.ok) {
         // Server pakai JSON envelope { success, error } untuk error path —
@@ -265,7 +289,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       a.remove()
       URL.revokeObjectURL(objectUrl)
       toast.success(
-        type === 'single' ? 'Percakapan didownload' : 'Semua percakapan didownload',
+        type === 'single'
+          ? 'Percakapan didownload'
+          : 'Semua percakapan didownload',
       )
     } catch (err) {
       console.error('[downloadChat] gagal:', err)
@@ -278,14 +304,19 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
   async function toggleResolved() {
     if (!contact) return
     const next = !contact.isResolved
-    const res = await fetch(`/api/inbox/${contact.id}/resolve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resolved: next }),
-    })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (!res.ok || !json.success) {
-      toast.error(json.error || 'Gagal mengubah status')
+    // Fungsi ini sebelumnya TANPA try/catch sama sekali — "Tandai selesai"
+    // bisa benar-benar tidak melakukan apa pun tanpa jejak.
+    const r = await fetchJson(
+      `/api/inbox/${contact.id}/resolve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved: next }),
+      },
+      'Gagal mengubah status',
+    )
+    if (!r.ok) {
+      toast.error(r.error ?? 'Gagal mengubah status')
       return
     }
     setContact({ ...contact, isResolved: next })
@@ -295,9 +326,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
 
   if (isLoading || !contact) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
+      <div className="text-muted-foreground flex h-full items-center justify-center">
         <Loader2 className="mr-2 size-5 animate-spin" />
-        Memuat percakapan...
+        Memuat percakapan…
       </div>
     )
   }
@@ -312,23 +343,31 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
             <button
               type="button"
               onClick={onBack}
-              className="flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-warm-100 md:hidden"
+              className="hover:bg-warm-100 flex size-9 shrink-0 items-center justify-center rounded-md md:hidden"
               aria-label="Kembali"
             >
               <ArrowLeft className="size-5" />
             </button>
           )}
           <Avatar className="size-10 shrink-0">
-            {contact.avatar && <AvatarImage src={contact.avatar} alt={contact.name ?? ''} />}
+            {contact.avatar && (
+              <AvatarImage src={contact.avatar} alt={contact.name ?? ''} />
+            )}
             <AvatarFallback>
               {(contact.name || contact.phoneNumber).slice(0, 2).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate font-medium">{contact.name || `+${contact.phoneNumber}`}</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate font-medium">
+              {contact.name || `+${contact.phoneNumber}`}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
               +{contact.phoneNumber}
-              {contact.waSession?.displayName && ` · via ${contact.waSession.displayName}`}
+              {/* Dulu "via …" hilang total kalau displayName null — padahal
+                  sesi Cloud yang baru terhubung sering belum punya nama dari
+                  Meta. senderName() jatuh ke nomor, jadi penandanya tidak
+                  pernah menghilang. */}
+              {contact.waSession && ` · via ${senderName(contact.waSession)}`}
             </p>
           </div>
         </div>
@@ -338,17 +377,23 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <CheckCircle2 className="size-3" /> Selesai
             </Badge>
           )}
+          {/* Dua-duanya status, jadi dua-duanya ber-highlight lewat TONES —
+              dulu Manual pakai `secondary` (abu polos) sehingga hanya AI yang
+              terlihat "aktif". brand=orange utk AI, info=sky utk Manual:
+              beda hue yang jelas tanpa memakai orange dua kali. */}
           {contact.aiPaused ? (
-            <Badge variant="secondary" className="gap-1">
-              <Hand className="size-3" /> Manual
-            </Badge>
+            <SharedStatusBadge tone="info" label="Manual" icon={Hand} />
           ) : (
-            <Badge variant="default" className="gap-1">
-              <Bot className="size-3" /> AI
-            </Badge>
+            <SharedStatusBadge tone="brand" label="AI" icon={Bot} />
           )}
+          {/* Tombol ini AKSI, bukan penanda state — state ada di badge kiri.
+              Dulu variant-nya ikut berubah (`default` saat Manual), sehingga
+              aksen orange LOMPAT dari badge ke tombol: di mode Manual mata
+              jatuh ke "Lepaskan ke AI" dan membacanya sebagai state terpilih.
+              Toolbar = outline (design system), jadi orange konsisten hanya
+              berarti satu hal: AI sedang aktif. */}
           <Button
-            variant={contact.aiPaused ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
             onClick={toggleTakeover}
             disabled={isToggling}
@@ -402,12 +447,17 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto bg-muted/20">
+      {/* overscroll-contain + min-h-0: scroll mentok tidak merambat ke <main>
+          (scroll chaining) sehingga header & halaman tidak ikut bergerak. */}
+      <div
+        ref={scrollRef}
+        className="bg-muted/20 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
         <div className="flex flex-col gap-2 p-4">
           {grouped.map((group) => (
             <div key={group.date} className="flex flex-col gap-2">
               <div className="my-2 flex justify-center">
-                <span className="rounded-full bg-background px-3 py-1 text-[11px] text-muted-foreground shadow-sm">
+                <span className="bg-background text-muted-foreground rounded-full px-3 py-1 text-xs shadow-sm">
                   {formatChatDateLabel(group.messages[0]!.createdAt)}
                 </span>
               </div>
@@ -422,8 +472,9 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
       {/* Composer */}
       <div className="border-t p-3">
         {!contact.aiPaused && (
-          <p className="mb-2 text-xs text-muted-foreground">
-            AI sedang aktif untuk kontak ini. Klik <strong>Ambil Alih</strong> untuk balas manual.
+          <p className="text-muted-foreground mb-2 text-xs">
+            AI sedang aktif untuk kontak ini. Klik <strong>Ambil Alih</strong>{' '}
+            untuk balas manual.
           </p>
         )}
         <div className="flex items-end gap-2">
@@ -459,10 +510,56 @@ export function ChatView({ contactId, onChanged, onBack }: ChatViewProps) {
               <Send className="size-4" />
             )}
           </Button>
+          {/* Template Meta hanya ada di jalur Cloud API. Untuk percakapan yang
+              berjalan lewat nomor Baileys (QR), tombol ini disembunyikan —
+              sebelumnya tetap tampil, lalu server diam-diam mengirim dari nomor
+              Cloud lain DAN memindahkan percakapan itu ke sana permanen. */}
+          {contact.waSession?.provider === 'CLOUD_API' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label="Kirim template Meta"
+              title="Kirim template Meta (di luar window 24 jam)"
+              className="shrink-0"
+              disabled={!contact.aiPaused || isSending}
+              onClick={() => {
+                setTemplateSessionId(contact.waSession?.id ?? null)
+                setTemplateOpen(true)
+              }}
+            >
+              <LayoutTemplate className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
+
+      <SendTemplateDialog
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        contactId={contact.id}
+        contactName={contact.name}
+        contactPhone={contact.phoneNumber}
+        sessionId={templateSessionId}
+        onSent={(m) => {
+          setMessages((prev) => [...prev, m])
+          setDraft('')
+          onChanged()
+        }}
+      />
     </div>
   )
+}
+
+// Label asal untuk pesan AGENT — bantu CS tahu balasan datang dari mana.
+const AGENT_SOURCE_LABEL: Record<string, string> = {
+  WA_DIRECT: 'CS via WA',
+  WA_HISTORY: 'CS via WA (riwayat)',
+  WEB_DASHBOARD: 'CS via Web',
+  TEMPLATE: 'CS via Template',
+  BROADCAST: 'Broadcast',
+  FOLLOWUP: 'Follow-up',
+  SYSTEM: 'Sistem',
 }
 
 function Bubble({
@@ -478,7 +575,8 @@ function Bubble({
   const showCost =
     isAdmin &&
     message.role === 'AI' &&
-    (message.apiCostRp !== null && message.apiCostRp !== undefined)
+    message.apiCostRp !== null &&
+    message.apiCostRp !== undefined
   // Bubble AGENT pakai warna hijau muda supaya gampang dibedakan dari AI
   // (primary). Outgoing tapi non-AGENT/AI tetap pakai warna primary.
   const bubbleClass = !isOutgoing
@@ -487,12 +585,7 @@ function Bubble({
       ? 'bg-green-100 text-green-950 border border-green-200'
       : 'bg-primary text-primary-foreground'
   // Label asal untuk pesan AGENT — bantu CS tahu balasan datang dari mana.
-  const agentLabel =
-    message.source === 'WA_DIRECT'
-      ? 'CS via WA'
-      : message.source === 'WEB_DASHBOARD'
-        ? 'CS via Web'
-        : 'CS'
+  const agentLabel = AGENT_SOURCE_LABEL[message.source ?? ''] ?? 'CS'
   return (
     <div className={cn('flex', isOutgoing ? 'justify-end' : 'justify-start')}>
       <div
@@ -502,24 +595,29 @@ function Bubble({
         )}
       >
         {message.role === 'AI' && (
-          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase opacity-80">
+          <div className="mb-1 flex items-center gap-1 text-xs uppercase opacity-80">
             <Bot className="size-3" /> AI
           </div>
         )}
         {isAgent && (
-          <div className="mb-1 flex items-center gap-1 text-[10px] uppercase opacity-80">
+          <div className="mb-1 flex items-center gap-1 text-xs uppercase opacity-80">
             <Hand className="size-3" /> {agentLabel}
           </div>
         )}
-        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+        <p className="break-words whitespace-pre-wrap">{message.content}</p>
         {isOutgoing && message.status === 'FAILED' && (
-          <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-red-600">
+          <div
+            className={cn(
+              'mt-1 flex items-center gap-1 text-xs font-medium',
+              TONES.danger.text,
+            )}
+          >
             <AlertTriangle className="size-3" /> Gagal terkirim ke WhatsApp
           </div>
         )}
         <p
           className={cn(
-            'mt-1 text-right text-[10px]',
+            'mt-1 text-right text-xs',
             isOutgoing ? 'opacity-70' : 'text-muted-foreground',
           )}
         >
@@ -528,17 +626,15 @@ function Bubble({
         {showCost && (
           <details
             className={cn(
-              'mt-1 cursor-pointer text-[10px]',
+              'mt-1 cursor-pointer text-xs',
               isOutgoing ? 'opacity-80' : 'text-muted-foreground',
             )}
           >
-            <summary className="flex select-none items-center gap-1">
+            <summary className="flex items-center gap-1 select-none">
               <BarChart3 className="size-3" aria-hidden /> Cost detail
             </summary>
             <div className="mt-1 space-y-0.5 font-mono">
-              {message.modelName && (
-                <div>Model: {message.modelName}</div>
-              )}
+              {message.modelName && <div>Model: {message.modelName}</div>}
               <div>
                 Token: {message.apiInputTokens ?? '—'} in /{' '}
                 {message.apiOutputTokens ?? '—'} out
@@ -554,9 +650,7 @@ function Bubble({
                 })}
               </div>
               <div
-                className={cn(
-                  (message.profitRp ?? 0) < 0 && 'font-semibold',
-                )}
+                className={cn((message.profitRp ?? 0) < 0 && 'font-semibold')}
               >
                 Profit: Rp{' '}
                 {(message.profitRp ?? 0).toLocaleString('id-ID', {

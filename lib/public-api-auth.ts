@@ -1,0 +1,387 @@
+// Gerbang satu-satunya untuk /api/v1/* (API publik seller).
+//
+// PENTING: middleware.ts hanya mencakup /dashboard, /admin, /onboarding —
+// route /api/v1/* TIDAK punya jaring pengaman apa pun. `requirePublicApiAuth`
+// wajib jadi baris pertama setiap handler v1. Jadikan ini poin checklist
+// review tiap kali menambah endpoint baru.
+//
+// Keterbatasan rate limiter: in-memory per proses (lib/rate-limit-memory.ts).
+// Reset saat deploy/restart — klien dapat jatah ekstra sesaat, bukan lockout;
+// bila di-scale ke banyak replika, limit efektif = limit × jumlah replika.
+// Deployment saat ini single-instance dan Cloudflare tetap lapis pertama.
+// Pola DB-backed kalau nanti perlu: lib/otp/auth-otp.ts.
+
+import { NextResponse } from 'next/server'
+import { getClientIp } from '@/lib/client-ip'
+import {
+  checkRateLimit,
+  consumeRateLimit,
+  recordRateLimitHit,
+} from '@/lib/rate-limit-memory'
+import {
+  touchApiKeyUsage,
+  verifySellerApiKey,
+} from '@/lib/services/seller-api-keys'
+
+export const API_VERSION = 'v1'
+
+/** Kuota per kunci. Diumumkan di tab "Batas & Kuota" halaman /pengembang/api. */
+export const RATE_LIMIT_PER_KEY = 60
+/**
+ * Batas percobaan auth GAGAL per IP per menit (kunci salah/dicabut/tanpa
+ * header). Request yang berhasil tidak dihitung ke sini — lihat komentar di
+ * requirePublicApiAuth.
+ */
+export const RATE_LIMIT_PER_IP = 120
+
+/**
+ * Plafon KERAS per IP: semua request dihitung, dan yang melewatinya ditolak
+ * SEBELUM menyentuh DB. Sengaja jauh di atas pemakaian wajar (satu IP kantor
+ * dengan 5 kunci pun cuma 300 req/menit) — tugasnya hanya membatasi biaya
+ * tebak-kunci beruntun, bukan mengatur kuota pemakaian.
+ */
+export const RATE_LIMIT_PER_IP_HARD = 600
+export const RATE_WINDOW_MS = 60_000
+
+export interface PublicApiAuth {
+  userId: string
+  keyId: string
+  keyName: string
+  scopes: string[]
+  rateLimitHeaders: Record<string, string>
+}
+
+export type PublicApiAuthResult =
+  { ok: true; auth: PublicApiAuth } | { ok: false; response: NextResponse }
+
+function rateHeaders(r: {
+  limit: number
+  remaining: number
+  resetAtMs: number
+}): Record<string, string> {
+  return {
+    'X-RateLimit-Limit': String(r.limit),
+    'X-RateLimit-Remaining': String(r.remaining),
+    'X-RateLimit-Reset': String(Math.ceil(r.resetAtMs / 1000)),
+  }
+}
+
+/**
+ * Respons error API publik. Selain envelope repo `{success,error}` ada `code`
+ * yang machine-readable supaya klien bisa bercabang tanpa parsing teks.
+ */
+export function apiV1Error(
+  code: string,
+  message: string,
+  status: number,
+  headers: Record<string, string> = {},
+): NextResponse {
+  return NextResponse.json(
+    { success: false, error: message, code },
+    { status, headers },
+  )
+}
+
+/** Respons sukses + header kuota. */
+export function apiV1Ok<T>(
+  data: T,
+  auth: PublicApiAuth,
+  status = 200,
+): NextResponse {
+  return NextResponse.json(
+    { success: true, data },
+    { status, headers: auth.rateLimitHeaders },
+  )
+}
+
+/**
+ * Ambil kredensial dari header Authorization. HANYA header — `?api_key=`
+ * sengaja tidak didukung karena query string bocor ke access log, Referer,
+ * dan riwayat browser.
+ */
+function readBearer(req: Request): string | null {
+  const raw = req.headers.get('authorization')
+  if (!raw) return null
+  const match = /^Bearer\s+(.+)$/i.exec(raw.trim())
+  const token = match?.[1]?.trim()
+  return token && token.length > 0 ? token : null
+}
+
+export async function requirePublicApiAuth(
+  req: Request,
+): Promise<PublicApiAuthResult> {
+  // 1. Guard tebak-kunci per IP. Dua keputusan yang saling mengunci:
+  //
+  //    a. Yang dihitung HANYA percobaan GAGAL (pasangan check/record, bukan
+  //       consumeRateLimit). Satu server bisa memegang 3 kunci sah × 60
+  //       req/menit = 180 request; kalau request sah ikut masuk bucket IP,
+  //       kuota per-kunci yang kita janjikan tak pernah bisa dipakai penuh.
+  //    b. Saat jatah gagal habis, request TIDAK langsung ditolak — kunci tetap
+  //       diverifikasi dan yang SAH tetap dilayani. Banyak seller berbagi satu
+  //       IP publik (kantor/NAT/hosting), jadi menolak buta akan mengunci orang
+  //       yang tidak melakukan apa-apa gara-gara tetangga se-IP salah kunci.
+  //       Jawaban untuk yang gagal jadi 429 tanpa informasi.
+  //
+  //    Konsekuensi (b): request bertoken tetap menghasilkan satu SHA-256 + satu
+  //    SELECT ter-index meski IP-nya sudah lewat jatah gagal. Karena itu ada
+  //    plafon keras terpisah di bawah yang menolak SEBELUM menyentuh DB —
+  //    biaya tebak-kunci tetap terbatas tanpa mengorbankan poin (b).
+  const ip = getClientIp(req)
+  const hardCap = consumeRateLimit({
+    key: `apiv1:iphard:${ip}`,
+    limit: RATE_LIMIT_PER_IP_HARD,
+    windowMs: RATE_WINDOW_MS,
+  })
+  if (!hardCap.allowed) {
+    return {
+      ok: false,
+      response: apiV1Error(
+        'rate_limited',
+        'Terlalu banyak request dari alamat ini.',
+        429,
+        {
+          ...rateHeaders(hardCap),
+          'Retry-After': String(Math.ceil(hardCap.retryAfterMs / 1000)),
+        },
+      ),
+    }
+  }
+
+  const ipKey = `apiv1:ip:${ip}`
+  const ipGuard = checkRateLimit({
+    key: ipKey,
+    limit: RATE_LIMIT_PER_IP,
+    windowMs: RATE_WINDOW_MS,
+  })
+
+  const failAuth = (code: string, message: string): PublicApiAuthResult => {
+    recordRateLimitHit({ key: ipKey, windowMs: RATE_WINDOW_MS })
+    if (!ipGuard.allowed) {
+      // Sudah lewat jatah gagal: sembunyikan alasan aslinya.
+      return {
+        ok: false,
+        response: apiV1Error(
+          'rate_limited',
+          'Terlalu banyak percobaan. Coba lagi sebentar lagi.',
+          429,
+          {
+            'Retry-After': String(Math.ceil(ipGuard.retryAfterMs / 1000)),
+          },
+        ),
+      }
+    }
+    return { ok: false, response: apiV1Error(code, message, 401) }
+  }
+
+  const token = readBearer(req)
+  if (!token) {
+    return failAuth(
+      'missing_token',
+      'Header Authorization: Bearer <API key> wajib diisi.',
+    )
+  }
+
+  // DB tumbang tidak boleh keluar sebagai halaman error Next (bocor stack &
+  // bukan JSON) — klien API selalu berhak dapat envelope yang sama.
+  let verified: Awaited<ReturnType<typeof verifySellerApiKey>>
+  try {
+    verified = await verifySellerApiKey(token)
+  } catch (err) {
+    console.error('[api/v1] gagal verifikasi kunci:', err)
+    return {
+      ok: false,
+      response: apiV1Error(
+        'server_error',
+        'Gagal memverifikasi kunci API.',
+        500,
+      ),
+    }
+  }
+
+  if (!verified.ok) {
+    // malformed & not_found dijawab SAMA — jangan sampai penyerang bisa
+    // membedakan "formatnya salah" dari "kunci ini tidak ada".
+    if (verified.reason === 'revoked')
+      return failAuth('key_revoked', 'Kunci API sudah dicabut.')
+    if (verified.reason === 'expired')
+      return failAuth('key_expired', 'Kunci API sudah kedaluwarsa.')
+    return failAuth('invalid_token', 'Kunci API tidak valid.')
+  }
+
+  // 2. Rate limit utama per kunci.
+  const keyQuota = consumeRateLimit({
+    key: `apiv1:key:${verified.keyId}`,
+    limit: RATE_LIMIT_PER_KEY,
+    windowMs: RATE_WINDOW_MS,
+  })
+  if (!keyQuota.allowed) {
+    return {
+      ok: false,
+      response: apiV1Error(
+        'rate_limited',
+        'Kuota request per menit habis.',
+        429,
+        {
+          ...rateHeaders(keyQuota),
+          'Retry-After': String(Math.ceil(keyQuota.retryAfterMs / 1000)),
+        },
+      ),
+    }
+  }
+
+  // Tidak di-await: update lastUsedAt tidak boleh menambah latensi request.
+  touchApiKeyUsage(verified.keyId)
+
+  return {
+    ok: true,
+    auth: {
+      userId: verified.userId,
+      keyId: verified.keyId,
+      keyName: verified.name,
+      scopes: verified.scopes,
+      rateLimitHeaders: rateHeaders(keyQuota),
+    },
+  }
+}
+
+/**
+ * Guard scope. Keputusan produk 2026-08-25: SEMUA kunci boleh kirim (satu kunci
+ * = semua akses, seperti kirimchat), jadi endpoint POST tidak memanggil ini.
+ * Disimpan untuk kemungkinan scope granular kelak. 403 = soal izin, bukan
+ * identitas.
+ */
+export function requireScope(
+  auth: PublicApiAuth,
+  scope: string,
+): NextResponse | null {
+  if (auth.scopes.includes(scope)) return null
+  return apiV1Error(
+    'insufficient_scope',
+    `Kunci API ini tidak punya izin "${scope}".`,
+    403,
+    auth.rateLimitHeaders,
+  )
+}
+
+/** Batas kirim pesan per kunci per menit — lebih ketat dari 60/mnt umum. */
+export const SEND_LIMIT_PER_KEY = 30
+/**
+ * Batas kirim AGREGAT per user per menit. Tanpa ini, satu akun dengan 5 kunci
+ * (MAX_ACTIVE_KEYS_PER_USER) mendapat 5 × 30 = 150/mnt — jauh di atas yang
+ * diiklankan. Cap per-user membatasi total per akun apa pun jumlah kuncinya.
+ */
+export const SEND_LIMIT_PER_USER = 60
+
+/**
+ * Guard laju KIRIM (POST). Dua lapis: per kunci (anti satu kunci memonopoli) &
+ * per user (cap total akun). Mengembalikan 429 bila salah satu habis.
+ */
+export function checkSendRateLimit(auth: PublicApiAuth): NextResponse | null {
+  const perKey = consumeRateLimit({
+    key: `apiv1:send:${auth.keyId}`,
+    limit: SEND_LIMIT_PER_KEY,
+    windowMs: RATE_WINDOW_MS,
+  })
+  const perUser = consumeRateLimit({
+    key: `apiv1:send:user:${auth.userId}`,
+    limit: SEND_LIMIT_PER_USER,
+    windowMs: RATE_WINDOW_MS,
+  })
+  const blocked = !perKey.allowed ? perKey : !perUser.allowed ? perUser : null
+  if (!blocked) return null
+  return apiV1Error('rate_limited', 'Batas kirim pesan per menit habis.', 429, {
+    ...auth.rateLimitHeaders,
+    'Retry-After': String(Math.ceil(blocked.retryAfterMs / 1000)),
+  })
+}
+
+// Idempotensi kirim: klien boleh mengirim header `Idempotency-Key`. In-memory
+// best-effort (single-instance) — didokumentasikan.
+//
+// RESERVASI SINKRON: `reserveIdempotent` menandai key `pending` di titik yang
+// SAMA (tanpa await di antaranya) dengan pemeriksaan — sehingga dua retry
+// konkuren tidak sama-sama lolos lalu mengirim pesan dua kali. Yang menang
+// mengerjakan; yang kalah dapat 'pending'. `complete` menyimpan hasil sukses;
+// `release` menghapus reservasi saat gagal supaya retry berikutnya boleh jalan
+// (kita hanya meng-cache SUKSES).
+interface IdemEntry {
+  at: number
+  pending: boolean
+  status: number
+  body: unknown
+}
+const IDEM_TTL_MS = 10 * 60 * 1000
+const idemCache = new Map<string, IdemEntry>()
+
+export function readIdempotencyKey(req: Request): string | null {
+  const k = req.headers.get('idempotency-key')?.trim()
+  return k && k.length > 0 && k.length <= 128 ? k : null
+}
+
+export type IdemReservation =
+  | { kind: 'reserved' }
+  | { kind: 'pending' }
+  | { kind: 'done'; status: number; body: unknown }
+
+/** Atomik (sinkron): reservasi key, atau kembalikan hasil/pending yang ada. */
+export function reserveIdempotent(
+  keyId: string,
+  idemKey: string,
+): IdemReservation {
+  const k = `${keyId}:${idemKey}`
+  const hit = idemCache.get(k)
+  if (hit && Date.now() - hit.at <= IDEM_TTL_MS) {
+    if (hit.pending) return { kind: 'pending' }
+    return { kind: 'done', status: hit.status, body: hit.body }
+  }
+  if (idemCache.size > 2000) idemCache.clear()
+  idemCache.set(k, { at: Date.now(), pending: true, status: 0, body: null })
+  return { kind: 'reserved' }
+}
+
+export function completeIdempotent(
+  keyId: string,
+  idemKey: string,
+  status: number,
+  body: unknown,
+): void {
+  idemCache.set(`${keyId}:${idemKey}`, {
+    at: Date.now(),
+    pending: false,
+    status,
+    body,
+  })
+}
+
+export function releaseIdempotent(keyId: string, idemKey: string): void {
+  idemCache.delete(`${keyId}:${idemKey}`)
+}
+
+/**
+ * Parser cursor pagination seragam untuk semua endpoint v1.
+ *
+ * CATATAN: ini hanya memeriksa BENTUK. Pemanggil WAJIB memastikan barisnya ada
+ * dan masih dalam scope pemilik kunci sebelum meneruskannya ke `cursor:` Prisma
+ * — anchor cursor diselesaikan lewat subquery yang tidak memakai klausa where,
+ * jadi cursor basi/asing membuat baris hilang tanpa error.
+ */
+export function parsePagination(
+  url: URL,
+):
+  | { ok: true; limit: number; cursor: string | null }
+  | { ok: false; error: string } {
+  const rawLimit = url.searchParams.get('limit')
+  let limit = 25
+  if (rawLimit !== null) {
+    const n = Number(rawLimit)
+    if (!Number.isInteger(n) || n < 1 || n > 100) {
+      return { ok: false, error: 'Parameter limit harus bilangan bulat 1–100.' }
+    }
+    limit = n
+  }
+  const cursor = url.searchParams.get('cursor')
+  if (cursor !== null && (cursor.length === 0 || cursor.length > 64)) {
+    return { ok: false, error: 'Parameter cursor tidak valid.' }
+  }
+  return { ok: true, limit, cursor }
+}

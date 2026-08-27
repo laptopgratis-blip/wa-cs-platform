@@ -64,9 +64,10 @@ export function SoulList({ souls }: SoulListProps) {
     void (async () => {
       try {
         const res = await fetch('/api/soul/options')
-        const json = (await res.json().catch(() => null)) as
-          | { success: boolean; data?: { personalities: SoulOption[]; styles: SoulOption[] } }
-          | null
+        const json = (await res.json().catch(() => null)) as {
+          success: boolean
+          data?: { personalities: SoulOption[]; styles: SoulOption[] }
+        } | null
         if (!cancelled && json?.success && json.data) {
           setPersonalities(json.data.personalities)
           setStyles(json.data.styles)
@@ -120,10 +121,7 @@ export function SoulList({ souls }: SoulListProps) {
         title="Soul"
         description="Atur kepribadian AI yang akan membalas pesan customer."
         actions={
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" />
             Buat Soul
           </Button>
@@ -149,19 +147,16 @@ export function SoulList({ souls }: SoulListProps) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {souls.map((s) => (
-            <Card
-              key={s.id}
-              className="cursor-pointer rounded-xl border-warm-200 shadow-sm hover-lift"
-            >
+            <Card key={s.id} className="hover-lift cursor-pointer">
               <CardContent className="space-y-3 p-5">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate font-display font-bold text-warm-900 dark:text-warm-50">
+                      <h3 className="font-display text-warm-900 truncate font-semibold">
                         {s.name}
                       </h3>
                       {s.isDefault && (
-                        <Badge className="gap-1 bg-primary-500 text-white hover:bg-primary-500">
+                        <Badge>
                           <Star className="size-3" /> Default
                         </Badge>
                       )}
@@ -182,18 +177,23 @@ export function SoulList({ souls }: SoulListProps) {
                       )}
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" aria-label="Edit soul" onClick={() => openEdit(s)}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Edit soul"
+                    onClick={() => openEdit(s)}
+                  >
                     <Pencil className="size-4" />
                   </Button>
                 </div>
 
                 {s.businessContext && (
-                  <p className="line-clamp-3 text-sm text-muted-foreground">
+                  <p className="text-muted-foreground line-clamp-3 text-sm">
                     {s.businessContext}
                   </p>
                 )}
 
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   Dipakai {s.usageCount} WA session
                 </p>
               </CardContent>
@@ -205,7 +205,7 @@ export function SoulList({ souls }: SoulListProps) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-xl px-6"
+          className="w-full overflow-y-auto px-6 sm:max-w-xl"
         >
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Soul' : 'Buat Soul Baru'}</SheetTitle>
@@ -213,7 +213,10 @@ export function SoulList({ souls }: SoulListProps) {
               Pilih kepribadian, gaya balas, dan isi konteks bisnis.
             </SheetDescription>
           </SheetHeader>
-          <SoulForm initial={editing ?? undefined} onDone={() => setOpen(false)} />
+          <SoulForm
+            initial={editing ?? undefined}
+            onDone={() => setOpen(false)}
+          />
         </SheetContent>
       </Sheet>
     </>

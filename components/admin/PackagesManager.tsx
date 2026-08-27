@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { TableSkeleton } from '@/components/shared/skeletons'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,6 +31,8 @@ import {
 } from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
 
+type PackageKind = 'TOKEN' | 'MESSAGE_CREDIT'
+
 interface PackageRow {
   id: string
   name: string
@@ -38,6 +41,7 @@ interface PackageRow {
   isPopular: boolean
   isActive: boolean
   sortOrder: number
+  kind: PackageKind
 }
 
 export function PackagesManager() {
@@ -51,6 +55,7 @@ export function PackagesManager() {
   const [sortOrder, setSortOrder] = useState('0')
   const [isPopular, setIsPopular] = useState(false)
   const [isActive, setIsActive] = useState(true)
+  const [kind, setKind] = useState<PackageKind>('TOKEN')
   const [isSaving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<PackageRow | null>(null)
   const [isDeleting, setDeleting] = useState(false)
@@ -59,7 +64,10 @@ export function PackagesManager() {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/packages')
-      const json = (await res.json()) as { success: boolean; data?: PackageRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: PackageRow[]
+      }
       if (json.success && json.data) setRows(json.data)
     } finally {
       setLoading(false)
@@ -77,6 +85,7 @@ export function PackagesManager() {
     setSortOrder(String(rows.length))
     setIsPopular(false)
     setIsActive(true)
+    setKind('TOKEN')
     setOpen(true)
   }
   function openEdit(p: PackageRow) {
@@ -87,6 +96,7 @@ export function PackagesManager() {
     setSortOrder(String(p.sortOrder))
     setIsPopular(p.isPopular)
     setIsActive(p.isActive)
+    setKind(p.kind ?? 'TOKEN')
     setOpen(true)
   }
 
@@ -100,6 +110,7 @@ export function PackagesManager() {
         sortOrder: Number(sortOrder),
         isPopular,
         isActive,
+        kind,
       }
       const res = await fetch(
         editing ? `/api/admin/packages/${editing.id}` : '/api/admin/packages',
@@ -159,10 +170,7 @@ export function PackagesManager() {
         title="Token Packages"
         description="Atur paket token yang bisa dibeli user."
         actions={
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" /> Tambah Paket
           </Button>
         }
@@ -173,9 +181,9 @@ export function PackagesManager() {
           <TableHeader>
             <TableRow>
               <TableHead>Nama</TableHead>
-              <TableHead className="text-right">Token</TableHead>
+              <TableHead className="text-right">Token / Kredit</TableHead>
               <TableHead className="text-right">Harga</TableHead>
-              <TableHead className="text-right">Per token</TableHead>
+              <TableHead className="text-right">Per token / Harga%</TableHead>
               <TableHead className="text-right">Order</TableHead>
               <TableHead>Populer</TableHead>
               <TableHead>Aktif</TableHead>
@@ -198,19 +206,30 @@ export function PackagesManager() {
             ) : (
               rows.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="font-medium">
+                    {p.name}
+                    {p.kind === 'MESSAGE_CREDIT' && (
+                      <Badge variant="secondary" className="ml-2">
+                        Kredit Pesan WA
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatNumber(p.tokenAmount)}
+                    {p.kind === 'MESSAGE_CREDIT'
+                      ? formatRupiah(p.tokenAmount)
+                      : formatNumber(p.tokenAmount)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {formatRupiah(p.price)}
                   </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">
-                    {p.tokenAmount > 0
-                      ? formatRupiah(Math.round(p.price / p.tokenAmount))
-                      : '—'}
+                  <TableCell className="text-muted-foreground text-right text-xs">
+                    {p.kind === 'MESSAGE_CREDIT'
+                      ? `${Math.round((p.price / Math.max(p.tokenAmount, 1)) * 100)}%`
+                      : p.tokenAmount > 0
+                        ? formatRupiah(Math.round(p.price / p.tokenAmount))
+                        : '—'}
                   </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-right">
                     {p.sortOrder}
                   </TableCell>
                   <TableCell>
@@ -227,10 +246,18 @@ export function PackagesManager() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Switch checked={p.isActive} onCheckedChange={() => toggleActive(p)} />
+                    <Switch
+                      checked={p.isActive}
+                      onCheckedChange={() => toggleActive(p)}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" aria-label="Edit paket" onClick={() => openEdit(p)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Edit paket"
+                      onClick={() => openEdit(p)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -251,19 +278,43 @@ export function PackagesManager() {
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md px-6">
+        <SheetContent side="right" className="w-full px-6 sm:max-w-md">
           <SheetHeader className="px-0">
             <SheetTitle>{editing ? 'Edit Paket' : 'Tambah Paket'}</SheetTitle>
-            <SheetDescription>Atur paket token yang muncul di halaman Billing.</SheetDescription>
+            <SheetDescription>
+              Atur paket token yang muncul di halaman Billing.
+            </SheetDescription>
           </SheetHeader>
           <div className="space-y-3 py-3">
             <div className="space-y-1.5">
               <Label htmlFor="p-name">Nama</Label>
-              <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                id="p-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="p-kind">Jenis paket</Label>
+              <select
+                id="p-kind"
+                className="bg-background h-9 w-full rounded-md border px-2 text-sm"
+                value={kind}
+                onChange={(e) => setKind(e.target.value as PackageKind)}
+              >
+                <option value="TOKEN">Token AI</option>
+                <option value="MESSAGE_CREDIT">
+                  Kredit Pesan WA (Rp, untuk template Meta)
+                </option>
+              </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="p-tok">Jumlah Token</Label>
+                <Label htmlFor="p-tok">
+                  {kind === 'MESSAGE_CREDIT'
+                    ? 'Kredit diterima (Rp)'
+                    : 'Jumlah Token'}
+                </Label>
                 <Input
                   id="p-tok"
                   type="number"
@@ -322,8 +373,8 @@ export function PackagesManager() {
         title="Hapus paket ini?"
         description={
           <>
-            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini tidak
-            bisa dibatalkan.
+            Hapus paket <strong>{deleteTarget?.name}</strong>? Tindakan ini
+            tidak bisa dibatalkan.
           </>
         }
         isLoading={isDeleting}

@@ -13,14 +13,17 @@ import {
   Loader2,
   Package,
   Sparkles,
+  TriangleAlert,
   Truck,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Prerequisites {
@@ -113,9 +116,9 @@ export function CsAiIntegrationsCard() {
 
   if (loading || !state) {
     return (
-      <Card className="rounded-xl border-warm-200 shadow-sm">
+      <Card>
         <CardContent className="flex items-center justify-center py-10">
-          <Loader2 className="size-5 animate-spin text-warm-400" />
+          <Loader2 className="text-warm-400 size-5 animate-spin" />
         </CardContent>
       </Card>
     )
@@ -125,19 +128,19 @@ export function CsAiIntegrationsCard() {
   const shippingDisabled = !pr.hasShippingOrigin
 
   return (
-    <Card className="overflow-hidden rounded-xl border-2 border-primary-200 bg-gradient-to-br from-primary-50/40 via-card to-card shadow-sm">
+    <Card className="border-primary-200 from-primary-50/40 via-card to-card overflow-hidden border-2 bg-linear-to-br">
       <CardContent className="p-5">
         <div className="mb-4 flex items-start gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
+          <div className="bg-primary-500 flex size-10 shrink-0 items-center justify-center rounded-lg text-white">
             <Sparkles className="size-5" />
           </div>
           <div>
-            <h2 className="font-display text-base font-extrabold text-warm-900 dark:text-warm-50">
+            <h2 className="font-display text-warm-900 text-base font-semibold">
               Integrasi CS AI
             </h2>
-            <p className="mt-0.5 text-xs text-warm-600 dark:text-warm-400">
-              Sekali klik aktifkan — CS AI bisa jawab pertanyaan produk &
-              hitung ongkir otomatis lengkap dengan promo yang berlaku.
+            <p className="text-warm-600 mt-0.5 text-xs">
+              Sekali klik aktifkan — CS AI bisa jawab pertanyaan produk & hitung
+              ongkir otomatis lengkap dengan promo yang berlaku.
             </p>
           </div>
         </div>
@@ -146,7 +149,7 @@ export function CsAiIntegrationsCard() {
           {/* TOGGLE 1: KATALOG PRODUK */}
           <IntegrationToggle
             icon={Package}
-            iconClass="bg-blue-100 text-blue-600"
+            iconClass="bg-primary-100 text-primary-600"
             title="Akses Katalog Produk"
             description="CS AI tahu nama, harga, stok, dan varian produkmu — bisa jawab pertanyaan customer tanpa nanya admin."
             enabled={state.productCatalogEnabled}
@@ -155,18 +158,24 @@ export function CsAiIntegrationsCard() {
             onToggle={(v) => void update('productCatalogEnabled', v)}
             badge={
               pr.hasActiveProducts ? (
-                <Badge tone="emerald">
-                  ✅ {pr.activeProductCount} produk aktif
-                </Badge>
+                <StatusBadge
+                  tone="success"
+                  icon={CheckCircle2}
+                  label={`${pr.activeProductCount} produk aktif`}
+                />
               ) : (
-                <Badge tone="amber">⚠️ Belum ada produk aktif</Badge>
+                <StatusBadge
+                  tone="warning"
+                  icon={TriangleAlert}
+                  label="Belum ada produk aktif"
+                />
               )
             }
             ctaWhenEmpty={
               !pr.hasActiveProducts ? (
                 <Link
                   href="/products"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:underline"
+                  className="text-primary-600 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
                 >
                   Tambah produk dulu
                   <ExternalLink className="size-3" />
@@ -175,14 +184,12 @@ export function CsAiIntegrationsCard() {
             }
             footer={
               state.productCatalogEnabled && pr.hasActiveProducts ? (
-                <div className="space-y-1.5 text-[11px]">
+                <div className="space-y-1.5 text-xs">
                   <RuleToggle
                     label="Apply diskon Flash Sale otomatis"
                     checked={state.applyFlashSaleDiscount}
                     saving={savingField === 'applyFlashSaleDiscount'}
-                    onToggle={(v) =>
-                      void update('applyFlashSaleDiscount', v)
-                    }
+                    onToggle={(v) => void update('applyFlashSaleDiscount', v)}
                   />
                 </div>
               ) : null
@@ -192,7 +199,7 @@ export function CsAiIntegrationsCard() {
           {/* TOGGLE 2: HITUNG ONGKIR */}
           <IntegrationToggle
             icon={Truck}
-            iconClass="bg-orange-100 text-orange-600"
+            iconClass="bg-primary-100 text-primary-600"
             title="Hitung Ongkir Otomatis"
             description="Customer sebut kota tujuan, CS AI langsung kasih harga ongkir lewat Raja Ongkir + apply promo gratis-ongkir / subsidi yang kamu setup."
             enabled={state.shippingCalcEnabled}
@@ -201,18 +208,24 @@ export function CsAiIntegrationsCard() {
             onToggle={(v) => void update('shippingCalcEnabled', v)}
             badge={
               pr.hasShippingOrigin ? (
-                <Badge tone="emerald">
-                  ✅ Origin: {pr.originCityName}
-                </Badge>
+                <StatusBadge
+                  tone="success"
+                  icon={CheckCircle2}
+                  label={`Origin: ${pr.originCityName}`}
+                />
               ) : (
-                <Badge tone="amber">⚠️ Belum setup kota asal</Badge>
+                <StatusBadge
+                  tone="warning"
+                  icon={TriangleAlert}
+                  label="Belum setup kota asal"
+                />
               )
             }
             ctaWhenEmpty={
               !pr.hasShippingOrigin ? (
                 <Link
                   href="/bank-accounts"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-600 hover:underline"
+                  className="text-primary-600 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
                 >
                   Setup kota asal pengiriman
                   <ExternalLink className="size-3" />
@@ -221,7 +234,7 @@ export function CsAiIntegrationsCard() {
             }
             footer={
               state.shippingCalcEnabled && pr.hasShippingOrigin ? (
-                <div className="space-y-1.5 text-[11px]">
+                <div className="space-y-1.5 text-xs">
                   <RuleToggle
                     label={`Apply rule promo ongkir${pr.activeSubsidyZoneCount > 0 ? ` (${pr.activeSubsidyZoneCount} aktif)` : ''}`}
                     checked={state.applySubsidyRules}
@@ -233,7 +246,7 @@ export function CsAiIntegrationsCard() {
                       Belum ada zona subsidi.{' '}
                       <Link
                         href="/shipping-zones"
-                        className="font-semibold text-primary-600 hover:underline"
+                        className="text-primary-600 font-semibold hover:underline"
                       >
                         Setup di sini →
                       </Link>
@@ -246,7 +259,13 @@ export function CsAiIntegrationsCard() {
         </div>
 
         {(state.productCatalogEnabled || state.shippingCalcEnabled) && (
-          <div className="mt-4 flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+          <div
+            className={cn(
+              'mt-4 flex items-start gap-2 rounded-lg px-3 py-2 text-xs',
+              TONES.success.bg,
+              TONES.success.text,
+            )}
+          >
             <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
             <p>
               Integrasi aktif — CS AI akan otomatis pakai info ini di setiap
@@ -289,18 +308,25 @@ function IntegrationToggle({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 rounded-xl border bg-card p-4 transition',
-        enabled ? 'border-primary-300 ring-1 ring-primary-200' : 'border-warm-200',
+        'bg-card flex flex-col gap-3 rounded-xl border p-4 transition',
+        enabled
+          ? 'border-primary-300 ring-primary-200 ring-1'
+          : 'border-warm-200',
         disabled && 'opacity-60',
       )}
     >
       <div className="flex items-start gap-3">
-        <div className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg', iconClass)}>
+        <div
+          className={cn(
+            'flex size-9 shrink-0 items-center justify-center rounded-lg',
+            iconClass,
+          )}
+        >
           <Icon className="size-4" />
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-display text-sm font-bold leading-tight text-warm-900 dark:text-warm-50">
+            <h3 className="font-display text-warm-900 text-sm leading-tight font-semibold">
               {title}
             </h3>
             <Switch
@@ -310,7 +336,7 @@ function IntegrationToggle({
               aria-label={`Toggle ${title}`}
             />
           </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-warm-600 dark:text-warm-400">
+          <p className="text-warm-600 mt-1 text-xs leading-relaxed">
             {description}
           </p>
         </div>
@@ -322,32 +348,11 @@ function IntegrationToggle({
       </div>
 
       {footer && (
-        <div className="border-t border-dashed border-warm-200 pt-2.5">
+        <div className="border-warm-200 border-t border-dashed pt-2.5">
           {footer}
         </div>
       )}
     </div>
-  )
-}
-
-function Badge({
-  tone,
-  children,
-}: {
-  tone: 'emerald' | 'amber'
-  children: React.ReactNode
-}) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold',
-        tone === 'emerald'
-          ? 'bg-emerald-100 text-emerald-800'
-          : 'bg-amber-100 text-amber-800',
-      )}
-    >
-      {children}
-    </span>
   )
 }
 
@@ -363,7 +368,7 @@ function RuleToggle({
   onToggle: (v: boolean) => void
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-2 text-warm-700 dark:text-warm-300">
+    <label className="text-warm-700 flex cursor-pointer items-center justify-between gap-2">
       <span>{label}</span>
       <Switch
         checked={checked}

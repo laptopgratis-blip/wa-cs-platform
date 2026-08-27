@@ -17,6 +17,7 @@ interface MobileNavProps {
     role: Role
   }
   tokenBalance?: number | null
+  messageCreditRp?: number | null
   hasOrderSystemAccess?: boolean
   onboardingGoal?: OnboardingGoal | null
 }
@@ -24,6 +25,7 @@ interface MobileNavProps {
 export function MobileNav({
   user,
   tokenBalance,
+  messageCreditRp = null,
   hasOrderSystemAccess,
   onboardingGoal,
 }: MobileNavProps) {
@@ -36,6 +38,7 @@ export function MobileNav({
         onOpenChange={setDrawerOpen}
         user={user}
         tokenBalance={tokenBalance}
+        messageCreditRp={messageCreditRp}
         hasOrderSystemAccess={hasOrderSystemAccess}
         onboardingGoal={onboardingGoal}
       />

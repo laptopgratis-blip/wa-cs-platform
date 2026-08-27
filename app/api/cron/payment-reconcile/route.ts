@@ -11,11 +11,12 @@
 // sebagai already-processed (tidak error).
 //
 // Auth: terpusat di lib/cron-auth.ts (Bearer / x-cron-secret / ?secret=).
-import { Prisma } from '@prisma/client'
+import { Prisma, type PaymentPurpose } from '@prisma/client'
 import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/lib/cron-auth'
 import { prisma } from '@/lib/prisma'
+import { applyPaymentCredit } from '@/lib/billing/apply-payment-credit'
 import { getTransactionDetail } from '@/lib/tripay'
 
 // Window 24 jam: lebih dari ini, anggap webhook benar-benar lost dan
@@ -41,6 +42,7 @@ async function reconcileOne(payment: {
   status: string
   paymentMethod: string | null
   tokenAmount: number
+  purpose: PaymentPurpose
   expiredAt: Date | null
 }): Promise<'paid' | 'expired' | 'failed' | 'unchanged' | 'error'> {
   if (!payment.reference) return 'unchanged'
@@ -81,26 +83,12 @@ async function reconcileOne(payment: {
         },
       })
       if (next === 'SUCCESS') {
-        await tx.tokenBalance.upsert({
-          where: { userId: payment.userId },
-          create: {
-            userId: payment.userId,
-            balance: payment.tokenAmount,
-            totalPurchased: payment.tokenAmount,
-          },
-          update: {
-            balance: { increment: payment.tokenAmount },
-            totalPurchased: { increment: payment.tokenAmount },
-          },
-        })
-        await tx.tokenTransaction.create({
-          data: {
-            userId: payment.userId,
-            amount: payment.tokenAmount,
-            type: 'PURCHASE',
-            description: `Pembelian via Tripay (reconcile, ${payment.paymentMethod ?? 'unknown'})`,
-            reference: payment.orderId,
-          },
+        await applyPaymentCredit(tx, {
+          userId: payment.userId,
+          purpose: payment.purpose,
+          amount: payment.tokenAmount,
+          reference: payment.orderId,
+          description: `Pembelian via Tripay (reconcile, ${payment.paymentMethod ?? 'unknown'})`,
         })
         // Catatan 2026-07-14: top-up tidak lagi menaikkan tier kuota LP.
       }
@@ -147,6 +135,7 @@ async function handle(req: Request) {
       status: true,
       paymentMethod: true,
       tokenAmount: true,
+      purpose: true,
       expiredAt: true,
     },
   })

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { CourseBuilder } from '@/components/lms/CourseBuilder'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
@@ -41,15 +42,13 @@ export default async function EditCoursePage({ params }: Params) {
   ])
 
   return (
-    <div className="mx-auto flex min-h-full max-w-4xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
-      <div>
-        <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
-          <Link href="/lms/courses">
-            <ArrowLeft className="mr-2 size-4" />
-            Kembali ke Course Saya
-          </Link>
-        </Button>
-      </div>
+    <PageContainer>
+      <Button asChild variant="ghost" size="sm" className="-ml-2 self-start">
+        <Link href="/lms/courses">
+          <ArrowLeft className="mr-2 size-4" />
+          Kembali ke Course Saya
+        </Link>
+      </Button>
 
       <CourseBuilder
         course={{
@@ -84,6 +83,6 @@ export default async function EditCoursePage({ params }: Params) {
           canIssueCertificate: quota.canIssueCertificate,
         }}
       />
-    </div>
+    </PageContainer>
   )
 }

@@ -14,7 +14,11 @@ import { AiGenerator } from '@/components/lp/AiGenerator'
 import { ColorsPanel } from '@/components/lp/ColorsPanel'
 import { CtaLinkPanel } from '@/components/lp/CtaLinkPanel'
 import { LiveEmbedPanel } from '@/components/lp/LiveEmbedPanel'
-import { EditorTopbar, type SaveStatus, type Viewport } from '@/components/lp/EditorTopbar'
+import {
+  EditorTopbar,
+  type SaveStatus,
+  type Viewport,
+} from '@/components/lp/EditorTopbar'
 import { HtmlEditor } from '@/components/lp/HtmlEditor'
 import { ImageManager } from '@/components/lp/ImageManager'
 import { LivePreview } from '@/components/lp/LivePreview'
@@ -22,6 +26,7 @@ import { PublishDialog } from '@/components/lp/PublishDialog'
 import { SeoSettingsSheet } from '@/components/lp/SeoSettingsSheet'
 import { VisualEditor } from '@/components/lp/VisualEditor'
 import { findEditableTagOffset } from '@/lib/lp/html-mutation'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 type EditorMode = 'visual' | 'lanjutan'
@@ -36,14 +41,14 @@ function ModeBar({
   onChange: (m: EditorMode) => void
 }) {
   return (
-    <div className="flex items-center gap-1 border-b border-warm-200 bg-warm-50/50 px-4 py-1.5">
+    <div className="border-warm-200 bg-warm-50/50 flex items-center gap-1 border-b px-4 py-1.5">
       <button
         type="button"
         onClick={() => onChange('visual')}
         className={cn(
           'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
           mode === 'visual'
-            ? 'bg-card text-warm-900 shadow-sm ring-1 ring-warm-200'
+            ? 'bg-card text-warm-900 ring-warm-200 shadow-sm ring-1'
             : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
         )}
         aria-pressed={mode === 'visual'}
@@ -51,7 +56,13 @@ function ModeBar({
         <MousePointerClick className="size-3.5" />
         Edit Mudah
         {mode === 'visual' && (
-          <span className="ml-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+          <span
+            className={cn(
+              'ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold',
+              TONES.success.bg,
+              TONES.success.text,
+            )}
+          >
             disarankan
           </span>
         )}
@@ -62,7 +73,7 @@ function ModeBar({
         className={cn(
           'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
           mode === 'lanjutan'
-            ? 'bg-card text-warm-900 shadow-sm ring-1 ring-warm-200'
+            ? 'bg-card text-warm-900 ring-warm-200 shadow-sm ring-1'
             : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
         )}
         aria-pressed={mode === 'lanjutan'}
@@ -70,7 +81,7 @@ function ModeBar({
         <Code2 className="size-3.5" />
         HTML Lanjutan
       </button>
-      <span className="ml-2 hidden text-[10px] text-warm-500 md:inline">
+      <span className="text-warm-500 ml-2 hidden text-xs md:inline">
         {mode === 'visual'
           ? 'Klik teks/tombol di preview untuk ubah · ganti warna di panel atas'
           : 'Edit HTML mentah · cocok kalau kamu mau custom struktur'}
@@ -127,9 +138,10 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   // Highlight range untuk HtmlEditor — diset saat user klik elemen di LivePreview
   // (mode lanjutan). Object baru tiap klik (walau index sama) supaya effect
   // re-trigger untuk klik berulang ke elemen yang sama.
-  const [htmlHighlight, setHtmlHighlight] = useState<
-    { start: number; end: number } | null
-  >(null)
+  const [htmlHighlight, setHtmlHighlight] = useState<{
+    start: number
+    end: number
+  } | null>(null)
 
   const handlePreviewElementClick = useCallback(
     (editIndex: number) => {
@@ -312,8 +324,8 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
       <ModeBar mode={mode} onChange={setMode} />
 
       {mode === 'visual' ? (
-        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr]">
-          <aside className="hidden border-r border-warm-200 bg-card lg:flex lg:flex-col lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_1fr]">
+          <aside className="border-warm-200 bg-card hidden border-r lg:flex lg:flex-col lg:overflow-hidden">
             <ImageManager lpId={initial.id} />
           </aside>
 
@@ -321,7 +333,7 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
               menumpuk tinggi tanpa "menelan" preview di bawah. Min height
               500px di preview area memastikan preview tetap kelihatan
               walaupun di laptop dengan layar kecil. */}
-          <section className="flex min-h-0 flex-col overflow-y-auto bg-warm-50/30">
+          <section className="bg-warm-50/30 flex min-h-0 flex-col overflow-y-auto">
             <AiGenerator
               lpId={initial.id}
               onGenerated={handleGeneratedHtml}
@@ -348,18 +360,18 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
           </section>
         </div>
       ) : (
-        <div className="grid flex-1 min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr_1fr]">
-          <aside className="hidden border-r border-warm-200 bg-card lg:flex lg:flex-col lg:overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_1fr_1fr]">
+          <aside className="border-warm-200 bg-card hidden border-r lg:flex lg:flex-col lg:overflow-hidden">
             <ImageManager lpId={initial.id} />
           </aside>
 
-          <section className="flex min-h-0 flex-col border-r border-warm-200 bg-warm-50/30">
+          <section className="border-warm-200 bg-warm-50/30 flex min-h-0 flex-col border-r">
             <AiGenerator
               lpId={initial.id}
               onGenerated={handleGeneratedHtml}
               initialOpen={!hasContent}
             />
-            <div className="flex min-h-0 flex-1 flex-col border-t border-warm-200">
+            <div className="border-warm-200 flex min-h-0 flex-1 flex-col border-t">
               <HtmlEditor
                 value={htmlContent}
                 onChange={setHtmlContent}
@@ -369,7 +381,7 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col bg-warm-100/40">
+          <section className="bg-warm-100/40 flex min-h-0 flex-col">
             <LivePreview
               htmlContent={htmlContent}
               viewport={viewport}

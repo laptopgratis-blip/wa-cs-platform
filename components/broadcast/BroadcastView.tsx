@@ -58,7 +58,7 @@ export function BroadcastView({
       />
 
       <div>
-        <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+        <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
           Broadcast Saya
         </h2>
         {broadcasts.length === 0 ? (

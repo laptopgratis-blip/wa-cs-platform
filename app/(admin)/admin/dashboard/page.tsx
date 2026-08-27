@@ -3,14 +3,18 @@ import { Activity, CreditCard, MessageCircle, Users } from 'lucide-react'
 
 import { ServerStatusCard } from '@/components/admin/ServerStatusCard'
 import { SoulTokenBudget } from '@/components/admin/SoulTokenBudget'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
 
@@ -63,9 +67,8 @@ export default async function AdminDashboardPage() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-6xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
-        className="mb-7"
         title="Admin Dashboard"
         description="Ringkasan platform — metrik utama untuk pantau pertumbuhan & operasional."
       />
@@ -94,15 +97,11 @@ export default async function AdminDashboardPage() {
         />
       </div>
 
-      <div className="mt-6">
-        <SoulTokenBudget />
-      </div>
+      <SoulTokenBudget />
 
-      <div className="mt-6">
-        <ServerStatusCard />
-      </div>
+      <ServerStatusCard />
 
-      <Card className="mt-6">
+      <Card>
         <CardHeader>
           <CardTitle>Pembayaran Sukses Terbaru</CardTitle>
         </CardHeader>
@@ -113,47 +112,49 @@ export default async function AdminDashboardPage() {
               description="Transaksi token yang berhasil bakal tampil di sini."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-muted-foreground">
-                  <tr className="border-b">
-                    <th className="py-2 pr-4 font-medium">Order ID</th>
-                    <th className="py-2 pr-4 font-medium">User</th>
-                    <th className="py-2 pr-4 font-medium">Token</th>
-                    <th className="py-2 pr-4 font-medium">Metode</th>
-                    <th className="py-2 pr-4 text-right font-medium">Jumlah</th>
-                    <th className="py-2 pr-4 text-right font-medium">Tanggal</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentPayments.map((p) => {
-                    const u = userMap.get(p.userId)
-                    return (
-                      <tr key={p.id} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-mono text-xs">{p.orderId}</td>
-                        <td className="py-2 pr-4">{u?.name || u?.email || '—'}</td>
-                        <td className="py-2 pr-4">{formatNumber(p.tokenAmount)}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">
-                          {p.paymentMethod ?? '—'}
-                        </td>
-                        <td className="py-2 pr-4 text-right">{formatRupiah(p.amount)}</td>
-                        <td className="py-2 pr-4 text-right text-muted-foreground">
-                          {p.paidAt?.toLocaleDateString('id-ID', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                          }) ?? '—'}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Token</TableHead>
+                  <TableHead>Metode</TableHead>
+                  <TableHead className="text-right">Jumlah</TableHead>
+                  <TableHead className="text-right">Tanggal</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentPayments.map((p) => {
+                  const u = userMap.get(p.userId)
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono text-xs">
+                        {p.orderId}
+                      </TableCell>
+                      <TableCell>{u?.name || u?.email || '—'}</TableCell>
+                      <TableCell>{formatNumber(p.tokenAmount)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {p.paymentMethod ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatRupiah(p.amount)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-right">
+                        {p.paidAt?.toLocaleDateString('id-ID', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                        }) ?? '—'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }
 
@@ -166,20 +167,20 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, hint }: StatCardProps) {
   return (
-    <Card className="group rounded-xl border-warm-200 shadow-sm hover-lift">
+    <Card className="group hover-lift">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <CardTitle className="text-xs font-medium uppercase tracking-wider text-warm-500">
+        <CardTitle className="text-warm-500 text-xs font-medium tracking-wider uppercase">
           {label}
         </CardTitle>
-        <span className="flex size-9 items-center justify-center rounded-lg bg-primary-100 text-primary-500 transition-colors group-hover:bg-primary-500 group-hover:text-white">
+        <span className="bg-primary-100 text-primary-500 group-hover:bg-primary-500 flex size-9 items-center justify-center rounded-lg transition-colors group-hover:text-white">
           {icon}
         </span>
       </CardHeader>
       <CardContent>
-        <div className="font-display text-2xl font-bold text-warm-900 dark:text-warm-50 tabular-nums">
+        <div className="font-display text-warm-900 text-2xl font-bold tabular-nums">
           {value}
         </div>
-        {hint && <p className="mt-1 text-xs text-warm-500">{hint}</p>}
+        {hint && <p className="text-warm-500 mt-1 text-xs">{hint}</p>}
       </CardContent>
     </Card>
   )

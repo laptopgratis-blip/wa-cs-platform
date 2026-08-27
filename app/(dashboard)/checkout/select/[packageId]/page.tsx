@@ -7,6 +7,8 @@ import { notFound, redirect } from 'next/navigation'
 
 import { PaymentMethodPicker } from '@/components/dashboard/PaymentMethodPicker'
 import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +22,7 @@ import { Separator } from '@/components/ui/separator'
 import { authOptions } from '@/lib/auth'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { prisma } from '@/lib/prisma'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,11 +40,16 @@ export default async function SelectPaymentPage({
     where: { id: packageId, isActive: true },
   })
   if (!pkg) notFound()
+  // Paket Kredit Pesan tidak bisa dibeli selama billing kredit nonaktif
+  // (lihat lib/billing/message-credit-mode.ts) — lindungi dari tautan langsung.
+  if (pkg.kind === 'MESSAGE_CREDIT' && !MESSAGE_CREDIT_BILLING_ENABLED) notFound()
 
   const pricePerToken = pkg.tokenAmount > 0 ? pkg.price / pkg.tokenAmount : 0
+  // Paket Kredit Pesan WA (Trek 2B): tokenAmount = Rp kredit yang diterima.
+  const isCredit = pkg.kind === 'MESSAGE_CREDIT'
 
   return (
-    <div className="mx-auto flex min-h-full max-w-2xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/billing">
@@ -49,48 +57,50 @@ export default async function SelectPaymentPage({
             Kembali ke Billing
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Pilih Metode Pembayaran
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Pilih cara bayar yang paling nyaman untuk kamu.
-        </p>
+        <PageHeader
+          title="Pilih Metode Pembayaran"
+          description="Pilih cara bayar yang paling nyaman untuk kamu."
+        />
       </div>
 
       <PostPublishReturnBanner />
 
       {/* Ringkasan paket */}
-      <Card className="relative overflow-visible rounded-xl border-warm-200 shadow-sm">
+      <Card className="relative overflow-visible">
         {pkg.isPopular && (
-          <Badge className="absolute -top-2.5 right-4 z-10 bg-primary-500 text-white shadow-orange">
+          <Badge className="shadow-orange absolute -top-2.5 right-4 z-10">
             <Sparkles className="mr-1 size-3" />
             Paling Populer
           </Badge>
         )}
         <CardHeader className="pb-2">
-          <CardDescription className="text-xs font-medium uppercase tracking-wider text-warm-500">
+          <CardDescription className="text-warm-500 text-xs font-medium tracking-wider uppercase">
             Paket yang dipilih
           </CardDescription>
-          <CardTitle className="font-display text-xl font-bold text-warm-900 dark:text-warm-50">
+          <CardTitle className="font-display text-warm-900 text-xl font-semibold">
             {pkg.name}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <ul className="space-y-1.5 text-sm text-warm-600">
+          <ul className="text-warm-600 space-y-1.5 text-sm">
             <li className="flex items-center gap-2">
-              <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+              <span className="bg-primary-100 text-primary-600 flex size-4 shrink-0 items-center justify-center rounded-full">
                 <Check className="size-3" strokeWidth={3} />
               </span>
-              {formatNumber(pkg.tokenAmount)} token siap pakai
+              {isCredit
+                ? `Kredit Pesan WA ${formatRupiah(pkg.tokenAmount)} (untuk template Meta di nomor Cloud API)`
+                : `${formatNumber(pkg.tokenAmount)} token siap pakai`}
             </li>
             <li className="flex items-center gap-2">
-              <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+              <span className="bg-primary-100 text-primary-600 flex size-4 shrink-0 items-center justify-center rounded-full">
                 <Check className="size-3" strokeWidth={3} />
               </span>
-              Akses semua model AI yang aktif
+              {isCredit
+                ? 'Dipotong per pesan sesuai kategori (utility/marketing/OTP)'
+                : 'Akses semua model AI yang aktif'}
             </li>
             <li className="flex items-center gap-2">
-              <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-600">
+              <span className="bg-primary-100 text-primary-600 flex size-4 shrink-0 items-center justify-center rounded-full">
                 <Check className="size-3" strokeWidth={3} />
               </span>
               Tanpa expired
@@ -100,11 +110,13 @@ export default async function SelectPaymentPage({
           <Separator />
 
           <div className="flex items-baseline justify-between">
-            <span className="text-sm text-warm-500">
-              ≈ {formatRupiah(Math.round(pricePerToken))} per token
+            <span className="text-warm-500 text-sm">
+              {isCredit
+                ? `Harga ${Math.round((pkg.price / Math.max(pkg.tokenAmount, 1)) * 100)}% dari nilai kredit`
+                : `≈ ${formatRupiah(Math.round(pricePerToken))} per token`}
             </span>
             <div className="text-right">
-              <div className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50 tabular-nums">
+              <div className="font-display text-warm-900 text-2xl font-semibold tabular-nums">
                 {formatRupiah(pkg.price)}
               </div>
             </div>
@@ -118,6 +130,6 @@ export default async function SelectPaymentPage({
         packageName={pkg.name}
         packagePrice={pkg.price}
       />
-    </div>
+    </PageContainer>
   )
 }

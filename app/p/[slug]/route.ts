@@ -47,7 +47,7 @@ function clientIpFrom(headers: Headers): string {
 
 const THROTTLE_PER_MIN = 10
 const QUOTA_EXCEEDED_HTML = `<!DOCTYPE html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Halaman Sementara Tidak Tersedia</title><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#1f1f1f;background:#fafafa;padding:24px}main{max-width:480px;text-align:center}h1{font-size:1.75rem;margin:0 0 12px;color:#ea580c}p{color:#555;line-height:1.6}small{display:block;margin-top:32px;color:#999;font-size:11px}</style></head><body><main><h1>🔒 Halaman Sementara Tidak Tersedia</h1><p>Pemilik halaman ini telah mencapai batas pengunjung untuk bulan ini.</p><p>Silakan coba kembali bulan depan, atau hubungi pemilik langsung.</p><small>Powered by Hulao</small></main></body></html>`
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Halaman Sementara Tidak Tersedia</title><style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#1f1f1f;background:#fafafa;padding:24px}main{max-width:480px;text-align:center}h1{font-size:1.75rem;margin:0 0 12px;color:#ea580c}p{color:#555;line-height:1.6}small{display:block;margin-top:32px;color:#999;font-size:11px}</style></head><body><main><h1>Halaman Sementara Tidak Tersedia</h1><p>Pemilik halaman ini telah mencapai batas pengunjung untuk bulan ini.</p><p>Silakan coba kembali bulan depan, atau hubungi pemilik langsung.</p><small>Powered by Hulao</small></main></body></html>`
 
 interface Params {
   params: Promise<{ slug: string }>
@@ -104,9 +104,7 @@ function injectMeta(htmlDoc: string, metaBlock: string): string {
   const reMatch = cleaned.match(/<head[^>]*>/i)
   if (!reMatch) return htmlDoc
   const idx = (reMatch.index ?? 0) + reMatch[0].length
-  return (
-    cleaned.slice(0, idx) + '\n  ' + metaBlock + '\n' + cleaned.slice(idx)
-  )
+  return cleaned.slice(0, idx) + '\n  ' + metaBlock + '\n' + cleaned.slice(idx)
   // Note: hindari unused-variable warning untuk variabel awal — keep originals.
   void headOpenIdx
   void headOpenLen
@@ -268,7 +266,8 @@ export async function GET(req: Request, { params }: Params) {
   const reqUrl = new URL(req.url)
   const utmSource = reqUrl.searchParams.get('utm_source')?.slice(0, 100) ?? null
   const utmMedium = reqUrl.searchParams.get('utm_medium')?.slice(0, 100) ?? null
-  const utmCampaign = reqUrl.searchParams.get('utm_campaign')?.slice(0, 100) ?? null
+  const utmCampaign =
+    reqUrl.searchParams.get('utm_campaign')?.slice(0, 100) ?? null
   // Geoip dari header reverse proxy kalau ada (Cloudflare/Vercel set ini).
   // Traefik default tidak set — jadi biasanya null. Bisa ditambah nanti via
   // service eksternal di Phase 2.
@@ -276,9 +275,7 @@ export async function GET(req: Request, { params }: Params) {
     req.headers.get('cf-ipcountry')?.slice(0, 2) ??
     req.headers.get('x-vercel-ip-country')?.slice(0, 2) ??
     null
-  const city =
-    req.headers.get('x-vercel-ip-city')?.slice(0, 100) ??
-    null
+  const city = req.headers.get('x-vercel-ip-city')?.slice(0, 100) ?? null
   prisma.lpVisit
     .create({
       data: {
@@ -312,9 +309,7 @@ export async function GET(req: Request, { params }: Params) {
 
   // Default fallback: pakai title LP & deskripsi dari metaDesc, atau text generic.
   const metaTitle = (lp.metaTitle ?? lp.title).slice(0, 200)
-  const metaDesc = (
-    lp.metaDesc ?? `${lp.title} — landing page.`
-  ).slice(0, 320)
+  const metaDesc = (lp.metaDesc ?? `${lp.title} — landing page.`).slice(0, 320)
 
   const metaBlock = buildMetaTags({
     title: metaTitle,
@@ -364,7 +359,8 @@ export async function GET(req: Request, { params }: Params) {
       'Content-Type': 'text/html; charset=utf-8',
       // Cache control: lightweight cache supaya search bot crawl efisien,
       // tapi tetap stale dalam menit untuk ngeliat update LP.
-      'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
+      'Cache-Control':
+        'public, max-age=60, s-maxage=120, stale-while-revalidate=300',
       'X-Robots-Tag': 'index, follow',
     },
   })

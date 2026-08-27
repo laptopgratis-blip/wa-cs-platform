@@ -116,7 +116,7 @@ export function InlineShippingZone({
       </div>
 
       <div className="rounded-md bg-blue-50 px-3 py-2 text-[11px] text-blue-800">
-        💡 Untuk setup gratis ongkir per area / subsidi flat / minimum order,
+        Untuk setup gratis ongkir per area / subsidi flat / minimum order,
         buka halaman lengkap setelah ini.
       </div>
 

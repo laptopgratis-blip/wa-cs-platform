@@ -11,6 +11,7 @@ import { Topbar } from '@/components/dashboard/Topbar'
 import { MobileNav } from '@/components/layout/MobileNav'
 import { MainWelcomeWizard } from '@/components/onboarding/MainWelcomeWizard'
 import { authOptions } from '@/lib/auth'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import type { OnboardingGoal } from '@/lib/navigation'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
@@ -48,14 +49,24 @@ export default async function DashboardLayout({
 
   // Fetch saldo token + akses Order System paralel — di-pass ke Sidebar (desktop)
   // + Drawer (mobile) untuk filter menu Order System (POWER only).
-  const [balance, orderAccess] = await Promise.all([
+  const [balance, orderAccess, cloudSessionCount] = await Promise.all([
     prisma.tokenBalance.findUnique({
       where: { userId: session.user.id },
-      select: { balance: true },
+      select: { balance: true, messageCreditRp: true },
     }),
     checkOrderSystemAccess(session.user.id),
+    // Kartu "Kredit Pesan WA" hanya relevan bila user punya nomor Cloud API.
+    prisma.whatsappSession.count({
+      where: { userId: session.user.id, provider: 'CLOUD_API', isActive: true },
+    }),
   ])
   const tokenBalance = balance?.balance ?? 0
+  // null = kartu Kredit Pesan tidak dirender (billing kredit nonaktif).
+  const messageCreditRp =
+    MESSAGE_CREDIT_BILLING_ENABLED &&
+    (cloudSessionCount > 0 || (balance?.messageCreditRp ?? 0) !== 0)
+      ? (balance?.messageCreditRp ?? 0)
+      : null
   const hasOrderSystemAccess = orderAccess.hasAccess
   const onboardingGoal = (userMeta?.onboardingGoal ?? null) as
     | OnboardingGoal
@@ -73,6 +84,7 @@ export default async function DashboardLayout({
       <Sidebar
         className="hidden md:flex"
         tokenBalance={tokenBalance}
+        messageCreditRp={messageCreditRp}
         hasOrderSystemAccess={hasOrderSystemAccess}
         onboardingGoal={onboardingGoal}
       />
@@ -86,7 +98,7 @@ export default async function DashboardLayout({
             full-bleed (split panel) tanpa di-pad parent. Padding-bottom
             untuk mobile = tinggi BottomNav + safe-area-inset-bottom (iPhone
             home indicator) supaya konten paling bawah tidak ketutup nav. */}
-        <main className="flex-1 overflow-y-auto pb-mobile-nav md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-mobile-nav">
           {children}
         </main>
       </div>
@@ -99,6 +111,7 @@ export default async function DashboardLayout({
           role: session.user.role,
         }}
         tokenBalance={tokenBalance}
+        messageCreditRp={messageCreditRp}
         hasOrderSystemAccess={hasOrderSystemAccess}
         onboardingGoal={onboardingGoal}
       />

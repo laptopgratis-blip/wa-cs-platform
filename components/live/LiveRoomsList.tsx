@@ -71,7 +71,7 @@ export function LiveRoomsList() {
         actions={
           <Link href="/live-rooms/new">
             <Button>
-              <Plus className="mr-2 h-4 w-4" /> Bikin Live Room
+              <Plus className="mr-2 size-4" /> Bikin Live Room
             </Button>
           </Link>
         }
@@ -89,7 +89,7 @@ export function LiveRoomsList() {
               action={
                 <Link href="/live-rooms/new">
                   <Button>
-                    <Plus className="mr-2 h-4 w-4" /> Bikin Live Room
+                    <Plus className="mr-2 size-4" /> Bikin Live Room
                   </Button>
                 </Link>
               }
@@ -122,31 +122,31 @@ export function LiveRoomsList() {
 
                 <div className="flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => copyLink(row.slug)}>
-                    <Copy className="mr-1 h-3.5 w-3.5" /> Copy Link
+                    <Copy className="mr-1 size-3.5" /> Copy Link
                   </Button>
                   <Link href={`/live/${row.slug}`} target="_blank">
                     <Button size="sm" variant="outline">
-                      <ExternalLink className="mr-1 h-3.5 w-3.5" /> Buka
+                      <ExternalLink className="mr-1 size-3.5" /> Buka
                     </Button>
                   </Link>
                   <Link href={`/live-rooms/${row.id}/leads`}>
                     <Button size="sm" variant="outline">
-                      <Users className="mr-1 h-3.5 w-3.5" /> Leads
+                      <Users className="mr-1 size-3.5" /> Leads
                     </Button>
                   </Link>
                   <Link href={`/live-rooms/${row.id}/objections`}>
                     <Button size="sm" variant="outline">
-                      <BarChart3 className="mr-1 h-3.5 w-3.5" /> Objection
+                      <BarChart3 className="mr-1 size-3.5" /> Objection
                     </Button>
                   </Link>
                   <Link href={`/live-rooms/${row.id}/improve`}>
                     <Button size="sm" variant="outline">
-                      <Sparkles className="mr-1 h-3.5 w-3.5" /> Optimasi
+                      <Sparkles className="mr-1 size-3.5" /> Optimasi
                     </Button>
                   </Link>
                   <Link href={`/live-rooms/${row.id}`}>
                     <Button size="sm" variant="outline">
-                      <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                      <Pencil className="mr-1 size-3.5" /> Edit
                     </Button>
                   </Link>
                   <Button
@@ -156,7 +156,7 @@ export function LiveRoomsList() {
                     className="text-destructive hover:text-destructive"
                     onClick={() => setDeleteTarget(row)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="size-3.5" />
                   </Button>
                 </div>
               </CardContent>

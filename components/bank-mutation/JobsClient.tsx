@@ -1,17 +1,28 @@
 'use client'
 
 // Job log scraper untuk debug. Read-only, 50 job terakhir.
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { formatRelativeTime } from '@/lib/format-time'
+import { scrapeJobStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 
 interface Job {
   id: string
@@ -28,16 +39,8 @@ interface Job {
 }
 
 function statusBadge(status: string) {
-  switch (status) {
-    case 'SUCCESS':
-      return <Badge className="bg-emerald-600">SUCCESS</Badge>
-    case 'FAILED':
-      return <Badge variant="destructive">FAILED</Badge>
-    case 'RUNNING':
-      return <Badge variant="outline">RUNNING</Badge>
-    default:
-      return <Badge variant="outline">{status}</Badge>
-  }
+  const meta = statusMeta(scrapeJobStatusMeta, status)
+  return <StatusBadge tone={meta.tone} label={meta.label} />
 }
 
 export function JobsClient() {
@@ -65,7 +68,7 @@ export function JobsClient() {
       <div>
         <Link href="/integrations/bank-mutation">
           <Button variant="ghost" size="sm" className="mb-2 -ml-2">
-            <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
+            <ArrowLeft className="mr-1 size-4" /> Kembali
           </Button>
         </Link>
         <PageHeader
@@ -86,51 +89,49 @@ export function JobsClient() {
               description="Log muncul setelah scraper jalan (terjadwal atau manual)."
             />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b bg-muted/40">
-                  <tr className="text-left">
-                    <th className="p-3 font-medium">Waktu</th>
-                    <th className="p-3 font-medium">Trigger</th>
-                    <th className="p-3 font-medium">Status</th>
-                    <th className="p-3 font-medium text-right">Durasi</th>
-                    <th className="p-3 font-medium text-right">Mutasi (baru/total)</th>
-                    <th className="p-3 font-medium text-right">Auto-confirm</th>
-                    <th className="p-3 font-medium">Error</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {jobs.map((j) => (
-                    <tr key={j.id} className="border-b">
-                      <td className="p-3 whitespace-nowrap">
-                        {formatRelativeTime(j.createdAt)}
-                      </td>
-                      <td className="p-3">
-                        <Badge variant="outline">{j.triggeredBy}</Badge>
-                      </td>
-                      <td className="p-3">{statusBadge(j.status)}</td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.durationMs !== null
-                          ? `${(j.durationMs / 1000).toFixed(1)}s`
-                          : '—'}
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.newMutations}/{j.mutationsFound}
-                      </td>
-                      <td className="p-3 text-right font-mono text-xs">
-                        {j.autoConfirmed}
-                      </td>
-                      <td
-                        className="p-3 max-w-[300px] truncate text-xs text-red-600"
-                        title={j.errorMessage ?? ''}
-                      >
-                        {j.errorMessage ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Waktu</TableHead>
+                  <TableHead>Trigger</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Durasi</TableHead>
+                  <TableHead className="text-right">
+                    Mutasi (baru/total)
+                  </TableHead>
+                  <TableHead className="text-right">Auto-confirm</TableHead>
+                  <TableHead>Error</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {jobs.map((j) => (
+                  <TableRow key={j.id}>
+                    <TableCell>{formatRelativeTime(j.createdAt)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{j.triggeredBy}</Badge>
+                    </TableCell>
+                    <TableCell>{statusBadge(j.status)}</TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.durationMs !== null
+                        ? `${(j.durationMs / 1000).toFixed(1)}s`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.newMutations}/{j.mutationsFound}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-xs">
+                      {j.autoConfirmed}
+                    </TableCell>
+                    <TableCell
+                      className={`max-w-[300px] truncate text-xs ${TONES.danger.text}`}
+                      title={j.errorMessage ?? ''}
+                    >
+                      {j.errorMessage ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

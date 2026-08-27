@@ -9,6 +9,7 @@
 // Mirror style dari /components/lp-lab/* — warna warm + primary-orange.
 import {
   Award,
+  BarChart3,
   Loader2,
   TrendingUp,
   UserCheck,
@@ -17,11 +18,23 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import type {
   CourseAnalyticsResult,
   CourseAnalyticsSeries,
   CourseAnalyticsLesson,
 } from '@/lib/services/lms/analytics'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 type Range = 7 | 30 | 90
 
@@ -58,7 +71,7 @@ export function CourseAnalyticsClient({ courseId }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex gap-0.5 rounded-md border border-warm-300 p-0.5">
+        <div className="border-warm-300 flex gap-0.5 rounded-md border p-0.5">
           {([7, 30, 90] as const).map((d) => (
             <button
               key={d}
@@ -75,17 +88,15 @@ export function CourseAnalyticsClient({ courseId }: Props) {
           ))}
         </div>
         {loading && (
-          <span className="flex items-center gap-1 text-xs text-warm-500">
-            <Loader2 className="size-3 animate-spin" />
+          <span className="text-warm-500 flex items-center gap-1 text-xs">
+            <Loader2 className="size-4 animate-spin" />
             Memuat…
           </span>
         )}
       </div>
 
       {!loading && !data && (
-        <div className="rounded border border-dashed border-warm-200 bg-warm-50 py-12 text-center text-sm text-warm-500">
-          Gagal memuat analytics.
-        </div>
+        <EmptyState bordered icon={BarChart3} title="Gagal memuat analytics." />
       )}
 
       {data && (
@@ -120,56 +131,52 @@ function SummaryCards({
       ? summary.avgDaysToComplete.toFixed(1)
       : '—'
 
+  // Ikon stat tile pakai aksen brand tunggal — yang membedakan makna adalah
+  // ikonnya, bukan hue dekoratif per kartu.
   const cards = [
     {
       label: 'Total Enrollment',
       value: summary.totalEnrollments.toLocaleString('id-ID'),
       Icon: Users,
-      tone: 'text-primary-600',
     },
     {
       label: 'Active 7 hari',
       value: summary.activeStudents7d.toLocaleString('id-ID'),
       Icon: UserCheck,
-      tone: 'text-blue-600',
     },
     {
       label: 'Completion Rate',
       value: `${completionPct}%`,
       Icon: TrendingUp,
-      tone: 'text-emerald-600',
     },
     {
       label: 'Sertifikat Terbit',
       value: summary.totalCertificates.toLocaleString('id-ID'),
       Icon: Award,
-      tone: 'text-amber-600',
     },
     {
       label: 'Avg Hari Selesai',
       value: avgDays,
       Icon: Hourglass,
-      tone: 'text-purple-600',
     },
   ]
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
       {cards.map((c) => (
-        <div
-          key={c.label}
-          className="rounded-xl border border-warm-200 bg-white p-3"
-        >
-          <div className="mb-1 flex items-center gap-1.5">
-            <c.Icon className={`size-4 ${c.tone}`} />
-            <span className="text-[11px] font-medium uppercase tracking-wide text-warm-500">
-              {c.label}
-            </span>
-          </div>
-          <div className="font-display text-xl font-bold tabular-nums text-warm-900">
-            {c.value}
-          </div>
-        </div>
+        <Card key={c.label}>
+          <CardContent className="p-3">
+            <div className="mb-1 flex items-center gap-1.5">
+              <c.Icon className="text-primary-600 size-4" />
+              <span className="text-warm-500 text-xs font-medium tracking-wide uppercase">
+                {c.label}
+              </span>
+            </div>
+            <div className="font-display text-warm-900 text-xl font-semibold tabular-nums">
+              {c.value}
+            </div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   )
@@ -201,102 +208,103 @@ function EnrollmentChart({
   const total = series.reduce((acc, s) => acc + s.count, 0)
 
   return (
-    <div className="rounded-xl border border-warm-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-display text-sm font-semibold text-warm-900">
-          <Users className="mr-1 inline size-4" /> Enrollment Harian
-        </h3>
-        <span className="text-xs text-warm-500">
-          {total.toLocaleString('id-ID')} total dalam {days} hari
-        </span>
-      </div>
-
-      {!chart || total === 0 ? (
-        <div className="rounded border border-dashed border-warm-200 bg-warm-50 py-12 text-center text-xs text-warm-500">
-          Belum ada enrollment dalam window {days} hari.
+    <Card>
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-display text-warm-900 text-lg font-semibold">
+            <Users className="mr-1 inline size-4" /> Enrollment Harian
+          </h3>
+          <span className="text-warm-500 text-xs">
+            {total.toLocaleString('id-ID')} total dalam {days} hari
+          </span>
         </div>
-      ) : (
-        <svg
-          viewBox={`0 0 ${chart.W} ${chart.H}`}
-          className="w-full"
-          preserveAspectRatio="xMinYMin meet"
-        >
-          {/* Y-axis grid */}
-          {[0, 0.5, 1].map((f) => {
-            const v = Math.round(chart.max * f)
-            return (
-              <g key={f}>
-                <line
-                  x1={chart.PAD_X}
-                  x2={chart.W - chart.PAD_X / 2}
-                  y1={chart.yOf(v)}
-                  y2={chart.yOf(v)}
-                  className="stroke-warm-200"
-                  strokeWidth={1}
-                  strokeDasharray={f === 0 ? '' : '2,4'}
-                />
-                <text
-                  x={chart.PAD_X - 4}
-                  y={chart.yOf(v) + 3}
-                  textAnchor="end"
-                  className="fill-warm-500 text-[9px]"
-                >
-                  {v}
-                </text>
-              </g>
-            )
-          })}
 
-          {/* Bars */}
-          {series.map((s, i) => {
-            const h = chart.H - chart.PAD_Y - chart.yOf(s.count)
-            return (
-              <rect
-                key={s.date}
-                x={chart.xOf(i)}
-                y={chart.yOf(s.count)}
-                width={chart.wOf}
-                height={Math.max(0, h)}
-                rx={1.5}
-                className={
-                  s.count > 0 ? 'fill-primary-500' : 'fill-warm-200'
-                }
-              >
-                <title>
-                  {new Date(s.date).toLocaleDateString('id-ID', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                  : {s.count} enrollment
-                </title>
-              </rect>
-            )
-          })}
-
-          {/* X-axis labels — first, mid, last */}
-          {series.length > 1 &&
-            [0, Math.floor(series.length / 2), series.length - 1].map((i) => {
-              const s = series[i]
-              if (!s) return null
+        {!chart || total === 0 ? (
+          <EmptyState
+            bordered
+            title={`Belum ada enrollment dalam window ${days} hari.`}
+          />
+        ) : (
+          <svg
+            viewBox={`0 0 ${chart.W} ${chart.H}`}
+            className="w-full"
+            preserveAspectRatio="xMinYMin meet"
+          >
+            {/* Y-axis grid */}
+            {[0, 0.5, 1].map((f) => {
+              const v = Math.round(chart.max * f)
               return (
-                <text
-                  key={i}
-                  x={chart.xOf(i) + chart.wOf / 2}
-                  y={chart.H - 4}
-                  textAnchor="middle"
-                  className="fill-warm-500 text-[9px]"
-                >
-                  {new Date(s.date).toLocaleDateString('id-ID', {
-                    day: '2-digit',
-                    month: 'short',
-                  })}
-                </text>
+                <g key={f}>
+                  <line
+                    x1={chart.PAD_X}
+                    x2={chart.W - chart.PAD_X / 2}
+                    y1={chart.yOf(v)}
+                    y2={chart.yOf(v)}
+                    className="stroke-warm-200"
+                    strokeWidth={1}
+                    strokeDasharray={f === 0 ? '' : '2,4'}
+                  />
+                  <text
+                    x={chart.PAD_X - 4}
+                    y={chart.yOf(v) + 3}
+                    textAnchor="end"
+                    className="fill-warm-500 text-xs"
+                  >
+                    {v}
+                  </text>
+                </g>
               )
             })}
-        </svg>
-      )}
-    </div>
+
+            {/* Bars */}
+            {series.map((s, i) => {
+              const h = chart.H - chart.PAD_Y - chart.yOf(s.count)
+              return (
+                <rect
+                  key={s.date}
+                  x={chart.xOf(i)}
+                  y={chart.yOf(s.count)}
+                  width={chart.wOf}
+                  height={Math.max(0, h)}
+                  rx={1.5}
+                  className={s.count > 0 ? 'fill-primary-500' : 'fill-warm-200'}
+                >
+                  <title>
+                    {new Date(s.date).toLocaleDateString('id-ID', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                    : {s.count} enrollment
+                  </title>
+                </rect>
+              )
+            })}
+
+            {/* X-axis labels — first, mid, last */}
+            {series.length > 1 &&
+              [0, Math.floor(series.length / 2), series.length - 1].map((i) => {
+                const s = series[i]
+                if (!s) return null
+                return (
+                  <text
+                    key={i}
+                    x={chart.xOf(i) + chart.wOf / 2}
+                    y={chart.H - 4}
+                    textAnchor="middle"
+                    className="fill-warm-500 text-xs"
+                  >
+                    {new Date(s.date).toLocaleDateString('id-ID', {
+                      day: '2-digit',
+                      month: 'short',
+                    })}
+                  </text>
+                )
+              })}
+          </svg>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -305,79 +313,83 @@ function EnrollmentChart({
 function LessonsFunnel({ lessons }: { lessons: CourseAnalyticsLesson[] }) {
   if (lessons.length === 0) {
     return (
-      <div className="rounded-xl border border-warm-200 bg-white p-4">
-        <h3 className="mb-3 font-display text-sm font-semibold text-warm-900">
-          <TrendingUp className="mr-1 inline size-4" /> Funnel Lesson
-        </h3>
-        <div className="rounded border border-dashed border-warm-200 bg-warm-50 py-12 text-center text-xs text-warm-500">
-          Course belum punya lesson.
-        </div>
-      </div>
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="font-display text-warm-900 mb-3 text-lg font-semibold">
+            <TrendingUp className="mr-1 inline size-4" /> Funnel Lesson
+          </h3>
+          <EmptyState bordered title="Course belum punya lesson." />
+        </CardContent>
+      </Card>
     )
   }
 
   const max = Math.max(1, ...lessons.map((l) => l.started))
 
   return (
-    <div className="rounded-xl border border-warm-200 bg-white p-4">
-      <h3 className="mb-3 font-display text-sm font-semibold text-warm-900">
-        <TrendingUp className="mr-1 inline size-4" /> Funnel Lesson
-      </h3>
-      <div className="space-y-2">
-        {lessons.map((l) => {
-          const pct = max > 0 ? (l.started / max) * 100 : 0
-          const completedPct =
-            max > 0 ? (l.completed / max) * 100 : 0
-          return (
-            <div key={l.lessonId}>
-              <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
-                <div className="min-w-0 flex-1 truncate font-medium text-warm-700">
-                  <span className="mr-1.5 inline-block size-5 rounded-full bg-primary-100 text-center text-[10px] font-bold leading-5 text-primary-700">
-                    {l.index}
-                  </span>
-                  {l.title}
-                </div>
-                <div className="shrink-0 tabular-nums text-warm-600">
-                  <span className="font-semibold text-warm-900">
-                    {l.started}
-                  </span>
-                  <span className="text-warm-400">/{l.completed}</span>
-                  {l.dropFromPrev !== null && l.dropFromPrev > 0.05 && (
-                    <span className="ml-2 text-rose-600">
-                      −{(l.dropFromPrev * 100).toFixed(0)}%
+    <Card>
+      <CardContent className="p-4">
+        <h3 className="font-display text-warm-900 mb-3 text-lg font-semibold">
+          <TrendingUp className="mr-1 inline size-4" /> Funnel Lesson
+        </h3>
+        <div className="space-y-2">
+          {lessons.map((l) => {
+            const pct = max > 0 ? (l.started / max) * 100 : 0
+            const completedPct = max > 0 ? (l.completed / max) * 100 : 0
+            return (
+              <div key={l.lessonId}>
+                <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+                  <div className="text-warm-700 min-w-0 flex-1 truncate font-medium">
+                    <span className="bg-primary-100 text-primary-700 mr-1.5 inline-block size-5 rounded-full text-center text-xs leading-5 font-semibold">
+                      {l.index}
                     </span>
-                  )}
+                    {l.title}
+                  </div>
+                  <div className="text-warm-600 shrink-0 tabular-nums">
+                    <span className="text-warm-900 font-semibold">
+                      {l.started}
+                    </span>
+                    <span className="text-warm-400">/{l.completed}</span>
+                    {l.dropFromPrev !== null && l.dropFromPrev > 0.05 && (
+                      <span className={cn('ml-2', TONES.danger.text)}>
+                        −{(l.dropFromPrev * 100).toFixed(0)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="bg-warm-100 relative h-2 w-full overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary-300 absolute inset-y-0 left-0"
+                    style={{ width: `${Math.max(2, pct)}%` }}
+                  />
+                  <div
+                    className={cn(
+                      'absolute inset-y-0 left-0',
+                      TONES.success.dot,
+                    )}
+                    style={{ width: `${Math.max(0, completedPct)}%` }}
+                  />
                 </div>
               </div>
-              <div className="relative h-2 w-full overflow-hidden rounded-full bg-warm-100">
-                <div
-                  className="absolute inset-y-0 left-0 bg-primary-300"
-                  style={{ width: `${Math.max(2, pct)}%` }}
-                />
-                <div
-                  className="absolute inset-y-0 left-0 bg-emerald-500"
-                  style={{ width: `${Math.max(0, completedPct)}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-3 flex items-center gap-3 text-[11px] text-warm-500">
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-full bg-primary-300" />
-          Started
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-full bg-emerald-500" />
-          Completed
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="text-rose-600">−%</span>
-          Drop dari lesson sebelumnya
-        </span>
-      </div>
-    </div>
+            )
+          })}
+        </div>
+        <div className="text-warm-500 mt-3 flex items-center gap-3 text-xs">
+          <span className="flex items-center gap-1">
+            <span className="bg-primary-300 size-2 rounded-full" />
+            Started
+          </span>
+          <span className="flex items-center gap-1">
+            <span className={cn('size-2 rounded-full', TONES.success.dot)} />
+            Completed
+          </span>
+          <span className="flex items-center gap-1">
+            <span className={TONES.danger.text}>−%</span>
+            Drop dari lesson sebelumnya
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -395,70 +407,77 @@ function LessonsBreakdown({ lessons }: { lessons: CourseAnalyticsLesson[] }) {
   )
 
   return (
-    <div className="rounded-xl border border-warm-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-display text-sm font-semibold text-warm-900">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-display text-warm-900 text-lg font-semibold">
           Per-Lesson Breakdown
         </h3>
         {maxDrop && maxDrop.dropFromPrev && maxDrop.dropFromPrev > 0.1 && (
-          <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-xs font-medium',
+              TONES.danger.bg,
+              TONES.danger.text,
+            )}
+          >
             Dropout terbesar: Lesson {maxDrop.index} — {maxDrop.title} (−
             {(maxDrop.dropFromPrev * 100).toFixed(0)}%)
           </span>
         )}
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-warm-200 text-left text-warm-500">
-              <th className="py-2 pr-2 font-medium">#</th>
-              <th className="py-2 pr-2 font-medium">Lesson</th>
-              <th className="py-2 pr-2 font-medium">Module</th>
-              <th className="py-2 pr-2 text-right font-medium">Started</th>
-              <th className="py-2 pr-2 text-right font-medium">Completed</th>
-              <th className="py-2 pr-2 text-right font-medium">Completion</th>
-              <th className="py-2 pr-2 text-right font-medium">Drop ↓</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>#</TableHead>
+              <TableHead>Lesson</TableHead>
+              <TableHead>Module</TableHead>
+              <TableHead className="text-right">Started</TableHead>
+              <TableHead className="text-right">Completed</TableHead>
+              <TableHead className="text-right">Completion</TableHead>
+              <TableHead className="text-right">Drop ↓</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {lessons.map((l) => {
-              const dropBig =
-                l.dropFromPrev !== null && l.dropFromPrev > 0.2
+              const dropBig = l.dropFromPrev !== null && l.dropFromPrev > 0.2
               return (
-                <tr
-                  key={l.lessonId}
-                  className="border-b border-warm-100 last:border-0"
-                >
-                  <td className="py-2 pr-2 tabular-nums text-warm-500">
+                <TableRow key={l.lessonId}>
+                  <TableCell className="text-warm-500 tabular-nums">
                     {l.index}
-                  </td>
-                  <td className="py-2 pr-2 font-medium text-warm-900">
+                  </TableCell>
+                  <TableCell className="text-warm-900 font-medium">
                     {l.title}
-                  </td>
-                  <td className="py-2 pr-2 text-warm-600">{l.moduleTitle}</td>
-                  <td className="py-2 pr-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-warm-600">
+                    {l.moduleTitle}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     {l.started}
-                  </td>
-                  <td className="py-2 pr-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     {l.completed}
-                  </td>
-                  <td className="py-2 pr-2 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
                     {(l.completionRate * 100).toFixed(0)}%
-                  </td>
-                  <td
-                    className={`py-2 pr-2 text-right tabular-nums ${
-                      dropBig ? 'font-semibold text-rose-600' : 'text-warm-500'
-                    }`}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      'text-right tabular-nums',
+                      dropBig
+                        ? cn('font-semibold', TONES.danger.text)
+                        : 'text-warm-500',
+                    )}
                   >
                     {l.dropFromPrev === null
                       ? '—'
                       : `${(l.dropFromPrev * 100).toFixed(0)}%`}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )

@@ -3,20 +3,27 @@
 // Library tab — list ContentPiece dgn filter channel/status, copy-to-clipboard, mark posted/archived.
 import {
   Archive,
+  CalendarClock,
   CalendarPlus,
   CheckCircle2,
   Clipboard,
   ClipboardCheck,
   FolderOpen,
   Loader2,
+  Target,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { EmptyState } from '@/components/shared/EmptyState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { contentPieceStatusMeta, funnelStageMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Piece {
   id: string
@@ -45,19 +52,6 @@ const CHANNEL_LABEL: Record<string, string> = {
   TIKTOK: 'TikTok',
   META_ADS: 'Meta Ads',
   TIKTOK_ADS: 'TikTok Ads',
-}
-
-const FUNNEL_LABEL: Record<string, { label: string; cls: string }> = {
-  TOFU: { label: 'Awareness', cls: 'bg-blue-100 text-blue-700' },
-  MOFU: { label: 'Pertimbangan', cls: 'bg-amber-100 text-amber-700' },
-  BOFU: { label: 'Beli', cls: 'bg-emerald-100 text-emerald-700' },
-}
-
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: 'bg-warm-100 text-warm-700' },
-  READY: { label: 'Siap post', cls: 'bg-blue-100 text-blue-700' },
-  POSTED: { label: 'Sudah post', cls: 'bg-emerald-100 text-emerald-700' },
-  ARCHIVED: { label: 'Arsip', cls: 'bg-rose-100 text-rose-700' },
 }
 
 export function LibraryTab() {
@@ -117,11 +111,16 @@ export function LibraryTab() {
     setPieces((prev) =>
       prev.map((p) =>
         p.id === pieceId
-          ? { ...p, status, postedAt: status === 'POSTED' ? new Date().toISOString() : p.postedAt }
+          ? {
+              ...p,
+              status,
+              postedAt:
+                status === 'POSTED' ? new Date().toISOString() : p.postedAt,
+            }
           : p,
       ),
     )
-    toast.success(`Status: ${STATUS_LABEL[status]?.label ?? status}`)
+    toast.success(`Status: ${contentPieceStatusMeta[status]?.label ?? status}`)
   }
 
   async function schedulePiece(pieceId: string) {
@@ -169,7 +168,7 @@ export function LibraryTab() {
           onChange={(e) =>
             setFilter((f) => ({ ...f, pieceType: e.target.value || undefined }))
           }
-          className="rounded-md border border-warm-300 bg-white px-2 py-1 text-xs"
+          className="border-warm-300 rounded-md border bg-white px-2 py-1 text-xs"
         >
           <option value="">Organik + Iklan</option>
           <option value="ORGANIC">Konten organik</option>
@@ -183,7 +182,7 @@ export function LibraryTab() {
               channel: e.target.value || undefined,
             }))
           }
-          className="rounded-md border border-warm-300 bg-white px-2 py-1 text-xs"
+          className="border-warm-300 rounded-md border bg-white px-2 py-1 text-xs"
         >
           <option value="">Semua channel</option>
           {Object.entries(CHANNEL_LABEL).map(([k, v]) => (
@@ -197,10 +196,10 @@ export function LibraryTab() {
           onChange={(e) =>
             setFilter((f) => ({ ...f, status: e.target.value || undefined }))
           }
-          className="rounded-md border border-warm-300 bg-white px-2 py-1 text-xs"
+          className="border-warm-300 rounded-md border bg-white px-2 py-1 text-xs"
         >
           <option value="">Semua status</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => (
+          {Object.entries(contentPieceStatusMeta).map(([k, v]) => (
             <option key={k} value={k}>
               {v.label}
             </option>
@@ -209,49 +208,40 @@ export function LibraryTab() {
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 py-8 text-sm text-warm-500">
-          <Loader2 className="size-4 animate-spin" /> Memuat library...
+        <div className="text-warm-500 flex items-center gap-2 py-8 text-sm">
+          <Loader2 className="size-4 animate-spin" /> Memuat…
         </div>
       )}
 
       {!loading && pieces.length === 0 && (
-        <div className="rounded-xl border border-dashed border-warm-200 bg-warm-50 py-12 text-center">
-          <FolderOpen className="mx-auto mb-2 size-8 text-warm-300" />
-          <p className="text-sm font-medium text-warm-700">
-            Belum ada konten di library
-          </p>
-          <p className="mt-1 text-xs text-warm-500">
-            Generate ide dulu di tab kiri, lalu pilih ide yg mau di-bikin.
-          </p>
-        </div>
+        <EmptyState
+          bordered
+          icon={FolderOpen}
+          title="Belum ada konten di library"
+          description="Generate ide dulu di tab kiri, lalu pilih ide yg mau di-bikin."
+        />
       )}
 
       {!loading && pieces.length > 0 && (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {pieces.map((p) => {
-            const funnel = FUNNEL_LABEL[p.funnelStage]
-            const status = STATUS_LABEL[p.status]
+            const funnel = funnelStageMeta[p.funnelStage]
+            const status = contentPieceStatusMeta[p.status]
             return (
               <Card key={p.id}>
                 <CardContent className="space-y-3 p-4">
                   <div className="flex flex-wrap gap-1">
                     {p.pieceType === 'ADS' && (
-                      <Badge className="bg-fuchsia-100 text-[10px] text-fuchsia-800">
-                        🎯 Iklan
-                      </Badge>
+                      <StatusBadge tone="brand" label="Iklan" icon={Target} />
                     )}
-                    <Badge className="bg-warm-100 text-[10px] text-warm-700">
+                    <Badge className="bg-warm-100 text-warm-700 text-xs">
                       {CHANNEL_LABEL[p.channel] ?? p.channel}
                     </Badge>
                     {funnel && (
-                      <Badge className={`text-[10px] ${funnel.cls}`}>
-                        {funnel.label}
-                      </Badge>
+                      <StatusBadge tone={funnel.tone} label={funnel.label} />
                     )}
                     {status && (
-                      <Badge className={`text-[10px] ${status.cls}`}>
-                        {status.label}
-                      </Badge>
+                      <StatusBadge tone={status.tone} label={status.label} />
                     )}
                   </div>
 
@@ -259,16 +249,16 @@ export function LibraryTab() {
                     href={`/content/pieces/${p.id}`}
                     className="block hover:underline"
                   >
-                    <h3 className="text-sm font-semibold leading-snug text-warm-900">
+                    <h3 className="text-warm-900 text-sm leading-snug font-semibold">
                       {p.title}
                     </h3>
                   </Link>
 
-                  <p className="line-clamp-3 text-xs text-warm-600">
+                  <p className="text-warm-600 line-clamp-3 text-xs">
                     {previewBody(p.bodyJson)}
                   </p>
 
-                  <div className="flex items-center justify-between border-t border-warm-100 pt-2 text-[10px] text-warm-500">
+                  <div className="border-warm-100 text-warm-500 flex items-center justify-between border-t pt-2 text-xs">
                     <span>
                       {p.tokensCharged.toLocaleString('id-ID')} tk ·{' '}
                       {new Date(p.createdAt).toLocaleDateString('id-ID', {
@@ -277,8 +267,14 @@ export function LibraryTab() {
                       })}
                     </span>
                     {p.scheduledFor && (
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700">
-                        📅{' '}
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
+                          TONES.info.bg,
+                          TONES.info.text,
+                        )}
+                      >
+                        <CalendarClock className="size-3" aria-hidden />
                         {new Date(p.scheduledFor).toLocaleDateString('id-ID', {
                           day: '2-digit',
                           month: 'short',
@@ -298,7 +294,9 @@ export function LibraryTab() {
                     >
                       {copiedId === p.id ? (
                         <>
-                          <ClipboardCheck className="mr-1 size-3.5 text-emerald-600" />
+                          <ClipboardCheck
+                            className={cn('mr-1 size-3.5', TONES.success.text)}
+                          />
                           Tercopy
                         </>
                       ) : (
@@ -315,7 +313,7 @@ export function LibraryTab() {
                         onClick={() => schedulePiece(p.id)}
                         title="Jadwalkan posting"
                       >
-                        <CalendarPlus className="size-3.5 text-blue-600" />
+                        <CalendarPlus className="size-3.5" />
                       </Button>
                     )}
                     {p.status !== 'POSTED' && p.status !== 'ARCHIVED' && (
@@ -325,7 +323,9 @@ export function LibraryTab() {
                         onClick={() => updateStatus(p.id, 'POSTED')}
                         title="Tandai sudah di-post"
                       >
-                        <CheckCircle2 className="size-3.5 text-emerald-600" />
+                        <CheckCircle2
+                          className={cn('size-3.5', TONES.success.text)}
+                        />
                       </Button>
                     )}
                     {p.status !== 'ARCHIVED' && (
@@ -357,7 +357,11 @@ function formatPieceForClipboard(piece: Piece): string {
   if (Array.isArray(body.slides)) {
     body.slides.forEach((s, i) => {
       const slide = s as { headline?: string; body?: string }
-      lines.push('', `Slide ${i + 1}: ${slide.headline ?? ''}`, slide.body ?? '')
+      lines.push(
+        '',
+        `Slide ${i + 1}: ${slide.headline ?? ''}`,
+        slide.body ?? '',
+      )
     })
     if (typeof body.caption === 'string') lines.push('', '---', body.caption)
   }

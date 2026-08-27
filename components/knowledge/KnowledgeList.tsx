@@ -30,6 +30,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export type KnowledgeContentType = 'TEXT' | 'IMAGE' | 'FILE' | 'LINK'
 
@@ -54,12 +56,12 @@ interface KnowledgeListProps {
 
 const TYPE_META: Record<
   KnowledgeContentType,
-  { icon: typeof FileText; label: string; emoji: string }
+  { icon: typeof FileText; label: string }
 > = {
-  TEXT: { icon: FileText, label: 'Teks', emoji: '📝' },
-  IMAGE: { icon: ImageIcon, label: 'Gambar', emoji: '📷' },
-  FILE: { icon: FileText, label: 'File', emoji: '📄' },
-  LINK: { icon: LinkIcon, label: 'Link', emoji: '🔗' },
+  TEXT: { icon: FileText, label: 'Teks' },
+  IMAGE: { icon: ImageIcon, label: 'Gambar' },
+  FILE: { icon: FileText, label: 'File' },
+  LINK: { icon: LinkIcon, label: 'Link' },
 }
 
 // Ambang batas entry "kurang keyword" — kalau <= angka ini, ikut bulk optimize.
@@ -122,16 +124,14 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
             existingKeywords: it.triggerKeywords,
           }),
         })
-        const sugJson = (await sugRes.json().catch(() => null)) as
-          | {
-              success: boolean
-              data?: {
-                keywords: string[]
-                charge?: { tokensCharged: number }
-              }
-              error?: string
-            }
-          | null
+        const sugJson = (await sugRes.json().catch(() => null)) as {
+          success: boolean
+          data?: {
+            keywords: string[]
+            charge?: { tokensCharged: number }
+          }
+          error?: string
+        } | null
         // 402 = saldo kurang. Stop bulk, kasih pesan.
         if (sugRes.status === 402) {
           stoppedReason = sugJson?.error ?? 'Saldo token habis.'
@@ -197,14 +197,17 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive: next }),
       })
-      const json = (await res.json().catch(() => null)) as
-        | { success: boolean; error?: string }
-        | null
+      const json = (await res.json().catch(() => null)) as {
+        success: boolean
+        error?: string
+      } | null
       if (!res.ok || !json?.success) {
         toast.error(json?.error ?? 'Gagal mengubah status')
         return
       }
-      toast.success(next ? 'Pengetahuan diaktifkan' : 'Pengetahuan dinonaktifkan')
+      toast.success(
+        next ? 'Pengetahuan diaktifkan' : 'Pengetahuan dinonaktifkan',
+      )
       router.refresh()
     } finally {
       setTogglingId(null)
@@ -217,48 +220,52 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
         title="Pengetahuan Bisnis"
         description={
           <>
-            Tambahkan info yang AI perlu tahu untuk jawab customer dengan akurat.
-            <span className="mt-1 block text-xs text-muted-foreground">
+            Tambahkan info yang AI perlu tahu untuk jawab customer dengan
+            akurat.
+            <span className="text-muted-foreground mt-1 block text-xs">
               Terpakai {items.length} dari {limit} entry
             </span>
           </>
         }
         actions={
           <>
-          {optimizeCandidates.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={handleBulkOptimize}
-              disabled={bulkState.running}
-              title={`${optimizeCandidates.length} entry punya ≤${BULK_OPTIMIZE_THRESHOLD} keyword`}
-            >
-              {bulkState.running ? (
-                <>
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                  {bulkState.done}/{bulkState.total}…
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 size-4" />
-                  Optimasi Keyword AI ({optimizeCandidates.length})
-                </>
-              )}
+            {optimizeCandidates.length > 0 && (
+              <Button
+                variant="outline"
+                onClick={handleBulkOptimize}
+                disabled={bulkState.running}
+                title={`${optimizeCandidates.length} entry punya ≤${BULK_OPTIMIZE_THRESHOLD} keyword`}
+              >
+                {bulkState.running ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    {bulkState.done}/{bulkState.total}…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 size-4" />
+                    Optimasi Keyword AI ({optimizeCandidates.length})
+                  </>
+                )}
+              </Button>
+            )}
+            <Button onClick={openCreate} disabled={isFull}>
+              <Plus className="mr-2 size-4" />
+              Tambah Pengetahuan
             </Button>
-          )}
-          <Button
-            onClick={openCreate}
-            disabled={isFull}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
-            <Plus className="mr-2 size-4" />
-            Tambah Pengetahuan
-          </Button>
           </>
         }
       />
 
       {isFull && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div
+          className={cn(
+            'rounded-lg border p-3 text-sm',
+            TONES.warning.bg,
+            TONES.warning.border,
+            TONES.warning.text,
+          )}
+        >
           Sudah mencapai batas {limit} entry. Hapus yang lama dulu kalau mau
           tambah baru.
         </div>
@@ -292,18 +299,16 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
                 })
               : null
             return (
-              <Card
-                key={it.id}
-                className="rounded-xl border-warm-200 shadow-sm hover-lift"
-              >
+              <Card key={it.id} className="hover-lift">
                 <CardContent className="space-y-3 p-5">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span aria-hidden className="text-lg leading-none">
-                          {meta.emoji}
-                        </span>
-                        <h3 className="truncate font-display font-bold text-warm-900 dark:text-warm-50">
+                        <meta.icon
+                          aria-hidden
+                          className="text-warm-500 size-4 shrink-0"
+                        />
+                        <h3 className="font-display text-warm-900 truncate font-semibold">
                           {it.title}
                         </h3>
                         {!it.isActive && (
@@ -312,7 +317,7 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
                           </Badge>
                         )}
                       </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="text-muted-foreground mt-0.5 text-xs">
                         {meta.label}
                         {it.linkUrl ? ' · ' : ''}
                         {it.linkUrl && (
@@ -339,7 +344,7 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
                   </div>
 
                   {(it.textContent || it.caption) && (
-                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                    <p className="text-muted-foreground line-clamp-2 text-sm">
                       {it.textContent ?? it.caption}
                     </p>
                   )}
@@ -363,7 +368,7 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pt-1 text-xs text-muted-foreground">
+                  <div className="text-muted-foreground flex items-center justify-between pt-1 text-xs">
                     <span>
                       Dipakai {it.triggerCount}×
                       {lastTriggered ? ` · terakhir ${lastTriggered}` : ''}
@@ -385,15 +390,14 @@ export function KnowledgeList({ items, limit }: KnowledgeListProps) {
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent
           side="right"
-          className="w-full overflow-y-auto sm:max-w-xl px-6"
+          className="w-full overflow-y-auto px-6 sm:max-w-xl"
         >
           <SheetHeader className="px-0">
             <SheetTitle>
               {editing ? 'Edit Pengetahuan' : 'Tambah Pengetahuan'}
             </SheetTitle>
             <SheetDescription>
-              AI akan pakai info ini untuk jawab customer saat kata kunci
-              cocok.
+              AI akan pakai info ini untuk jawab customer saat kata kunci cocok.
             </SheetDescription>
           </SheetHeader>
           <KnowledgeForm

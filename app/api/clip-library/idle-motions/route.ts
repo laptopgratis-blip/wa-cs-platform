@@ -4,7 +4,10 @@
 import type { NextResponse } from 'next/server'
 
 import { jsonOk, requireSession } from '@/lib/api'
-import { IDLE_MOTIONS, IDLE_MOTION_CATEGORIES } from '@/lib/services/clip-library/idle-motions'
+import {
+  IDLE_MOTIONS,
+  IDLE_MOTION_CATEGORIES,
+} from '@/lib/services/clip-library/idle-motions'
 
 export async function GET() {
   try {
@@ -17,7 +20,6 @@ export async function GET() {
       id: m.id,
       label: m.label,
       category: m.category,
-      emoji: m.emoji,
       durationSec: m.durationSec,
     })),
     categories: IDLE_MOTION_CATEGORIES,

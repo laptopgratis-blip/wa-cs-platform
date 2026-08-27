@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Notif {
@@ -91,7 +92,13 @@ export function NotificationBell() {
         >
           <Bell className="size-5" />
           {unreadCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+            <span
+              className={cn(
+                'absolute -right-0.5 -top-0.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-semibold',
+                // Badge angka pakai tone danger dari registry (bukan hue mentah).
+                TONES.danger.solid,
+              )}
+            >
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -143,7 +150,7 @@ export function NotificationBell() {
                     <p className="line-clamp-2 text-xs text-muted-foreground">
                       {n.message}
                     </p>
-                    <p className="text-[10px] text-muted-foreground/70">
+                    <p className="text-xs text-muted-foreground/70">
                       {timeAgo(n.createdAt)}
                     </p>
                   </div>

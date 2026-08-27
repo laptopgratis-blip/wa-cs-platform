@@ -2,19 +2,24 @@
 
 // Sidebar utama dashboard — light theme.
 // Menu di-grup berdasarkan kategori (CHAT & CS, ORDER SYSTEM, LANDING PAGE,
-// INTEGRASI, LAPORAN, AKUN). Section header tipis di atas tiap grup. Group
+// INTEGRASI, LAPORAN, AKUN, DUKUNGAN). Section header tipis
 // bisa di-collapse via chevron — state persist di localStorage. Sumber data
 // dari lib/navigation.ts (USER_NAV_HOME + USER_NAV_GROUPS) supaya konsisten
 // dengan Drawer mobile.
-import { ChevronDown, ChevronRight, Eye, EyeOff, MessageCircle } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  MessageCircle,
+} from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { formatNumber } from '@/lib/format'
 import {
-  NAV_ACCENTS,
-  type NavAccent,
+  NAV_ACCENT,
   type OnboardingGoal,
   USER_NAV_GROUPS,
   USER_NAV_HOME,
@@ -32,6 +37,8 @@ interface SidebarProps {
   onNavigate?: () => void
   /** Saldo token user untuk card di bawah. Null = sembunyi (mis. admin). */
   tokenBalance?: number | null
+  /** Saldo Kredit Pesan WA (Rp). Null = sembunyi (tidak punya sesi Cloud API). */
+  messageCreditRp?: number | null
   /** Akses ke Order System (paket POWER). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
@@ -42,6 +49,7 @@ export function Sidebar({
   className,
   onNavigate,
   tokenBalance,
+  messageCreditRp = null,
   hasOrderSystemAccess = false,
   onboardingGoal = null,
 }: SidebarProps) {
@@ -132,18 +140,20 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'flex h-full w-60 flex-col border-r border-warm-200 bg-card text-warm-700',
+        'border-warm-200 bg-card text-warm-700 flex h-full w-60 flex-col border-r',
         className,
       )}
     >
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-warm-200 px-4">
+      <div className="border-warm-200 flex h-16 items-center gap-3 border-b px-4">
         <div className="flex size-9 items-center justify-center rounded-lg bg-primary-500 text-white shadow-orange">
           <MessageCircle className="size-4" />
         </div>
         <div className="leading-tight">
-          <p className="font-display text-base font-bold text-warm-900">Hulao</p>
-          <p className="text-[11px] font-medium text-primary-500">Dashboard</p>
+          <p className="font-display text-warm-900 text-base font-bold">
+            Hulao
+          </p>
+          <p className="text-primary-500 text-xs font-medium">Dashboard</p>
         </div>
       </div>
 
@@ -166,7 +176,6 @@ export function Sidebar({
         {groups.map((group) => {
           const hasActive = groupHasActive(group.items)
           const isCollapsed = collapsed.has(group.label) && !hasActive
-          const accent = NAV_ACCENTS[group.accent ?? 'neutral']
           return (
             <div key={group.label} className="mt-4">
               <button
@@ -174,8 +183,8 @@ export function Sidebar({
                 onClick={() => toggleGroup(group.label)}
                 aria-expanded={!isCollapsed}
                 className={cn(
-                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider transition-opacity hover:opacity-80',
-                  accent.header,
+                  'group flex w-full items-center justify-between rounded px-3 pb-1 text-left text-xs font-semibold tracking-wider uppercase transition-opacity hover:opacity-80',
+                  NAV_ACCENT.header,
                 )}
                 title={isCollapsed ? 'Klik untuk buka' : 'Klik untuk tutup'}
               >
@@ -195,7 +204,6 @@ export function Sidebar({
                         label={it.label}
                         Icon={it.icon}
                         active={isActive(it.href)}
-                        accent={accent}
                         onClick={onNavigate}
                       />
                     </li>
@@ -216,12 +224,12 @@ export function Sidebar({
             const wrapClass = isEmpty
               ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
               : isLow
-                ? 'border-amber-300 bg-amber-50 hover:bg-amber-100'
+                ? 'border-amber-200 bg-amber-50 hover:bg-amber-100'
                 : 'border-primary-200 bg-primary-50 hover:bg-primary-100'
             const labelClass = isEmpty
               ? 'text-destructive'
               : isLow
-                ? 'text-amber-800'
+                ? 'text-amber-700'
                 : 'text-primary-700'
             const valueClass = isEmpty
               ? 'text-destructive'
@@ -249,7 +257,7 @@ export function Sidebar({
               >
                 <p
                   className={cn(
-                    'text-[11px] font-medium uppercase tracking-wider',
+                    'text-xs font-medium tracking-wider uppercase',
                     labelClass,
                   )}
                 >
@@ -257,13 +265,13 @@ export function Sidebar({
                 </p>
                 <p
                   className={cn(
-                    'mt-1 font-display text-xl font-bold tabular-nums',
+                    'font-display mt-1 text-xl font-bold tabular-nums',
                     valueClass,
                   )}
                 >
                   {formatNumber(tokenBalance)}
                 </p>
-                <p className={cn('mt-0.5 text-[11px]', helperClass)}>
+                <p className={cn('mt-0.5 text-xs', helperClass)}>
                   {helperText}
                 </p>
               </Link>
@@ -272,13 +280,58 @@ export function Sidebar({
         </div>
       )}
 
+      {/* Kredit Pesan WA (Cloud API) — hanya bila user punya nomor resmi Meta */}
+      {typeof messageCreditRp === 'number' && (
+        <div className="px-3 pb-3">
+          <Link
+            href="/billing#kredit-pesan"
+            onClick={onNavigate}
+            className={cn(
+              'block rounded-lg border p-3 transition-colors',
+              messageCreditRp <= 0
+                ? 'border-destructive/40 bg-destructive/10 hover:bg-destructive/15'
+                : 'border-primary-200 bg-primary-50 hover:bg-primary-100',
+            )}
+          >
+            <p
+              className={cn(
+                'text-xs font-medium tracking-wider uppercase',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-700',
+              )}
+            >
+              Kredit Pesan WA
+            </p>
+            <p
+              className={cn(
+                'font-display mt-0.5 text-base font-bold tabular-nums',
+                messageCreditRp <= 0 ? 'text-destructive' : 'text-primary-600',
+              )}
+            >
+              Rp {formatNumber(messageCreditRp)}
+            </p>
+            <p
+              className={cn(
+                'text-xs',
+                messageCreditRp <= 0
+                  ? 'text-destructive/80'
+                  : 'text-primary-700/70',
+              )}
+            >
+              {messageCreditRp <= 0
+                ? 'Habis — top up untuk template Meta'
+                : 'Untuk template Meta (Cloud API)'}
+            </p>
+          </Link>
+        </div>
+      )}
+
       {/* Footer */}
-      <div className="flex flex-col gap-2 border-t border-warm-200 px-3 py-3">
+      <div className="border-warm-200 flex flex-col gap-2 border-t px-3 py-3">
         {hasHidden && (
           <button
             type="button"
             onClick={toggleShowAll}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] font-medium text-warm-500 transition-colors hover:bg-warm-100 hover:text-warm-800"
+            className="text-warm-500 hover:bg-warm-100 hover:text-warm-800 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium transition-colors"
             title={
               showAll
                 ? 'Sembunyikan menu yg tidak relevan untuk tujuanmu'
@@ -296,7 +349,7 @@ export function Sidebar({
             )}
           </button>
         )}
-        <p className="px-2 text-[11px] text-warm-400">v0.1.0 — beta</p>
+        <p className="text-warm-400 px-2 text-xs">v0.1.0 — beta</p>
       </div>
     </aside>
   )
@@ -307,18 +360,15 @@ function SidebarLink({
   label,
   Icon,
   active,
-  accent,
   onClick,
 }: {
   href: string
   label: string
   Icon: (typeof USER_NAV_GROUPS)[number]['items'][number]['icon']
   active: boolean
-  /** Aksen warna grup — undefined (mis. Dashboard) fallback ke neutral. */
-  accent?: NavAccent
   onClick?: () => void
 }) {
-  const a = accent ?? NAV_ACCENTS.neutral
+  const a = NAV_ACCENT
   return (
     <Link
       href={href}
@@ -335,7 +385,7 @@ function SidebarLink({
         <span
           aria-hidden
           className={cn(
-            'absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-r-full',
+            'absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-r-full',
             a.bar,
           )}
         />

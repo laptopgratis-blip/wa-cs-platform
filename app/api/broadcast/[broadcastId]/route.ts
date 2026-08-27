@@ -4,6 +4,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { skipRemaining } from '@/lib/services/broadcast/cloud-runner'
 import { waService } from '@/lib/wa-service'
 
 interface Params {
@@ -23,7 +24,8 @@ export async function GET(_req: Request, { params }: Params) {
     const b = await prisma.broadcast.findFirst({
       where: { id: broadcastId, userId: session.user.id },
       include: {
-        waSession: { select: { id: true, displayName: true, phoneNumber: true } },
+        waSession: { select: { id: true, displayName: true, phoneNumber: true, provider: true } },
+        template: { select: { id: true, name: true, category: true, status: true } },
       },
     })
     if (!b) return jsonError('Broadcast tidak ditemukan', 404)
@@ -51,7 +53,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   try {
     const b = await prisma.broadcast.findFirst({
       where: { id: broadcastId, userId: session.user.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, provider: true },
     })
     if (!b) return jsonError('Broadcast tidak ditemukan', 404)
 
@@ -59,8 +61,9 @@ export async function DELETE(_req: Request, { params }: Params) {
       return jsonError('Broadcast sudah selesai dan tidak bisa diubah')
     }
 
-    // Kalau sedang SENDING, minta wa-service abort dulu.
-    if (b.status === 'SENDING') {
+    // Baileys SENDING: minta wa-service abort dulu. Cloud API: pembatalan
+    // lewat DB — worker membaca status CANCELLED dan berhenti.
+    if (b.status === 'SENDING' && b.provider !== 'CLOUD_API') {
       await waService.cancelBroadcast(broadcastId).catch(() => {})
     }
 
@@ -69,6 +72,7 @@ export async function DELETE(_req: Request, { params }: Params) {
       data: { status: 'CANCELLED', completedAt: new Date() },
       select: { id: true, status: true },
     })
+    if (b.provider === 'CLOUD_API') await skipRemaining(broadcastId)
     return jsonOk(updated)
   } catch (err) {
     console.error('[DELETE /api/broadcast/:id] gagal:', err)

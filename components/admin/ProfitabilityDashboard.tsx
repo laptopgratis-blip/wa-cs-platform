@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -26,6 +26,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { pricingMarginMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface SourceBreakdown {
@@ -119,16 +121,12 @@ function rangeOf(preset: Preset, customFrom: string, customTo: string): { from: 
   }
 }
 
-const STATUS_STYLE: Record<'AMAN' | 'TIPIS' | 'RUGI', string> = {
-  AMAN: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  TIPIS: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-  RUGI: 'bg-red-100 text-red-700 hover:bg-red-100',
-}
-
+// Label tetap lokal — 'SEHAT' beda dari label registry ('AMAN'); tone-nya
+// yang diambil dari lib/status.ts supaya warnanya seragam.
 const STATUS_LABEL: Record<'AMAN' | 'TIPIS' | 'RUGI', string> = {
-  AMAN: '🟢 SEHAT',
-  TIPIS: '🟡 TIPIS',
-  RUGI: '🔴 RUGI',
+  AMAN: 'SEHAT',
+  TIPIS: 'TIPIS',
+  RUGI: 'RUGI',
 }
 
 export function ProfitabilityDashboard() {
@@ -266,15 +264,11 @@ export function ProfitabilityDashboard() {
                 label="Pesan AI"
                 value={`${formatNumber(summary.messages)} pesan`}
                 hint={
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      'mt-1 font-normal',
-                      STATUS_STYLE[summary.status],
-                    )}
-                  >
-                    {STATUS_LABEL[summary.status]}
-                  </Badge>
+                  <StatusBadge
+                    className="mt-1"
+                    tone={statusMeta(pricingMarginMeta, summary.status).tone}
+                    label={STATUS_LABEL[summary.status]}
+                  />
                 }
               />
               <Stat label="Cost API" value={formatRupiah(summary.apiCostRp)} />
@@ -285,7 +279,7 @@ export function ProfitabilityDashboard() {
               />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Memuat...</p>
+            <p className="text-sm text-muted-foreground">Memuat…</p>
           )}
           {summary && (
             <div className="mt-6">
@@ -321,7 +315,7 @@ export function ProfitabilityDashboard() {
                             <TableCell
                               className={cn(
                                 'text-right tabular-nums',
-                                profit < 0 && 'text-red-600',
+                                profit < 0 && TONES.danger.text,
                               )}
                             >
                               {formatRupiah(profit)}
@@ -378,7 +372,7 @@ export function ProfitabilityDashboard() {
                     <TableCell
                       className={cn(
                         'text-right tabular-nums font-medium',
-                        m.profitRp < 0 && 'text-red-600',
+                        m.profitRp < 0 && TONES.danger.text,
                       )}
                     >
                       {formatRupiah(m.profitRp)}
@@ -387,15 +381,10 @@ export function ProfitabilityDashboard() {
                       {m.marginPct.toFixed(1)}%
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          STATUS_STYLE[m.status],
-                        )}
-                      >
-                        {STATUS_LABEL[m.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingMarginMeta, m.status).tone}
+                        label={STATUS_LABEL[m.status]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -440,7 +429,7 @@ export function ProfitabilityDashboard() {
                   <TableRow key={f.featureKey}>
                     <TableCell>
                       <div className="font-medium">{f.displayName}</div>
-                      <div className="font-mono text-[10px] text-muted-foreground">
+                      <div className="font-mono text-xs text-muted-foreground">
                         {f.featureKey}
                       </div>
                     </TableCell>
@@ -459,7 +448,7 @@ export function ProfitabilityDashboard() {
                     <TableCell
                       className={cn(
                         'text-right tabular-nums font-medium',
-                        f.profitRp < 0 && 'text-red-600',
+                        f.profitRp < 0 && TONES.danger.text,
                       )}
                     >
                       {formatRupiah(f.profitRp)}
@@ -468,15 +457,10 @@ export function ProfitabilityDashboard() {
                       {f.marginPct.toFixed(1)}%
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          STATUS_STYLE[f.status],
-                        )}
-                      >
-                        {STATUS_LABEL[f.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingMarginMeta, f.status).tone}
+                        label={STATUS_LABEL[f.status]}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -534,7 +518,7 @@ export function ProfitabilityDashboard() {
                     <TableCell
                       className={cn(
                         'text-right tabular-nums font-medium',
-                        u.profitRp < 0 && 'text-red-600',
+                        u.profitRp < 0 && TONES.danger.text,
                       )}
                     >
                       {formatRupiah(u.profitRp)}
@@ -577,8 +561,8 @@ function Stat({
       <p
         className={cn(
           'mt-1 font-display text-2xl font-bold tabular-nums',
-          emphasis === 'negative' && 'text-red-600',
-          emphasis === 'positive' && 'text-emerald-700',
+          emphasis === 'negative' && TONES.danger.text,
+          emphasis === 'positive' && TONES.success.text,
         )}
       >
         {value}

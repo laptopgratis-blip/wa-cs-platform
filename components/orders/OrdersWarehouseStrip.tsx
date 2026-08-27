@@ -7,6 +7,7 @@
 // 1-gudang tak perlu (perilaku lama).
 import { Layers, Warehouse } from 'lucide-react'
 
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 import type { WarehouseSummary } from './types'
@@ -27,7 +28,7 @@ export function OrdersWarehouseStrip({ summary, active, onSelect }: Props) {
 
   return (
     <section aria-label="Proses pesanan per gudang" className="space-y-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+      <h2 className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
         Proses per Gudang
       </h2>
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -88,9 +89,7 @@ function Chip({
 }) {
   // Ada antrian → amber (perlu aksi); kosong → netral/hijau. "Semua" netral.
   const countTone =
-    neutral || count === 0
-      ? 'text-warm-400 dark:text-warm-500'
-      : 'text-amber-600 dark:text-amber-400'
+    neutral || count === 0 ? 'text-warm-400' : TONES.warning.text
 
   return (
     <button
@@ -100,20 +99,25 @@ function Chip({
       className={cn(
         'flex min-h-[52px] min-w-[116px] shrink-0 flex-col justify-center gap-0.5 rounded-lg border px-3 py-1.5 text-left transition-colors',
         active
-          ? 'border-primary-500 bg-primary-50 dark:border-primary-500 dark:bg-primary-950/40'
-          : 'border-warm-200 bg-white hover:bg-warm-50 dark:border-warm-800 dark:bg-warm-950 dark:hover:bg-warm-900',
+          ? 'border-primary-500 bg-primary-50'
+          : 'border-warm-200 hover:bg-warm-50 bg-white',
         muted && 'opacity-60',
       )}
     >
-      <span className="flex items-center gap-1.5 text-xs font-medium text-warm-600 dark:text-warm-300">
-        <span className="shrink-0 text-warm-400">{icon}</span>
+      <span className="text-warm-600 flex items-center gap-1.5 text-xs font-medium">
+        <span className="text-warm-400 shrink-0">{icon}</span>
         <span className="truncate">{label}</span>
       </span>
       <span className="flex items-baseline gap-1">
-        <span className={cn('text-lg font-bold tabular-nums leading-none', countTone)}>
+        <span
+          className={cn(
+            'text-lg leading-none font-bold tabular-nums',
+            countTone,
+          )}
+        >
           {count}
         </span>
-        <span className="text-[11px] text-warm-500">{unit}</span>
+        <span className="text-warm-500 text-xs">{unit}</span>
       </span>
     </button>
   )

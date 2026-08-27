@@ -7,13 +7,14 @@
 // Section D: log research terakhir
 import { formatDistanceToNow } from 'date-fns'
 import { id as idLocale } from 'date-fns/locale'
+import type { LucideIcon } from 'lucide-react'
 import {
   Check,
   ChevronDown,
   ChevronUp,
   Loader2,
   Pencil,
-  RefreshCw,
+  Plus,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -40,6 +41,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -66,9 +68,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  pricingFreshnessMeta,
+  pricingResearchJobMeta,
+  statusMeta,
+} from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
-type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
+type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
+type UnitType = 'TOKEN' | 'IMAGE' | 'VIDEO_SECOND'
 type Freshness = 'verified' | 'stale' | 'outdated'
 
 interface Preset {
@@ -78,6 +87,8 @@ interface Preset {
   displayName: string
   inputPricePer1M: number
   outputPricePer1M: number
+  unitType: UnitType
+  unitLabel: string | null
   contextWindow: number | null
   isAvailable: boolean
   notes: string | null
@@ -105,7 +116,11 @@ interface JobStatus {
   status: 'RUNNING' | 'SUCCESS' | 'FAILED'
   modelsAdded: number
   modelsUpdated: number
-  diff: { added: DiffEntry[]; updated: DiffEntry[]; unchanged: DiffEntry[] } | null
+  diff: {
+    added: DiffEntry[]
+    updated: DiffEntry[]
+    unchanged: DiffEntry[]
+  } | null
   error: string | null
   startedAt: string
   completedAt: string | null
@@ -128,12 +143,6 @@ const FRESHNESS_LABEL: Record<Freshness, string> = {
   outdated: 'Outdated',
 }
 
-const FRESHNESS_STYLE: Record<Freshness, string> = {
-  verified: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  stale: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-  outdated: 'bg-red-100 text-red-700 hover:bg-red-100',
-}
-
 const RESEARCH_STEPS = [
   'Mencari harga di Anthropic...',
   'Mencari harga di OpenAI...',
@@ -143,6 +152,27 @@ const RESEARCH_STEPS = [
 
 function formatPrice(v: number): string {
   return `$${v.toFixed(2)}`
+}
+
+// Harga natural per-satuan untuk tampilan. IMAGE/VIDEO_SECOND disimpan sebagai
+// USD/unit × 1_000_000 (konvensi AiFeatureConfig) → tampilkan per-unit. TOKEN
+// (termasuk char/detik audio) tampil per-1M.
+function priceDisplay(p: Preset): { input: string; output: string; unit: string } {
+  const perUnit = p.unitType === 'IMAGE' || p.unitType === 'VIDEO_SECOND'
+  const label = p.unitLabel ?? (perUnit ? 'unit' : 'token')
+  if (perUnit) {
+    const v = p.inputPricePer1M / 1_000_000
+    return {
+      input: `$${v.toLocaleString('en-US', { maximumFractionDigits: 4 })}`,
+      output: '—',
+      unit: `/${label}`,
+    }
+  }
+  return {
+    input: formatPrice(p.inputPricePer1M),
+    output: p.outputPricePer1M > 0 ? formatPrice(p.outputPricePer1M) : '—',
+    unit: `/1M ${label}`,
+  }
 }
 
 export function AiPricingDatabase() {
@@ -198,7 +228,8 @@ export function AiPricingDatabase() {
 
   const filtered = useMemo(() => {
     return presets.filter((p) => {
-      if (filterProvider !== 'ALL' && p.provider !== filterProvider) return false
+      if (filterProvider !== 'ALL' && p.provider !== filterProvider)
+        return false
       if (filterFreshness !== 'ALL' && p.freshnessStatus !== filterFreshness)
         return false
       return true
@@ -208,7 +239,16 @@ export function AiPricingDatabase() {
   // ── Research flow ──────────────────────────────────────────────────
   async function startResearch() {
     setConfirmOpen(false)
-    setJob({ id: '', status: 'RUNNING', modelsAdded: 0, modelsUpdated: 0, diff: null, error: null, startedAt: new Date().toISOString(), completedAt: null })
+    setJob({
+      id: '',
+      status: 'RUNNING',
+      modelsAdded: 0,
+      modelsUpdated: 0,
+      diff: null,
+      error: null,
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    })
     setStepIdx(0)
     try {
       const res = await fetch('/api/admin/ai-pricing/research', {
@@ -239,7 +279,10 @@ export function AiPricingDatabase() {
     const tick = async () => {
       try {
         const res = await fetch(`/api/admin/ai-pricing/research/${jobId}`)
-        const json = (await res.json()) as { success: boolean; data?: JobStatus }
+        const json = (await res.json()) as {
+          success: boolean
+          data?: JobStatus
+        }
         if (json.success && json.data) {
           setJob(json.data)
           if (json.data.status !== 'RUNNING') {
@@ -280,17 +323,14 @@ export function AiPricingDatabase() {
     if (!job || job.status !== 'SUCCESS') return
     setApplying(true)
     try {
-      const res = await fetch(
-        '/api/admin/ai-pricing/presets/apply-changes',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jobId: job.id,
-            modelIds: Array.from(reviewSelected),
-          }),
-        },
-      )
+      const res = await fetch('/api/admin/ai-pricing/presets/apply-changes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId: job.id,
+          modelIds: Array.from(reviewSelected),
+        }),
+      })
       const json = (await res.json()) as {
         success: boolean
         data?: { applied: number }
@@ -363,7 +403,6 @@ export function AiPricingDatabase() {
           <Button
             onClick={() => setConfirmOpen(true)}
             disabled={Boolean(job && job.status === 'RUNNING')}
-            className="bg-primary-500 text-white hover:bg-primary-600"
           >
             <Sparkles className="mr-2 size-4" />
             Update via AI
@@ -389,6 +428,8 @@ export function AiPricingDatabase() {
                   <SelectItem value="ANTHROPIC">Anthropic</SelectItem>
                   <SelectItem value="OPENAI">OpenAI</SelectItem>
                   <SelectItem value="GOOGLE">Google</SelectItem>
+                  <SelectItem value="KLING">Kling</SelectItem>
+                  <SelectItem value="ELEVENLABS">ElevenLabs</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -417,8 +458,9 @@ export function AiPricingDatabase() {
                 <TableRow>
                   <TableHead>Provider</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead className="text-right">Input $/1M</TableHead>
-                  <TableHead className="text-right">Output $/1M</TableHead>
+                  <TableHead className="text-right">Input</TableHead>
+                  <TableHead className="text-right">Output</TableHead>
+                  <TableHead>Satuan</TableHead>
                   <TableHead className="text-right">Context</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -426,7 +468,9 @@ export function AiPricingDatabase() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const disp = priceDisplay(p)
+                  return (
                   <TableRow key={p.id}>
                     <TableCell>
                       <Badge variant="outline" className="font-normal">
@@ -435,33 +479,34 @@ export function AiPricingDatabase() {
                     </TableCell>
                     <TableCell>
                       <div className="font-medium">{p.displayName}</div>
-                      <div className="font-mono text-xs text-muted-foreground">
+                      <div className="text-muted-foreground font-mono text-xs">
                         {p.modelId}
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatPrice(p.inputPricePer1M)}
+                      {disp.input}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatPrice(p.outputPricePer1M)}
+                      {disp.output}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-xs text-muted-foreground">
+                      {disp.unit}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-right tabular-nums">
                       {p.contextWindow
                         ? `${(p.contextWindow / 1000).toFixed(0)}K`
                         : '—'}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          FRESHNESS_STYLE[p.freshnessStatus],
-                        )}
-                      >
-                        {FRESHNESS_LABEL[p.freshnessStatus]}
-                      </Badge>
+                      <StatusBadge
+                        tone={
+                          statusMeta(pricingFreshnessMeta, p.freshnessStatus)
+                            .tone
+                        }
+                        label={FRESHNESS_LABEL[p.freshnessStatus]}
+                      />
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-xs">
                       {formatDistanceToNow(new Date(p.lastUpdatedAt), {
                         addSuffix: true,
                         locale: idLocale,
@@ -480,12 +525,13 @@ export function AiPricingDatabase() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
                 {filtered.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      colSpan={9}
+                      className="text-muted-foreground py-8 text-center text-sm"
                     >
                       Tidak ada preset cocok dengan filter.
                     </TableCell>
@@ -537,19 +583,10 @@ export function AiPricingDatabase() {
                       {l.triggeredBy.slice(0, 8)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          'font-normal',
-                          l.status === 'SUCCESS' &&
-                            'bg-emerald-100 text-emerald-700',
-                          l.status === 'FAILED' && 'bg-red-100 text-red-700',
-                          l.status === 'RUNNING' &&
-                            'bg-amber-100 text-amber-800',
-                        )}
-                      >
-                        {l.status}
-                      </Badge>
+                      <StatusBadge
+                        tone={statusMeta(pricingResearchJobMeta, l.status).tone}
+                        label={l.status}
+                      />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {l.modelsUpdated}
@@ -557,7 +594,9 @@ export function AiPricingDatabase() {
                     <TableCell className="text-right tabular-nums">
                       {l.modelsAdded}
                     </TableCell>
-                    <TableCell className="max-w-xs truncate text-xs text-red-600">
+                    <TableCell
+                      className={cn('max-w-xs truncate text-xs', TONES.danger.text)}
+                    >
                       {l.error ?? ''}
                     </TableCell>
                   </TableRow>
@@ -566,7 +605,7 @@ export function AiPricingDatabase() {
                   <TableRow>
                     <TableCell
                       colSpan={6}
-                      className="py-8 text-center text-sm text-muted-foreground"
+                      className="text-muted-foreground py-8 text-center text-sm"
                     >
                       Belum ada research log.
                     </TableCell>
@@ -619,7 +658,7 @@ export function AiPricingDatabase() {
                     key={step}
                     className={cn(
                       'flex items-center gap-2',
-                      i < stepIdx && 'text-emerald-700',
+                      i < stepIdx && TONES.success.text,
                       i === stepIdx && 'font-medium',
                       i > stepIdx && 'text-muted-foreground',
                     )}
@@ -647,7 +686,10 @@ export function AiPricingDatabase() {
               </DialogHeader>
               <div className="max-h-[60vh] space-y-4 overflow-y-auto">
                 {job.diff.added.length > 0 && (
-                  <Section title={`🆕 ${job.diff.added.length} model baru`}>
+                  <Section
+                    icon={Plus}
+                    title={`${job.diff.added.length} model baru`}
+                  >
                     {job.diff.added.map((d) => (
                       <DiffRow
                         key={d.modelId}
@@ -659,7 +701,10 @@ export function AiPricingDatabase() {
                   </Section>
                 )}
                 {job.diff.updated.length > 0 && (
-                  <Section title={`📝 ${job.diff.updated.length} model berubah`}>
+                  <Section
+                    icon={Pencil}
+                    title={`${job.diff.updated.length} model berubah`}
+                  >
                     {job.diff.updated.map((d) => (
                       <DiffRow
                         key={d.modelId}
@@ -671,16 +716,17 @@ export function AiPricingDatabase() {
                   </Section>
                 )}
                 {job.diff.unchanged.length > 0 && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     {job.diff.unchanged.length} model tidak berubah
                     (auto-skipped)
                   </p>
                 )}
-                {job.diff.added.length === 0 && job.diff.updated.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    Tidak ada perubahan harga.
-                  </p>
-                )}
+                {job.diff.added.length === 0 &&
+                  job.diff.updated.length === 0 && (
+                    <p className="text-muted-foreground text-sm">
+                      Tidak ada perubahan harga.
+                    </p>
+                  )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={closeJob}>
@@ -699,7 +745,7 @@ export function AiPricingDatabase() {
           {job?.status === 'FAILED' && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-red-600">
+                <DialogTitle className={TONES.danger.text}>
                   Research gagal
                 </DialogTitle>
                 <DialogDescription>{job.error}</DialogDescription>
@@ -761,6 +807,16 @@ export function AiPricingDatabase() {
                 />
               </div>
             </div>
+            {editing && editing.unitType !== 'TOKEN' && (
+              <p className="text-xs text-muted-foreground">
+                Model per-{editing.unitLabel ?? 'unit'}: nilai disimpan = USD/
+                {editing.unitLabel ?? 'unit'} × 1.000.000. Sekarang = $
+                {(Number(editInput) / 1_000_000).toLocaleString('en-US', {
+                  maximumFractionDigits: 4,
+                })}{' '}
+                / {editing.unitLabel ?? 'unit'}. Output tidak dipakai (isi 0).
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -783,14 +839,20 @@ export function AiPricingDatabase() {
 
 function Section({
   title,
+  icon: Icon,
   children,
 }: {
   title: string
+  // Ikon judul section — lucide, bukan emoji (lihat CLAUDE.md § Design System UI).
+  icon?: LucideIcon
   children: React.ReactNode
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold">{title}</p>
+      <p className="flex items-center gap-1.5 text-sm font-semibold">
+        {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
+        {title}
+      </p>
       <div className="space-y-1">{children}</div>
     </div>
   )
@@ -805,10 +867,9 @@ function DiffRow({
   checked: boolean
   onToggle: () => void
 }) {
-  const naik =
-    d.before && d.after.inputPricePer1M > d.before.inputPricePer1M
+  const naik = d.before && d.after.inputPricePer1M > d.before.inputPricePer1M
   return (
-    <label className="flex cursor-pointer items-start gap-2 rounded-md border p-2 hover:bg-warm-50 dark:hover:bg-warm-900/30">
+    <label className="hover:bg-warm-50 flex cursor-pointer items-start gap-2 rounded-md border p-2">
       <Checkbox
         checked={checked}
         onCheckedChange={onToggle}
@@ -816,7 +877,7 @@ function DiffRow({
       />
       <div className="min-w-0 flex-1 text-sm">
         <p className="font-medium">{d.after.displayName}</p>
-        <p className="font-mono text-xs text-muted-foreground">
+        <p className="text-muted-foreground font-mono text-xs">
           {d.after.modelId}
         </p>
         <p className="mt-1 text-xs">

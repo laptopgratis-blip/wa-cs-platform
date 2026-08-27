@@ -12,16 +12,20 @@
 // Resend: panggil ulang endpoint /api/auth/otp/request dgn payload sama
 // (lewat callback onResend dari parent — parent yang punya data signup
 // atau identifier). Cooldown 60s, UI countdown.
-import { Loader2 } from 'lucide-react'
-import { signIn } from 'next-auth/react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
+import { getSession, signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+
+import { resolveLoginRedirect } from '@/lib/auth-landing'
 
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export interface OtpRequestPayload {
   otpId: string
@@ -41,7 +45,7 @@ interface OtpFormProps {
   // supaya OtpForm bisa update otpId & cooldown.
   onResend: () => Promise<OtpRequestPayload>
   // Redirect setelah login berhasil.
-  callbackUrl?: string
+  callbackUrl?: string | null
   // Tampilkan "ganti email/no WA" link kalau true.
   onBack?: () => void
 }
@@ -62,7 +66,7 @@ const ERROR_MESSAGE: Record<string, string> = {
 export function OtpForm({
   initial,
   onResend,
-  callbackUrl = '/dashboard',
+  callbackUrl = null,
   onBack,
 }: OtpFormProps) {
   const router = useRouter()
@@ -90,7 +94,7 @@ export function OtpForm({
         otpId: payload.otpId,
         code,
         redirect: false,
-        callbackUrl,
+        callbackUrl: callbackUrl ?? undefined,
       })
       if (res?.error) {
         const msg = ERROR_MESSAGE[res.error] ?? 'Verifikasi gagal. Coba lagi.'
@@ -106,7 +110,10 @@ export function OtpForm({
         return
       }
       toast.success('Berhasil masuk')
-      router.push(res?.url || callbackUrl)
+      // Sama seperti jalur password: tujuan dihitung dari role, bukan dari
+      // res.url yang masih memakai callbackUrl mentah.
+      const fresh = await getSession()
+      router.push(resolveLoginRedirect(callbackUrl, fresh?.user?.role))
       router.refresh()
     } finally {
       setSubmitting(false)
@@ -132,7 +139,7 @@ export function OtpForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4" noValidate>
-      <div className="rounded-lg border border-warm-200 bg-warm-50/60 p-3 text-sm">
+      <div className="border-warm-200 bg-warm-50/60 rounded-lg border p-3 text-sm">
         <p className="text-warm-700">
           Kode OTP 6 digit dikirim ke{' '}
           {payload.emailDelivered && (
@@ -153,19 +160,33 @@ export function OtpForm({
         {payload.sentTo.phone &&
           payload.emailDelivered &&
           !payload.waDelivered && (
-            <p className="mt-2 text-xs text-amber-700">
-              ⚠️ OTP via WhatsApp tidak terkirim (sesi pengirim sedang putus).
-              Cek email kamu — kode tetap berlaku.
+            <p
+              className={cn(
+                'mt-2 flex items-start gap-1.5 text-xs',
+                TONES.warning.text,
+              )}
+            >
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                OTP via WhatsApp tidak terkirim (sesi pengirim sedang putus).
+                Cek email kamu — kode tetap berlaku.
+              </span>
             </p>
           )}
         {payload.channelMode === 'BOTH' &&
           !payload.emailDelivered &&
           payload.waDelivered && (
-            <p className="mt-2 text-xs text-amber-700">
-              ⚠️ Email gagal terkirim. Cek WhatsApp untuk kode OTP.
+            <p
+              className={cn(
+                'mt-2 flex items-start gap-1.5 text-xs',
+                TONES.warning.text,
+              )}
+            >
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>Email gagal terkirim. Cek WhatsApp untuk kode OTP.</span>
             </p>
           )}
-        <p className="mt-2 text-xs text-warm-500">
+        <p className="text-warm-500 mt-2 text-xs">
           {payload.emailDelivered
             ? 'Tidak masuk dalam 1 menit? Cek folder Spam email, atau klik "Kirim ulang".'
             : 'Tidak masuk dalam 1 menit? Klik "Kirim ulang".'}
@@ -185,14 +206,14 @@ export function OtpForm({
           onChange={(e) =>
             setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
           }
-          className="tracking-[0.5em] text-center font-mono text-lg"
+          className="text-center font-mono text-lg tracking-[0.5em]"
           autoFocus
         />
       </div>
 
       <Button
         type="submit"
-        className="w-full bg-primary-500 font-semibold text-white shadow-orange hover:bg-primary-600"
+        className="w-full"
         disabled={submitting || code.length !== 6}
       >
         {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
@@ -215,7 +236,7 @@ export function OtpForm({
           type="button"
           onClick={handleResend}
           disabled={cooldown > 0 || resending}
-          className="font-medium text-primary-600 hover:underline disabled:cursor-not-allowed disabled:text-warm-400 disabled:no-underline"
+          className="text-primary-600 disabled:text-warm-400 font-medium hover:underline disabled:cursor-not-allowed disabled:no-underline"
         >
           {resending ? (
             <>

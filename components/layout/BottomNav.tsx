@@ -38,7 +38,7 @@ export function BottomNav({ onOpenDrawer }: BottomNavProps) {
                 href={href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex h-full min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors',
+                  'flex h-full min-h-11 flex-col items-center justify-center gap-0.5 text-xs transition-colors',
                   active
                     ? 'font-semibold text-primary-600'
                     : 'text-warm-500',
@@ -59,7 +59,7 @@ export function BottomNav({ onOpenDrawer }: BottomNavProps) {
           <button
             type="button"
             onClick={onOpenDrawer}
-            className="flex h-full w-full min-h-11 flex-col items-center justify-center gap-0.5 text-[11px] text-warm-500 transition-colors hover:text-warm-700"
+            className="flex h-full w-full min-h-11 flex-col items-center justify-center gap-0.5 text-xs text-warm-500 transition-colors hover:text-warm-700"
             aria-label="Buka menu"
           >
             <Menu className="size-5" />

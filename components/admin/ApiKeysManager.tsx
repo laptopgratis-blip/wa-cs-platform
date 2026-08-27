@@ -10,18 +10,12 @@
 // - Polling otomatis tiap 1 jam selama tab terbuka.
 import { formatDistanceToNow } from 'date-fns'
 import { id as idLocale } from 'date-fns/locale'
-import {
-  Eye,
-  EyeOff,
-  Key,
-  Loader2,
-  RefreshCw,
-} from 'lucide-react'
+import { Eye, EyeOff, Key, Loader2, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -32,6 +26,8 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { apiKeyStatusMeta, statusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
@@ -45,7 +41,13 @@ interface KeyRow {
   lastTestError: string | null
 }
 
-const PROVIDERS: Provider[] = ['ANTHROPIC', 'OPENAI', 'GOOGLE', 'KLING', 'ELEVENLABS']
+const PROVIDERS: Provider[] = [
+  'ANTHROPIC',
+  'OPENAI',
+  'GOOGLE',
+  'KLING',
+  'ELEVENLABS',
+]
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   ANTHROPIC: 'Anthropic',
@@ -58,9 +60,9 @@ const PROVIDER_LABEL: Record<Provider, string> = {
 // Dot warna per provider — pengganti emoji lingkaran (konsisten & theme-able).
 const PROVIDER_DOT: Record<Provider, string> = {
   ANTHROPIC: 'bg-primary-500',
-  OPENAI: 'bg-emerald-500',
-  GOOGLE: 'bg-blue-500',
-  KLING: 'bg-violet-500',
+  OPENAI: 'bg-primary-400',
+  GOOGLE: 'bg-primary-600',
+  KLING: 'bg-primary-300',
   ELEVENLABS: 'bg-warm-500',
 }
 
@@ -77,20 +79,6 @@ function statusOf(row: KeyRow): StatusKind {
   const ageMs = Date.now() - new Date(row.lastTestedAt).getTime()
   if (row.lastTestStatus === 'SUCCESS' && ageMs < STALE_TEST_MS) return 'AKTIF'
   return 'BELUM_DITES'
-}
-
-const STATUS_LABEL: Record<StatusKind, string> = {
-  AKTIF: '🟢 Aktif',
-  BELUM_DITES: '🟡 Belum dites',
-  ERROR: '🔴 Error',
-  KOSONG: '⚪ Kosong',
-}
-
-const STATUS_STYLE: Record<StatusKind, string> = {
-  AKTIF: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100',
-  BELUM_DITES: 'bg-amber-100 text-amber-800 hover:bg-amber-100',
-  ERROR: 'bg-red-100 text-red-700 hover:bg-red-100',
-  KOSONG: 'bg-warm-100 text-warm-600 hover:bg-warm-100',
 }
 
 export function ApiKeysManager() {
@@ -209,10 +197,9 @@ export function ApiKeysManager() {
   async function testKey(provider: Provider) {
     setTestingId(provider)
     try {
-      const res = await fetch(
-        `/api/admin/api-keys/${provider}/test`,
-        { method: 'POST' },
-      )
+      const res = await fetch(`/api/admin/api-keys/${provider}/test`, {
+        method: 'POST',
+      })
       const json = (await res.json()) as {
         success: boolean
         error?: string
@@ -274,12 +261,10 @@ export function ApiKeysManager() {
                     />
                     {PROVIDER_LABEL[p]}
                   </span>
-                  <Badge
-                    variant="secondary"
-                    className={cn('font-normal', STATUS_STYLE[status])}
-                  >
-                    {STATUS_LABEL[status]}
-                  </Badge>
+                  <StatusBadge
+                    tone={statusMeta(apiKeyStatusMeta, status).tone}
+                    label={statusMeta(apiKeyStatusMeta, status).label}
+                  />
                 </CardTitle>
                 <CardDescription>
                   {row?.maskedKey ? (
@@ -291,15 +276,29 @@ export function ApiKeysManager() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {row?.lastTestError && status === 'ERROR' && (
-                  <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                  <p
+                    className={cn(
+                      'rounded-md px-2 py-1.5 text-xs',
+                      TONES.danger.bg,
+                      TONES.danger.text,
+                    )}
+                  >
                     {row.lastTestError}
                   </p>
                 )}
                 {p === 'KLING' ? (
                   <div className="space-y-3">
-                    <p className="rounded-md bg-violet-50 px-2 py-1.5 text-[11px] leading-snug text-violet-800 dark:bg-violet-950/40 dark:text-violet-200">
+                    <p
+                      className={cn(
+                        'rounded-md px-2 py-1.5 text-xs leading-snug',
+                        TONES.info.bg,
+                        TONES.info.text,
+                      )}
+                    >
                       Kling pakai <strong>2 key</strong>: AccessKey + SecretKey.
-                      Dapat dari <span className="font-mono">platform.klingai.com</span> → Account Management → API Key.
+                      Dapat dari{' '}
+                      <span className="font-mono">platform.klingai.com</span> →
+                      Account Management → API Key.
                     </p>
                     <div className="space-y-1.5">
                       <Label htmlFor={`klingAccess`}>AccessKey</Label>
@@ -330,10 +329,14 @@ export function ApiKeysManager() {
                           onClick={() =>
                             setShowKey((prev) => ({ ...prev, [p]: !prev[p] }))
                           }
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
                           aria-label={isShown ? 'Sembunyikan' : 'Tampilkan'}
                         >
-                          {isShown ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                          {isShown ? (
+                            <EyeOff className="size-4" />
+                          ) : (
+                            <Eye className="size-4" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -362,7 +365,7 @@ export function ApiKeysManager() {
                         onClick={() =>
                           setShowKey((prev) => ({ ...prev, [p]: !prev[p] }))
                         }
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2"
                         aria-label={isShown ? 'Sembunyikan' : 'Tampilkan'}
                       >
                         {isShown ? (
@@ -404,7 +407,7 @@ export function ApiKeysManager() {
                     Test
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-muted-foreground text-xs">
                   {row?.lastTestedAt
                     ? `Terakhir dites: ${formatDistanceToNow(
                         new Date(row.lastTestedAt),

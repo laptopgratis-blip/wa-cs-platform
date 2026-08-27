@@ -49,7 +49,10 @@ export function BankAccountsManager() {
     setLoading(true)
     try {
       const res = await fetch('/api/admin/bank-accounts')
-      const json = (await res.json()) as { success: boolean; data?: BankAccountRow[] }
+      const json = (await res.json()) as {
+        success: boolean
+        data?: BankAccountRow[]
+      }
       if (json.success && json.data) setRows(json.data)
     } finally {
       setLoading(false)
@@ -86,7 +89,9 @@ export function BankAccountsManager() {
         isActive,
       }
       const res = await fetch(
-        editing ? `/api/admin/bank-accounts/${editing.id}` : '/api/admin/bank-accounts',
+        editing
+          ? `/api/admin/bank-accounts/${editing.id}`
+          : '/api/admin/bank-accounts',
         {
           method: editing ? 'PATCH' : 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -143,10 +148,7 @@ export function BankAccountsManager() {
         title="Rekening Bank"
         description="Rekening tujuan transfer manual yang muncul di halaman checkout user."
         actions={
-          <Button
-            onClick={openCreate}
-            className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
-          >
+          <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" /> Tambah Rekening
           </Button>
         }
@@ -172,13 +174,10 @@ export function BankAccountsManager() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {rows.map((b) => (
-            <Card
-              key={b.id}
-              className="rounded-xl border-warm-200 transition-shadow hover:shadow-md"
-            >
+            <Card key={b.id}>
               <CardContent className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                  <div className="bg-primary-50 text-primary-600 flex size-10 items-center justify-center rounded-lg">
                     <Building2 className="size-5" />
                   </div>
                   <Badge variant={b.isActive ? 'default' : 'outline'}>
@@ -186,26 +185,32 @@ export function BankAccountsManager() {
                   </Badge>
                 </div>
                 <div>
-                  <div className="font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+                  <div className="font-display text-warm-900 text-lg font-bold">
                     {b.bankName}
                   </div>
-                  <div className="mt-1 font-mono text-sm tracking-wider text-warm-700">
+                  <div className="text-warm-700 mt-1 font-mono text-sm tracking-wider">
                     {b.accountNumber}
                   </div>
-                  <div className="mt-0.5 text-xs text-warm-500">
+                  <div className="text-warm-500 mt-0.5 text-xs">
                     a.n. {b.accountName}
                   </div>
                 </div>
-                <div className="flex items-center justify-between border-t border-warm-100 pt-3">
+                <div className="border-warm-100 flex items-center justify-between border-t pt-3">
                   <div className="flex items-center gap-2">
                     <Switch
                       checked={b.isActive}
                       onCheckedChange={() => toggleActive(b)}
                     />
-                    <span className="text-xs text-warm-500">Tampilkan ke user</span>
+                    <span className="text-warm-500 text-xs">
+                      Tampilkan ke user
+                    </span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(b)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(b)}
+                    >
                       <Pencil className="size-4" />
                     </Button>
                     <Button
@@ -225,9 +230,11 @@ export function BankAccountsManager() {
       )}
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md px-6">
+        <SheetContent side="right" className="w-full px-6 sm:max-w-md">
           <SheetHeader className="px-0">
-            <SheetTitle>{editing ? 'Edit Rekening' : 'Tambah Rekening'}</SheetTitle>
+            <SheetTitle>
+              {editing ? 'Edit Rekening' : 'Tambah Rekening'}
+            </SheetTitle>
             <SheetDescription>
               Rekening ini akan ditampilkan di halaman checkout transfer manual.
             </SheetDescription>

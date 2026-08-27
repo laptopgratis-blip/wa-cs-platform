@@ -27,9 +27,11 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { DURATION_DISCOUNTS } from '@/lib/subscription-pricing'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface Pkg {
@@ -153,7 +155,7 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
   }
 
   return (
-    <div className="mx-auto h-full max-w-3xl space-y-6 overflow-y-auto p-4 md:p-8">
+    <PageContainer width="narrow">
       <PageHeader
         title={`Upgrade ke ${pkg.name}`}
         description="Bayar pakai saldo token. Aktivasi instan, tidak ada konfirmasi manual atau upload bukti transfer."
@@ -161,23 +163,23 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
 
       <Card>
         <CardContent className="space-y-5 p-6">
-          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-            <div className="flex items-center gap-2 text-purple-900">
+          <div className="border-primary-200 bg-primary-50 rounded-lg border p-4">
+            <div className="text-primary-900 flex items-center gap-2">
               <Sparkles className="size-4" />
               <span className="font-semibold">Paket {pkg.name}</span>
-              <span className="rounded bg-purple-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-purple-900">
+              <span className="bg-primary-200 text-primary-900 rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide uppercase">
                 {pkg.tier}
               </span>
             </div>
             {pkg.description && (
-              <p className="mt-1 text-sm text-purple-800">{pkg.description}</p>
+              <p className="text-primary-800 mt-1 text-sm">{pkg.description}</p>
             )}
             <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-1.5 text-purple-900">
+              <div className="text-primary-900 flex items-center gap-1.5">
                 <CheckCircle2 className="size-3.5" />
                 {pkg.maxLp} landing page
               </div>
-              <div className="flex items-center gap-1.5 text-purple-900">
+              <div className="text-primary-900 flex items-center gap-1.5">
                 <CheckCircle2 className="size-3.5" />
                 {pkg.maxStorageMB} MB storage
               </div>
@@ -199,12 +201,12 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                     'rounded-lg border-2 p-3 text-left transition',
                     duration === d.months
                       ? 'border-primary-500 bg-primary-50'
-                      : 'border-warm-200 bg-white hover:border-warm-300',
+                      : 'border-warm-200 bg-card hover:border-warm-300',
                   )}
                 >
-                  <div className="text-sm font-bold">{d.label}</div>
+                  <div className="text-sm font-semibold">{d.label}</div>
                   {d.badge && (
-                    <div className="mt-0.5 text-[10px] font-medium text-emerald-700">
+                    <div className="text-primary-700 mt-0.5 text-xs font-medium">
                       {d.badge}
                     </div>
                   )}
@@ -215,17 +217,15 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
 
           {/* Cost breakdown */}
           {loadingPreview && !preview ? (
-            <div className="flex items-center justify-center gap-2 rounded-lg border border-warm-200 bg-white p-6 text-sm text-warm-500">
+            <div className="border-warm-200 bg-card text-warm-500 flex items-center justify-center gap-2 rounded-lg border p-6 text-sm">
               <Loader2 className="size-4 animate-spin" />
-              Memuat estimasi...
+              Memuat estimasi…
             </div>
           ) : preview ? (
             <div className="space-y-3">
-              <div className="rounded-lg border border-warm-200 bg-warm-50 p-4 text-sm">
-                <div className="font-semibold text-warm-900">
-                  Rincian biaya
-                </div>
-                <ul className="mt-2 space-y-1 text-xs text-warm-700">
+              <div className="border-warm-200 bg-warm-50 rounded-lg border p-4 text-sm">
+                <div className="text-warm-900 font-semibold">Rincian biaya</div>
+                <ul className="text-warm-700 mt-2 space-y-1 text-xs">
                   <li className="flex justify-between">
                     <span>
                       {pkg.priceMonthly.toLocaleString('id-ID')} × {duration}{' '}
@@ -236,21 +236,25 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                     </span>
                   </li>
                   {preview.discountPct > 0 && (
-                    <li className="flex justify-between text-emerald-700">
+                    <li
+                      className={cn('flex justify-between', TONES.success.text)}
+                    >
                       <span>Diskon durasi {preview.discountPct}%</span>
                       <span className="tabular-nums">
                         − Rp {preview.discountAmount.toLocaleString('id-ID')}
                       </span>
                     </li>
                   )}
-                  <li className="flex justify-between border-t border-warm-200 pt-1 font-semibold text-warm-900">
+                  <li className="border-warm-200 text-warm-900 flex justify-between border-t pt-1 font-semibold">
                     <span>Total IDR</span>
                     <span className="tabular-nums">
                       Rp {preview.priceIdr.toLocaleString('id-ID')}
                     </span>
                   </li>
                   {preview.creditTokens > 0 && (
-                    <li className="flex justify-between text-emerald-700">
+                    <li
+                      className={cn('flex justify-between', TONES.success.text)}
+                    >
                       <span>
                         Kredit sisa{' '}
                         {preview.creditSources
@@ -270,8 +274,8 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                 className={cn(
                   'rounded-lg border-2 p-4',
                   preview.sufficientBalance
-                    ? 'border-emerald-300 bg-emerald-50'
-                    : 'border-rose-300 bg-rose-50',
+                    ? cn(TONES.success.border, TONES.success.bg)
+                    : cn(TONES.danger.border, TONES.danger.bg),
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -279,27 +283,27 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                     className={cn(
                       'mt-0.5 rounded-lg p-2',
                       preview.sufficientBalance
-                        ? 'bg-emerald-200 text-emerald-900'
-                        : 'bg-rose-200 text-rose-900',
+                        ? TONES.success.solid
+                        : TONES.danger.solid,
                     )}
                   >
                     <Coins className="size-4" />
                   </div>
                   <div className="flex-1">
-                    <div className="text-xs font-medium uppercase tracking-wide text-warm-600">
+                    <div className="text-warm-600 text-xs font-medium tracking-wide uppercase">
                       Akan dipotong dari saldo
                     </div>
-                    <div className="font-mono text-2xl font-bold tabular-nums text-warm-900">
+                    <div className="text-warm-900 font-mono text-2xl font-bold tabular-nums">
                       {preview.tokensDue.toLocaleString('id-ID')} token
                     </div>
                     {preview.creditTokens > 0 && (
-                      <div className="text-xs text-emerald-700">
+                      <div className={cn('text-xs', TONES.success.text)}>
                         Sudah dipotong kredit upgrade{' '}
                         {preview.creditTokens.toLocaleString('id-ID')} token —
                         sisa plan lama tidak hangus.
                       </div>
                     )}
-                    <div className="mt-1 text-xs text-warm-600">
+                    <div className="text-warm-600 mt-1 text-xs">
                       Konversi 1 token = Rp{' '}
                       {preview.pricePerToken.toLocaleString('id-ID')} (kurs
                       platform)
@@ -314,7 +318,7 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                     </div>
 
                     {preview.sufficientBalance ? (
-                      <div className="mt-1 text-xs text-emerald-700">
+                      <div className={cn('mt-1 text-xs', TONES.success.text)}>
                         Setelah aktivasi:{' '}
                         <span className="font-mono font-semibold tabular-nums">
                           {(
@@ -324,7 +328,12 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                         </span>
                       </div>
                     ) : (
-                      <div className="mt-2 flex items-start gap-2 text-xs text-rose-900">
+                      <div
+                        className={cn(
+                          'mt-2 flex items-start gap-2 text-xs',
+                          TONES.danger.text,
+                        )}
+                      >
                         <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                         <span>
                           Kurang{' '}
@@ -350,8 +359,10 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 rounded-lg border border-warm-200 bg-white p-3 text-xs text-warm-600">
-                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+              <div className="border-warm-200 bg-card text-warm-600 flex items-start gap-2 rounded-lg border p-3 text-xs">
+                <ShieldCheck
+                  className={cn('mt-0.5 size-3.5 shrink-0', TONES.success.text)}
+                />
                 <span>
                   Aktivasi instan setelah konfirmasi. Akses fitur premium aktif{' '}
                   {duration === 1
@@ -372,15 +383,12 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
             </Button>
             <Button
               onClick={handleCheckout}
-              disabled={
-                !preview || !preview.sufficientBalance || submitting
-              }
-              className="bg-primary-500 text-white hover:bg-primary-600"
+              disabled={!preview || !preview.sufficientBalance || submitting}
             >
               {submitting ? (
                 <>
                   <Loader2 className="mr-1.5 size-4 animate-spin" />
-                  Memproses...
+                  Memproses…
                 </>
               ) : (
                 <>
@@ -392,6 +400,6 @@ export function UpgradeView({ pkg, initialDuration }: Props) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   )
 }

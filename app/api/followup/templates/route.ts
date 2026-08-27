@@ -61,6 +61,8 @@ export async function POST(req: Request) {
         orderFormId: data.scope === 'FORM' ? data.orderFormId : null,
         order: data.order,
         isDefault: false,
+        ...(data.metaTemplateId !== undefined ? { metaTemplateId: data.metaTemplateId } : {}),
+        ...(data.metaParamMap !== undefined ? { metaParamMap: data.metaParamMap ?? undefined } : {}),
       },
     })
 

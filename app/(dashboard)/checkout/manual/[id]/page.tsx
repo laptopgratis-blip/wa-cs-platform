@@ -8,9 +8,12 @@ import { notFound, redirect } from 'next/navigation'
 
 import { ManualCheckoutDetail } from '@/components/dashboard/ManualCheckoutDetail'
 import { PostPublishReturnBanner } from '@/components/onboarding/PostPublishReturnBanner'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { unitLabelForPurpose } from '@/lib/billing/apply-payment-credit'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,13 +42,19 @@ export default async function ManualCheckoutPage({
 
   if (!payment) notFound()
   if (payment.userId !== session.user.id) notFound()
-  // Halaman ini khusus pembelian token. LP upgrade pakai /checkout/manual-lp/[id].
-  if (payment.purpose !== 'TOKEN_PURCHASE' || !payment.package) notFound()
+  // Halaman ini khusus paket token / kredit pesan. LP upgrade pakai /checkout/manual-lp/[id].
+  if (
+    (payment.purpose !== 'TOKEN_PURCHASE' &&
+      payment.purpose !== 'MESSAGE_CREDIT_PURCHASE') ||
+    !payment.package
+  ) {
+    notFound()
+  }
 
   const expiresAt = new Date(payment.createdAt.getTime() + TRANSFER_TTL_MS)
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer width="narrow">
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/billing">
@@ -53,13 +62,10 @@ export default async function ManualCheckoutPage({
             Kembali ke Billing
           </Link>
         </Button>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight text-warm-900 dark:text-warm-50">
-          Transfer Manual
-        </h1>
-        <p className="mt-1 text-sm text-warm-500">
-          Transfer ke salah satu rekening di bawah, lalu upload bukti transfer untuk
-          diverifikasi.
-        </p>
+        <PageHeader
+          title="Transfer Manual"
+          description="Transfer ke salah satu rekening di bawah, lalu upload bukti transfer untuk diverifikasi."
+        />
       </div>
 
       <PostPublishReturnBanner
@@ -88,6 +94,7 @@ export default async function ManualCheckoutPage({
           packageName: payment.package.name,
           createdAt: payment.createdAt.toISOString(),
           expiresAt: expiresAt.toISOString(),
+          unitLabel: unitLabelForPurpose(payment.purpose),
         }}
         banks={banks.map((b) => ({
           id: b.id,
@@ -95,8 +102,11 @@ export default async function ManualCheckoutPage({
           accountNumber: b.accountNumber,
           accountName: b.accountName,
         }))}
-        user={{ name: session.user.name ?? null, email: session.user.email ?? '' }}
+        user={{
+          name: session.user.name ?? null,
+          email: session.user.email ?? '',
+        }}
       />
-    </div>
+    </PageContainer>
   )
 }

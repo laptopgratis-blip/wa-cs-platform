@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp API Resmi untuk Hulao</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===========================================
+   VIEWPORT FITTING: MANDATORY BASE STYLES
+   =========================================== */
+html, body { height: 100%; overflow-x: hidden; }
+/* Catatan: dengan height:100% + overflow-x hidden, BODY menjadi scroll
+   container aktual — snap & smooth harus dipasang di sana (html ikut
+   di-set untuk browser yang menjadikan html scroller). */
+html, body { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+.slide {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.slide-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-height: 100%;
+    overflow: hidden;
+    padding: var(--slide-padding);
+    max-width: 1180px;
+    margin: 0 auto;
+    width: 100%;
+}
+:root {
+    --title-size: clamp(1.6rem, 5vw, 4rem);
+    --h2-size: clamp(1.2rem, 3.2vw, 2.3rem);
+    --h3-size: clamp(0.95rem, 2.2vw, 1.4rem);
+    --body-size: clamp(0.72rem, 1.4vw, 1.02rem);
+    --small-size: clamp(0.62rem, 1vw, 0.83rem);
+    --slide-padding: clamp(1rem, 4vw, 3.5rem);
+    --content-gap: clamp(0.5rem, 2vw, 1.6rem);
+    --element-gap: clamp(0.25rem, 1vw, 0.9rem);
+
+    /* Bold Signal — charcoal + oranye hulao */
+    --bg: #171512;
+    --bg-soft: #201d19;
+    --card: #26221d;
+    --line: #3a352d;
+    --ink: #f7f3ec;
+    --ink-dim: #b3aa9c;
+    --accent: #f97316;       /* hulao orange */
+    --accent-soft: #fdba74;
+    --good: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+}
+@media (max-height: 700px) {
+    :root { --slide-padding: clamp(0.75rem, 3vw, 2rem); --content-gap: clamp(0.4rem, 1.5vw, 1rem);
+            --title-size: clamp(1.25rem, 4.5vw, 2.5rem); --h2-size: clamp(1rem, 3vw, 1.75rem); }
+}
+@media (max-height: 600px) {
+    :root { --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem); --content-gap: clamp(0.3rem, 1vw, 0.75rem);
+            --title-size: clamp(1.1rem, 4vw, 2rem); --body-size: clamp(0.68rem, 1.2vw, 0.92rem); }
+    .nav-dots, .keyboard-hint, .decorative { display: none; }
+}
+@media (max-height: 500px) {
+    :root { --slide-padding: clamp(0.4rem, 2vw, 1rem); --title-size: clamp(1rem, 3.5vw, 1.5rem);
+            --h2-size: clamp(0.9rem, 2.5vw, 1.25rem); --body-size: clamp(0.62rem, 1vw, 0.82rem); }
+    .step { padding: 0.3rem 0.55rem; }
+    .steps { gap: 0.26rem; }
+    .step b { line-height: 1.2; }
+    .step small { line-height: 1.2; font-size: 0.56rem; }
+}
+@media (max-width: 600px) {
+    :root { --title-size: clamp(1.25rem, 7vw, 2.5rem); }
+    .grid { grid-template-columns: 1fr !important; }
+    .two-col { grid-template-columns: 1fr !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+    html, body { scroll-behavior: auto; }
+}
+
+/* =========================================== THEME =========================================== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: var(--body-size);
+    line-height: 1.5;
+}
+h1, h2, .display { font-family: 'Archivo Black', 'Arial Black', sans-serif; line-height: 1.08; letter-spacing: -0.01em; }
+h1 { font-size: var(--title-size); }
+h2 { font-size: var(--h2-size); }
+h3 { font-size: var(--h3-size); font-weight: 700; }
+
+.slide::before { /* garis grid halus */
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 100% 25%,
+      linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 25% 100%;
+    opacity: 0.12;
+}
+.slide:nth-child(even) { background: var(--bg-soft); }
+
+.kicker {
+    display: inline-flex; align-items: center; gap: 0.5em;
+    font-size: var(--small-size); font-weight: 700; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: var(--element-gap);
+}
+.kicker::before { content: ''; width: 2.2em; height: 2px; background: var(--accent); }
+
+.lead { color: var(--ink-dim); max-width: 62ch; }
+.accent { color: var(--accent); }
+.good { color: var(--good); }
+.warn { color: var(--warn); }
+.bad  { color: var(--bad); }
+.dim  { color: var(--ink-dim); }
+strong { color: var(--ink); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: clamp(0.5rem, 1.5vw, 1rem); margin-top: var(--content-gap); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(0.6rem, 2vw, 1.4rem); margin-top: var(--content-gap); align-items: start; }
+
+.card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: clamp(0.7rem, 1.8vw, 1.3rem);
+}
+.card h3 { margin-bottom: 0.35em; }
+.card .num {
+    font-family: 'Archivo Black', sans-serif; font-size: clamp(1rem, 2.4vw, 1.7rem);
+    color: var(--accent); display: block; margin-bottom: 0.2em;
+}
+.card.hot { background: var(--accent); border-color: var(--accent); color: #1c1006; }
+.card.hot h3, .card.hot strong { color: #1c1006; }
+.card.hot .dim { color: rgba(28,16,6,0.75); }
+
+.steps { display: flex; flex-direction: column; gap: clamp(0.4rem, 1.2vh, 0.85rem); margin-top: var(--content-gap); counter-reset: step; }
+.step {
+    display: grid; grid-template-columns: auto 1fr; gap: clamp(0.6rem, 1.5vw, 1.1rem);
+    align-items: start; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: clamp(0.55rem, 1.4vw, 1rem) clamp(0.7rem, 1.8vw, 1.2rem);
+}
+.step::before {
+    counter-increment: step; content: counter(step, decimal-leading-zero);
+    font-family: 'Archivo Black', sans-serif; color: var(--accent);
+    font-size: clamp(0.9rem, 2vw, 1.4rem); line-height: 1.35;
+}
+.step b { display: block; }
+.step small { color: var(--ink-dim); font-size: var(--small-size); }
+
+table { width: 100%; border-collapse: collapse; margin-top: var(--content-gap); font-size: var(--body-size); }
+th, td { text-align: left; padding: clamp(0.35rem, 1vh, 0.65rem) clamp(0.4rem, 1.2vw, 0.9rem); border-bottom: 1px solid var(--line); }
+th { font-size: var(--small-size); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-dim); font-weight: 600; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+tr.hl td { background: rgba(249, 115, 22, 0.10); }
+tfoot td { border-bottom: none; font-weight: 700; }
+
+.pill {
+    display: inline-block; padding: 0.18em 0.7em; border-radius: 999px;
+    font-size: var(--small-size); font-weight: 700; letter-spacing: 0.04em;
+    border: 1px solid var(--line); color: var(--ink-dim); margin-right: 0.35em;
+}
+.pill.green { color: var(--good); border-color: rgba(52,211,153,0.4); background: rgba(52,211,153,0.08); }
+.pill.orange { color: var(--accent-soft); border-color: rgba(249,115,22,0.45); background: rgba(249,115,22,0.10); }
+.pill.yellow { color: var(--warn); border-color: rgba(251,191,36,0.4); background: rgba(251,191,36,0.08); }
+
+.footnote { font-size: var(--small-size); color: var(--ink-dim); margin-top: var(--content-gap); }
+
+/* Divider slide */
+.divider .slide-content { justify-content: center; }
+.divider .giant {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: clamp(4rem, 18vw, 13rem);
+    color: transparent; -webkit-text-stroke: 2px var(--accent);
+    line-height: 0.9; opacity: 0.9;
+}
+.divider h2 { margin-top: 0.15em; }
+
+/* Title slide */
+.title-slide .slide-content { justify-content: center; }
+.title-slide .glow {
+    /* Full-bleed di dalam slide; lingkaran diposisikan lewat gradien supaya
+       tidak pernah menambah scrollable-overflow container. */
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle clamp(220px, 32vw, 430px) at 92% 6%,
+        rgba(249,115,22,0.22), transparent 70%);
+}
+.badge-row { display: flex; flex-wrap: wrap; gap: 0.5em; margin-top: var(--content-gap); }
+
+/* ── Diagram: flow horizontal (onboarding user) ── */
+.flow-h { display: flex; align-items: stretch; gap: clamp(0.25rem, 0.7vw, 0.55rem); margin-top: var(--content-gap); }
+.flow-node {
+    flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: clamp(0.5rem, 1.3vw, 0.95rem); display: flex; flex-direction: column; gap: 0.3em;
+}
+.flow-node .fn { font-family: 'Archivo Black', sans-serif; color: var(--accent); font-size: clamp(0.8rem, 1.6vw, 1.1rem); }
+.flow-node b { font-size: var(--body-size); line-height: 1.25; }
+.flow-node small { color: var(--ink-dim); font-size: var(--small-size); line-height: 1.3; }
+.flow-node.done { border-color: rgba(52,211,153,0.45); }
+.flow-sep { align-self: center; color: var(--accent); font-size: clamp(0.9rem, 2vw, 1.5rem); flex: 0 0 auto; }
+/* Stack vertikal hanya di layar sempit yang CUKUP TINGGI — landscape phone
+   (pendek) tetap horizontal supaya muat satu viewport. */
+@media (max-width: 900px) and (min-height: 501px) {
+    .flow-h { flex-direction: column; }
+    .flow-sep { transform: rotate(90deg); }
+}
+
+/* ── Diagram: arsitektur dua jalur ── */
+.arch {
+    display: grid; grid-template-columns: minmax(130px, 0.9fr) auto 1.7fr auto minmax(150px, 1.1fr);
+    gap: clamp(0.3rem, 1vw, 0.8rem); align-items: center; margin-top: var(--content-gap);
+}
+.arch-lanes { display: flex; flex-direction: column; gap: clamp(0.5rem, 1.5vh, 1rem); }
+.arch-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: clamp(0.55rem, 1.4vw, 1rem); }
+.arch-box h4 { font-size: var(--body-size); margin-bottom: 0.25em; }
+.arch-box p { font-size: var(--small-size); color: var(--ink-dim); line-height: 1.35; }
+.arch-box .lane-tag { display: inline-block; font-size: var(--small-size); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25em; }
+.arch-arrow { color: var(--accent); font-size: clamp(1rem, 2.2vw, 1.6rem); text-align: center; line-height: 1; }
+.arch-box.core { border-color: rgba(249,115,22,0.55); background: rgba(249,115,22,0.08); }
+.arch-box.lane-b { border-color: rgba(251,191,36,0.4); }
+.arch-box.lane-c { border-color: rgba(52,211,153,0.45); }
+@media (max-width: 900px) and (min-height: 501px) {
+    .arch { grid-template-columns: 1fr; }
+    .arch-arrow { transform: rotate(90deg); }
+}
+
+/* ── Diagram: pohon keputusan biaya ── */
+.dtree { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin-top: var(--content-gap); }
+.dt-root { align-self: center; min-width: min(60%, 480px); text-align: center; }
+.dt-connect { display: grid; grid-template-columns: 1fr 1fr; height: clamp(0.9rem, 2.6vh, 1.6rem); }
+.dt-connect span { justify-self: center; color: var(--accent); font-size: clamp(0.8rem, 1.8vw, 1.2rem); line-height: 1; }
+.dt-branches { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(0.6rem, 2vw, 1.4rem); align-items: stretch; }
+.dt-sub { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(0.4rem, 1vw, 0.8rem); margin-top: clamp(0.4rem, 1.2vh, 0.7rem); }
+.dt-sub .arch-box { background: var(--bg-soft); }
+.dt-big { font-family: 'Archivo Black', sans-serif; font-size: clamp(0.95rem, 2.2vw, 1.5rem); margin-top: 0.2em; }
+@media (max-width: 700px) and (min-height: 501px) {
+    .dt-branches, .dt-sub { grid-template-columns: 1fr; }
+    .dt-connect { grid-template-columns: 1fr; }
+    .dt-connect span:last-child { display: none; }
+}
+/* Layar pendek (landscape phone): kompres diagram supaya muat 1 viewport. */
+@media (max-height: 500px) {
+    .flow-node, .arch-box { padding: 0.3rem 0.45rem; border-radius: 8px; }
+    .flow-node small, .arch-box p { font-size: 0.54rem; line-height: 1.2; }
+    .arch-box h4, .flow-node b { font-size: 0.66rem; }
+    .flow-node .fn { font-size: 0.7rem; }
+    .dt-big { font-size: 0.78rem; }
+    .dt-connect { height: 0.6rem; }
+    .arch-lanes { gap: 0.35rem; }
+    .footnote { font-size: 0.52rem; margin-top: 0.35rem; }
+}
+
+/* Reveal animation — digate di belakang html.js supaya tanpa JS (atau saat
+   print ke PDF) seluruh konten tetap terlihat. */
+html.js .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.55s ease, transform 0.55s ease; }
+.slide.active .reveal { opacity: 1; transform: none; }
+.slide.active .reveal:nth-child(2), .slide.active .r2 { transition-delay: 0.08s; }
+.slide.active .reveal:nth-child(3), .slide.active .r3 { transition-delay: 0.16s; }
+.slide.active .reveal:nth-child(4), .slide.active .r4 { transition-delay: 0.24s; }
+.slide.active .reveal:nth-child(5), .slide.active .r5 { transition-delay: 0.32s; }
+.slide.active .reveal:nth-child(6), .slide.active .r6 { transition-delay: 0.40s; }
+
+/* Progress + nav */
+.progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); width: 0%; z-index: 60; transition: width 0.25s ease; }
+.slide-index {
+    position: fixed; bottom: clamp(0.6rem, 2vh, 1.2rem); right: clamp(0.8rem, 2vw, 1.4rem);
+    font-size: var(--small-size); color: var(--ink-dim); z-index: 60;
+    font-variant-numeric: tabular-nums; letter-spacing: 0.1em;
+}
+.keyboard-hint {
+    position: fixed; bottom: clamp(0.6rem, 2vh, 1.2rem); left: clamp(0.8rem, 2vw, 1.4rem);
+    font-size: var(--small-size); color: var(--ink-dim); z-index: 60; opacity: 0.7;
+}
+.footer-tag {
+    position: absolute; bottom: clamp(0.6rem, 2vh, 1.1rem); left: 50%; transform: translateX(-50%);
+    font-size: var(--small-size); color: var(--ink-dim); opacity: 0.55; letter-spacing: 0.12em; text-transform: uppercase;
+}
+
+@media print {
+    .reveal { opacity: 1 !important; transform: none !important; }
+    .slide { page-break-after: always; height: auto; min-height: 100vh; }
+    .progress, .slide-index, .keyboard-hint { display: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="slide-index" id="slideIndex">1 / 16</div>
+<div class="keyboard-hint">← → / spasi untuk navigasi</div>
+
+<main>
+
+<!-- 1 ▸ TITLE -->
+<section class="slide title-slide">
+  <div class="glow decorative"></div>
+  <div class="slide-content">
+    <div class="kicker reveal">Hulao × Meta WhatsApp Cloud API</div>
+    <h1 class="reveal">WhatsApp API <span class="accent">Resmi</span><br>untuk Hulao</h1>
+    <p class="lead reveal" style="margin-top:var(--element-gap)">Dua jalur integrasi WhatsApp di hulao: Baileys (unofficial) tetap tersedia, ditambah WhatsApp Business Platform resmi Meta — langkah implementasi, alur user, dan strategi pricing.</p>
+    <div class="badge-row reveal">
+      <span class="pill green">✓ Lolos Tech Provider Meta</span>
+      <span class="pill green">✓ Tahap 1 sudah live di staging</span>
+      <span class="pill orange">develop.hulao.id</span>
+    </div>
+  </div>
+  <div class="footer-tag">Agustus 2026 · Internal</div>
+</section>
+
+<!-- 2 ▸ KENAPA PINDAH -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Latar Belakang</div>
+    <h2 class="reveal">Kenapa menambah jalur API resmi?</h2>
+    <div class="grid">
+      <div class="card reveal r2"><span class="num">⚠︎</span><h3>Risiko Baileys</h3><p class="dim">Unofficial &amp; melanggar ToS WhatsApp — nomor bisa <strong class="bad">di-banned</strong> kapan saja, sesi sering putus &amp; minta scan QR ulang.</p></div>
+      <div class="card reveal r3"><span class="num">✓</span><h3>Stabil &amp; Legal</h3><p class="dim">Tidak tergantung HP user. Tanpa scan QR, tanpa putus sesi, uptime dijamin infrastruktur Meta.</p></div>
+      <div class="card reveal r4"><span class="num">$0</span><h3>Balasan AI Gratis</h3><p class="dim">Balasan ke chat customer dalam window 24 jam <strong class="good">tidak dikenai biaya Meta</strong> — core bisnis hulao (CS AI) justru makin murah.</p></div>
+      <div class="card hot reveal r5"><span class="num" style="color:#1c1006">🏆</span><h3>Modal Sudah di Tangan</h3><p class="dim">Hulao <strong>sudah lolos Tech Provider Meta</strong> — gerbang tersulit sudah terlewati. Tinggal eksekusi.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ▸ DIVIDER 1 -->
+<section class="slide divider">
+  <div class="slide-content">
+    <div class="giant reveal">01</div>
+    <h2 class="reveal">Langkah Implementasi</h2>
+    <p class="lead reveal">Teknis &amp; non-teknis — apa yang sudah selesai, apa yang tersisa.</p>
+  </div>
+</section>
+
+<!-- 4 ▸ STATUS HARI INI -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Teknis · Sudah Selesai</div>
+    <h2 class="reveal">Tahap 1 sudah berjalan di staging</h2>
+    <div class="grid">
+      <div class="card reveal r2"><h3 class="good">✓ Onboarding resmi</h3><p class="dim">Tombol "Hubungkan via Meta" (Embedded Signup) — user login Facebook, nomor langsung terhubung. Tanpa QR.</p></div>
+      <div class="card reveal r3"><h3 class="good">✓ Pipeline CS AI penuh</h3><p class="dim">Pesan masuk → AI balas otomatis → muncul realtime di inbox web. Soul, knowledge, flow, takeover CS — semua fitur existing jalan.</p></div>
+      <div class="card reveal r4"><h3 class="good">✓ Dual-run aman</h3><p class="dim">Baileys &amp; Cloud API hidup berdampingan per nomor — user lama tidak terganggu, migrasi bisa bertahap tanpa big-bang.</p></div>
+    </div>
+    <p class="footnote reveal r5">6 rilis kode di branch <b>develop</b> · teruji di <b>develop.hulao.id</b> · tinggal isi kredensial Meta App untuk uji end-to-end.</p>
+  </div>
+</section>
+
+<!-- 5 ▸ DIAGRAM ARSITEKTUR DUA JALUR -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Arsitektur</div>
+    <h2 class="reveal">Dua jalur, satu mesin hulao</h2>
+    <div class="arch reveal r2">
+      <div class="arch-box">
+        <h4>📱 Customer</h4>
+        <p>Chat WhatsApp seperti biasa — tidak tahu &amp; tidak peduli jalur mana yang dipakai seller.</p>
+      </div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-lanes">
+        <div class="arch-box lane-b">
+          <span class="lane-tag warn">Jalur Unofficial · Baileys</span>
+          <p>Scan QR dari HP · wa-service · broadcast &amp; follow-up free-text <b class="good">gratis</b> · risiko banned ditanggung seller</p>
+        </div>
+        <div class="arch-box lane-c">
+          <span class="lane-tag good">Jalur Resmi · Meta Cloud API</span>
+          <p>Embedded Signup tanpa QR · webhook resmi Meta · stabil &amp; legal · pesan template <b class="warn">berbayar</b></p>
+        </div>
+      </div>
+      <div class="arch-arrow">⇄</div>
+      <div class="arch-box core">
+        <h4>⚙️ Hulao Engine</h4>
+        <p>Soul + Model AI · saldo token · knowledge &amp; sales flow · takeover CS · inbox realtime — <b>identik untuk kedua jalur</b></p>
+      </div>
+    </div>
+    <p class="footnote reveal r3">Satu nomor hidup di satu jalur, tapi satu akun seller boleh punya nomor di kedua jalur sekaligus. Pindah jalur = onboarding ulang nomor, data kontak &amp; riwayat chat tetap utuh.</p>
+  </div>
+</section>
+
+<!-- 6 ▸ TEKNIS BERIKUTNYA -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Teknis · Berikutnya</div>
+    <h2 class="reveal">Sisa pekerjaan teknis (Tahap 2–3)</h2>
+    <div class="steps">
+      <div class="step reveal r2"><div><b>Manajemen Template Meta</b><small>UI buat &amp; submit template ke Meta, pantau status approve/reject — prasyarat semua pesan berbayar.</small></div></div>
+      <div class="step reveal r3"><div><b>Broadcast &amp; Follow-up via template</b><small>Broadcast dan follow-up otomatis wajib pakai template ter-approve (aturan Meta di luar window 24 jam).</small></div></div>
+      <div class="step reveal r4"><div><b>OTP resmi dari nomor platform</b><small>Login &amp; magic link dikirim via authentication template dari nomor WABA milik hulao sendiri.</small></div></div>
+      <div class="step reveal r5"><div><b>Media &amp; monitoring</b><small>Terima gambar/dokumen customer, kirim lampiran, plus monitoring kesehatan nomor &amp; kualitas rating.</small></div></div>
+    </div>
+    <p class="footnote reveal r6">Estimasi: Tahap 2 (template + broadcast + OTP) adalah blok kerja terbesar — dikerjakan setelah uji E2E Tahap 1 lolos.</p>
+  </div>
+</section>
+
+<!-- 6 ▸ NON-TEKNIS -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Non-Teknis · Critical Path</div>
+    <h2 class="reveal">Yang tidak bisa dikejar dengan koding</h2>
+    <div class="steps">
+      <div class="step reveal r2"><div><b>Verifikasi Bisnis Meta per seller <span class="pill yellow">mingguan</span></b><small>Tanpa verifikasi: limit ±250 pesan promosi/hari &amp; nama bisnis tidak permanen. Banyak seller kecil belum punya dokumen usaha.</small></div></div>
+      <div class="step reveal r3"><div><b>Metode pembayaran Meta per akun</b><small>Broadcast berbayar butuh kartu kredit terpasang di akun WABA seller — atau hulao yang menalangi &amp; menjual kredit (keputusan bisnis).</small></div></div>
+      <div class="step reveal r4"><div><b>Aturan opt-in &amp; kualitas</b><small>Promosi hanya ke kontak yang setuju dihubungi. Banyak yang blokir/report → rating turun → limit nomor dipotong Meta.</small></div></div>
+      <div class="step reveal r5"><div><b>Edukasi user &amp; syarat nomor</b><small>Nomor tidak bisa dipakai di aplikasi WA biasa lagi. Perlu panduan onboarding + ekspektasi yang jelas sebelum user mulai.</small></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ▸ ROLLOUT -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Strategi Peluncuran</div>
+    <h2 class="reveal">Rollout bertahap, bukan big-bang</h2>
+    <div class="grid">
+      <div class="card reveal r2"><span class="num">1</span><h3>Nomor Hulao Sendiri</h3><p class="dim">OTP &amp; notifikasi platform pindah ke API resmi duluan — sekaligus jadi kelinci percobaan pipeline end-to-end.</p></div>
+      <div class="card reveal r3"><span class="num">2</span><h3>Pilot 2–3 Seller</h3><p class="dim">Seller ber-badan usaha &amp; ber-volume — validasi onboarding, biaya nyata, dan kualitas layanan.</p></div>
+      <div class="card reveal r4"><span class="num">3</span><h3>Buka Umum</h3><p class="dim">Rilis ke semua user dengan checklist kesiapan (jenis nomor, verifikasi, consent) di UI.</p></div>
+      <div class="card reveal r5"><span class="num">4</span><h3>Dua Jalur Permanen</h3><p class="dim">Baileys tetap ditawarkan (hemat, fleksibel) berdampingan dengan jalur resmi (stabil, legal) — user memilih sesuai kebutuhan &amp; budget.</p></div>
+    </div>
+    <p class="footnote reveal r6">Catatan penting: satu nomor hanya bisa hidup di <b>satu</b> jalur (Baileys <i>atau</i> resmi), tapi satu akun boleh punya nomor di kedua jalur — sistem dual-run sudah dibangun sejak Tahap 1.</p>
+  </div>
+</section>
+
+<!-- 8 ▸ DIVIDER 2 -->
+<section class="slide divider">
+  <div class="slide-content">
+    <div class="giant reveal">02</div>
+    <h2 class="reveal">Flow User Baru</h2>
+    <p class="lead reveal">Bagaimana seller menghubungkan WhatsApp-nya ke hulao — versi resmi.</p>
+  </div>
+</section>
+
+<!-- 9 ▸ FLOW -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Pengalaman User · Jalur Resmi</div>
+    <h2 class="reveal">5 langkah, ± 5 menit, tanpa QR</h2>
+    <div class="flow-h reveal r2">
+      <div class="flow-node">
+        <span class="fn">01</span>
+        <b>Tambah WhatsApp</b>
+        <small>Di dashboard hulao, pilih jalur <span class="accent">Business API (resmi)</span>.</small>
+      </div>
+      <div class="flow-sep">➜</div>
+      <div class="flow-node">
+        <span class="fn">02</span>
+        <b>Login Facebook</b>
+        <small>Popup Embedded Signup resmi Meta — akun FB pengelola bisnis.</small>
+      </div>
+      <div class="flow-sep">➜</div>
+      <div class="flow-node">
+        <span class="fn">03</span>
+        <b>Wizard Meta</b>
+        <small>Pilih/buat bisnis + nomor WA, verifikasi OTP SMS dari Meta.</small>
+      </div>
+      <div class="flow-sep">➜</div>
+      <div class="flow-node done">
+        <span class="fn">04</span>
+        <b>Terhubung ✓</b>
+        <small>Webhook otomatis aktif, kartu sesi ber-badge <span class="good">Cloud API</span>. Tanpa QR, tanpa HP standby.</small>
+      </div>
+      <div class="flow-sep">➜</div>
+      <div class="flow-node done">
+        <span class="fn">05</span>
+        <b>AI siaga 24/7</b>
+        <small>Set Soul + Model — inbox, takeover CS, knowledge langsung jalan.</small>
+      </div>
+    </div>
+    <p class="footnote reveal r3">Jalur Baileys tetap seperti biasa: pilih "Scan QR" → pindai dari HP → selesai. Dua-duanya tersedia di dropdown yang sama.</p>
+  </div>
+</section>
+
+<!-- 10 ▸ SYARAT USER -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Prasyarat &amp; Batasan</div>
+    <h2 class="reveal">Yang perlu disiapkan seller</h2>
+    <div class="two-col">
+      <div class="card reveal r2">
+        <h3>Syarat masuk</h3>
+        <p class="dim" style="margin-top:0.4em">• Akun Facebook aktif yang mengelola bisnis<br>
+        • Nomor telepon yang <strong>tidak sedang dipakai</strong> aplikasi WhatsApp biasa (nomor baru / siap dimigrasi)<br>
+        • Nama bisnis untuk display name (direview Meta)</p>
+      </div>
+      <div class="card reveal r3">
+        <h3>Level akun</h3>
+        <p class="dim" style="margin-top:0.4em">
+        <span class="pill yellow">Belum verifikasi</span> CS AI jalan penuh · promosi dibatasi ±250 kontak/hari<br><br>
+        <span class="pill green">Terverifikasi Meta</span> limit promosi naik bertahap 1K → 10K → 100K/hari + centang &amp; nama permanen</p>
+      </div>
+    </div>
+    <p class="footnote reveal r4">Strategi produk: paket "CS AI dulu" untuk seller kecil tanpa dokumen usaha (inbound tak terbatas), fitur broadcast penuh menyusul setelah verifikasi.</p>
+  </div>
+</section>
+
+<!-- 11 ▸ DIVIDER 3 -->
+<section class="slide divider">
+  <div class="slide-content">
+    <div class="giant reveal">03</div>
+    <h2 class="reveal">Pricing</h2>
+    <p class="lead reveal">Kombinasi model token hulao yang sudah ada &amp; biaya per-pesan Meta.</p>
+  </div>
+</section>
+
+<!-- 12 ▸ CARA META MENAGIH -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Struktur Biaya Meta</div>
+    <h2 class="reveal">Meta menagih <span class="accent">per pesan template</span> — chat biasa gratis</h2>
+    <table class="reveal r2">
+      <thead><tr><th>Jenis pesan</th><th>Kapan dipakai</th><th class="r">Biaya Meta / pesan*</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td><b>Balasan dalam window 24 jam</b></td><td>CS AI &amp; CS manusia membalas chat customer</td><td class="r good"><b>GRATIS</b></td></tr>
+        <tr><td>Utility <span class="dim">(dalam window)</span></td><td>Konfirmasi order saat customer masih aktif chat</td><td class="r good"><b>GRATIS</b></td></tr>
+        <tr><td>Utility <span class="dim">(di luar window)</span></td><td>Follow-up order, notif pengiriman</td><td class="r">Rp 356,65</td></tr>
+        <tr><td>Authentication</td><td>OTP login</td><td class="r">Rp 356,65</td></tr>
+        <tr><td>Marketing</td><td>Broadcast promo</td><td class="r warn">Rp 586,33</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote reveal r3">*Rate card Meta Indonesia 2026, per pesan delivered (dokumen pricing internal). Lead dari Click-to-WhatsApp Ads dapat Free Entry Point gratis hingga 72 jam. Aturan "gratis dalam window" dikonfirmasi dokumentasi resmi Meta.</p>
+  </div>
+</section>
+
+<!-- ▸ DIAGRAM POHON KEPUTUSAN BIAYA -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Pricing · Kapan Bayar</div>
+    <h2 class="reveal">Satu pertanyaan: <span class="accent">customer chat ≤ 24 jam terakhir?</span></h2>
+    <div class="dtree">
+      <div class="arch-box dt-root reveal r2"><h4>💬 Seller mau kirim pesan ke customer…</h4></div>
+      <div class="dt-connect reveal r3"><span>▼</span><span>▼</span></div>
+      <div class="dt-branches">
+        <div class="arch-box lane-c reveal r3">
+          <span class="pill green">YA — masih dalam window</span>
+          <p style="margin-top:0.4em">Balas bebas: teks apa pun, oleh AI maupun CS manusia.</p>
+          <p class="dt-big good">Rp 0 dari Meta</p>
+          <p>Berlaku di <b>kedua jalur</b> — inilah kenapa bisnis inti hulao (CS AI) aman.</p>
+        </div>
+        <div class="arch-box lane-b reveal r4">
+          <span class="pill yellow">TIDAK — di luar window / mulai duluan</span>
+          <p style="margin-top:0.4em">Broadcast, follow-up lama, OTP — tergantung jalur nomornya:</p>
+          <div class="dt-sub">
+            <div class="arch-box">
+              <span class="lane-tag warn">Baileys</span>
+              <p>Free-text tetap bisa · <b class="good">Rp 0</b> · risiko banned</p>
+            </div>
+            <div class="arch-box">
+              <span class="lane-tag good">Resmi</span>
+              <p>Wajib template · <b>Kredit Pesan</b>: utility Rp 393 · OTP Rp 393 · marketing Rp 657*</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="footnote reveal r5">*Harga jual usulan — struktur margin lengkap di slide "Dua Dompet". Window di-reset setiap kali customer mengirim pesan baru.</p>
+  </div>
+</section>
+
+<!-- 13 ▸ EXISTING HULAO -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Pricing Hulao Saat Ini</div>
+    <h2 class="reveal">Model token yang sudah berjalan</h2>
+    <div class="two-col">
+      <div class="reveal r2">
+        <h3>Paket saldo token</h3>
+        <table>
+          <thead><tr><th>Paket</th><th class="r">Token</th><th class="r">Harga</th><th class="r">Rp/token</th></tr></thead>
+          <tbody>
+            <tr><td>Saldo Mini</td><td class="r">25.000</td><td class="r">Rp 100rb</td><td class="r">4,0</td></tr>
+            <tr><td>Saldo Sedang</td><td class="r">130.000</td><td class="r">Rp 390rb</td><td class="r">3,0</td></tr>
+            <tr><td>Saldo Besar</td><td class="r">250.000</td><td class="r">Rp 500rb</td><td class="r">2,0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="reveal r3">
+        <h3>Biaya per balasan AI</h3>
+        <table>
+          <thead><tr><th>Model</th><th class="r">Token</th><th class="r">≈ Rupiah*</th></tr></thead>
+          <tbody>
+            <tr><td>GPT-5 Mini</td><td class="r">7</td><td class="r">Rp 21</td></tr>
+            <tr><td>Gemini Flash</td><td class="r">21</td><td class="r">Rp 63</td></tr>
+            <tr><td>Claude Haiku</td><td class="r">41</td><td class="r">Rp 123</td></tr>
+            <tr><td>Claude Sonnet</td><td class="r">154</td><td class="r">Rp 462</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="footnote reveal r4">*Asumsi Rp 3/token (paket Sedang). Kabar baik: di API resmi, seluruh balasan AI ini <b class="good">tetap Rp 0 dari sisi Meta</b> — margin token AI tidak terganggu sama sekali.</p>
+  </div>
+</section>
+
+<!-- 14 ▸ USULAN DUA METER -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Usulan Kombinasi</div>
+    <h2 class="reveal">Dua dompet: <span class="accent">Token AI</span> + <span class="accent">Kredit Pesan Resmi</span></h2>
+    <div class="two-col">
+      <div class="card reveal r2">
+        <h3>💬 Token AI <span class="pill green">tidak berubah</span></h3>
+        <p class="dim" style="margin-top:0.4em">Untuk semua balasan AI &amp; fitur AI. Model existing dipertahankan — user tidak merasakan perubahan apa pun. Biaya Meta: Rp 0 (dalam window).</p>
+      </div>
+      <div class="card hot reveal r3">
+        <h3>📣 Kredit Pesan Resmi <span class="pill" style="border-color:rgba(28,16,6,.35);color:#1c1006">baru</span></h3>
+        <p class="dim" style="margin-top:0.4em">Untuk broadcast, follow-up di luar window, &amp; OTP. Harga jual = tarif Meta + PPN + margin hulao. Prabayar seperti token — tanpa kartu kredit seller.</p>
+      </div>
+    </div>
+    <table class="reveal r4">
+      <thead><tr><th>Kredit</th><th class="r">Modal Meta*</th><th class="r">Harga jual (final)</th><th class="r">Margin kotor</th></tr></thead>
+      <tbody>
+        <tr><td>Pesan Utility / follow-up</td><td class="r">Rp 356,65</td><td class="r"><b>Rp 393</b></td><td class="r good">± 10,2%</td></tr>
+        <tr><td>Pesan OTP (Authentication)</td><td class="r">Rp 356,65</td><td class="r"><b>Rp 393</b></td><td class="r good">± 10,2%</td></tr>
+        <tr><td>Pesan Marketing / broadcast</td><td class="r">Rp 586,33</td><td class="r"><b>Rp 657</b></td><td class="r good">± 12,1%</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote reveal r5">*Rate card Meta Indonesia 2026 per pesan delivered. Harga jual sesuai dokumen pricing (2026-08-21) — sudah diterapkan di sistem. Pesan dalam window &amp; Free Entry Point (Click-to-WhatsApp Ads, 72 jam) tetap gratis; monetisasi jalur gratis lewat platform fee/token.</p>
+  </div>
+</section>
+
+<!-- 15 ▸ SIMULASI -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Simulasi</div>
+    <h2 class="reveal">Contoh seller aktif — 1 bulan</h2>
+    <table class="reveal r2">
+      <thead><tr><th>Aktivitas</th><th class="r">Volume</th><th class="r">Dompet</th><th class="r">Biaya user</th><th class="r">Modal hulao**</th></tr></thead>
+      <tbody>
+        <tr><td>Chat customer dibalas AI (Haiku)</td><td class="r">500 balasan</td><td class="r">Token</td><td class="r">Rp 61.500</td><td class="r">API AI saja</td></tr>
+        <tr><td>Broadcast promo 2× ke 500 kontak</td><td class="r">1.000 pesan</td><td class="r">Kredit</td><td class="r">Rp 657.000</td><td class="r">± Rp 586.000</td></tr>
+        <tr><td>Follow-up order otomatis</td><td class="r">300 pesan</td><td class="r">Kredit</td><td class="r">Rp 117.900</td><td class="r">± Rp 107.000</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Total belanja seller</td><td class="r"></td><td class="r"></td><td class="r accent">± Rp 836rb</td><td class="r dim">margin kotor kredit ± Rp 82rb + margin token</td></tr>
+      </tfoot>
+    </table>
+    <div class="footnote reveal r3">
+      <b>Posisi dua jalur:</b> di jalur resmi broadcast &amp; follow-up berbayar per pesan (di Baileys tetap gratis — dengan risiko banned). Jalur resmi = paket "upgrade" untuk seller yang butuh legalitas, bebas banned, &amp; deliverability. CS AI murah di kedua jalur.<br>
+      **Belum termasuk biaya API AI (sudah tertutup margin token existing).
+    </div>
+  </div>
+</section>
+
+<!-- 16 ▸ KEPUTUSAN + NEXT -->
+<section class="slide">
+  <div class="slide-content">
+    <div class="kicker reveal">Butuh Keputusan Owner</div>
+    <h2 class="reveal">4 keputusan &amp; langkah 2 minggu ke depan</h2>
+    <div class="grid">
+      <div class="card reveal r2"><span class="num">A</span><h3>Model bayar template</h3><p class="dim">Hulao jual kredit prabayar (usul ✓) — atau seller pasang kartu kredit sendiri di Meta?</p></div>
+      <div class="card reveal r3"><span class="num">B</span><h3>Harga jual kredit ✓</h3><p class="dim">FINAL sesuai dokumen pricing: Rp 393 / 393 / 657 per pesan utility / OTP / marketing (sudah di sistem).</p></div>
+      <div class="card reveal r4"><span class="num">C</span><h3>Paket produk</h3><p class="dim">Tier "CS AI only" (tanpa verifikasi bisnis) vs tier penuh — gate fitur broadcast di level mana?</p></div>
+      <div class="card reveal r5"><span class="num">D</span><h3>Pilot seller</h3><p class="dim">Pilih 2–3 seller ber-badan usaha untuk pilot setelah nomor internal hulao live.</p></div>
+    </div>
+    <p class="footnote reveal r6"><b>Langsung setelah meeting ini:</b> isi kredensial Meta App di staging → uji end-to-end dengan test number → onboard nomor hulao sendiri untuk OTP → mulai Tahap 2 (template &amp; broadcast).</p>
+  </div>
+  <div class="footer-tag">develop.hulao.id · siap demo live</div>
+</section>
+
+</main>
+
+<script>
+// ─── Presentation controller: keyboard, wheel, touch, progress ───
+document.documentElement.classList.add('js');
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const progress = document.getElementById('progress');
+  const indexEl = document.getElementById('slideIndex');
+  let current = 0;
+  let wheelLock = false;
+
+  function goTo(i) {
+    current = Math.max(0, Math.min(slides.length - 1, i));
+    const target = slides[current];
+    target.scrollIntoView({ behavior: 'smooth' });
+    // Jaring pengaman: kalau smooth scroll dibatalkan/beku (snap agresif,
+    // tab background, dsb.), lompat instan supaya navigasi tak macet.
+    // 'instant' eksplisit — scrollIntoView() polos ikut CSS scroll-behavior
+    // smooth sehingga ikut beku.
+    setTimeout(() => {
+      if (Math.abs(target.getBoundingClientRect().top) > 60) {
+        target.scrollIntoView({ behavior: 'instant' })
+      }
+    }, 800);
+  }
+
+  function updateUi() {
+    progress.style.width = ((current + 1) / slides.length) * 100 + '%';
+    indexEl.textContent = (current + 1) + ' / ' + slides.length;
+  }
+
+  // Tandai slide aktif (untuk animasi reveal) via IntersectionObserver.
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('active');
+        current = slides.indexOf(entry.target);
+        updateUi();
+      }
+    });
+  }, { threshold: 0.55 });
+  slides.forEach((s) => io.observe(s));
+
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowDown', 'ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+  });
+
+  // Wheel: debounce supaya satu gulir = satu slide (scroll-snap handle sisanya).
+  document.addEventListener('wheel', (e) => {
+    if (wheelLock) return;
+    if (Math.abs(e.deltaY) < 18) return;
+    wheelLock = true;
+    goTo(current + (e.deltaY > 0 ? 1 : -1));
+    setTimeout(() => { wheelLock = false; }, 650);
+  }, { passive: true });
+
+  // Touch swipe vertikal.
+  let touchY = null;
+  document.addEventListener('touchstart', (e) => { touchY = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (touchY === null) return;
+    const dy = touchY - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 45) goTo(current + (dy > 0 ? 1 : -1));
+    touchY = null;
+  }, { passive: true });
+
+  updateUi();
+  slides[0].classList.add('active');
+})();
+</script>
+</body>
+</html>

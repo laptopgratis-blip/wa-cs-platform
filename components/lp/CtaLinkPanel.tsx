@@ -58,32 +58,32 @@ export function CtaLinkPanel({ html, onChange }: Props) {
   }
 
   return (
-    <div className="border-b border-warm-200 bg-card">
+    <div className="border-warm-200 bg-card border-b">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-2 text-left hover:bg-warm-50"
+        className="hover:bg-warm-50 flex w-full items-center justify-between px-4 py-2 text-left"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
-          <Link2 className="size-4 text-primary-500" />
-          <span className="font-display text-sm font-bold text-warm-900">
+          <Link2 className="text-primary-500 size-4" />
+          <span className="font-display text-warm-900 text-sm font-semibold">
             Link Tombol Default
           </span>
-          <span className="text-[10px] text-warm-500">
+          <span className="text-warm-500 text-xs">
             {nonWaCount} tombol non-WA terdeteksi
           </span>
         </div>
         {open ? (
-          <ChevronUp className="size-4 text-warm-500" />
+          <ChevronUp className="text-warm-500 size-4" />
         ) : (
-          <ChevronDown className="size-4 text-warm-500" />
+          <ChevronDown className="text-warm-500 size-4" />
         )}
       </button>
 
       {open && (
-        <div className="space-y-2 px-4 pb-3 pt-1">
+        <div className="space-y-2 px-4 pt-1 pb-3">
           <div className="space-y-1">
-            <label htmlFor="cta-default-url" className="text-[11px] text-warm-700">
+            <label htmlFor="cta-default-url" className="text-warm-700 text-xs">
               URL tujuan (checkout / daftar / info)
             </label>
             <Input
@@ -93,7 +93,7 @@ export function CtaLinkPanel({ html, onChange }: Props) {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               maxLength={500}
-              className="h-9 font-mono text-[11px]"
+              className="h-9 font-mono text-xs"
             />
           </div>
           <Button
@@ -101,11 +101,11 @@ export function CtaLinkPanel({ html, onChange }: Props) {
             type="button"
             onClick={handleApply}
             disabled={!url.trim() || nonWaCount === 0}
-            className="bg-primary-500 text-xs text-white hover:bg-primary-600"
+            className="text-xs"
           >
             Terapkan ke {nonWaCount} tombol non-WA
           </Button>
-          <p className="text-[10px] leading-relaxed text-warm-500">
+          <p className="text-warm-500 text-xs leading-relaxed">
             Semua tombol/link yang BUKAN WhatsApp akan diarahkan ke URL ini,
             otomatis dibuka di tab baru. Tombol WhatsApp tidak terpengaruh.
             Untuk edit per-tombol, klik tombolnya di preview di bawah.

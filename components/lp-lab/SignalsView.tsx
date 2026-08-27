@@ -2,13 +2,20 @@
 
 // Signals tab — top customer concerns dari pesan WA, dengan sample quote.
 // Manual refresh button supaya user bisa trigger recompute.
-import { Loader2, MessageCircleWarning, RefreshCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  Loader2,
+  MessageCircleWarning,
+  RefreshCw,
+} from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { TONES, type Tone } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Signal {
   category: string
@@ -21,13 +28,14 @@ interface Props {
   lpId: string
 }
 
-const CATEGORY_COLOR: Record<string, string> = {
-  harga_mahal: 'bg-rose-100 text-rose-800',
-  gak_paham: 'bg-amber-100 text-amber-800',
-  gak_percaya: 'bg-purple-100 text-purple-800',
-  ragu_kualitas: 'bg-orange-100 text-orange-800',
-  gak_yakin: 'bg-blue-100 text-blue-800',
-  cocok_kebutuhan: 'bg-emerald-100 text-emerald-800',
+// Kategori signal (enum backend) → tone registry lib/ui-tones.ts.
+const CATEGORY_TONE: Record<string, Tone> = {
+  harga_mahal: 'danger',
+  gak_paham: 'warning',
+  gak_percaya: 'danger',
+  ragu_kualitas: 'warning',
+  gak_yakin: 'info',
+  cocok_kebutuhan: 'success',
 }
 
 function formatRelative(iso: string | null): string {
@@ -82,9 +90,7 @@ export function SignalsView({ lpId }: Props) {
       )
       const j = await res.json()
       if (j.success) {
-        toast.success(
-          `Recompute: ${j.data.messagesScanned} pesan di-scan`,
-        )
+        toast.success(`Recompute: ${j.data.messagesScanned} pesan di-scan`)
         await load()
       } else {
         toast.error(j.error ?? 'Gagal recompute')
@@ -97,20 +103,22 @@ export function SignalsView({ lpId }: Props) {
   }
 
   const totalSignals = signals.reduce((s, sig) => s + sig.count, 0)
-  const sortedNonZero = signals.filter((s) => s.count > 0).sort((a, b) => b.count - a.count)
+  const sortedNonZero = signals
+    .filter((s) => s.count > 0)
+    .sort((a, b) => b.count - a.count)
 
   return (
     <Card>
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <MessageCircleWarning className="size-4 text-warm-600" />
+            <MessageCircleWarning className="text-warm-600 size-4" />
             <h3 className="font-display text-sm font-semibold">
               Customer Concerns dari Chat WA
             </h3>
           </div>
           <div className="flex items-center gap-2">
-            <div className="flex gap-0.5 rounded-md border border-warm-300 bg-white p-0.5">
+            <div className="border-warm-300 bg-card flex gap-0.5 rounded-md border p-0.5">
               {[7, 30, 90].map((p) => (
                 <button
                   key={p}
@@ -145,25 +153,35 @@ export function SignalsView({ lpId }: Props) {
           </div>
         </div>
 
-        <p className="text-xs text-warm-500">
+        <p className="text-warm-500 text-xs">
           Signal di-bucketing dari pesan customer di {period} hari terakhir.
           Total {totalSignals} pesan match keyword. Update terakhir:{' '}
           {formatRelative(computedAt)}.
         </p>
-        <p className="text-[11px] text-amber-700">
-          ⚠️ Catatan: scope match adalah SEMUA chat user owner, belum filter
-          per-LP precisely (Phase 3 limitation). Akurasi naik kalau pakai UTM
-          source di link CTA tiap LP.
+        <p
+          className={cn(
+            'flex items-start gap-1.5 rounded-md border p-2 text-xs',
+            TONES.warning.bg,
+            TONES.warning.border,
+            TONES.warning.text,
+          )}
+        >
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            Catatan: scope match adalah SEMUA chat user owner, belum filter
+            per-LP precisely (Phase 3 limitation). Akurasi naik kalau pakai UTM
+            source di link CTA tiap LP.
+          </span>
         </p>
 
         {loading && (
-          <div className="flex items-center justify-center py-8 text-warm-500">
+          <div className="text-warm-500 flex items-center justify-center py-8">
             <Loader2 className="mr-2 size-4 animate-spin" /> Memuat…
           </div>
         )}
 
         {!loading && sortedNonZero.length === 0 && (
-          <div className="rounded border border-dashed border-warm-200 bg-warm-50 p-4 text-center text-xs text-warm-500">
+          <div className="border-warm-200 bg-warm-50 text-warm-500 rounded border border-dashed p-4 text-center text-xs">
             Belum ada signal kecocokan keyword. Bisa karena: (1) belum ada chat
             customer dalam {period} hari ini, atau (2) keyword bucket tidak
             cover bahasa yang dipakai customer.
@@ -175,26 +193,23 @@ export function SignalsView({ lpId }: Props) {
             {sortedNonZero.map((s) => (
               <div
                 key={s.category}
-                className="rounded-lg border border-warm-200 p-3"
+                className="border-warm-200 rounded-lg border p-3"
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <Badge
-                    className={`${
-                      CATEGORY_COLOR[s.category] ?? 'bg-warm-100 text-warm-800'
-                    } hover:${CATEGORY_COLOR[s.category] ?? 'bg-warm-100'}`}
-                  >
-                    {s.label}
-                  </Badge>
-                  <span className="text-sm font-semibold tabular-nums text-warm-900">
+                  <StatusBadge
+                    tone={CATEGORY_TONE[s.category] ?? 'neutral'}
+                    label={s.label}
+                  />
+                  <span className="text-warm-900 text-sm font-semibold tabular-nums">
                     {s.count} pesan
                   </span>
                 </div>
                 {s.samples.length > 0 && (
-                  <ul className="space-y-1 text-xs text-warm-700">
+                  <ul className="text-warm-700 space-y-1 text-xs">
                     {s.samples.map((q, i) => (
                       <li
                         key={i}
-                        className="border-l-2 border-warm-300 pl-2 italic text-warm-600"
+                        className="border-warm-300 text-warm-600 border-l-2 pl-2 italic"
                       >
                         &ldquo;{q}&rdquo;
                       </li>

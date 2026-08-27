@@ -4,14 +4,22 @@
 // Click tanggal → list piece di hari itu, dengan opsi unschedule.
 //
 // Bukan auto-publish — purely planning view.
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Loader2,
+  X,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { contentPieceStatusMeta } from '@/lib/status'
 
 interface Piece {
   id: string
@@ -31,20 +39,15 @@ const CHANNEL_LABEL: Record<string, string> = {
   TIKTOK: 'TikTok',
 }
 
+// Dot per channel — palet kategorikal chart (var(--chart-N)), bukan hue
+// dekoratif lepas. TikTok pakai warm sebagai slot ke-6.
 const CHANNEL_DOT: Record<string, string> = {
-  WA_STATUS: 'bg-emerald-500',
-  IG_STORY: 'bg-purple-500',
-  IG_POST: 'bg-pink-500',
-  IG_CAROUSEL: 'bg-blue-500',
-  IG_REELS: 'bg-rose-500',
+  WA_STATUS: 'bg-chart-1',
+  IG_STORY: 'bg-chart-3',
+  IG_POST: 'bg-chart-4',
+  IG_CAROUSEL: 'bg-chart-2',
+  IG_REELS: 'bg-chart-5',
   TIKTOK: 'bg-warm-700',
-}
-
-const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: 'Draft', cls: 'bg-warm-100 text-warm-700' },
-  READY: { label: 'Siap post', cls: 'bg-blue-100 text-blue-700' },
-  POSTED: { label: 'Sudah post', cls: 'bg-emerald-100 text-emerald-700' },
-  ARCHIVED: { label: 'Arsip', cls: 'bg-rose-100 text-rose-700' },
 }
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
@@ -74,7 +77,10 @@ export function CalendarTab() {
 
   // Build month grid: 6 rows × 7 cols. Cells include trailing days from prev
   // month (untuk supaya senin/minggu pertama align) + leading days of next month.
-  const grid = useMemo(() => buildMonthGrid(cursor.year, cursor.month), [cursor])
+  const grid = useMemo(
+    () => buildMonthGrid(cursor.year, cursor.month),
+    [cursor],
+  )
 
   // Fetch pieces untuk window ±1 month dari grid (covers prev/next month leak).
   useEffect(() => {
@@ -108,7 +114,9 @@ export function CalendarTab() {
     return map
   }, [pieces])
 
-  const selectedPieces = selectedDate ? (piecesByDate.get(selectedDate) ?? []) : []
+  const selectedPieces = selectedDate
+    ? (piecesByDate.get(selectedDate) ?? [])
+    : []
 
   function shiftMonth(delta: number) {
     setCursor((c) => {
@@ -149,7 +157,7 @@ export function CalendarTab() {
           <Button size="sm" variant="outline" onClick={() => shiftMonth(-1)}>
             <ChevronLeft className="size-3.5" />
           </Button>
-          <h2 className="font-display text-lg font-bold text-warm-900">
+          <h2 className="font-display text-warm-900 text-xl font-semibold">
             {MONTH_LABELS[cursor.month]} {cursor.year}
           </h2>
           <Button size="sm" variant="outline" onClick={() => shiftMonth(1)}>
@@ -161,9 +169,9 @@ export function CalendarTab() {
             Hari ini
           </Button>
           {loading && (
-            <span className="flex items-center gap-1 text-warm-500">
-              <Loader2 className="size-3 animate-spin" />
-              Loading
+            <span className="text-warm-500 flex items-center gap-1">
+              <Loader2 className="size-4 animate-spin" />
+              Memuat…
             </span>
           )}
         </div>
@@ -172,11 +180,11 @@ export function CalendarTab() {
       {/* Grid */}
       <Card>
         <CardContent className="p-3">
-          <div className="grid grid-cols-7 gap-px overflow-hidden rounded bg-warm-200 text-xs">
+          <div className="bg-warm-200 grid grid-cols-7 gap-px overflow-hidden rounded text-xs">
             {DAY_LABELS.map((d) => (
               <div
                 key={d}
-                className="bg-warm-50 py-2 text-center font-semibold uppercase text-warm-500"
+                className="bg-warm-50 text-warm-500 py-2 text-center font-semibold uppercase"
               >
                 {d}
               </div>
@@ -193,12 +201,12 @@ export function CalendarTab() {
                   onClick={() => setSelectedDate(cell.iso)}
                   className={`flex min-h-[72px] flex-col gap-1 bg-white p-1.5 text-left transition-colors ${
                     !inMonth ? 'text-warm-300' : 'text-warm-800'
-                  } ${isSelected ? 'ring-2 ring-primary-500' : ''} ${
+                  } ${isSelected ? 'ring-primary-500 ring-2' : ''} ${
                     isToday ? 'bg-primary-50' : ''
                   } hover:bg-warm-50`}
                 >
                   <span
-                    className={`text-[11px] font-semibold ${
+                    className={`text-xs font-semibold ${
                       isToday ? 'text-primary-700' : ''
                     }`}
                   >
@@ -213,7 +221,7 @@ export function CalendarTab() {
                       />
                     ))}
                     {dayPieces.length > 6 && (
-                      <span className="text-[9px] text-warm-500">
+                      <span className="text-warm-500 text-xs">
                         +{dayPieces.length - 6}
                       </span>
                     )}
@@ -226,7 +234,7 @@ export function CalendarTab() {
       </Card>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-[11px] text-warm-600">
+      <div className="text-warm-600 flex flex-wrap gap-3 text-xs">
         {Object.entries(CHANNEL_LABEL).map(([k, v]) => (
           <span key={k} className="flex items-center gap-1.5">
             <span className={`size-2 rounded-full ${CHANNEL_DOT[k]}`} />
@@ -239,7 +247,7 @@ export function CalendarTab() {
       {selectedDate && (
         <Card>
           <CardContent className="space-y-3 p-4">
-            <h3 className="text-sm font-semibold text-warm-900">
+            <h3 className="text-warm-900 text-sm font-semibold">
               {new Date(selectedDate).toLocaleDateString('id-ID', {
                 day: 'numeric',
                 month: 'long',
@@ -247,35 +255,36 @@ export function CalendarTab() {
                 weekday: 'long',
               })}
               {selectedPieces.length > 0 && (
-                <span className="ml-2 text-warm-500">
+                <span className="text-warm-500 ml-2">
                   ({selectedPieces.length} konten)
                 </span>
               )}
             </h3>
             {selectedPieces.length === 0 ? (
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Belum ada konten dijadwalkan hari ini. Schedule dari Library.
               </p>
             ) : (
               <div className="space-y-2">
                 {selectedPieces.map((p) => {
-                  const status = STATUS_LABEL[p.status]
+                  const status = contentPieceStatusMeta[p.status]
                   return (
                     <div
                       key={p.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-warm-200 bg-warm-50 p-3"
+                      className="border-warm-200 bg-warm-50 flex items-center justify-between gap-3 rounded-md border p-3"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="mb-0.5 flex flex-wrap gap-1">
-                          <Badge className="bg-warm-100 text-[10px] text-warm-700">
+                          <Badge className="bg-warm-100 text-warm-700 text-xs">
                             {CHANNEL_LABEL[p.channel] ?? p.channel}
                           </Badge>
                           {status && (
-                            <Badge className={`text-[10px] ${status.cls}`}>
-                              {status.label}
-                            </Badge>
+                            <StatusBadge
+                              tone={status.tone}
+                              label={status.label}
+                            />
                           )}
-                          <span className="text-[10px] text-warm-500">
+                          <span className="text-warm-500 text-xs">
                             {new Date(p.scheduledFor).toLocaleTimeString(
                               'id-ID',
                               {
@@ -285,7 +294,7 @@ export function CalendarTab() {
                             )}
                           </span>
                         </div>
-                        <p className="truncate text-sm font-medium text-warm-900">
+                        <p className="text-warm-900 truncate text-sm font-medium">
                           {p.title}
                         </p>
                       </div>
@@ -301,7 +310,7 @@ export function CalendarTab() {
                           onClick={() => unschedule(p.id)}
                           title="Hapus schedule"
                         >
-                          ✕
+                          <X className="size-3.5" />
                         </Button>
                       </div>
                     </div>

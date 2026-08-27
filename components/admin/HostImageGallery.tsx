@@ -15,16 +15,20 @@ import {
   CheckCircle2,
   Download,
   ImagePlus,
+  Lightbulb,
   Loader2,
+  Paperclip,
   Sparkles,
   Star,
   Trash2,
   Upload,
+  Zap,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 
 interface ImageVariant {
   id: string
@@ -126,7 +130,9 @@ export function HostImageGallery({
       )
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!json.success) throw new Error(json.error ?? 'Upload gagal')
-      toast.success('Gambar di-upload sebagai kandidat. Klik "Pakai ini" untuk aktifkan.')
+      toast.success(
+        'Gambar di-upload sebagai kandidat. Klik "Pakai ini" untuk aktifkan.',
+      )
       await refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -217,9 +223,9 @@ export function HostImageGallery({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold">Galeri Gambar Host</h3>
-          <p className="text-[11px] text-muted-foreground">
-            Generate (opsi tanpa produk) → download → edit ukuran produk di luar →
-            upload → <strong>Pakai ini</strong>.
+          <p className="text-muted-foreground text-xs">
+            Generate (opsi tanpa produk) → download → edit ukuran produk di luar
+            → upload → <strong>Pakai ini</strong>.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -230,7 +236,7 @@ export function HostImageGallery({
             onClick={() => setShowGen((s) => !s)}
             className="h-8"
           >
-            <Sparkles className="mr-1.5 h-3.5 w-3.5 text-orange-500" /> Generate
+            <Sparkles className="text-primary-500 mr-1.5 size-3.5" /> Generate
           </Button>
           <input
             ref={uploadRef}
@@ -251,9 +257,9 @@ export function HostImageGallery({
             className="h-8"
           >
             {uploading ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             ) : (
-              <Upload className="mr-1.5 h-3.5 w-3.5" />
+              <Upload className="mr-1.5 size-3.5" />
             )}
             Upload edit
           </Button>
@@ -262,17 +268,17 @@ export function HostImageGallery({
 
       {/* Generate panel */}
       {showGen ? (
-        <div className="rounded-lg border border-warm-200 bg-warm-50/50 p-3 space-y-2">
+        <div className="border-warm-200 bg-warm-50/50 space-y-2 rounded-lg border p-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-warm-500">
+            <span className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
               Produk:
             </span>
             <button
               type="button"
               onClick={() => setWithProduct(false)}
-              className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+              className={`rounded-full px-2.5 py-1 text-xs transition ${
                 !withProduct
-                  ? 'bg-orange-500 text-white'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -281,9 +287,9 @@ export function HostImageGallery({
             <button
               type="button"
               onClick={() => setWithProduct(true)}
-              className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+              className={`rounded-full px-2.5 py-1 text-xs transition ${
                 withProduct
-                  ? 'bg-orange-500 text-white'
+                  ? 'bg-primary-500 text-white'
                   : 'bg-warm-100 text-warm-700 hover:bg-warm-200'
               }`}
             >
@@ -296,12 +302,15 @@ export function HostImageGallery({
             rows={5}
             spellCheck={false}
             placeholder="Prompt gambar untuk Gemini (editable)…"
-            className="w-full rounded-md border border-warm-200 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="border-warm-200 focus:ring-primary-500 w-full rounded-md border bg-white px-3 py-2 font-mono text-xs leading-relaxed focus:ring-2 focus:outline-none"
           />
-          <p className="text-[10px] text-warm-500">
-            {withProduct
-              ? '💡 Foto produk dikirim sebagai referensi — ukuran bisa kurang presisi.'
-              : '💡 Host tampil tangan kosong. Composite produk ukuran pas di luar lalu upload.'}
+          <p className="text-warm-500 flex items-start gap-1.5 text-xs">
+            <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span>
+              {withProduct
+                ? 'Foto produk dikirim sebagai referensi — ukuran bisa kurang presisi.'
+                : 'Host tampil tangan kosong. Composite produk ukuran pas di luar lalu upload.'}
+            </span>
           </p>
           <div className="flex justify-end">
             <Button
@@ -309,15 +318,14 @@ export function HostImageGallery({
               size="sm"
               onClick={handleGenerate}
               disabled={generating}
-              className="bg-orange-600 hover:bg-orange-700"
             >
               {generating ? (
                 <>
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Generate…
+                  <Loader2 className="mr-1.5 size-4 animate-spin" /> Generate…
                 </>
               ) : (
                 <>
-                  <ImagePlus className="mr-1.5 h-4 w-4" /> Generate kandidat
+                  <ImagePlus className="mr-1.5 size-4" /> Generate kandidat
                 </>
               )}
             </Button>
@@ -327,12 +335,13 @@ export function HostImageGallery({
 
       {/* Grid kandidat */}
       {variants === null ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Memuat galeri…
+        <div className="text-muted-foreground flex items-center gap-2 text-xs">
+          <Loader2 className="size-4 animate-spin" /> Memuat galeri…
         </div>
       ) : variants.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-warm-300 bg-warm-50/60 p-4 text-center text-xs text-warm-600">
-          Belum ada gambar. Klik <strong>Generate</strong> atau <strong>Upload edit</strong>.
+        <p className="border-warm-300 bg-warm-50/60 text-warm-600 rounded-lg border border-dashed p-4 text-center text-xs">
+          Belum ada gambar. Klik <strong>Generate</strong> atau{' '}
+          <strong>Upload edit</strong>.
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -343,34 +352,48 @@ export function HostImageGallery({
               <div
                 key={v.id}
                 className={`overflow-hidden rounded-lg border bg-white shadow-sm ${
-                  isActive ? 'border-orange-500 ring-2 ring-orange-200' : 'border-warm-200'
+                  isActive
+                    ? 'border-primary-500 ring-primary-200 ring-2'
+                    : 'border-warm-200'
                 }`}
               >
-                <div className="relative aspect-[9/16] bg-warm-100">
+                <div className="bg-warm-100 relative aspect-[9/16]">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={v.url} alt={v.label ?? 'kandidat'} className="h-full w-full object-cover" />
+                  <img
+                    src={v.url}
+                    alt={v.label ?? 'kandidat'}
+                    className="h-full w-full object-cover"
+                  />
                   {isActive ? (
-                    <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                      <Star className="h-2.5 w-2.5 fill-white" /> AKTIF
+                    <span className="bg-primary-500 absolute top-1.5 left-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-bold text-white">
+                      <Star className="size-2.5 fill-white" /> AKTIF
                     </span>
                   ) : null}
-                  <span className="absolute right-1.5 top-1.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[9px] text-white">
-                    {v.source === 'UPLOADED' ? '📎 upload' : '⚡ generate'}
+                  <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-0.5 text-xs text-white">
+                    {v.source === 'UPLOADED' ? (
+                      <>
+                        <Paperclip className="size-2.5" aria-hidden /> upload
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="size-2.5" aria-hidden /> generate
+                      </>
+                    )}
                   </span>
                   {busy ? (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                      <Loader2 className="h-6 w-6 animate-spin text-white" />
+                      <Loader2 className="size-6 animate-spin text-white" />
                     </div>
                   ) : null}
                 </div>
                 <div className="space-y-1.5 p-2">
                   {v.label ? (
-                    <p className="truncate text-[10px] text-warm-600">{v.label}</p>
+                    <p className="text-warm-600 truncate text-xs">{v.label}</p>
                   ) : null}
                   <div className="flex items-center gap-1">
                     {isActive ? (
-                      <span className="inline-flex flex-1 items-center justify-center gap-1 rounded-md bg-orange-50 py-1 text-[10px] font-medium text-orange-700">
-                        <CheckCircle2 className="h-3 w-3" /> Dipakai
+                      <span className="bg-primary-50 text-primary-700 inline-flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-xs font-medium">
+                        <CheckCircle2 className="size-3" /> Dipakai
                       </span>
                     ) : (
                       <Button
@@ -379,7 +402,7 @@ export function HostImageGallery({
                         variant="outline"
                         onClick={() => handleActivate(v)}
                         disabled={busy}
-                        className="h-7 flex-1 px-1.5 text-[10px]"
+                        className="h-7 flex-1 px-1.5 text-xs"
                       >
                         Pakai ini
                       </Button>
@@ -391,9 +414,9 @@ export function HostImageGallery({
                       onClick={() => handleDownload(v)}
                       disabled={busy}
                       title="Download"
-                      className="h-7 w-7 text-warm-500 hover:text-orange-600"
+                      className="text-warm-500 hover:text-primary-600 size-7"
                     >
-                      <Download className="h-3.5 w-3.5" />
+                      <Download className="size-3.5" />
                     </Button>
                     {!isActive ? (
                       <Button
@@ -403,9 +426,9 @@ export function HostImageGallery({
                         onClick={() => handleDelete(v)}
                         disabled={busy}
                         title="Hapus"
-                        className="h-7 w-7 text-warm-400 hover:text-red-600"
+                        className="text-warm-400 hover:text-destructive size-7"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="size-3.5" />
                       </Button>
                     ) : null}
                   </div>

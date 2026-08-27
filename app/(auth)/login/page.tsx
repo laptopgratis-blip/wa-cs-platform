@@ -2,6 +2,8 @@
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
+import { landingPathForRole } from '@/lib/auth-landing'
+
 import { LoginForm } from '@/components/auth/LoginForm'
 import {
   Card,
@@ -15,7 +17,9 @@ import { getOtpChannelMode } from '@/lib/settings'
 
 export default async function LoginPage() {
   const session = await getServerSession(authOptions)
-  if (session) redirect('/dashboard')
+  // Sudah login → langsung ke halaman sesuai role (admin jangan mampir
+  // ke dashboard user dulu).
+  if (session) redirect(landingPathForRole(session.user.role))
 
   const googleEnabled = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
@@ -23,9 +27,9 @@ export default async function LoginPage() {
   const otpChannelMode = await getOtpChannelMode()
 
   return (
-    <Card className="rounded-xl border-warm-200 shadow-lg">
+    <Card>
       <CardHeader className="space-y-1.5">
-        <CardTitle className="font-display text-2xl font-extrabold text-warm-900 dark:text-warm-50">
+        <CardTitle className="font-display text-warm-900 text-2xl font-bold">
           Masuk
         </CardTitle>
         <CardDescription className="text-warm-500">
@@ -33,7 +37,10 @@ export default async function LoginPage() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <LoginForm googleEnabled={googleEnabled} otpChannelMode={otpChannelMode} />
+        <LoginForm
+          googleEnabled={googleEnabled}
+          otpChannelMode={otpChannelMode}
+        />
       </CardContent>
     </Card>
   )

@@ -14,7 +14,10 @@ interface ManualBuyButtonProps {
   packageName: string
 }
 
-export function ManualBuyButton({ packageId, packageName }: ManualBuyButtonProps) {
+export function ManualBuyButton({
+  packageId,
+  packageName,
+}: ManualBuyButtonProps) {
   const router = useRouter()
   const [isLoading, setLoading] = useState(false)
 
@@ -49,7 +52,7 @@ export function ManualBuyButton({ packageId, packageName }: ManualBuyButtonProps
       onClick={handleBuy}
       disabled={isLoading}
       variant="outline"
-      className="w-full rounded-full border-warm-200 bg-card font-medium text-warm-700 hover:bg-warm-50"
+      className="w-full rounded-full"
       aria-label={`Transfer manual untuk paket ${packageName}`}
     >
       {isLoading ? (

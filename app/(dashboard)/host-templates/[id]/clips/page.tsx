@@ -4,6 +4,7 @@
 import { notFound } from 'next/navigation'
 
 import { ClipLibraryBoard } from '@/components/admin/ClipLibraryBoard'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 
@@ -36,7 +37,7 @@ export default async function HostClipsPage({
   }
 
   return (
-    <div className="mx-auto h-full max-w-5xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <ClipLibraryBoard
         hostId={host.id}
         hostName={host.name}
@@ -46,6 +47,6 @@ export default async function HostClipsPage({
         isAdmin={session.user.role === 'ADMIN'}
         backHref={`/host-templates/${host.id}`}
       />
-    </div>
+    </PageContainer>
   )
 }

@@ -49,6 +49,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format-time'
 import { formatNumber, formatRupiah } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
 
 export interface BankMutationIntegrationView {
   id: string
@@ -208,12 +209,18 @@ export function BankMutationClient({ initial }: Props) {
           onSaved={async () => {
             setSetupOpen(false)
             await refreshIntegration()
-            toast.success('Integration tersimpan. Klik Sync untuk test koneksi.')
+            toast.success(
+              'Integration tersimpan. Klik Sync untuk test koneksi.',
+            )
           }}
         />
       ) : (
         <>
-          <StatusCard integration={integration} onSync={handleSync} syncing={syncing} />
+          <StatusCard
+            integration={integration}
+            onSync={handleSync}
+            syncing={syncing}
+          />
           <SettingsCard
             integration={integration}
             onChange={handleSettingChange}
@@ -233,14 +240,14 @@ export function BankMutationClient({ initial }: Props) {
               onClick={() => setConfirmDisconnect(true)}
               className="text-destructive hover:text-destructive"
             >
-              <Trash2 className="h-4 w-4 mr-1" /> Disconnect & Hapus
+              <Trash2 className="mr-1 size-4" /> Disconnect & Hapus
             </Button>
           </div>
         </>
       )}
 
       <Dialog open={setupOpen} onOpenChange={setSetupOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Setup Akun BCA</DialogTitle>
             <DialogDescription>
@@ -286,16 +293,28 @@ export function BankMutationClient({ initial }: Props) {
 
 function BetaDisclaimerBanner() {
   return (
-    <Alert variant="destructive" className="border-orange-400 bg-orange-50">
-      <ShieldAlert className="h-5 w-5" />
-      <AlertTitle className="text-orange-900">Fitur BETA — Pakai dengan Risiko</AlertTitle>
-      <AlertDescription className="text-orange-900/90">
+    <Alert variant="destructive" className="border-primary-400 bg-primary-50">
+      <ShieldAlert className="size-5" />
+      <AlertTitle className="text-primary-900">
+        Fitur BETA — Pakai dengan Risiko
+      </AlertTitle>
+      <AlertDescription className="text-primary-900/90">
         <ul className="mt-2 space-y-1 text-sm">
           {DISCLAIMER_BULLETS_NEGATIVE.map((b) => (
-            <li key={b}>❌ {b}</li>
+            <li key={b} className="flex items-start gap-2">
+              <XCircle
+                className={`mt-0.5 size-4 shrink-0 ${TONES.danger.text}`}
+              />
+              <span>{b}</span>
+            </li>
           ))}
           {DISCLAIMER_BULLETS_POSITIVE.map((b) => (
-            <li key={b}>✅ {b}</li>
+            <li key={b} className="flex items-start gap-2">
+              <CheckCircle2
+                className={`mt-0.5 size-4 shrink-0 ${TONES.success.text}`}
+              />
+              <span>{b}</span>
+            </li>
           ))}
         </ul>
       </AlertDescription>
@@ -306,7 +325,7 @@ function BetaDisclaimerBanner() {
 function statusVisual(integration: BankMutationIntegrationView) {
   if (integration.isAdminBlocked) {
     return {
-      icon: <XCircle className="h-5 w-5 text-red-600" />,
+      icon: <XCircle className={`size-5 ${TONES.danger.text}`} />,
       label: 'Diblokir Admin',
       tone: 'destructive' as const,
       detail:
@@ -315,7 +334,7 @@ function statusVisual(integration: BankMutationIntegrationView) {
   }
   if (!integration.lastScrapeStatus) {
     return {
-      icon: <Loader2 className="h-5 w-5 text-yellow-600 animate-spin" />,
+      icon: <Loader2 className={`size-5 animate-spin ${TONES.warning.text}`} />,
       label: 'Belum sync pertama',
       tone: 'default' as const,
       detail: 'Klik Sync untuk test koneksi.',
@@ -324,14 +343,14 @@ function statusVisual(integration: BankMutationIntegrationView) {
   switch (integration.lastScrapeStatus) {
     case 'SUCCESS':
       return {
-        icon: <CheckCircle2 className="h-5 w-5 text-emerald-600" />,
+        icon: <CheckCircle2 className={`size-5 ${TONES.success.text}`} />,
         label: 'Terhubung',
         tone: 'default' as const,
         detail: null,
       }
     case 'OTP_REQUIRED':
       return {
-        icon: <XCircle className="h-5 w-5 text-red-600" />,
+        icon: <XCircle className={`size-5 ${TONES.danger.text}`} />,
         label: 'OTP/KeyBCA diminta',
         tone: 'destructive' as const,
         detail:
@@ -339,14 +358,14 @@ function statusVisual(integration: BankMutationIntegrationView) {
       }
     case 'AUTH_FAILED':
       return {
-        icon: <AlertTriangle className="h-5 w-5 text-amber-600" />,
+        icon: <AlertTriangle className={`size-5 ${TONES.warning.text}`} />,
         label: 'Kredensial salah',
         tone: 'destructive' as const,
         detail: 'User ID atau PIN BCA salah. Update kredensial Anda.',
       }
     case 'BLOCKED':
       return {
-        icon: <XCircle className="h-5 w-5 text-red-600" />,
+        icon: <XCircle className={`size-5 ${TONES.danger.text}`} />,
         label: 'Akun BCA terkunci',
         tone: 'destructive' as const,
         detail:
@@ -355,7 +374,7 @@ function statusVisual(integration: BankMutationIntegrationView) {
     case 'ERROR':
     default:
       return {
-        icon: <AlertTriangle className="h-5 w-5 text-amber-600" />,
+        icon: <AlertTriangle className={`size-5 ${TONES.warning.text}`} />,
         label: 'Error sementara',
         tone: 'destructive' as const,
         detail: integration.lastScrapeError || 'Coba sync lagi.',
@@ -387,21 +406,29 @@ function StatusCard({
             <AlertDescription>{v.detail}</AlertDescription>
           </Alert>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
             <div className="text-muted-foreground">Bank</div>
             <div className="font-medium">{integration.bankCode}</div>
           </div>
           <div>
             <div className="text-muted-foreground">Rekening</div>
-            <div className="font-medium font-mono">
-              {integration.accountNumber || <span className="text-muted-foreground italic">belum diketahui</span>}
+            <div className="font-mono font-medium">
+              {integration.accountNumber || (
+                <span className="text-muted-foreground italic">
+                  belum diketahui
+                </span>
+              )}
             </div>
           </div>
           <div>
             <div className="text-muted-foreground">Nama</div>
             <div className="font-medium">
-              {integration.accountName || <span className="text-muted-foreground italic">belum diketahui</span>}
+              {integration.accountName || (
+                <span className="text-muted-foreground italic">
+                  belum diketahui
+                </span>
+              )}
             </div>
           </div>
           <div>
@@ -424,9 +451,9 @@ function StatusCard({
         <div className="flex justify-end">
           <Button onClick={onSync} disabled={syncing} size="sm">
             {syncing ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 size-4 animate-spin" />
             ) : (
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="mr-2 size-4" />
             )}
             {syncing ? 'Sync berjalan...' : 'Sync Sekarang'}
           </Button>
@@ -454,9 +481,10 @@ function SettingsCard({
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-medium text-sm">Aktifkan auto-confirm</div>
-            <div className="text-xs text-muted-foreground">
-              Order TRANSFER yang totalnya match mutasi CR akan otomatis ter-PAID.
+            <div className="text-sm font-medium">Aktifkan auto-confirm</div>
+            <div className="text-muted-foreground text-xs">
+              Order TRANSFER yang totalnya match mutasi CR akan otomatis
+              ter-PAID.
             </div>
           </div>
           <Switch
@@ -466,8 +494,8 @@ function SettingsCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-medium text-sm">Match by exact amount</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm font-medium">Match by exact amount</div>
+            <div className="text-muted-foreground text-xs">
               Cocokkan totalRp order persis dengan amount mutasi (default ON).
             </div>
           </div>
@@ -475,10 +503,10 @@ function SettingsCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-medium text-sm">
+            <div className="text-sm font-medium">
               Match by customer name (eksperimental)
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-muted-foreground text-xs">
               Kalau ada beberapa order dengan total sama, pilih berdasarkan nama
               di deskripsi mutasi.
             </div>
@@ -490,8 +518,8 @@ function SettingsCard({
         </div>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="font-medium text-sm">Aktif</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm font-medium">Aktif</div>
+            <div className="text-muted-foreground text-xs">
               Pause sementara tanpa hapus data.
             </div>
           </div>
@@ -516,10 +544,19 @@ function StatsCard({
         <CardTitle className="text-base">Statistik</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-          <Stat label="Mutasi tercatat" value={formatNumber(integration.totalMutationsCaptured)} />
-          <Stat label="Auto-confirmed" value={formatNumber(integration.totalAutoConfirmed)} />
-          <Stat label="Total scrapes" value={formatNumber(integration.totalScrapes)} />
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+          <Stat
+            label="Mutasi tercatat"
+            value={formatNumber(integration.totalMutationsCaptured)}
+          />
+          <Stat
+            label="Auto-confirmed"
+            value={formatNumber(integration.totalAutoConfirmed)}
+          />
+          <Stat
+            label="Total scrapes"
+            value={formatNumber(integration.totalScrapes)}
+          />
           <Stat
             label="Scrape gagal"
             value={formatNumber(integration.totalScrapeFailures)}
@@ -542,13 +579,12 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="text-xs text-muted-foreground uppercase tracking-wide">
+      <div className="text-muted-foreground text-xs tracking-wide uppercase">
         {label}
       </div>
       <div
         className={
-          'font-bold text-xl ' +
-          (tone === 'warning' ? 'text-amber-600' : '')
+          'text-xl font-bold ' + (tone === 'warning' ? TONES.warning.text : '')
         }
       >
         {value}
@@ -578,15 +614,14 @@ function SetupCard({
             <p className="text-sm">
               Sebelum setup, baca disclaimer di atas dan centang persetujuan.
             </p>
-            <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
               <Checkbox
                 checked={consented}
                 onCheckedChange={(v) => setConsented(v === true)}
               />
               <span>
-                Saya membaca & menerima risiko fitur BETA ini. Saya paham
-                bahwa Hulao tidak bertanggung jawab atas masalah dengan akun
-                BCA saya.
+                Saya membaca & menerima risiko fitur BETA ini. Saya paham bahwa
+                Hulao tidak bertanggung jawab atas masalah dengan akun BCA saya.
               </span>
             </label>
             <div className="flex gap-2">
@@ -675,12 +710,12 @@ function SetupForm({
           placeholder="••••••"
         />
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-muted-foreground text-xs">
         Setelah simpan, klik Sync di status panel untuk test koneksi.
       </p>
       <div className="flex justify-end gap-2">
         <Button onClick={handleSubmit} disabled={submitting} size="sm">
-          {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {submitting && <Loader2 className="mr-2 size-4 animate-spin" />}
           {mode === 'create' ? 'Aktifkan' : 'Simpan'}
         </Button>
       </div>

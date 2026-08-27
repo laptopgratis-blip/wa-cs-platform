@@ -1,7 +1,13 @@
 'use client'
 
 // Manage subscription user — current plan + history + tombol perpanjang/cancel.
-import { CheckCircle2, Clock, Crown, Loader2, RefreshCw, XCircle } from 'lucide-react'
+import {
+  CheckCircle2,
+  Crown,
+  Loader2,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -15,8 +21,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +33,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { statusMeta, subscriptionStatusMeta } from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
 interface CurrentSubscription {
@@ -78,23 +96,19 @@ function formatDateId(iso: string): string {
   })
 }
 
-const STATUS_BADGE: Record<string, { label: string; className: string }> = {
-  ACTIVE: { label: 'Aktif', className: 'bg-emerald-100 text-emerald-700' },
-  PENDING: { label: 'Menunggu Pembayaran', className: 'bg-amber-100 text-amber-700' },
-  EXPIRED: { label: 'Berakhir', className: 'bg-warm-100 text-warm-700' },
-  CANCELLED: { label: 'Dibatalkan', className: 'bg-rose-100 text-rose-700' },
-  PAID: { label: 'Lunas', className: 'bg-emerald-100 text-emerald-700' },
-  WAITING_CONFIRMATION: {
-    label: 'Menunggu Konfirmasi',
-    className: 'bg-blue-100 text-blue-700',
-  },
+// Badge status subscription — label+tone dari registry lib/status.ts.
+function SubStatusBadge({ status }: { status: string }) {
+  const meta = statusMeta(subscriptionStatusMeta, status)
+  return <StatusBadge tone={meta.tone} label={meta.label} />
 }
 
 export function SubscriptionDashboard() {
   const [current, setCurrent] = useState<CurrentSubscription | null>(null)
   const [history, setHistory] = useState<HistorySubscription[]>([])
   const [loading, setLoading] = useState(true)
-  const [cancelTarget, setCancelTarget] = useState<CurrentSubscription | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<CurrentSubscription | null>(
+    null,
+  )
   const [cancelling, setCancelling] = useState(false)
 
   async function load() {
@@ -140,7 +154,9 @@ export function SubscriptionDashboard() {
         toast.error(json.error || 'Gagal cancel')
         return
       }
-      toast.success(`Subscription dibatalkan. Akses tetap aktif sampai ${formatDateId(cancelTarget.endDate)}.`)
+      toast.success(
+        `Subscription dibatalkan. Akses tetap aktif sampai ${formatDateId(cancelTarget.endDate)}.`,
+      )
       setCancelTarget(null)
       void load()
     } finally {
@@ -150,14 +166,14 @@ export function SubscriptionDashboard() {
 
   if (loading) {
     return (
-      <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-8">
+      <PageContainer width="narrow">
         <CardGridSkeleton count={2} />
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="mx-auto h-full max-w-4xl space-y-6 overflow-y-auto p-4 md:p-8">
+    <PageContainer width="narrow">
       <PageHeader
         title="Subscription Plan"
         description="Kelola plan aktif & lihat history pembayaran subscription."
@@ -167,7 +183,7 @@ export function SubscriptionDashboard() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Crown className="size-5 text-primary-500" />
+            <Crown className="text-primary-500 size-5" />
             Plan Aktif
           </CardTitle>
         </CardHeader>
@@ -186,31 +202,33 @@ export function SubscriptionDashboard() {
             <div className="space-y-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="font-display text-xl font-bold">
+                  <div className="font-display text-xl font-semibold">
                     {current.plan.name}{' '}
-                    <span className="font-normal text-muted-foreground">
+                    <span className="text-muted-foreground font-normal">
                       ({current.plan.tier})
                     </span>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {current.plan.maxLp >= 999 ? 'Unlimited' : current.plan.maxLp} LP ·{' '}
-                    {current.plan.maxStorageMB} MB storage
+                  <div className="text-muted-foreground text-sm">
+                    {current.plan.maxLp >= 999
+                      ? 'Unlimited'
+                      : current.plan.maxLp}{' '}
+                    LP · {current.plan.maxStorageMB} MB storage
                   </div>
                 </div>
-                <Badge className={STATUS_BADGE[current.status]?.className}>
-                  {STATUS_BADGE[current.status]?.label ?? current.status}
-                </Badge>
+                <SubStatusBadge status={current.status} />
               </div>
 
-              <div className="grid gap-4 rounded-lg border bg-muted/20 p-4 sm:grid-cols-3">
+              <div className="bg-muted/20 grid gap-4 rounded-lg border p-4 sm:grid-cols-3">
                 <div>
-                  <div className="text-xs text-muted-foreground">Tanggal Mulai</div>
+                  <div className="text-muted-foreground text-xs">
+                    Tanggal Mulai
+                  </div>
                   <div className="font-medium">
                     {formatDateId(current.startDate)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-muted-foreground text-xs">
                     {current.isLifetime ? 'Berlaku Sampai' : 'Berakhir'}
                   </div>
                   <div className="font-medium">
@@ -220,7 +238,7 @@ export function SubscriptionDashboard() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Sisa</div>
+                  <div className="text-muted-foreground text-xs">Sisa</div>
                   <div className="font-medium">
                     {current.isLifetime ? '∞' : `${current.daysRemaining} hari`}
                   </div>
@@ -228,7 +246,14 @@ export function SubscriptionDashboard() {
               </div>
 
               {current.cancelledAt && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <div
+                  className={cn(
+                    'rounded-lg border p-3 text-sm',
+                    TONES.warning.border,
+                    TONES.warning.bg,
+                    TONES.warning.text,
+                  )}
+                >
                   Subscription telah dibatalkan tapi akses tetap aktif sampai{' '}
                   {formatDateId(current.endDate)}. Setelah itu otomatis turun ke
                   FREE plan.
@@ -241,29 +266,31 @@ export function SubscriptionDashboard() {
                 {!current.isLifetime &&
                   (current.status === 'ACTIVE' ||
                     current.status === 'CANCELLED') && (
-                  <>
-                    <Button asChild>
-                      <Link href={`/upgrade?plan=${current.plan.id}&duration=12`}>
-                        <RefreshCw className="mr-2 size-4" />
-                        Perpanjang
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline">
-                      <Link href="/pricing">Upgrade Plan</Link>
-                    </Button>
-                    {!current.cancelledAt && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setCancelTarget(current)}
-                      >
-                        <XCircle className="mr-2 size-4" />
-                        Cancel
+                    <>
+                      <Button asChild>
+                        <Link
+                          href={`/upgrade?plan=${current.plan.id}&duration=12`}
+                        >
+                          <RefreshCw className="mr-2 size-4" />
+                          Perpanjang
+                        </Link>
                       </Button>
-                    )}
-                  </>
-                )}
+                      <Button asChild variant="outline">
+                        <Link href="/pricing">Upgrade Plan</Link>
+                      </Button>
+                      {!current.cancelledAt && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setCancelTarget(current)}
+                        >
+                          <XCircle className="mr-2 size-4" />
+                          Cancel
+                        </Button>
+                      )}
+                    </>
+                  )}
                 {current.isLifetime && (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-muted-foreground text-sm">
                     Plan lifetime — tidak ada masa berakhir.
                   </p>
                 )}
@@ -283,54 +310,44 @@ export function SubscriptionDashboard() {
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
+            <p className="text-muted-foreground py-6 text-center text-sm">
               Belum ada subscription.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs text-muted-foreground">
-                  <tr className="border-b">
-                    <th className="py-2 pr-3 font-medium">Tanggal</th>
-                    <th className="py-2 pr-3 font-medium">Plan</th>
-                    <th className="py-2 pr-3 font-medium">Durasi</th>
-                    <th className="py-2 pr-3 text-right font-medium">Harga</th>
-                    <th className="py-2 pr-3 font-medium">Status</th>
-                    <th className="py-2 pr-3 font-medium">Invoice</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((s) => (
-                    <tr key={s.id} className="border-b last:border-0">
-                      <td className="py-2 pr-3 text-muted-foreground">
-                        {formatDateId(s.createdAt)}
-                      </td>
-                      <td className="py-2 pr-3">{s.plan.name}</td>
-                      <td className="py-2 pr-3">
-                        {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        Rp {s.priceFinal.toLocaleString('id-ID')}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px]',
-                            STATUS_BADGE[s.status]?.className,
-                          )}
-                        >
-                          {STATUS_BADGE[s.status]?.label ?? s.status}
-                        </Badge>
-                      </td>
-                      <td className="py-2 pr-3 font-mono text-xs">
-                        {s.invoices[0]?.invoiceNumber ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Durasi</TableHead>
+                  <TableHead className="text-right">Harga</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Invoice</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="text-muted-foreground">
+                      {formatDateId(s.createdAt)}
+                    </TableCell>
+                    <TableCell>{s.plan.name}</TableCell>
+                    <TableCell>
+                      {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      Rp {s.priceFinal.toLocaleString('id-ID')}
+                    </TableCell>
+                    <TableCell>
+                      <SubStatusBadge status={s.status} />
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {s.invoices[0]?.invoiceNumber ?? '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
@@ -375,6 +392,6 @@ export function SubscriptionDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   )
 }

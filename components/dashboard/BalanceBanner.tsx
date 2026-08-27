@@ -10,33 +10,41 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatNumber } from '@/lib/format'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export const LOW_BALANCE_THRESHOLD = 1000
 
 export function BalanceBanner({ balance }: { balance: number }) {
   if (balance === 0) {
     return (
-      <Card className="rounded-xl border-destructive/30 bg-destructive/5">
+      <Card className={TONES.danger.bg}>
         <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+            <div
+              className={cn(
+                'flex size-10 shrink-0 items-center justify-center rounded-lg',
+                TONES.danger.solid,
+              )}
+            >
               <ShieldAlert className="size-5" />
             </div>
             <div>
-              <p className="font-display text-sm font-bold text-destructive">
+              <p
+                className={cn(
+                  'font-display text-sm font-bold',
+                  TONES.danger.text,
+                )}
+              >
                 Token kamu habis!
               </p>
-              <p className="mt-0.5 text-xs text-warm-700">
-                WhatsApp kamu tidak bisa membalas pesan customer. Top up sekarang
-                supaya AI nyala lagi.
+              <p className="text-warm-700 mt-0.5 text-xs">
+                WhatsApp kamu tidak bisa membalas pesan customer. Top up
+                sekarang supaya AI nyala lagi.
               </p>
             </div>
           </div>
-          <Button
-            asChild
-            size="sm"
-            className="bg-destructive font-semibold text-white hover:bg-destructive/90"
-          >
+          <Button asChild size="sm">
             <Link href="/billing">Top Up Token</Link>
           </Button>
         </CardContent>
@@ -46,26 +54,32 @@ export function BalanceBanner({ balance }: { balance: number }) {
 
   if (balance < LOW_BALANCE_THRESHOLD) {
     return (
-      <Card className="rounded-xl border-amber-200 bg-amber-50">
+      <Card className={TONES.warning.bg}>
         <CardContent className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <div
+              className={cn(
+                'flex size-10 shrink-0 items-center justify-center rounded-lg',
+                TONES.warning.solid,
+              )}
+            >
               <AlertTriangle className="size-5" />
             </div>
             <div>
-              <p className="font-display text-sm font-bold text-amber-900">
+              <p
+                className={cn(
+                  'font-display text-sm font-bold',
+                  TONES.warning.text,
+                )}
+              >
                 Token kamu hampir habis (sisa {formatNumber(balance)})
               </p>
-              <p className="mt-0.5 text-xs text-amber-800">
+              <p className="text-warm-700 mt-0.5 text-xs">
                 Segera top up sebelum balasan AI mati.
               </p>
             </div>
           </div>
-          <Button
-            asChild
-            size="sm"
-            className="bg-amber-600 font-semibold text-white hover:bg-amber-700"
-          >
+          <Button asChild size="sm">
             <Link href="/billing">Top Up Token</Link>
           </Button>
         </CardContent>

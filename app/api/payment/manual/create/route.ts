@@ -7,6 +7,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { manualPaymentCreateSchema } from '@/lib/validations/payment'
 
 const MAX_RETRY = 20
@@ -82,6 +83,10 @@ export async function POST(req: Request) {
       )
     }
 
+    if (pkg.kind === 'MESSAGE_CREDIT' && !MESSAGE_CREDIT_BILLING_ENABLED) {
+      // Billing kredit nonaktif — paket ini tidak dijual.
+      return jsonError('Paket ini sedang tidak tersedia', 400)
+    }
     const created = await prisma.manualPayment.create({
       data: {
         userId: session.user.id,
@@ -91,6 +96,7 @@ export async function POST(req: Request) {
         uniqueCode,
         totalAmount: pkg.price + uniqueCode,
         status: 'PENDING',
+        purpose: pkg.kind === 'MESSAGE_CREDIT' ? 'MESSAGE_CREDIT_PURCHASE' : 'TOKEN_PURCHASE',
       },
       select: {
         id: true,

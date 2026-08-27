@@ -23,7 +23,9 @@ import {
 } from '@/components/order-system/DestinationPicker'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -328,20 +330,22 @@ export function BankAccountsClient({
   }
 
   return (
-    <div className="mx-auto h-full max-w-4xl overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <PageHeader
-        className="mb-6"
         title="Rekening Bank"
         description={
           <>
             Customer akan transfer ke rekening yang kamu set di sini.
-            <span className="ml-1 text-warm-500">
+            <span className="text-warm-500 ml-1">
               ({accounts.length}/{limit})
             </span>
           </>
         }
         actions={
-          <Button onClick={openCreateDialog} disabled={accounts.length >= limit}>
+          <Button
+            onClick={openCreateDialog}
+            disabled={accounts.length >= limit}
+          >
             <Plus className="mr-2 size-4" />
             Tambah Rekening
           </Button>
@@ -350,48 +354,45 @@ export function BankAccountsClient({
 
       {/* List rekening */}
       {accounts.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent>
-            <EmptyState
-              icon={Building2}
-              title="Belum ada rekening"
-              description="Tambahkan minimal 1 rekening supaya customer bisa transfer."
-              action={
-                <Button onClick={openCreateDialog}>
-                  <Plus className="mr-2 size-4" />
-                  Tambah Rekening Pertama
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={Building2}
+          title="Belum ada rekening"
+          description="Tambahkan minimal 1 rekening supaya customer bisa transfer."
+          action={
+            <Button onClick={openCreateDialog}>
+              <Plus className="mr-2 size-4" />
+              Tambah Rekening Pertama
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {accounts.map((acc) => (
             <Card key={acc.id} className={acc.isActive ? '' : 'opacity-60'}>
               <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                  <div className="bg-primary-50 text-primary-600 flex size-10 shrink-0 items-center justify-center rounded-lg">
                     <CreditCard className="size-5" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-warm-900">
+                      <p className="text-warm-900 font-semibold">
                         {acc.bankName}
                       </p>
                       {acc.isDefault && (
-                        <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                          <Star className="mr-1 size-3" /> Default
-                        </Badge>
+                        <StatusBadge tone="brand" icon={Star} label="Default" />
                       )}
                       {!acc.isActive && (
                         <Badge variant="secondary">Tidak aktif</Badge>
                       )}
                     </div>
-                    <p className="font-mono text-sm text-warm-700">
+                    <p className="text-warm-700 font-mono text-sm">
                       {acc.accountNumber}
                     </p>
-                    <p className="text-xs text-warm-500">a.n. {acc.accountName}</p>
+                    <p className="text-warm-500 text-xs">
+                      a.n. {acc.accountName}
+                    </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -435,13 +436,13 @@ export function BankAccountsClient({
       )}
 
       {/* Pengaturan Pengiriman section (Phase 2) */}
-      <Card className="mt-8">
+      <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Truck className="size-5 text-blue-600" />
+            <Truck className="text-primary-500 size-5" />
             <CardTitle className="text-lg">Pengaturan Pengiriman</CardTitle>
           </div>
-          <p className="text-sm text-warm-600">
+          <p className="text-warm-600 text-sm">
             Kota asal & kurir yang aktif. Sistem pakai data ini untuk hitung
             ongkir otomatis ke alamat customer via RajaOngkir.
           </p>
@@ -453,7 +454,7 @@ export function BankAccountsClient({
               Kota Asal Pengiriman
             </Label>
             <DestinationPicker value={origin} onChange={setOrigin} />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Cari nama kota / kecamatan / kelurahan tempat kamu kirim paket.
             </p>
           </div>
@@ -464,7 +465,7 @@ export function BankAccountsClient({
               {SUPPORTED_COURIERS.map((c) => (
                 <label
                   key={c.code}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg border bg-warm-50 px-3 py-2 hover:bg-warm-100"
+                  className="bg-warm-50 hover:bg-warm-100 flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2"
                 >
                   <Checkbox
                     checked={enabledCouriers.includes(c.code)}
@@ -474,14 +475,16 @@ export function BankAccountsClient({
                 </label>
               ))}
             </div>
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Customer akan lihat opsi ongkir hanya dari kurir yang kamu
               centang.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="default-weight">Berat Default Per Order (gram)</Label>
+            <Label htmlFor="default-weight">
+              Berat Default Per Order (gram)
+            </Label>
             <Input
               id="default-weight"
               type="number"
@@ -491,7 +494,7 @@ export function BankAccountsClient({
               onChange={(e) => setDefaultWeight(Number(e.target.value) || 0)}
               className="max-w-xs"
             />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Dipakai kalau produk belum diset berat-nya. Default 500 gram.
             </p>
           </div>
@@ -505,22 +508,26 @@ export function BankAccountsClient({
       </Card>
 
       {/* WA Konfirmasi section */}
-      <Card className="mt-8">
+      <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
-            <MessageCircle className="size-5 text-emerald-600" />
-            <CardTitle className="text-lg">WA Konfirmasi Bukti Transfer</CardTitle>
+            <MessageCircle className="text-primary-500 size-5" />
+            <CardTitle className="text-lg">
+              WA Konfirmasi Bukti Transfer
+            </CardTitle>
           </div>
-          <p className="text-sm text-warm-600">
+          <p className="text-warm-600 text-sm">
             Customer bisa langsung kirim bukti transfer via WhatsApp ke nomor
             kamu, lengkap dengan template pesan otomatis.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-4 py-3">
+          <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-4 py-3">
             <div>
-              <p className="text-sm font-medium text-warm-900">Aktifkan tombol &ldquo;Kirim via WA&rdquo;</p>
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-900 text-sm font-medium">
+                Aktifkan tombol &ldquo;Kirim via WA&rdquo;
+              </p>
+              <p className="text-warm-500 text-xs">
                 Tombol akan tampil di halaman invoice customer.
               </p>
             </div>
@@ -542,7 +549,7 @@ export function BankAccountsClient({
                 setWaForm((f) => ({ ...f, waConfirmNumber: e.target.value }))
               }
             />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Format: 62xxx (tanpa + atau 0 di depan). Mis. 6281234567890.
             </p>
           </div>
@@ -558,13 +565,19 @@ export function BankAccountsClient({
               }
               className="font-mono text-sm"
             />
-            <p className="text-xs text-warm-500">
+            <p className="text-warm-500 text-xs">
               Variabel yang bisa dipakai:{' '}
-              <code className="rounded bg-warm-100 px-1">{'{invoiceNumber}'}</code>{' '}
-              <code className="rounded bg-warm-100 px-1">{'{totalRp}'}</code>{' '}
-              <code className="rounded bg-warm-100 px-1">{'{bankName}'}</code>{' '}
-              <code className="rounded bg-warm-100 px-1">{'{accountName}'}</code>{' '}
-              <code className="rounded bg-warm-100 px-1">{'{customerName}'}</code>
+              <code className="bg-warm-100 rounded px-1">
+                {'{invoiceNumber}'}
+              </code>{' '}
+              <code className="bg-warm-100 rounded px-1">{'{totalRp}'}</code>{' '}
+              <code className="bg-warm-100 rounded px-1">{'{bankName}'}</code>{' '}
+              <code className="bg-warm-100 rounded px-1">
+                {'{accountName}'}
+              </code>{' '}
+              <code className="bg-warm-100 rounded px-1">
+                {'{customerName}'}
+              </code>
             </p>
           </div>
 
@@ -643,20 +656,18 @@ export function BankAccountsClient({
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm" htmlFor="acc-active">
                 Aktif (tampil ke customer)
               </Label>
               <Switch
                 id="acc-active"
                 checked={form.isActive}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, isActive: v }))
-                }
+                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm" htmlFor="acc-default">
                 Jadikan rekening default
               </Label>
@@ -695,6 +706,6 @@ export function BankAccountsClient({
         isLoading={isDeleting}
         onConfirm={handleDelete}
       />
-    </div>
+    </PageContainer>
   )
 }

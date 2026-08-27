@@ -426,8 +426,7 @@ export function ProductsClient({
         return
       }
       if (
-        new Date(form.flashSaleStartLocal) >=
-        new Date(form.flashSaleEndLocal)
+        new Date(form.flashSaleStartLocal) >= new Date(form.flashSaleEndLocal)
       ) {
         toast.error('Tanggal mulai harus sebelum selesai')
         return
@@ -469,7 +468,9 @@ export function ProductsClient({
           // Kirim null kalau kosong/0 ATAU flash sale produk sedang off —
           // supaya tidak ada harga flash "nyangkut" saat toggle dimatikan.
           flashSalePrice:
-            form.flashSaleActive && v.flashSalePrice != null && v.flashSalePrice > 0
+            form.flashSaleActive &&
+            v.flashSalePrice != null &&
+            v.flashSalePrice > 0
               ? Number(v.flashSalePrice)
               : null,
           weightGrams: Number(v.weightGrams),
@@ -480,9 +481,7 @@ export function ProductsClient({
         })),
         ebookId: form.ebookId,
       }
-      const url = editingId
-        ? `/api/products/${editingId}`
-        : '/api/products'
+      const url = editingId ? `/api/products/${editingId}` : '/api/products'
       const res = await fetch(url, {
         method: editingId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -542,7 +541,7 @@ export function ProductsClient({
         description={
           <>
             Kelola produk yang tampil di Form Order kamu.
-            <span className="ml-1 text-warm-500">
+            <span className="text-warm-500 ml-1">
               ({products.length}/{limit})
             </span>
           </>
@@ -556,27 +555,24 @@ export function ProductsClient({
       />
 
       {products.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent>
-            <EmptyState
-              icon={Package}
-              title="Belum ada produk"
-              description="Tambahkan produk pertama untuk dijual via Form Order."
-              action={
-                <Button onClick={openCreate}>
-                  <Plus className="mr-2 size-4" />
-                  Tambah Produk Pertama
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={Package}
+          title="Belum ada produk"
+          description="Tambahkan produk pertama untuk dijual via Form Order."
+          action={
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 size-4" />
+              Tambah Produk Pertama
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {products.map((p) => (
             <Card key={p.id} className={p.isActive ? '' : 'opacity-60'}>
               <CardContent className="flex gap-3 p-4">
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-warm-100">
+                <div className="bg-warm-100 relative size-20 shrink-0 overflow-hidden rounded-lg">
                   {p.imageUrl ? (
                     <Image
                       src={p.imageUrl}
@@ -586,19 +582,19 @@ export function ProductsClient({
                       className="object-cover"
                     />
                   ) : (
-                    <div className="flex size-full items-center justify-center text-warm-400">
+                    <div className="text-warm-400 flex size-full items-center justify-center">
                       <ImageIcon className="size-6" />
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="font-semibold text-warm-900 truncate">
+                    <p className="text-warm-900 truncate font-semibold">
                       {p.name}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {p.variants && p.variants.length > 0 && (
-                        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                        <Badge className="bg-primary-100 text-primary-800 hover:bg-primary-100">
                           <Layers className="mr-0.5 size-3" />
                           {p.variants.length} varian
                         </Badge>
@@ -617,17 +613,17 @@ export function ProductsClient({
                         <p className="text-sm font-medium text-amber-700">
                           Rp {formatNumber(p.flashSalePrice)}
                         </p>
-                        <p className="text-xs text-warm-500 line-through">
+                        <p className="text-warm-500 text-xs line-through">
                           Rp {formatNumber(p.price)}
                         </p>
                       </>
                     ) : (
-                      <p className="text-sm font-medium text-primary-600">
+                      <p className="text-primary-600 text-sm font-medium">
                         Rp {formatNumber(p.price)}
                       </p>
                     )}
                   </div>
-                  <p className="text-xs text-warm-500">
+                  <p className="text-warm-500 text-xs">
                     {p.weightGrams} g ·{' '}
                     {p.stock === null
                       ? 'Stok unlimited'
@@ -646,7 +642,9 @@ export function ProductsClient({
                       size="sm"
                       variant="outline"
                       className="text-destructive hover:bg-destructive/10"
-                      onClick={() => setDeleteTarget({ id: p.id, name: p.name })}
+                      onClick={() =>
+                        setDeleteTarget({ id: p.id, name: p.name })
+                      }
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -659,7 +657,7 @@ export function ProductsClient({
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] sm:max-w-2xl lg:max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl lg:max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               {editingId ? 'Edit Produk' : 'Tambah Produk'}
@@ -676,7 +674,9 @@ export function ProductsClient({
               <Input
                 id="p-name"
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
                 placeholder="Cleanoz 12ml"
               />
             </div>
@@ -704,7 +704,10 @@ export function ProductsClient({
                   step={500}
                   value={form.price}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, price: Number(e.target.value) || 0 }))
+                    setForm((f) => ({
+                      ...f,
+                      price: Number(e.target.value) || 0,
+                    }))
                   }
                 />
               </div>
@@ -729,7 +732,7 @@ export function ProductsClient({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Foto Produk</Label>
-                <span className="text-xs text-warm-500">
+                <span className="text-warm-500 text-xs">
                   {form.images.length}/{MAX_IMAGES}
                 </span>
               </div>
@@ -751,11 +754,13 @@ export function ProductsClient({
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={uploading}
-                  className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-warm-50 text-warm-500 transition-colors hover:bg-warm-100 disabled:opacity-60"
+                  className="bg-warm-50 text-warm-500 hover:bg-warm-100 flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed transition-colors disabled:opacity-60"
                 >
                   <Upload className="size-6" />
                   <span className="text-sm">
-                    {uploading ? 'Mengunggah…' : 'Pilih foto (bisa pilih banyak sekaligus)'}
+                    {uploading
+                      ? 'Mengunggah…'
+                      : 'Pilih foto (bisa pilih banyak sekaligus)'}
                   </span>
                 </button>
               ) : (
@@ -763,8 +768,8 @@ export function ProductsClient({
                   {form.images.map((url, idx) => (
                     <div
                       key={`${url}-${idx}`}
-                      className={`group relative aspect-square overflow-hidden rounded-lg border bg-warm-50 ${
-                        idx === 0 ? 'ring-2 ring-primary-500' : ''
+                      className={`group bg-warm-50 relative aspect-square overflow-hidden rounded-lg border ${
+                        idx === 0 ? 'ring-primary-500 ring-2' : ''
                       }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -774,7 +779,7 @@ export function ProductsClient({
                         className="size-full object-cover"
                       />
                       {idx === 0 && (
-                        <span className="absolute left-1 top-1 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                        <span className="bg-primary-600 absolute top-1 left-1 rounded px-1.5 py-0.5 text-xs font-bold tracking-wide text-white uppercase">
                           Cover
                         </span>
                       )}
@@ -803,7 +808,7 @@ export function ProductsClient({
                           type="button"
                           aria-label="Hapus foto"
                           onClick={() => removeImage(idx)}
-                          className="rounded p-1 text-rose-200 hover:bg-rose-500/40"
+                          className="rounded p-1 text-red-200 hover:bg-red-500/40"
                         >
                           <X className="size-3.5" />
                         </button>
@@ -824,28 +829,26 @@ export function ProductsClient({
                       type="button"
                       onClick={() => fileRef.current?.click()}
                       disabled={uploading}
-                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed bg-warm-50 text-warm-500 transition-colors hover:bg-warm-100 disabled:opacity-60"
+                      className="bg-warm-50 text-warm-500 hover:bg-warm-100 flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed transition-colors disabled:opacity-60"
                     >
                       <Plus className="size-5" />
-                      <span className="text-[10px]">
+                      <span className="text-xs">
                         {uploading ? 'Upload…' : 'Tambah'}
                       </span>
                     </button>
                   )}
                 </div>
               )}
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 JPG / PNG / WebP, max 8 MB per foto. Maksimal {MAX_IMAGES} foto.
                 Foto pertama jadi cover di list & invoice. Klik bintang untuk
                 set sebagai cover.
               </p>
             </div>
 
-            <div className="space-y-2 rounded-lg border bg-warm-50 p-3">
+            <div className="bg-warm-50 space-y-2 rounded-lg border p-3">
               <div className="flex items-center justify-between">
-                <Label className="cursor-pointer text-sm">
-                  Stok Unlimited
-                </Label>
+                <Label className="cursor-pointer text-sm">Stok Unlimited</Label>
                 <Switch
                   checked={unlimitedStock}
                   onCheckedChange={setUnlimitedStock}
@@ -857,26 +860,27 @@ export function ProductsClient({
                   min={0}
                   value={form.stock ?? 0}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, stock: Number(e.target.value) || 0 }))
+                    setForm((f) => ({
+                      ...f,
+                      stock: Number(e.target.value) || 0,
+                    }))
                   }
                   placeholder="Jumlah stok"
                 />
               )}
-              <p className="text-xs text-warm-500">
+              <p className="text-warm-500 text-xs">
                 Stok akan auto-kurang saat order PAID. Set unlimited untuk
                 produk digital atau pre-order.
               </p>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border bg-warm-50 px-3 py-2">
+            <div className="bg-warm-50 flex items-center justify-between rounded-lg border px-3 py-2">
               <Label className="cursor-pointer text-sm">
                 Aktif (tampil di Form Order)
               </Label>
               <Switch
                 checked={form.isActive}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, isActive: v }))
-                }
+                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
 
@@ -888,14 +892,14 @@ export function ProductsClient({
             />
 
             {/* Varian section (Phase 5) */}
-            <div className="space-y-3 rounded-lg border-2 border-blue-200 bg-blue-50 p-3">
+            <div className="border-primary-200 bg-primary-50 space-y-3 rounded-lg border-2 p-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <Label className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+                  <Label className="text-primary-900 flex items-center gap-2 text-sm font-semibold">
                     <Layers className="size-4" />
                     Varian Produk
                   </Label>
-                  <p className="mt-1 text-xs text-blue-800">
+                  <p className="text-primary-800 mt-1 text-xs">
                     Optional. Kalau diisi, customer harus pilih salah satu di
                     Form Order. Harga & stok utama di atas akan diabaikan.
                   </p>
@@ -914,25 +918,25 @@ export function ProductsClient({
               </div>
 
               {form.variants.length === 0 ? (
-                <p className="rounded border border-dashed border-blue-300 bg-white/60 px-3 py-4 text-center text-xs text-blue-800">
-                  Belum ada varian. Klik &ldquo;Tambah Varian&rdquo; untuk
-                  bikin opsi seperti ukuran (12ml/30ml), warna+ukuran (Putih M),
-                  atau paket bundling.
+                <p className="border-primary-300 text-primary-800 rounded border border-dashed bg-white/60 px-3 py-4 text-center text-xs">
+                  Belum ada varian. Klik &ldquo;Tambah Varian&rdquo; untuk bikin
+                  opsi seperti ukuran (12ml/30ml), warna+ukuran (Putih M), atau
+                  paket bundling.
                 </p>
               ) : (
                 <ul className="space-y-3">
                   {form.variants.map((v, idx) => (
                     <li
                       key={v.tempKey}
-                      className="rounded-lg border border-blue-200 bg-white p-3"
+                      className="border-primary-200 rounded-lg border bg-white p-3"
                     >
                       <div className="flex items-start gap-2">
-                        <div className="mt-2 hidden text-blue-300 md:block">
+                        <div className="text-primary-300 mt-2 hidden md:block">
                           <GripVertical className="size-4" />
                         </div>
 
                         {/* Foto varian (96px) */}
-                        <div className="size-20 shrink-0 overflow-hidden rounded-lg border bg-warm-50">
+                        <div className="bg-warm-50 size-20 shrink-0 overflow-hidden rounded-lg border">
                           {v.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -941,16 +945,16 @@ export function ProductsClient({
                               className="size-full object-cover"
                             />
                           ) : (
-                            <div className="flex size-full items-center justify-center text-warm-400">
+                            <div className="text-warm-400 flex size-full items-center justify-center">
                               <ImageIcon className="size-6" />
                             </div>
                           )}
                         </div>
 
-                        <div className="flex-1 space-y-2 min-w-0">
+                        <div className="min-w-0 flex-1 space-y-2">
                           <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                             <div className="space-y-1">
-                              <Label className="text-xs text-blue-900">
+                              <Label className="text-primary-900 text-xs">
                                 Nama Varian
                               </Label>
                               <Input
@@ -964,7 +968,7 @@ export function ProductsClient({
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs text-blue-900">
+                              <Label className="text-primary-900 text-xs">
                                 SKU (opsional)
                               </Label>
                               <Input
@@ -981,7 +985,7 @@ export function ProductsClient({
 
                           <div className="grid grid-cols-3 gap-2">
                             <div className="space-y-1">
-                              <Label className="text-xs text-blue-900">
+                              <Label className="text-primary-900 text-xs">
                                 Harga (Rp)
                               </Label>
                               <Input
@@ -997,7 +1001,7 @@ export function ProductsClient({
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs text-blue-900">
+                              <Label className="text-primary-900 text-xs">
                                 Berat (g)
                               </Label>
                               <Input
@@ -1013,7 +1017,7 @@ export function ProductsClient({
                               />
                             </div>
                             <div className="space-y-1">
-                              <Label className="text-xs text-blue-900">
+                              <Label className="text-primary-900 text-xs">
                                 Stok
                               </Label>
                               <Input
@@ -1057,7 +1061,7 @@ export function ProductsClient({
                               {v.flashSalePrice != null &&
                                 v.flashSalePrice > 0 &&
                                 v.flashSalePrice < v.price && (
-                                  <p className="text-[11px] text-amber-800">
+                                  <p className="text-xs text-amber-800">
                                     Hemat Rp{' '}
                                     {formatNumber(v.price - v.flashSalePrice)} (
                                     {Math.round(
@@ -1071,7 +1075,7 @@ export function ProductsClient({
 
                           <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                             <div className="flex items-center gap-2">
-                              <Label className="cursor-pointer text-xs text-blue-900">
+                              <Label className="text-primary-900 cursor-pointer text-xs">
                                 Aktif
                               </Label>
                               <Switch

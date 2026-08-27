@@ -9,9 +9,18 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Pagination } from '@/components/shared/Pagination'
 import { CardGridSkeleton } from '@/components/shared/skeletons'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -21,6 +30,13 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  statusMeta,
+  subscriptionInvoiceStatusMeta,
+  subscriptionStatusMeta,
+} from '@/lib/status'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Sub {
   id: string
@@ -71,7 +87,8 @@ export function AdminSubscriptionsView() {
   async function load() {
     setLoading(true)
     try {
-      const status = tab === 'active' ? 'ACTIVE' : tab === 'pending' ? 'PENDING' : 'all'
+      const status =
+        tab === 'active' ? 'ACTIVE' : tab === 'pending' ? 'PENDING' : 'all'
       const res = await fetch(
         `/api/admin/subscriptions?status=${status}&page=${page}&pageSize=${PAGE_SIZE}`,
       )
@@ -98,7 +115,11 @@ export function AdminSubscriptionsView() {
     try {
       const res = await fetch(
         `/api/admin/subscriptions/invoices/${invoiceId}/approve`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        },
       )
       const json = (await res.json()) as { success: boolean; error?: string }
       if (!res.ok || !json.success) {
@@ -158,11 +179,7 @@ export function AdminSubscriptionsView() {
         </TabsList>
 
         <TabsContent value="active" className="mt-4">
-          <SubsTable
-            subs={subs}
-            loading={loading}
-            onClickInvoice={() => {}}
-          />
+          <SubsTable subs={subs} loading={loading} onClickInvoice={() => {}} />
           {!loading && total > PAGE_SIZE && (
             <div className="mt-4">
               <Pagination
@@ -178,19 +195,11 @@ export function AdminSubscriptionsView() {
         </TabsContent>
 
         <TabsContent value="pending" className="mt-4">
-          <PendingTable
-            subs={subs}
-            loading={loading}
-            onView={setProofTarget}
-          />
+          <PendingTable subs={subs} loading={loading} onView={setProofTarget} />
         </TabsContent>
 
         <TabsContent value="all" className="mt-4">
-          <SubsTable
-            subs={subs}
-            loading={loading}
-            onClickInvoice={() => {}}
-          />
+          <SubsTable subs={subs} loading={loading} onClickInvoice={() => {}} />
           {!loading && total > PAGE_SIZE && (
             <div className="mt-4">
               <Pagination
@@ -220,9 +229,7 @@ export function AdminSubscriptionsView() {
           <DialogHeader>
             <DialogTitle>Verifikasi Bukti Transfer</DialogTitle>
           </DialogHeader>
-          {proofTarget && (
-            <ProofPanel sub={proofTarget} />
-          )}
+          {proofTarget && <ProofPanel sub={proofTarget} />}
           <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
             <Textarea
               placeholder="Alasan reject (wajib diisi kalau reject)"
@@ -245,7 +252,7 @@ export function AdminSubscriptionsView() {
                 Reject
               </Button>
               <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                className={cn('flex-1', TONES.success.solid)}
                 onClick={() => {
                   if (proofTarget?.invoices[0]) {
                     approveInvoice(proofTarget.invoices[0].id)
@@ -290,58 +297,56 @@ function SubsTable({
   return (
     <Card>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr className="border-b">
-                <th className="px-4 py-3 font-medium">User</th>
-                <th className="px-4 py-3 font-medium">Plan</th>
-                <th className="px-4 py-3 font-medium">Durasi</th>
-                <th className="px-4 py-3 font-medium">End Date</th>
-                <th className="px-4 py-3 font-medium">Sisa</th>
-                <th className="px-4 py-3 text-right font-medium">Harga</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s) => (
-                <tr key={s.id} className="border-b last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">
-                      {s.user.name || s.user.email}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {s.user.email}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    {s.plan.name}{' '}
-                    <span className="text-xs text-muted-foreground">
-                      ({s.plan.tier})
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {s.isLifetime ? '∞' : formatDateId(s.endDate)}
-                  </td>
-                  <td className="px-4 py-3">
-                    {s.isLifetime ? '∞' : `${daysRemaining(s.endDate)}d`}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono">
-                    Rp {s.priceFinal.toLocaleString('id-ID')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant="outline" className="text-[10px]">
-                      {s.status}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Plan</TableHead>
+              <TableHead>Durasi</TableHead>
+              <TableHead>End Date</TableHead>
+              <TableHead>Sisa</TableHead>
+              <TableHead className="text-right">Harga</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {subs.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell>
+                  <div className="font-medium">
+                    {s.user.name || s.user.email}
+                  </div>
+                  <div className="text-muted-foreground text-xs">
+                    {s.user.email}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {s.plan.name}{' '}
+                  <span className="text-muted-foreground text-xs">
+                    ({s.plan.tier})
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {s.isLifetime ? '∞' : `${s.durationMonths} bln`}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {s.isLifetime ? '∞' : formatDateId(s.endDate)}
+                </TableCell>
+                <TableCell>
+                  {s.isLifetime ? '∞' : `${daysRemaining(s.endDate)}d`}
+                </TableCell>
+                <TableCell className="text-right font-mono">
+                  Rp {s.priceFinal.toLocaleString('id-ID')}
+                </TableCell>
+                <TableCell>
+                  <StatusBadge
+                    {...statusMeta(subscriptionStatusMeta, s.status)}
+                  />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   )
@@ -390,23 +395,23 @@ function PendingTable({
               <div className="flex-1">
                 <div className="font-medium">
                   {s.user.name || s.user.email}{' '}
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-muted-foreground text-xs">
                     ({s.user.email})
                   </span>
                 </div>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-muted-foreground text-sm">
                   {s.plan.name} · {s.durationMonths} bln · Rp{' '}
                   {s.priceFinal.toLocaleString('id-ID')}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
+                <div className="text-muted-foreground mt-1 text-xs">
                   Invoice: {s.invoices[0]?.invoiceNumber} ·{' '}
                   {s.invoices[0]?.paymentMethod} ·{' '}
-                  <Badge
-                    variant="outline"
-                    className="text-[10px]"
-                  >
-                    {s.invoices[0]?.status}
-                  </Badge>
+                  <StatusBadge
+                    {...statusMeta(
+                      subscriptionInvoiceStatusMeta,
+                      s.invoices[0]?.status ?? '',
+                    )}
+                  />
                 </div>
               </div>
               {isWaiting ? (
@@ -427,7 +432,15 @@ function PendingTable({
 
 function ProofPanel({ sub }: { sub: Sub }) {
   const [detail, setDetail] = useState<{
-    invoices: { id: string; manualProofUrl: string | null; manualNote: string | null; uniqueCode: number; amount: number; invoiceNumber: string; status: string }[]
+    invoices: {
+      id: string
+      manualProofUrl: string | null
+      manualNote: string | null
+      uniqueCode: number
+      amount: number
+      invoiceNumber: string
+      status: string
+    }[]
   } | null>(null)
 
   useEffect(() => {
@@ -447,15 +460,13 @@ function ProofPanel({ sub }: { sub: Sub }) {
 
   if (!invoice) {
     return (
-      <p className="py-4 text-sm text-muted-foreground">
-        Memuat invoice...
-      </p>
+      <p className="text-muted-foreground py-4 text-sm">Memuat invoice…</p>
     )
   }
 
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border bg-muted/20 p-3 text-sm">
+      <div className="bg-muted/20 rounded-lg border p-3 text-sm">
         <div>
           <strong>{invoice.invoiceNumber}</strong>
         </div>
@@ -464,7 +475,7 @@ function ProofPanel({ sub }: { sub: Sub }) {
           {invoice.uniqueCode})
         </div>
         {invoice.manualNote && (
-          <div className="mt-1 text-muted-foreground">
+          <div className="text-muted-foreground mt-1">
             Note user: {invoice.manualNote}
           </div>
         )}
@@ -482,9 +493,7 @@ function ProofPanel({ sub }: { sub: Sub }) {
           />
         </a>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          Bukti tidak tersedia.
-        </p>
+        <p className="text-muted-foreground text-sm">Bukti tidak tersedia.</p>
       )}
     </div>
   )

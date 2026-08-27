@@ -48,13 +48,13 @@ export function Features() {
   return (
     <section className="container mx-auto px-4 py-16 md:py-24">
       <div className="mx-auto max-w-2xl text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700">
-          ✨ Yang kamu dapat
+        <span className="border-primary-200 bg-primary-50 text-primary-700 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium">
+          Yang kamu dapat
         </span>
-        <h2 className="mt-4 font-display text-3xl font-extrabold tracking-tight text-warm-900 md:text-4xl">
+        <h2 className="font-display text-warm-900 mt-4 text-3xl font-extrabold tracking-tight md:text-4xl">
           Lengkap untuk jualan online — gratis selamanya
         </h2>
-        <p className="mt-3 text-warm-600">
+        <p className="text-warm-600 mt-3">
           Bukan sekadar hosting HTML. Tapi platform end-to-end dari publish
           sampai closing.
         </p>
@@ -64,15 +64,15 @@ export function Features() {
         {features.map(({ icon: Icon, title, desc }, idx) => (
           <div
             key={title}
-            className={`group rounded-xl border border-warm-200 bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-md opacity-0 animate-fade-slide-up stagger-${(idx % 4) + 1}`}
+            className={`group border-warm-200 bg-card hover:border-primary-200 animate-fade-slide-up rounded-xl border p-5 opacity-0 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md stagger-${(idx % 4) + 1}`}
           >
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary-100 text-primary-600 transition group-hover:bg-primary-500 group-hover:text-white">
+            <div className="bg-primary-100 text-primary-600 group-hover:bg-primary-500 flex size-10 items-center justify-center rounded-lg transition group-hover:text-white">
               <Icon className="size-5" />
             </div>
-            <h3 className="mt-4 font-display text-base font-bold text-warm-900">
+            <h3 className="font-display text-warm-900 mt-4 text-base font-bold">
               {title}
             </h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-warm-600">
+            <p className="text-warm-600 mt-1.5 text-sm leading-relaxed">
               {desc}
             </p>
           </div>

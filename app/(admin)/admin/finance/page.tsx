@@ -1,10 +1,11 @@
 // /admin/finance — verifikasi manual payment.
 import { FinanceManager } from '@/components/admin/FinanceManager'
+import { PageContainer } from '@/components/shared/PageContainer'
 
 export default function AdminFinancePage() {
   return (
-    <div className="mx-auto h-full max-w-7xl overflow-y-auto p-4 md:p-6">
+    <PageContainer width="wide">
       <FinanceManager />
-    </div>
+    </PageContainer>
   )
 }

@@ -62,7 +62,7 @@ export async function POST(req: Request, { params }: Params) {
       subscriptionId: invoice.subscriptionId,
       type: 'PAYMENT_FAILED',
       channel: 'IN_APP',
-      title: '❌ Bukti Transfer Ditolak',
+      title: 'Bukti Transfer Ditolak',
       message: `Invoice ${invoice.invoiceNumber} ditolak admin: ${parsed.data.reason}. Silakan cek kembali bukti transfer atau hubungi admin.`,
       link: '/billing/subscription',
     }).catch(() => {})

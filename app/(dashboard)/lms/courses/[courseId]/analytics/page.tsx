@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { CourseAnalyticsClient } from '@/components/lms-lab/CourseAnalyticsClient'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/button'
 import { authOptions } from '@/lib/auth'
@@ -25,7 +26,7 @@ export default async function CourseAnalyticsPage({ params }: Params) {
   if (!course) redirect('/lms/courses')
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/lms/courses">
@@ -40,6 +41,6 @@ export default async function CourseAnalyticsPage({ params }: Params) {
       </div>
 
       <CourseAnalyticsClient courseId={course.id} />
-    </div>
+    </PageContainer>
   )
 }

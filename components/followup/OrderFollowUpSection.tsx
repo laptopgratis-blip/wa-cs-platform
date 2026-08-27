@@ -3,10 +3,11 @@
 // Section "Riwayat & Jadwal Follow-Up" untuk dipasang di OrderDetailDialog.
 // Tampilkan FollowUpLog yang sudah ke-kirim + FollowUpQueue PENDING + tombol
 // kirim pesan manual ke customer.
-import { BellRing, Loader2, Send } from 'lucide-react'
+import { BellRing, Check, Clock, Loader2, Send } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -90,7 +91,7 @@ export function OrderFollowUpSection({ orderId }: { orderId: string }) {
 
   if (loading) {
     return (
-      <section className="space-y-2 rounded-lg border bg-muted/30 p-3">
+      <section className="bg-muted/30 space-y-2 rounded-lg border p-3">
         <Loader2 className="size-4 animate-spin" />
       </section>
     )
@@ -98,7 +99,7 @@ export function OrderFollowUpSection({ orderId }: { orderId: string }) {
 
   return (
     <>
-      <section className="space-y-2 rounded-lg border bg-muted/30 p-3">
+      <section className="bg-muted/30 space-y-2 rounded-lg border p-3">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-1 text-sm font-medium">
             <BellRing className="size-4" /> Riwayat & Jadwal Follow-Up
@@ -108,22 +109,21 @@ export function OrderFollowUpSection({ orderId }: { orderId: string }) {
           </Button>
         </div>
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && <p className="text-destructive text-xs">{error}</p>}
 
         {logs.length === 0 && queue.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Belum ada follow-up untuk order ini.
           </p>
         ) : (
           <ul className="max-h-48 space-y-1 overflow-y-auto text-xs">
             {logs.map((l) => (
               <li key={l.id} className="flex items-center gap-2">
-                <Badge
-                  variant={l.status === 'SENT' ? 'default' : 'destructive'}
-                  className={l.status === 'SENT' ? 'bg-emerald-600' : ''}
-                >
-                  ✓ {l.status}
-                </Badge>
+                <StatusBadge
+                  tone={l.status === 'SENT' ? 'success' : 'danger'}
+                  label={l.status}
+                  icon={l.status === 'SENT' ? Check : undefined}
+                />
                 <span className="text-muted-foreground">
                   {new Date(l.sentAt).toLocaleString('id-ID')}
                 </span>
@@ -137,7 +137,9 @@ export function OrderFollowUpSection({ orderId }: { orderId: string }) {
               .filter((q) => q.status === 'PENDING')
               .map((q) => (
                 <li key={q.id} className="flex items-center gap-2">
-                  <Badge variant="outline">⏰ Dijadwal</Badge>
+                  <Badge variant="outline">
+                    <Clock aria-hidden /> Dijadwal
+                  </Badge>
                   <span className="text-muted-foreground">
                     {new Date(q.scheduledAt).toLocaleString('id-ID')}
                   </span>
@@ -252,7 +254,7 @@ function ManualSendDialog({
             </div>
           )}
           {templateId !== NULL_TEMPLATE && (
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
+            <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {message || '(template kosong)'}
             </pre>
           )}

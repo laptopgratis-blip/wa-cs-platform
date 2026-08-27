@@ -19,11 +19,25 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 interface Settings {
   WA_ADMIN: string
   PLATFORM_NAME: string
   SUPPORT_EMAIL: string
+  DOCS_URL: string
+  SUPPORT_HOURS: string
+}
+
+// Satu sumber initial state — dipakai `values` DAN `savedSnapshot`. Dulu dua
+// objek literal terpisah yang harus disamakan manual saat menambah field.
+const EMPTY_SETTINGS: Settings = {
+  WA_ADMIN: '',
+  PLATFORM_NAME: '',
+  SUPPORT_EMAIL: '',
+  DOCS_URL: '',
+  SUPPORT_HOURS: '',
 }
 
 const FIELDS: {
@@ -52,22 +66,29 @@ const FIELDS: {
     key: 'SUPPORT_EMAIL',
     label: 'Email Support',
     placeholder: 'support@hulao.id',
-    helper: 'Email yang ditampilkan di footer / halaman bantuan.',
+    helper: 'Email yang ditampilkan di halaman Bantuan & Dukungan user.',
     type: 'email',
+  },
+  {
+    key: 'SUPPORT_HOURS',
+    label: 'Jam Operasional Support',
+    placeholder: 'Senin–Jumat, 09.00–17.00 WIB',
+    helper:
+      'Ditampilkan di halaman Bantuan & Dukungan supaya user tahu kapan admin membalas.',
+  },
+  {
+    key: 'DOCS_URL',
+    label: 'URL Dokumentasi',
+    placeholder: 'https://docs.hulao.id',
+    helper:
+      'Alamat situs dokumentasi eksternal (wajib https). Kosongkan kalau belum ada — halaman Dokumentasi tetap menampilkan sumber internal.',
+    type: 'url',
   },
 ]
 
 export function SettingsManager() {
-  const [values, setValues] = useState<Settings>({
-    WA_ADMIN: '',
-    PLATFORM_NAME: '',
-    SUPPORT_EMAIL: '',
-  })
-  const [savedSnapshot, setSavedSnapshot] = useState<Settings>({
-    WA_ADMIN: '',
-    PLATFORM_NAME: '',
-    SUPPORT_EMAIL: '',
-  })
+  const [values, setValues] = useState<Settings>(EMPTY_SETTINGS)
+  const [savedSnapshot, setSavedSnapshot] = useState<Settings>(EMPTY_SETTINGS)
   const [isLoading, setLoading] = useState(true)
   const [savingKey, setSavingKey] = useState<keyof Settings | null>(null)
 
@@ -125,12 +146,12 @@ export function SettingsManager() {
             const dirty = values[f.key] !== savedSnapshot[f.key]
             const isSaving = savingKey === f.key
             return (
-              <Card key={f.key} className="rounded-xl border-warm-200">
+              <Card key={f.key}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-warm-900">
+                  <CardTitle className="text-warm-900 text-sm font-semibold">
                     {f.label}
                   </CardTitle>
-                  <CardDescription className="text-xs text-warm-500">
+                  <CardDescription className="text-warm-500 text-xs">
                     {f.helper}
                   </CardDescription>
                 </CardHeader>
@@ -157,7 +178,7 @@ export function SettingsManager() {
                   </div>
                   <div className="flex items-center justify-end gap-2">
                     {dirty && !isSaving && (
-                      <span className="text-xs text-amber-600">
+                      <span className={cn('text-xs', TONES.warning.text)}>
                         Belum disimpan
                       </span>
                     )}
@@ -165,7 +186,6 @@ export function SettingsManager() {
                       size="sm"
                       onClick={() => handleSave(f.key)}
                       disabled={!dirty || isSaving}
-                      className="bg-primary-500 text-white shadow-orange hover:bg-primary-600"
                     >
                       {isSaving ? (
                         <Loader2 className="mr-1.5 size-3.5 animate-spin" />

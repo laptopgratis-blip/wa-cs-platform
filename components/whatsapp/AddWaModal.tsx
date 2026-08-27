@@ -43,6 +43,21 @@ interface ConnectResponse {
   error?: string
 }
 
+// Label ramah untuk baris "Status" — jangan tampilkan raw enum ke user.
+const STATUS_LABEL: Record<WaStatus, string> = {
+  CONNECTING: 'Menghubungkan…',
+  WAITING_QR: 'Menunggu dipindai',
+  CONNECTED: 'Terhubung',
+  DISCONNECTED: 'Terputus',
+  PAUSED: 'Dijeda',
+  ERROR: 'Gagal',
+}
+
+// QR WhatsApp berlaku ~60 detik. Baileys mengirim event 'qr' baru (biasanya
+// setelah timeout + reconnect) yang me-reset countdown. Kalau habis sebelum QR
+// baru datang, user diberi tombol "Muat ulang QR" (bukan spinner nyangkut).
+const QR_TTL_SEC = 60
+
 export function AddWaModal({
   open,
   onOpenChange,
@@ -52,8 +67,11 @@ export function AddWaModal({
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [status, setStatus] = useState<WaStatus>('CONNECTING')
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [qrAt, setQrAt] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState<number>(0)
   const [error, setError] = useState<string | null>(null)
   const [isCancelling, setCancelling] = useState(false)
+  const [isRefreshing, setRefreshing] = useState(false)
   const sessionRef = useRef<string | null>(null)
   const isRepair = Boolean(existingSessionId)
 
@@ -71,18 +89,22 @@ export function AddWaModal({
           ? `/api/whatsapp/${existingSessionId}/reconnect`
           : '/api/whatsapp/connect'
         const res = await fetch(url, { method: 'POST' })
-        const json = (await res.json()) as ConnectResponse
+        // Guard parse: respons non-JSON (mis. halaman 502 proxy) jangan
+        // dilempar sebagai SyntaxError mentah ke user.
+        const json = (await res.json().catch(() => null)) as ConnectResponse | null
         if (aborted) return
-        if (!res.ok || !json.success || !json.data) {
-          setError(json.error || 'Gagal memulai koneksi')
+        if (!res.ok || !json?.success || !json.data) {
+          setError(json?.error || 'Gagal memulai koneksi')
           return
         }
         setSessionId(json.data.id)
         sessionRef.current = json.data.id
         setStatus(json.data.status)
-      } catch (err) {
+      } catch {
         if (aborted) return
-        setError((err as Error).message)
+        // Error di sini = fetch gagal total; pesan bawaan browser ("Failed
+        // to fetch") tidak membantu user.
+        setError('Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.')
       }
     })()
 
@@ -110,14 +132,30 @@ export function AddWaModal({
     function handleQr(payload: QrEventPayload) {
       if (payload.sessionId !== sessionId) return
       setQrDataUrl(payload.qrDataUrl)
+      const now = Date.now()
+      setQrAt(now) // reset countdown tiap QR baru
+      // Ticker 1 dtk baru menulis nowTick SATU detik kemudian. Tanpa seed ini
+      // render pertama memakai nowTick=0 → (0 - qrAt) negatif raksasa dan
+      // countdown sempat menampilkan angka ngaco (~1,7 miliar detik).
+      setNowTick(now)
       setStatus('WAITING_QR')
+      setError(null) // QR baru datang = pulih; buang error lama
     }
     function handleStatus(payload: StatusEventPayload) {
       if (payload.sessionId !== sessionId) return
       // Defensive: hanya update kalau payload punya status (event 'connected'/
       // 'disconnected' punya schema beda — tidak ada field status).
       if (payload.status) setStatus(payload.status)
-      if (payload.reason) setError(payload.reason)
+      // `reason` cuma layak tampil merah kalau sesi benar-benar berhenti.
+      // Saat CONNECTING/WAITING_QR/CONNECTED itu keterangan transien (mis.
+      // pesan internal Baileys pasca-pairing) — menampilkannya bikin user
+      // kira scan-nya gagal padahal koneksi sedang lanjut. Status non-terminal
+      // juga membersihkan error lama supaya tidak nyangkut.
+      if (payload.status === 'ERROR' || payload.status === 'DISCONNECTED') {
+        if (payload.reason) setError(payload.reason)
+      } else if (payload.status) {
+        setError(null)
+      }
     }
     function handleConnected(payload: StatusEventPayload) {
       if (payload.sessionId !== sessionId) return
@@ -192,15 +230,50 @@ export function AddWaModal({
     }
   }, [isRepair, onOpenChange])
 
+  // Minta QR baru (Baileys wipe + reconnect di sesi yang sama). Dipakai saat
+  // countdown habis tapi QR baru belum datang.
+  const refreshQr = useCallback(async () => {
+    const id = sessionRef.current
+    if (!id || isRefreshing) return
+    setRefreshing(true)
+    setQrDataUrl(null)
+    setQrAt(null)
+    setStatus('CONNECTING')
+    try {
+      const res = await fetch(`/api/whatsapp/${id}/reconnect`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as {
+          error?: string
+        } | null
+        setError(j?.error || 'Gagal memuat ulang QR')
+      }
+    } catch {
+      setError('Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.')
+    } finally {
+      setRefreshing(false)
+    }
+  }, [isRefreshing])
+
   // Reset state saat modal benar-benar tertutup.
   useEffect(() => {
     if (!open) {
       sessionRef.current = null
       setSessionId(null)
       setQrDataUrl(null)
+      setQrAt(null)
+      setNowTick(0)
       setError(null)
     }
   }, [open])
+
+  // Ticker 1 dtk untuk countdown QR — hanya jalan selama QR tampil.
+  useEffect(() => {
+    if (!qrDataUrl || qrAt === null) return
+    const t = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [qrDataUrl, qrAt])
 
   return (
     <Dialog
@@ -223,20 +296,25 @@ export function AddWaModal({
             {isRepair && (
               <>
                 Pastikan dulu device <strong>Hulao</strong> lama sudah di-unlink
-                di HP (Pengaturan → Perangkat Tertaut), lalu scan QR baru di bawah.
+                di HP (Pengaturan → Perangkat Tertaut), lalu scan QR baru di
+                bawah.
                 <br />
               </>
             )}
             Buka WhatsApp di HP → <strong>Pengaturan</strong> →{' '}
-            <strong>Perangkat Tertaut</strong> → <strong>Tautkan Perangkat</strong>,
-            lalu pindai QR di bawah.
+            <strong>Perangkat Tertaut</strong> →{' '}
+            <strong>Tautkan Perangkat</strong>, lalu pindai QR di bawah.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex min-h-[320px] items-center justify-center rounded-lg border bg-muted/30 p-4">
+        {/* Saat CONNECTING, QR lama sengaja disembunyikan dan diganti spinner:
+            tepat setelah QR dipindai Baileys menutup stream (515) untuk
+            restart socket, dan menampilkan QR basi + countdown di momen itu
+            bikin user kira scan-nya tidak terbaca. */}
+        <div className="bg-muted/30 flex min-h-[320px] items-center justify-center rounded-lg border p-4">
           {error ? (
             <div className="text-center">
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-destructive text-sm">{error}</p>
               <Button
                 variant="outline"
                 size="sm"
@@ -246,7 +324,7 @@ export function AddWaModal({
                 <X className="mr-2 size-4" /> Tutup
               </Button>
             </div>
-          ) : qrDataUrl ? (
+          ) : qrDataUrl && status !== 'CONNECTING' ? (
             <div className="flex flex-col items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -256,26 +334,60 @@ export function AddWaModal({
                 height={280}
                 className="rounded bg-white p-2"
               />
-              <p className="text-xs text-muted-foreground">
-                QR otomatis refresh kalau kadaluarsa
-              </p>
+              {(() => {
+                const left =
+                  qrAt === null
+                    ? QR_TTL_SEC
+                    : Math.max(
+                        0,
+                        QR_TTL_SEC - Math.floor((nowTick - qrAt) / 1000),
+                      )
+                return left > 0 ? (
+                  <p className="text-muted-foreground flex items-center gap-1.5 text-xs tabular-nums">
+                    <RefreshCw className="size-3" />
+                    QR berlaku {left} dtk lagi
+                  </p>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-muted-foreground text-xs">
+                      QR mungkin sudah kedaluwarsa.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void refreshQr()}
+                      disabled={isRefreshing}
+                    >
+                      {isRefreshing ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="mr-2 size-4" />
+                      )}
+                      Muat ulang QR
+                    </Button>
+                  </div>
+                )
+              })()}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+            <div className="text-muted-foreground flex flex-col items-center gap-3 text-center text-sm">
               <Loader2 className="size-8 animate-spin" />
               <span>
                 {status === 'CONNECTING'
-                  ? 'Menghubungkan ke WhatsApp...'
-                  : 'Menyiapkan QR...'}
+                  ? 'Menghubungkan ke WhatsApp…'
+                  : 'Menyiapkan QR…'}
               </span>
             </div>
           )}
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <p className="text-muted-foreground flex items-center gap-2 text-xs">
             <RefreshCw className="size-3" />
-            Status: <span className="font-medium text-foreground">{status}</span>
+            Status:{' '}
+            <span className="text-foreground font-medium">
+              {STATUS_LABEL[status]}
+            </span>
           </p>
           <Button
             variant="ghost"

@@ -37,6 +37,8 @@ export async function GET() {
         displayName: r.displayName,
         inputPricePer1M: r.inputPricePer1M,
         outputPricePer1M: r.outputPricePer1M,
+        unitType: r.unitType,
+        unitLabel: r.unitLabel,
         contextWindow: r.contextWindow,
         isAvailable: r.isAvailable,
         notes: r.notes,

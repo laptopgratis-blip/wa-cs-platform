@@ -14,13 +14,10 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 
 import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-} from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -88,7 +85,10 @@ const MANUAL_STATUS_ICON: Record<ManualPaymentStatus, typeof Clock> = {
 }
 
 // Normalize QRIS variants ke "QRIS" saja.
-function normalizePaymentName(name: string | null, code: string | null): string {
+function normalizePaymentName(
+  name: string | null,
+  code: string | null,
+): string {
   if (code?.startsWith('QRIS')) return 'QRIS'
   return name ?? code ?? '—'
 }
@@ -129,7 +129,7 @@ export default async function PurchaseHistoryPage() {
   const isEmpty = !hasPayments && !hasManual
 
   return (
-    <div className="mx-auto flex min-h-full max-w-6xl flex-col gap-6 overflow-y-auto p-4 md:p-6">
+    <PageContainer>
       <div>
         <Button asChild variant="ghost" size="sm" className="mb-3 -ml-2">
           <Link href="/billing">
@@ -144,21 +144,18 @@ export default async function PurchaseHistoryPage() {
       </div>
 
       {isEmpty && (
-        <Card>
-          <CardContent>
-            <EmptyState
-              icon={Receipt}
-              title="Belum ada riwayat pembelian"
-              description="Pembelian token pertamamu bakal tercatat di sini."
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          bordered
+          icon={Receipt}
+          title="Belum ada riwayat pembelian"
+          description="Pembelian token pertamamu bakal tercatat di sini."
+        />
       )}
 
       {/* ── Payment Gateway (Tripay) ── */}
       {hasPayments && (
         <div>
-          <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
             Payment Gateway
           </h2>
           <div className="rounded-md border">
@@ -166,10 +163,14 @@ export default async function PurchaseHistoryPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Order ID</TableHead>
-                  <TableHead className="hidden sm:table-cell">Tanggal</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Tanggal
+                  </TableHead>
                   <TableHead>Metode</TableHead>
                   <TableHead className="text-right">Jumlah</TableHead>
-                  <TableHead className="text-right hidden sm:table-cell">Token</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    Token
+                  </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -187,7 +188,7 @@ export default async function PurchaseHistoryPage() {
                           {p.orderId}
                         </Link>
                       </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                      <TableCell className="text-muted-foreground hidden text-sm sm:table-cell">
                         {p.createdAt.toLocaleString('id-ID', {
                           day: '2-digit',
                           month: 'short',
@@ -202,7 +203,7 @@ export default async function PurchaseHistoryPage() {
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatRupiah(p.amount)}
                       </TableCell>
-                      <TableCell className="hidden text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-400 sm:table-cell">
+                      <TableCell className="hidden text-right font-medium text-emerald-600 tabular-nums sm:table-cell">
                         +{formatNumber(p.tokenAmount)}
                       </TableCell>
                       <TableCell>
@@ -234,7 +235,7 @@ export default async function PurchaseHistoryPage() {
       {/* ── Transfer Manual ── */}
       {hasManual && (
         <div>
-          <h2 className="mb-3 font-display text-lg font-bold text-warm-900 dark:text-warm-50">
+          <h2 className="font-display text-warm-900 mb-3 text-xl font-semibold">
             Transfer Manual
           </h2>
           <div className="rounded-md border">
@@ -242,9 +243,13 @@ export default async function PurchaseHistoryPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Paket</TableHead>
-                  <TableHead className="hidden sm:table-cell">Tanggal</TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Tanggal
+                  </TableHead>
                   <TableHead className="text-right">Jumlah</TableHead>
-                  <TableHead className="text-right hidden sm:table-cell">Token</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">
+                    Token
+                  </TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Aksi</TableHead>
                 </TableRow>
@@ -257,7 +262,7 @@ export default async function PurchaseHistoryPage() {
                       <TableCell className="text-sm font-medium">
                         {mp.package?.name ?? '—'}
                       </TableCell>
-                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                      <TableCell className="text-muted-foreground hidden text-sm sm:table-cell">
                         {mp.createdAt.toLocaleString('id-ID', {
                           day: '2-digit',
                           month: 'short',
@@ -269,7 +274,7 @@ export default async function PurchaseHistoryPage() {
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatRupiah(mp.totalAmount)}
                       </TableCell>
-                      <TableCell className="hidden text-right font-medium tabular-nums text-emerald-600 dark:text-emerald-400 sm:table-cell">
+                      <TableCell className="hidden text-right font-medium text-emerald-600 tabular-nums sm:table-cell">
                         +{formatNumber(mp.tokenAmount)}
                       </TableCell>
                       <TableCell>
@@ -297,6 +302,6 @@ export default async function PurchaseHistoryPage() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   )
 }

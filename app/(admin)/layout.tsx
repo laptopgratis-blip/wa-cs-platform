@@ -36,7 +36,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           email={session.user.email}
           image={session.user.image}
         />
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-mobile-nav md:pb-0">{children}</main>
       </div>
       <MobileNav
         user={{
