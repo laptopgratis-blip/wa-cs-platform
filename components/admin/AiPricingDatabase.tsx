@@ -76,7 +76,8 @@ import {
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
-type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE'
+type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
+type UnitType = 'TOKEN' | 'IMAGE' | 'VIDEO_SECOND'
 type Freshness = 'verified' | 'stale' | 'outdated'
 
 interface Preset {
@@ -86,6 +87,8 @@ interface Preset {
   displayName: string
   inputPricePer1M: number
   outputPricePer1M: number
+  unitType: UnitType
+  unitLabel: string | null
   contextWindow: number | null
   isAvailable: boolean
   notes: string | null
@@ -149,6 +152,27 @@ const RESEARCH_STEPS = [
 
 function formatPrice(v: number): string {
   return `$${v.toFixed(2)}`
+}
+
+// Harga natural per-satuan untuk tampilan. IMAGE/VIDEO_SECOND disimpan sebagai
+// USD/unit × 1_000_000 (konvensi AiFeatureConfig) → tampilkan per-unit. TOKEN
+// (termasuk char/detik audio) tampil per-1M.
+function priceDisplay(p: Preset): { input: string; output: string; unit: string } {
+  const perUnit = p.unitType === 'IMAGE' || p.unitType === 'VIDEO_SECOND'
+  const label = p.unitLabel ?? (perUnit ? 'unit' : 'token')
+  if (perUnit) {
+    const v = p.inputPricePer1M / 1_000_000
+    return {
+      input: `$${v.toLocaleString('en-US', { maximumFractionDigits: 4 })}`,
+      output: '—',
+      unit: `/${label}`,
+    }
+  }
+  return {
+    input: formatPrice(p.inputPricePer1M),
+    output: p.outputPricePer1M > 0 ? formatPrice(p.outputPricePer1M) : '—',
+    unit: `/1M ${label}`,
+  }
 }
 
 export function AiPricingDatabase() {
@@ -404,6 +428,8 @@ export function AiPricingDatabase() {
                   <SelectItem value="ANTHROPIC">Anthropic</SelectItem>
                   <SelectItem value="OPENAI">OpenAI</SelectItem>
                   <SelectItem value="GOOGLE">Google</SelectItem>
+                  <SelectItem value="KLING">Kling</SelectItem>
+                  <SelectItem value="ELEVENLABS">ElevenLabs</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -432,8 +458,9 @@ export function AiPricingDatabase() {
                 <TableRow>
                   <TableHead>Provider</TableHead>
                   <TableHead>Model</TableHead>
-                  <TableHead className="text-right">Input $/1M</TableHead>
-                  <TableHead className="text-right">Output $/1M</TableHead>
+                  <TableHead className="text-right">Input</TableHead>
+                  <TableHead className="text-right">Output</TableHead>
+                  <TableHead>Satuan</TableHead>
                   <TableHead className="text-right">Context</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -441,7 +468,9 @@ export function AiPricingDatabase() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const disp = priceDisplay(p)
+                  return (
                   <TableRow key={p.id}>
                     <TableCell>
                       <Badge variant="outline" className="font-normal">
@@ -455,10 +484,13 @@ export function AiPricingDatabase() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatPrice(p.inputPricePer1M)}
+                      {disp.input}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatPrice(p.outputPricePer1M)}
+                      {disp.output}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {disp.unit}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-right tabular-nums">
                       {p.contextWindow
@@ -493,11 +525,12 @@ export function AiPricingDatabase() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  )
+                })}
                 {filtered.length === 0 && (
                   <TableRow>
                     <TableCell
-                      colSpan={8}
+                      colSpan={9}
                       className="text-muted-foreground py-8 text-center text-sm"
                     >
                       Tidak ada preset cocok dengan filter.
@@ -774,6 +807,16 @@ export function AiPricingDatabase() {
                 />
               </div>
             </div>
+            {editing && editing.unitType !== 'TOKEN' && (
+              <p className="text-xs text-muted-foreground">
+                Model per-{editing.unitLabel ?? 'unit'}: nilai disimpan = USD/
+                {editing.unitLabel ?? 'unit'} × 1.000.000. Sekarang = $
+                {(Number(editInput) / 1_000_000).toLocaleString('en-US', {
+                  maximumFractionDigits: 4,
+                })}{' '}
+                / {editing.unitLabel ?? 'unit'}. Output tidak dipakai (isi 0).
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
