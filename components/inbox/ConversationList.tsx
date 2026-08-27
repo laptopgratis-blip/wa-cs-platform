@@ -186,7 +186,18 @@ export function ConversationList({
           Root ikut tinggi konten (ratusan chat), Viewport size-full tak pernah
           punya tinggi terbatas → tidak ada scroll & item bawah terpotong oleh
           overflow-hidden. min-h-0 bikin flex-1 menyusut ke ruang tersisa. */}
-      <ScrollArea className="min-h-0 flex-1 overscroll-contain">
+      {/* [&_[data-radix-scroll-area-viewport]>div]:!block —
+          Radix membungkus isi Viewport dengan <div style="display:table;
+          min-width:100%">. `table` menyusut/melebar mengikuti ISI dan
+          min-width cuma lantai, bukan plafon: satu nama kontak panjang
+          melebarkan wrapper itu (terukur 549px di panel 320px) sehingga jam
+          & badge terdorong keluar area terlihat — dan karena wrapper-nya
+          satu untuk semua baris, SEMUA baris kehilangan kolom kanannya.
+          Dipaksa `block` supaya ikut lebar viewport. Sengaja diperbaiki di
+          sini, bukan di primitive: `display:table` itu memang disengaja
+          Radix untuk skenario scroll horizontal, dan di sini kita hanya
+          mau scroll vertikal. */}
+          <ScrollArea className="min-h-0 flex-1 overscroll-contain [&_[data-radix-scroll-area-viewport]>div]:!block">
         {isLoading ? (
           <div className="text-muted-foreground p-4 text-center text-sm">
             Memuat…
@@ -217,7 +228,14 @@ export function ConversationList({
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-medium">
+                      {/* min-w-0 WAJIB bersama truncate. Flex item defaultnya
+                          `min-width: auto` = selebar isinya, jadi tanpa ini nama
+                          panjang TIDAK menyusut — ia justru melebarkan barisnya
+                          (terukur: 549px di panel 320px), mendorong jam & badge
+                          ke luar area terlihat. Karena <ul> ikut melebar, SEMUA
+                          baris kehilangan kolom kanannya, bukan cuma yang
+                          namanya panjang. */}
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium">
                         {c.name || `+${c.phoneNumber}`}
                       </p>
                       <span className="text-muted-foreground shrink-0 text-xs">
@@ -225,7 +243,10 @@ export function ConversationList({
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <p className="text-muted-foreground line-clamp-1 flex-1 text-xs">
+                      {/* min-w-0 juga di sini: flex-1 memberi basis 0 tapi
+                          min-width:auto tetap berlaku, dan satu kata panjang
+                          (mis. URL) masih bisa melebarkan baris. */}
+                      <p className="text-muted-foreground line-clamp-1 min-w-0 flex-1 text-xs">
                         {c.lastMessage?.role === 'AI' && (
                           <Bot className="mr-1 inline size-3" aria-hidden />
                         )}
