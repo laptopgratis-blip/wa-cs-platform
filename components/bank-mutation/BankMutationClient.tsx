@@ -32,7 +32,7 @@ import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -50,6 +50,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatRelativeTime } from '@/lib/format-time'
 import { formatNumber, formatRupiah } from '@/lib/format'
 import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 export interface BankMutationIntegrationView {
   id: string
@@ -175,12 +176,7 @@ export function BankMutationClient({ initial }: Props) {
           <span className="flex items-center gap-2">
             Otomatis baca mutasi BCA & konfirmasi order TRANSFER tanpa approve
             manual.
-            <Badge
-              variant="outline"
-              className="border-primary-400 bg-primary-50 text-primary-700"
-            >
-              BETA
-            </Badge>
+            <StatusBadge tone="warning" label="BETA" />
           </span>
         }
         actions={
@@ -293,13 +289,24 @@ export function BankMutationClient({ initial }: Props) {
 
 function BetaDisclaimerBanner() {
   return (
-    <Alert variant="destructive" className="border-primary-400 bg-primary-50">
+    // SENGAJA bukan variant="destructive". Varian itu memaksa merah lewat
+    // selektor anak `*:data-[slot=alert-description]:text-destructive/90` yang
+    // spesifisitasnya mengalahkan override warna di AlertDescription — dulu
+    // dilawan dengan text-primary-900, hasilnya merah & oranye bertabrakan.
+    // Ini peringatan, jadi pakai satu tone dari registry: warning.
+    <Alert
+      className={cn(TONES.warning.bg, TONES.warning.border, TONES.warning.text)}
+    >
+      {/* Ikon mewarisi warna Alert — base alertVariants memaksa `*:[svg]:
+          text-current` pada anak langsung, jadi mewarnainya di sini percuma. */}
       <ShieldAlert className="size-5" />
-      <AlertTitle className="text-primary-900">
+      <AlertTitle className="font-semibold">
         Fitur BETA — Pakai dengan Risiko
       </AlertTitle>
-      <AlertDescription className="text-primary-900/90">
-        <ul className="mt-2 space-y-1 text-sm">
+      {/* Badan sengaja NETRAL supaya terbaca; makna merah/hijau dibawa ikon
+          tiap butir, bukan oleh warna teksnya. */}
+      <AlertDescription className="text-warm-700">
+        <ul className="mt-2 space-y-1.5 text-sm">
           {DISCLAIMER_BULLETS_NEGATIVE.map((b) => (
             <li key={b} className="flex items-start gap-2">
               <XCircle
