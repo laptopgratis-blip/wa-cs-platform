@@ -1,5 +1,6 @@
 // Notifikasi akses e-book pasca-PAID — kirim magic link /belajar via WA
-// (primer) dengan email fallback.
+// DAN email sekaligus (keputusan owner 2026-08-28; sebelumnya email hanya
+// fallback saat WA gagal).
 //
 // BEDA dari notif LMS (fire-and-forget): pakai pola KLAIM+SWEEP ala
 // notifyNewOrder (lib/services/order-notif.ts) — EbookEntitlement.
@@ -65,10 +66,12 @@ export async function notifyEbookAccess(entitlementId: string): Promise<void> {
     sellerUserId: ent.ebook.userId,
   })
 
-  let delivered = sendWa.delivered
-
-  // Email hanya recovery channel — kirim kalau WA gagal & email tersedia.
-  if (!delivered && ent.buyerEmail) {
+  // KEPUTUSAN OWNER 2026-08-28: email bukan lagi sekadar fallback — kirim ke
+  // DUA kanal sekaligus (WA + email) setiap kali email pembeli tersedia.
+  // `delivered` = minimal satu kanal sukses; dua-duanya gagal → klaim dilepas
+  // dan cron menyapu ulang, sama seperti sebelumnya.
+  let emailOk = false
+  if (ent.buyerEmail) {
     try {
       await sendEbookAccessEmail({
         email: ent.buyerEmail,
@@ -76,13 +79,17 @@ export async function notifyEbookAccess(entitlementId: string): Promise<void> {
         magicUrl,
         ebookTitle: ent.ebook.title,
       })
-      delivered = true
-      console.warn(
-        `[ebook-notif] WA gagal — link akses dikirim via email ke ${ent.buyerEmail} (${ent.buyerPhone})`,
-      )
+      emailOk = true
     } catch (err) {
-      console.error(`[ebook-notif] email fallback gagal:`, err)
+      // Bukan fatal selama WA sampai — tapi tetap tercatat untuk ops.
+      console.error(`[ebook-notif] kirim email ke ${ent.buyerEmail} gagal:`, err)
     }
+  }
+  const delivered = sendWa.delivered || emailOk
+  if (!sendWa.delivered && emailOk) {
+    console.warn(
+      `[ebook-notif] WA gagal — link akses tetap sampai via email ke ${ent.buyerEmail} (${ent.buyerPhone})`,
+    )
   }
 
   // Dua kanal gagal → lepas klaim supaya cron followup-send menyapu ulang.
