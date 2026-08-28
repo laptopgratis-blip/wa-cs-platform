@@ -83,6 +83,15 @@ export function isDuplicateExternalMessageError(err: unknown): err is DuplicateE
   return err instanceof DuplicateExternalMessageError
 }
 
+/** P2002 Prisma — pelanggaran unique constraint (kode stabil lintas versi). */
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: string }).code === 'P2002'
+  )
+}
+
 // Normalisasi phoneNumber sebelum lookup/create kontak supaya tidak duplikat.
 // @s.whatsapp.net → ambil digit sebelum @ (dan sebelum :deviceId kalau ada).
 // @lid → biarkan as-is karena LID adalah ID opaque, bukan nomor asli.
@@ -116,9 +125,26 @@ export async function saveMessage(
     : {}
 
   const phoneNumber = normalizePhoneNumber(input.phoneNumber)
+  // URUTAN LOOKUP PENTING — insiden produksi 2026-08-28.
+  // Satu nomor pelanggan lazim punya BEBERAPA baris Contact (satu per sesi;
+  // 7 baris untuk satu nomor bukan hal aneh setelah beberapa kali re-link).
+  // Dulu lookup langsung `findFirst({ userId, phoneNumber })` TANPA orderBy:
+  // barisnya sembarang, lalu repin di bawah menabrak unique
+  // (waSessionId, phoneNumber) → P2002 → PESAN MASUK HILANG. Setelah re-link,
+  // hampir semua kontak aktif punya baris ganda, jadi seluruh inbound Cloud
+  // mati senyap.
+  // (1) Utamakan baris yang SUDAH ter-pin ke sesi ini — repin jadi no-op.
   let contact = await prisma.contact.findFirst({
-    where: { userId: wa.userId, phoneNumber },
+    where: { waSessionId: input.sessionId, phoneNumber },
   })
+  if (!contact) {
+    // (2) Baru cari lintas sesi — deterministik: percakapan TERBARU yang
+    //     di-repin, bukan baris sembarang.
+    contact = await prisma.contact.findFirst({
+      where: { userId: wa.userId, phoneNumber },
+      orderBy: { lastMessageAt: 'desc' },
+    })
+  }
   let contactCreated = false
   if (!contact) {
     contactCreated = true
@@ -133,15 +159,30 @@ export async function saveMessage(
       },
     })
   } else {
-    contact = await prisma.contact.update({
-      where: { id: contact.id },
-      data: {
-        name: input.pushName ?? undefined,
-        lastMessageAt: now,
-        ...(input.skipRepin ? {} : { waSessionId: input.sessionId }),
-        ...windowFields,
-      },
-    })
+    try {
+      contact = await prisma.contact.update({
+        where: { id: contact.id },
+        data: {
+          name: input.pushName ?? undefined,
+          lastMessageAt: now,
+          ...(input.skipRepin ? {} : { waSessionId: input.sessionId }),
+          ...windowFields,
+        },
+      })
+    } catch (err) {
+      // Race dua pesan beruntun: baris (sesi ini, nomor ini) baru saja dibuat/
+      // di-repin proses lain setelah lookup kita. Jangan buang pesannya —
+      // pakai baris yang menang itu.
+      if (!isUniqueConstraintError(err)) throw err
+      const winner = await prisma.contact.findFirst({
+        where: { waSessionId: input.sessionId, phoneNumber },
+      })
+      if (!winner) throw err
+      contact = await prisma.contact.update({
+        where: { id: winner.id },
+        data: { name: input.pushName ?? undefined, lastMessageAt: now, ...windowFields },
+      })
+    }
   }
 
   const messageData = {
