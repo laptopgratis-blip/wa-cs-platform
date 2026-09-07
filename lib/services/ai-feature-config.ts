@@ -28,7 +28,10 @@ export interface AiFeatureConfigValues {
 }
 
 const TTL_MS = 60_000
-const cache = new Map<string, { value: AiFeatureConfigValues; cachedAt: number }>()
+const cache = new Map<
+  string,
+  { value: AiFeatureConfigValues; cachedAt: number }
+>()
 
 // Default config kalau row di DB belum ada — fallback defensif supaya
 // service tidak crash kalau migration belum di-seed.
@@ -48,7 +51,10 @@ const COMMON_DEFAULTS = {
   unitLabel: null,
 } as const
 
-const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> = {
+const DEFAULTS: Record<
+  string,
+  Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>
+> = {
   CONTENT_IDEA: {
     ...COMMON_DEFAULTS,
     featureKey: 'CONTENT_IDEA',
@@ -147,46 +153,45 @@ const DEFAULTS: Record<string, Omit<AiFeatureConfigValues, 'id' | 'updatedAt'>> 
   // Kling video generation — biaya per detik.
   // inputPricePer1M = USD per 1 detik × 1_000_000.
   //
-  // Kalibrasi 2026-07-21 v2 (rincian kredit Kling dari owner): paket $140 =
-  // 1.000 kredit ($0,14/kredit); image→video = 20 kredit FLAT per video =
-  // $2,80 → dinormalisasi per detik utk video standar 10 dtk = $0,28/dtk.
-  // Karena biaya Kling flat per VIDEO (bukan per detik), floorTokens diset
-  // setara satu video penuh — video 5 dtk tetap kena potongan penuh.
-  // Target owner (2026-07-21): potongan ±32rb token (Rp 64rb) per video:
-  //   apiCostRp 10 dtk = 10 × 0,28 × 16.500  = Rp 46.200 (tercatat riil)
-  //   tokens           = ceil(46.200 × 1,4/2) = 32.340 token (≈ Rp 64,7rb)
+  // Rekalibrasi 2026-09-07: kling-v2-master pensiun 15 Sep 2026 → model ganti
+  // kling-v2-6 (API resmi Kling). Harga resmi per detik (1 unit = $0,14):
+  // std/720p = 0,3 unit ($0,042) | pro/1080p = 0,5 unit ($0,07). Config pakai
+  // rate pro sebagai bound atas (satu rate untuk dua mode — submit std jadi
+  // ekstra margin). Billing Kling kini murni PER DETIK (tidak lagi flat per
+  // video ala v2-master), jadi floor cukup setara video terpendek 5 dtk:
+  //   apiCostRp 5 dtk = 5 × 0,07 × 16.500   = Rp 5.775
+  //   tokens          = ceil(5.775 × 1,4/2) = 4.043 → floor 4.000 token
   HOST_VIDEO_KLING_V3: {
     ...COMMON_DEFAULTS,
     featureKey: 'HOST_VIDEO_KLING_V3',
     displayName: 'CS Live AI — Host Video (Kling)',
-    modelName: 'fal-ai/kling-video/v2.1/master/image-to-video',
-    inputPricePer1M: 280_000, // $0.28/sec × 1M (= 20 kredit/10 dtk, 2026-07-21)
+    modelName: 'kling-v2-6',
+    inputPricePer1M: 70_000, // $0.07/dtk × 1M — rate pro/1080p kling-v2-6 (2026-09-07)
     outputPricePer1M: 0,
     platformMargin: 1.4,
-    floorTokens: 32_000, // ≈ potongan 1 video penuh — biaya Kling flat/video
+    floorTokens: 4_000, // ≈ 1 video 5 dtk — billing per detik, bukan flat/video lagi
     unitType: 'VIDEO_SECOND' as const,
     unitLabel: 'detik',
     description:
-      'Animasikan gambar host jadi MP4 looping. Biaya Kling flat 20 kredit/video ($2,80). Async — submit → poll → download (24h URL expiry).',
+      'Animasikan gambar host jadi MP4 looping via Kling 2.6 image2video ($0,042/dtk 720p, $0,07/dtk 1080p). Async — submit → poll → download (URL expire 30 hari).',
   },
   // KLIP LIVE MODE (Sprint 5+, 2026-06-02) — per-stage billing pipeline.
   // Kalkulator + profitability page otomatis pickup ini via AiFeatureConfig table.
-  // Kalibrasi 2026-07-21 (rincian kredit Kling dari owner): lip-sync =
-  // 1 kredit FLAT per video = $0,14 → dinormalisasi $0,014/dtk (asumsi klip
-  // 10 dtk). Harga lama $0,10/dtk = 7× overcharge. floorTokens dijaga setara
-  // ±1 kredit + margin supaya klip pendek tetap menutup biaya flat.
+  // Verifikasi 2026-09-07 (docs resmi): lip-sync dibilling 0,5 unit per 5 dtk
+  // = $0,014/dtk — persis rate lama, angka TIDAK berubah. Endpoint lip-sync
+  // tidak terdampak retirement 15 Sep 2026 (lihat catatan di host-gen/kling.ts).
   KLIP_LIVE_LIPSYNC: {
     ...COMMON_DEFAULTS,
     featureKey: 'KLIP_LIVE_LIPSYNC',
     displayName: 'Klip Live — Kling Lip-Sync',
     modelName: 'kling-lip-sync',
-    inputPricePer1M: 14_000, // $0.014/sec × 1M (= 1 kredit/10 dtk, 2026-07-21)
+    inputPricePer1M: 14_000, // $0.014/sec × 1M (0,5 unit/5 dtk, verifikasi 2026-09-07)
     outputPricePer1M: 0,
-    floorTokens: 2_400, // ≈ 1 kredit ($0,14) + margin — biaya Kling flat/klip
+    floorTokens: 2_400, // ≈ klip 10 dtk ($0,14) + margin — jaga klip pendek tetap nutup
     unitType: 'VIDEO_SECOND' as const,
     unitLabel: 'detik',
     description:
-      'Kling lipsync — biaya flat 1 kredit/klip ($0,14). Pakai baseline videoId existing (gak charge image2video lagi).',
+      'Kling lipsync — 0,5 unit/5 dtk ($0,07), klip 10 dtk ≈ $0,14. Pakai baseline videoId existing (gak charge image2video lagi).',
   },
   KLIP_LIVE_TTS_ELEVENLABS: {
     ...COMMON_DEFAULTS,
