@@ -1,23 +1,26 @@
-// Kling AI image-to-video — official API api.klingai.com (JWT auth).
-// User punya 2 key dari platform.klingai.com: AccessKey + SecretKey.
-// Disimpan di DB sebagai `<access>:<secret>` colon-separated lalu di-split
-// di sini. JWT di-sign per call (TTL 30 menit).
+// Kling AI image-to-video — official API (auth via lib/kling-auth.ts:
+// API Key tunggal `api-key-kling-…` dipakai langsung sebagai Bearer, atau
+// legacy `AccessKey:SecretKey` yang di-sign JWT per call).
 //
 // Endpoints:
-//   POST   https://api.klingai.com/v1/videos/image2video    (submit)
-//   GET    https://api.klingai.com/v1/videos/image2video/{task_id}  (poll + result)
+//   POST   {KLING_HOST}/v1/videos/image2video    (submit)
+//   GET    {KLING_HOST}/v1/videos/image2video/{task_id}  (poll + result)
 //
 // Output: task_result.videos[].url valid ~30hari (jauh lebih panjang dari Fal),
 // tapi kita tetap download segera ke local supaya cepat dipakai live room.
 
-import { createHmac, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+
+import { klingAuthHeader } from '@/lib/kling-auth'
 
 import { getHostGenApiKey } from './provider-keys'
 import { transcodeVideoToWeb } from '../media/transcode'
 
-const KLING_HOST = 'https://api.klingai.com'
+// Per pengumuman Kling 2026: endpoint pindah dari api.klingai.com ke
+// api-singapore.klingai.com untuk server di luar China.
+const KLING_HOST = 'https://api-singapore.klingai.com'
 
 // Kling models tersedia:
 //   - kling-v1 (legacy, murah)
@@ -39,51 +42,8 @@ export interface KlingSubmitResult {
   model: string
 }
 
-// Base64URL encode tanpa padding.
-function b64url(buf: Buffer): string {
-  return buf
-    .toString('base64')
-    .replace(/=+$/, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-}
-
-// Sign JWT HS256 manual (no jsonwebtoken dependency). Sesuai spec:
-// iss = AccessKey, exp = now+1800 sec, nbf = now-5 sec.
-function signKlingJwt(accessKey: string, secretKey: string): string {
-  const header = { alg: 'HS256', typ: 'JWT' }
-  const now = Math.floor(Date.now() / 1000)
-  const payload = { iss: accessKey, exp: now + 1800, nbf: now - 5 }
-  const h = b64url(Buffer.from(JSON.stringify(header)))
-  const p = b64url(Buffer.from(JSON.stringify(payload)))
-  const data = `${h}.${p}`
-  const sig = b64url(createHmac('sha256', secretKey).update(data).digest())
-  return `${data}.${sig}`
-}
-
-// Ambil pair access_key + secret_key dari ApiKey table. Format disimpan:
-//   `<access_key>:<secret_key>`. Kalau tidak ada colon, lempar error
-//   (user belum migrasi dari Fal.ai format).
-async function getKlingCredentials(): Promise<{
-  accessKey: string
-  secretKey: string
-}> {
-  const raw = await getHostGenApiKey('KLING')
-  const idx = raw.indexOf(':')
-  if (idx <= 0 || idx >= raw.length - 1) {
-    throw new Error(
-      'API key KLING harus format "AccessKey:SecretKey". Dapat dari platform.klingai.com (Developer → API Keys).',
-    )
-  }
-  return {
-    accessKey: raw.slice(0, idx).trim(),
-    secretKey: raw.slice(idx + 1).trim(),
-  }
-}
-
 export async function buildKlingAuthHeader(): Promise<string> {
-  const { accessKey, secretKey } = await getKlingCredentials()
-  return `Bearer ${signKlingJwt(accessKey, secretKey)}`
+  return klingAuthHeader(await getHostGenApiKey('KLING'))
 }
 
 // Kling resource pack punya batas task paralel (HTTP 429 code 1303
@@ -115,9 +75,7 @@ const KLING_QUEUE_FULL_MSG =
 // Resolve image untuk Kling. Kalau URL absolute http(s) ke public host →
 // send URL langsung. Kalau localhost / private IP / path lokal → baca file
 // + send base64 (tanpa data-URI prefix, sesuai spec Kling).
-async function resolveImageForKling(
-  imageUrl: string,
-): Promise<string> {
+async function resolveImageForKling(imageUrl: string): Promise<string> {
   // Path lokal (mulai dengan /uploads/) — pasti perlu base64.
   if (imageUrl.startsWith('/uploads/')) {
     const abs = path.join(process.cwd(), 'public', imageUrl.slice(1))
@@ -126,7 +84,11 @@ async function resolveImageForKling(
   }
   // Absolute URL ke localhost / private IP → fetch + base64.
   // (Kling server di luar tidak bisa fetch ke localhost user.)
-  if (/^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(imageUrl)) {
+  if (
+    /^https?:\/\/(localhost|127\.|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(
+      imageUrl,
+    )
+  ) {
     const res = await fetch(imageUrl)
     if (!res.ok) {
       throw new Error(`Fetch local image gagal HTTP ${res.status}: ${imageUrl}`)
@@ -155,18 +117,23 @@ export async function submitKlingVideo(
     cfg_scale: 0.5,
   }
 
-  const res = await fetchKlingSubmitWithRetry(`${KLING_HOST}/v1/videos/image2video`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: auth,
+  const res = await fetchKlingSubmitWithRetry(
+    `${KLING_HOST}/v1/videos/image2video`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: auth,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  })
+  )
   const text = await res.text()
   if (!res.ok) {
     if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
-    throw new Error(`Kling submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`)
+    throw new Error(
+      `Kling submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`,
+    )
   }
   let json: {
     code?: number
@@ -216,7 +183,10 @@ export async function pollKlingStatus(input: {
   })
   const text = await res.text()
   if (!res.ok) {
-    return { status: 'FAILED', rawError: `HTTP ${res.status}: ${text.slice(0, 300)}` }
+    return {
+      status: 'FAILED',
+      rawError: `HTTP ${res.status}: ${text.slice(0, 300)}`,
+    }
   }
   let json: {
     code?: number
@@ -225,7 +195,11 @@ export async function pollKlingStatus(input: {
       task_status?: string
       task_status_msg?: string
       task_result?: {
-        videos?: Array<{ id?: string; url?: string; duration?: string | number }>
+        videos?: Array<{
+          id?: string
+          url?: string
+          duration?: string | number
+        }>
       }
     }
   }
@@ -259,7 +233,9 @@ export async function pollKlingStatus(input: {
       videoUrl: vid.url,
       videoId: vid.id, // CRITICAL untuk lipsync — beda dari task_id
       durationSeconds:
-        typeof vid.duration === 'string' ? parseFloat(vid.duration) : (vid.duration ?? 0),
+        typeof vid.duration === 'string'
+          ? parseFloat(vid.duration)
+          : (vid.duration ?? 0),
     }
   }
   // Unknown status — treat as in_progress.
@@ -271,10 +247,16 @@ export async function pollKlingStatus(input: {
 export async function fetchKlingResult(input: {
   requestId: string
   model?: string
-}): Promise<{ videoUrl: string; durationSeconds: number; rawResponse: unknown }> {
+}): Promise<{
+  videoUrl: string
+  durationSeconds: number
+  rawResponse: unknown
+}> {
   const r = await pollKlingStatus(input)
   if (r.status !== 'COMPLETED' || !r.videoUrl) {
-    throw new Error(`Kling not completed yet: status=${r.status} ${r.rawError ?? ''}`)
+    throw new Error(
+      `Kling not completed yet: status=${r.status} ${r.rawError ?? ''}`,
+    )
   }
   return {
     videoUrl: r.videoUrl,
@@ -355,8 +337,14 @@ export async function submitKlingLipsync(
 ): Promise<KlingSubmitResult> {
   const auth = await buildKlingAuthHeader()
 
-  if (!input.sourceVideoId && !input.sourceVideoUrl && !input.sourceVideoBase64) {
-    throw new Error('Lipsync: butuh sourceVideoId, sourceVideoUrl, atau sourceVideoBase64')
+  if (
+    !input.sourceVideoId &&
+    !input.sourceVideoUrl &&
+    !input.sourceVideoBase64
+  ) {
+    throw new Error(
+      'Lipsync: butuh sourceVideoId, sourceVideoUrl, atau sourceVideoBase64',
+    )
   }
   if (!input.audioUrl && !input.audioBase64) {
     throw new Error('Lipsync: butuh audioUrl atau audioBase64')
@@ -391,18 +379,23 @@ export async function submitKlingLipsync(
 
   const body = { input: inputPayload }
 
-  const res = await fetchKlingSubmitWithRetry(`${KLING_HOST}/v1/videos/lip-sync`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: auth,
+  const res = await fetchKlingSubmitWithRetry(
+    `${KLING_HOST}/v1/videos/lip-sync`,
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: auth,
+      },
+      body: JSON.stringify(body),
     },
-    body: JSON.stringify(body),
-  })
+  )
   const text = await res.text()
   if (!res.ok) {
     if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
-    throw new Error(`Kling lipsync submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`)
+    throw new Error(
+      `Kling lipsync submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`,
+    )
   }
   let json: {
     code?: number
@@ -435,7 +428,10 @@ export async function pollKlingLipsync(input: {
   })
   const text = await res.text()
   if (!res.ok) {
-    return { status: 'FAILED', rawError: `HTTP ${res.status}: ${text.slice(0, 300)}` }
+    return {
+      status: 'FAILED',
+      rawError: `HTTP ${res.status}: ${text.slice(0, 300)}`,
+    }
   }
   let json: {
     code?: number
@@ -444,7 +440,11 @@ export async function pollKlingLipsync(input: {
       task_status?: string
       task_status_msg?: string
       task_result?: {
-        videos?: Array<{ id?: string; url?: string; duration?: string | number }>
+        videos?: Array<{
+          id?: string
+          url?: string
+          duration?: string | number
+        }>
       }
     }
   }
@@ -471,13 +471,18 @@ export async function pollKlingLipsync(input: {
   if (s === 'succeed' || s === 'succeeded') {
     const vid = json.data?.task_result?.videos?.[0]
     if (!vid?.url) {
-      return { status: 'FAILED', rawError: 'lipsync succeed tapi videos.url kosong' }
+      return {
+        status: 'FAILED',
+        rawError: 'lipsync succeed tapi videos.url kosong',
+      }
     }
     return {
       status: 'COMPLETED',
       videoUrl: vid.url,
       durationSeconds:
-        typeof vid.duration === 'string' ? parseFloat(vid.duration) : (vid.duration ?? 0),
+        typeof vid.duration === 'string'
+          ? parseFloat(vid.duration)
+          : (vid.duration ?? 0),
     }
   }
   return { status: 'IN_PROGRESS' }

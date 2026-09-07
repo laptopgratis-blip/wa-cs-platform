@@ -4,7 +4,8 @@
 // Return shape uniform supaya UI bisa render konsisten:
 //   { ok, status, error?, errorCode? }
 
-export type Provider = 'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
+export type Provider =
+  'ANTHROPIC' | 'OPENAI' | 'GOOGLE' | 'KLING' | 'ELEVENLABS'
 
 export interface TestResult {
   ok: boolean
@@ -114,62 +115,28 @@ async function testGoogle(apiKey: string): Promise<TestResult> {
   }
 }
 
-// Test KLING key (official api.klingai.com). Auth pakai JWT HS256 di-sign
-// dari AccessKey:SecretKey colon-separated. Liveness check: GET task list
-// (return 200 + list kosong kalau belum ada task). Endpoint 401 kalau JWT
-// invalid → bantu user diagnose.
-import { createHmac } from 'node:crypto'
-
-function b64urlForTest(buf: Buffer): string {
-  return buf
-    .toString('base64')
-    .replace(/=+$/, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-}
-
-function signTestJwt(accessKey: string, secretKey: string): string {
-  const header = { alg: 'HS256', typ: 'JWT' }
-  const now = Math.floor(Date.now() / 1000)
-  const payload = { iss: accessKey, exp: now + 300, nbf: now - 5 }
-  const h = b64urlForTest(Buffer.from(JSON.stringify(header)))
-  const p = b64urlForTest(Buffer.from(JSON.stringify(payload)))
-  const data = `${h}.${p}`
-  const sig = b64urlForTest(
-    createHmac('sha256', secretKey).update(data).digest(),
-  )
-  return `${data}.${sig}`
-}
+// Test KLING key (official API, host Singapore untuk server di luar China).
+// Auth via lib/kling-auth.ts: API Key tunggal `api-key-kling-…` dipakai
+// langsung sebagai Bearer; legacy "AccessKey:SecretKey" di-sign JWT (TTL 5
+// menit cukup untuk satu call test). Liveness check: GET task list (return
+// 200 + list kosong kalau belum ada task). 401 kalau key invalid.
+import { klingAuthHeader } from '@/lib/kling-auth'
 
 async function testKling(apiKey: string): Promise<TestResult> {
-  // Expect format "AccessKey:SecretKey".
-  const idx = apiKey.indexOf(':')
-  if (idx <= 0 || idx >= apiKey.length - 1) {
-    return {
-      ok: false,
-      httpStatus: 0,
-      error:
-        'Format key harus "AccessKey:SecretKey" (2 key, pisah pakai titik dua). Dapat dari platform.klingai.com → Developer → API Keys.',
-    }
-  }
-  const accessKey = apiKey.slice(0, idx).trim()
-  const secretKey = apiKey.slice(idx + 1).trim()
-  if (!accessKey || !secretKey) {
-    return {
-      ok: false,
-      httpStatus: 0,
-      error: 'AccessKey atau SecretKey kosong setelah split.',
-    }
+  let auth: string
+  try {
+    auth = klingAuthHeader(apiKey, 300)
+  } catch (e) {
+    return { ok: false, httpStatus: 0, error: (e as Error).message }
   }
 
   try {
-    const jwt = signTestJwt(accessKey, secretKey)
     // List image2video tasks (paginated). Return 200 walau kosong = key valid.
     const res = await fetch(
-      'https://api.klingai.com/v1/videos/image2video?pageNum=1&pageSize=1',
+      'https://api-singapore.klingai.com/v1/videos/image2video?pageNum=1&pageSize=1',
       {
         method: 'GET',
-        headers: { authorization: `Bearer ${jwt}` },
+        headers: { authorization: auth },
       },
     )
     if (res.ok) {
@@ -222,7 +189,8 @@ export async function testApiKey(
 // pakai node:https module langsung dengan family=4 (IPv4-only). Tested OK.
 async function testElevenLabs(apiKey: string): Promise<TestResult> {
   const trimmed = apiKey.trim()
-  if (!trimmed) return { ok: false, httpStatus: 0, error: 'Key kosong setelah trim' }
+  if (!trimmed)
+    return { ok: false, httpStatus: 0, error: 'Key kosong setelah trim' }
   return new Promise<TestResult>((resolve) => {
     const https = require('https') as typeof import('https')
     let settled = false
@@ -278,7 +246,10 @@ async function testElevenLabs(apiKey: string): Promise<TestResult> {
       settle({
         ok: false,
         httpStatus: 0,
-        error: `${e.name}: ${e.message}${e.code ? ` (${e.code})` : ''}`.slice(0, 250),
+        error: `${e.name}: ${e.message}${e.code ? ` (${e.code})` : ''}`.slice(
+          0,
+          250,
+        ),
       })
     })
     req.end()
