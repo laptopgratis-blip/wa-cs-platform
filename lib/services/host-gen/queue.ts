@@ -27,7 +27,10 @@ import {
   submitKlingVideo,
   DEFAULT_KLING_MODEL,
 } from './kling'
-import { isTransientKlingTaskFailure, MAX_KLING_AUTO_RETRIES } from './kling-retry'
+import {
+  isTransientKlingTaskFailure,
+  MAX_KLING_AUTO_RETRIES,
+} from './kling-retry'
 import { fileToBase64, generateHostImage } from './gemini-image'
 import {
   appendImageVariant,
@@ -106,13 +109,18 @@ function buildVariantPrompt(motionScript: string): string {
 
 // Step 1: vision-only (cheap ~$0.01, jalan otomatis setelah image ready).
 // Output disimpan di HostTemplate.visionAnalysis untuk re-use di adaptive prompt.
-export async function autoVisionAnalyzeHost(hostTemplateId: string): Promise<void> {
+export async function autoVisionAnalyzeHost(
+  hostTemplateId: string,
+): Promise<void> {
   try {
     const { analyzeHostImage } = await import('./vision-analyzer')
     await analyzeHostImage(hostTemplateId)
     console.log(`[autoVisionAnalyzeHost ${hostTemplateId}] vision OK`)
   } catch (e) {
-    console.warn(`[autoVisionAnalyzeHost ${hostTemplateId}] vision gagal:`, (e as Error).message)
+    console.warn(
+      `[autoVisionAnalyzeHost ${hostTemplateId}] vision gagal:`,
+      (e as Error).message,
+    )
   }
 }
 
@@ -133,8 +141,8 @@ export function listBaselineVariants(): BaselineVariantPreview[] {
       v.category === 'greeting'
         ? 'Sapa & wave — cocok untuk klip GREETING / WELCOME / SMALL_TALK'
         : v.category === 'product'
-        ? 'Pointing & explain — cocok untuk klip PRODUCT_DEMO / FAQ / FEATURES'
-        : 'Hype & closing — cocok untuk klip CTA / URGENCY / IDLE bouncy',
+          ? 'Pointing & explain — cocok untuk klip PRODUCT_DEMO / FAQ / FEATURES'
+          : 'Hype & closing — cocok untuk klip CTA / URGENCY / IDLE bouncy',
     motionScript: v.motionScript,
   }))
 }
@@ -480,7 +488,9 @@ export async function activateImageVariant(
     select: { id: true, mode: true, imageVariants: true, videoLoopUrl: true },
   })
   if (!host) throw new Error('Host template tidak ditemukan')
-  const variant = parseVariants(host.imageVariants).find((v) => v.id === variantId)
+  const variant = parseVariants(host.imageVariants).find(
+    (v) => v.id === variantId,
+  )
   if (!variant) throw new Error('Kandidat gambar tidak ditemukan')
 
   await prisma.hostTemplate.update({
@@ -525,9 +535,13 @@ export async function deleteImageVariant(input: {
     select: { sourceImageUrl: true, imageVariants: true },
   })
   if (!host) throw new Error('Host template tidak ditemukan')
-  const target = parseVariants(host.imageVariants).find((v) => v.id === input.variantId)
+  const target = parseVariants(host.imageVariants).find(
+    (v) => v.id === input.variantId,
+  )
   if (target && target.url === host.sourceImageUrl) {
-    throw new Error('Tidak bisa hapus kandidat yang sedang aktif. Pilih kandidat lain dulu.')
+    throw new Error(
+      'Tidak bisa hapus kandidat yang sedang aktif. Pilih kandidat lain dulu.',
+    )
   }
   return removeImageVariant(input.hostTemplateId, input.variantId)
 }
@@ -543,7 +557,7 @@ export async function enqueueVideoJob(input: {
   promptMotion: string
   durationSeconds: 5 | 10
   publicBaseUrl: string // mis. http://localhost:3000 — untuk konstruksi absolute URL
-  klingMode?: 'std' | 'pro' // pro = motion lebih dramatic, 1.5× cost. Default std.
+  klingMode?: 'std' | 'pro' // pro = output 1080p, ±1,7× biaya std (720p). Default std.
 }): Promise<{ jobId: string; requestId: string }> {
   await assertVideoBudgetOk({
     featureKey: HOST_VIDEO_FEATURE_KEY,
@@ -735,7 +749,9 @@ async function retryVideoJobOnce(
       },
       data: { providerTaskId: job.providerTaskId },
     })
-    console.warn(`[kling-poll] job ${job.id} resubmit retry gagal: ${submitMsg}`)
+    console.warn(
+      `[kling-poll] job ${job.id} resubmit retry gagal: ${submitMsg}`,
+    )
   }
 }
 
@@ -757,7 +773,10 @@ async function sweepOrphanedRetryJobs(): Promise<void> {
   })
   for (const o of orphans) {
     const p =
-      (o.inputPayload as { klingRetryAt?: string; hostSceneId?: string } | null) ?? {}
+      (o.inputPayload as {
+        klingRetryAt?: string
+        hostSceneId?: string
+      } | null) ?? {}
     const retryAt = p.klingRetryAt ? Date.parse(p.klingRetryAt) : NaN
     const ageMs = Number.isNaN(retryAt) ? Infinity : Date.now() - retryAt
     if (ageMs < RETRY_ORPHAN_MAX_AGE_MS) continue
@@ -803,7 +822,8 @@ export async function pollAndFinalizePendingVideos(): Promise<{
 
   for (const job of jobs) {
     if (!job.providerTaskId) continue
-    const sceneId = (job.inputPayload as { hostSceneId?: string } | null)?.hostSceneId ?? null
+    const sceneId =
+      (job.inputPayload as { hostSceneId?: string } | null)?.hostSceneId ?? null
     try {
       const status = await pollKlingStatus({
         requestId: job.providerTaskId,
@@ -814,13 +834,19 @@ export async function pollAndFinalizePendingVideos(): Promise<{
         continue
       }
       if (status.status === 'FAILED') {
-        const payload = (job.inputPayload as Record<string, unknown> | null) ?? {}
+        const payload =
+          (job.inputPayload as Record<string, unknown> | null) ?? {}
         const retryCount =
-          typeof payload.klingRetryCount === 'number' ? payload.klingRetryCount : 0
+          typeof payload.klingRetryCount === 'number'
+            ? payload.klingRetryCount
+            : 0
         const rawErr = status.rawError ?? 'Kling FAILED'
         // Transient (mis. "generation time out") → resubmit otomatis.
         // Scene tetap GENERATING selama retry, UI tetap tampil progres.
-        if (isTransientKlingTaskFailure(rawErr) && retryCount < MAX_KLING_AUTO_RETRIES) {
+        if (
+          isTransientKlingTaskFailure(rawErr) &&
+          retryCount < MAX_KLING_AUTO_RETRIES
+        ) {
           await retryVideoJobOnce(
             {
               id: job.id,
@@ -836,8 +862,14 @@ export async function pollAndFinalizePendingVideos(): Promise<{
           continue
         }
         failed++
-        const retrySuffix = retryCount > 0 ? ` (sudah dicoba ${retryCount + 1}× otomatis)` : ''
-        await markVideoJobFailed(job.id, job.hostTemplateId, sceneId, rawErr + retrySuffix)
+        const retrySuffix =
+          retryCount > 0 ? ` (sudah dicoba ${retryCount + 1}× otomatis)` : ''
+        await markVideoJobFailed(
+          job.id,
+          job.hostTemplateId,
+          sceneId,
+          rawErr + retrySuffix,
+        )
         continue
       }
       // COMPLETED — fetch result & download.
@@ -868,7 +900,8 @@ export async function pollAndFinalizePendingVideos(): Promise<{
       })
       // Sprint 5+: simpan klingVideoId (videos[0].id) di inputPayload — beda
       // dari providerTaskId. Dipakai sebagai sourceVideoId untuk lipsync.
-      const existingPayload = (job.inputPayload as Record<string, unknown> | null) ?? {}
+      const existingPayload =
+        (job.inputPayload as Record<string, unknown> | null) ?? {}
       // Claim kondisional: hanya finalize kalau status MASIH RUNNING. Kalau
       // count 0 berarti poller lain sudah memproses job ini — skip update
       // scene/template supaya tidak dobel.
@@ -932,7 +965,10 @@ export async function pollAndFinalizePendingVideos(): Promise<{
             // Update primary scene re-render → refresh cache di template.
             await prisma.hostTemplate.update({
               where: { id: scene.hostTemplateId },
-              data: { videoLoopUrl: dl.videoPath, videoSeconds: seconds || undefined },
+              data: {
+                videoLoopUrl: dl.videoPath,
+                videoSeconds: seconds || undefined,
+              },
             })
           }
         }
@@ -990,7 +1026,10 @@ async function markVideoJobFailed(
   } else if (hostTemplateId) {
     await prisma.hostTemplate.update({
       where: { id: hostTemplateId },
-      data: { status: HostTemplateStatus.FAILED, errorMessage: err.slice(0, 1000) },
+      data: {
+        status: HostTemplateStatus.FAILED,
+        errorMessage: err.slice(0, 1000),
+      },
     })
   }
 }

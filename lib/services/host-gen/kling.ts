@@ -22,12 +22,15 @@ import { transcodeVideoToWeb } from '../media/transcode'
 // api-singapore.klingai.com untuk server di luar China.
 const KLING_HOST = 'https://api-singapore.klingai.com'
 
-// Kling models tersedia:
-//   - kling-v1 (legacy, murah)
-//   - kling-v1-6 (mid)
-//   - kling-v2-master (latest, best quality) — DEFAULT
-// Modes: std (standard, cheaper) | pro (high quality, dipakai)
-export const DEFAULT_KLING_MODEL = 'kling-v2-master'
+// Model image2video yang masih hidup di endpoint legacy /v1/videos/image2video
+// (pengumuman retirement Kling: kling-v1, kling-v1-5, kling-v1-6,
+// kling-v2-master, kling-v2-1, kling-v2-1-master pensiun 15 Sep 2026;
+// verifikasi docs resmi 2026-09-07). Harga per detik, 1 unit = $0,14:
+//   - kling-v2-5-turbo (0,3 unit/dtk 720p | 0,5 unit/dtk 1080p; durasi 5|10)
+//   - kling-v2-6 (harga sama 2.5-turbo, generasi lebih baru) — DEFAULT
+//   - kling-v3 (0,6 unit/dtk 720p | 0,8 unit/dtk 1080p; premium)
+// Modes: std (720p, murah) | pro (1080p, ±1,7× biaya std)
+export const DEFAULT_KLING_MODEL = 'kling-v2-6'
 
 export interface KlingSubmitInput {
   imageUrl: string // absolute URL (Kling fetch dari server-nya)
@@ -306,6 +309,14 @@ export async function downloadKlingVideo(input: {
 // LIP-SYNC ENDPOINT (Sprint 2 — Klip Live mode)
 // ─────────────────────────────────────────
 // Endpoint: POST /v1/videos/lip-sync (submit) + GET /v1/videos/lip-sync/{task_id} (poll)
+//
+// Status retirement (cek docs 2026-09-07): lip-sync TIDAK masuk daftar
+// retirement 15 Sep 2026 (yang pensiun hanya model image/video lama, virtual
+// try-on, dan sebagian efek). Capability map: "Lip Sync — All model versions",
+// jadi baseline dari kling-v2-6/v3 tetap bisa di-lipsync. CATATAN: docs resmi
+// kini menonjolkan /v1/videos/advanced-lip-sync (flow baru: face recognition →
+// session_id + face_id). Endpoint lama masih jalan — pantau kalau kelak
+// di-sunset, migrasinya butuh step face-recognition tambahan.
 //
 // Mode yang dipakai: audio2video — kasih video source + audio file → video lip-synced output.
 // Video source options:
