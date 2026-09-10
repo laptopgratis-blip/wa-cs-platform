@@ -736,6 +736,43 @@ export class WaManager {
     }
   }
 
+  // Kirim GAMBAR dari BUFFER (+ caption opsional) — jalur imageBase64 di
+  // /send-message ("fire and forget" dari image_base64 API publik): Baileys
+  // meng-upload bytes langsung ke WA, tidak ada file/URL yang disimpan.
+  async sendImageBuffer(
+    sessionId: string,
+    phoneNumber: string,
+    image: Buffer,
+    caption?: string,
+  ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+    const entry = this.sessions.get(sessionId)
+    if (!entry || !entry.socket) {
+      return { ok: false, error: 'session tidak aktif' }
+    }
+    if (entry.state.status !== 'CONNECTED') {
+      return {
+        ok: false,
+        error: `session belum siap (status: ${entry.state.status})`,
+      }
+    }
+    const jid = phoneToSendJid(phoneNumber)
+    if (!jid) {
+      return { ok: false, error: `nomor tujuan tidak valid: "${phoneNumber}"` }
+    }
+    try {
+      const result = await entry.socket.sendMessage(jid, {
+        image,
+        caption: caption?.trim() || undefined,
+      })
+      const messageId = result?.key?.id ?? undefined
+      if (messageId) this.markSent(entry, messageId)
+      return { ok: true, messageId }
+    } catch (err) {
+      console.error(`[wa-manager:${sessionId}] sendImageBuffer gagal:`, err)
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
   // Tandai messageId sebagai pesan outgoing yang sudah kita kirim — supaya
   // event messages.upsert fromMe untuk ID ini di-skip (cegah duplikat /
   // misclassification sebagai WA_DIRECT). Auto-evict 60 detik kemudian.

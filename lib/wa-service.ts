@@ -175,17 +175,27 @@ export const waService = {
       `/sessions/${encodeURIComponent(sessionId)}`,
     )
   },
-  // imageUrl opsional → kirim gambar (content jadi caption). Cloud: Meta yang
-  // fetch link-nya; Baileys: wa-service yang download — caller WAJIB sudah
-  // memvalidasi URL (assertSafeWebhookUrl) supaya bukan alamat internal.
+  // imageUrl opsional → kirim gambar by-link (content jadi caption). Cloud:
+  // Meta yang fetch link-nya; Baileys: wa-service yang download — caller WAJIB
+  // sudah memvalidasi URL (assertSafeWebhookUrl) supaya bukan alamat internal.
+  // imageData opsional (eksklusif dgn imageUrl; dari image_base64 API publik):
+  // bytes dikirim langsung — Baileys terima base64 via /send-message, Cloud
+  // upload dulu ke media API Meta. Tidak ada file tersimpan di platform.
   async sendMessage(
     sessionId: string,
     phoneNumber: string,
     content: string,
     imageUrl?: string,
+    imageData?: { buffer: Buffer; mime: string },
   ) {
     if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
-      return sendCloudText({ sessionId, phoneNumber, content, imageUrl })
+      return sendCloudText({
+        sessionId,
+        phoneNumber,
+        content,
+        imageUrl,
+        imageData,
+      })
     }
     return request<{
       sessionId: string
@@ -197,6 +207,9 @@ export const waService = {
         phoneNumber,
         content,
         ...(imageUrl ? { imageUrl } : {}),
+        ...(imageData
+          ? { imageBase64: imageData.buffer.toString('base64') }
+          : {}),
       }),
     })
   },

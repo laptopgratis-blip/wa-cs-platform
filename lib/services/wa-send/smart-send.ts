@@ -21,6 +21,22 @@ import { findApprovedTemplate } from '@/lib/services/waba/templates'
 
 export type SmartSendPurpose = Exclude<TemplateSendPurpose, 'CS' | 'BROADCAST'>
 
+/**
+ * Gambar untuk jalur free-form: by-URL publik (lama) ATAU bytes langsung
+ * ("fire and forget" dari image_base64 API publik — tidak ada file yang
+ * disimpan platform; Baileys terima buffer, Cloud upload ke media API Meta).
+ */
+export type SmartSendImage =
+  { url: string } | { data: { buffer: Buffer; mime: string } }
+
+function imageParts(image: SmartSendImage | undefined): {
+  url?: string
+  data?: { buffer: Buffer; mime: string }
+} {
+  if (!image) return {}
+  return 'url' in image ? { url: image.url } : { data: image.data }
+}
+
 export interface SmartSendTemplateSpec {
   /** Template spesifik (dipakai hanya bila wabaId-nya sama dengan kandidat). */
   templateId?: string | null
@@ -35,12 +51,13 @@ export interface SmartSendInput {
   /** Teks free-form (Baileys / Cloud dalam window). Caption saat image diisi. */
   text: string
   /**
-   * Opsional: kirim gambar dari URL publik (text jadi caption). Hanya jalur
-   * free-form — template TIDAK bisa membawa gambar arbitrer, jadi kandidat
-   * Cloud di luar window dilewati dengan WINDOW_CLOSED (tanpa fallback).
-   * URL WAJIB sudah lolos guard SSRF di pemanggil.
+   * Opsional: kirim gambar — URL publik atau buffer (lihat SmartSendImage);
+   * text jadi caption. Hanya jalur free-form — template TIDAK bisa membawa
+   * gambar arbitrer, jadi kandidat Cloud di luar window dilewati dengan
+   * WINDOW_CLOSED (tanpa fallback). URL WAJIB sudah lolos guard SSRF di
+   * pemanggil; buffer WAJIB sudah lolos decodeImageBase64.
    */
-  image?: { url: string }
+  image?: SmartSendImage
   template?: SmartSendTemplateSpec
   purpose: SmartSendPurpose
   /** Message.source untuk pesan template Cloud (mis. 'SYSTEM', 'FOLLOWUP'). */
@@ -159,6 +176,7 @@ export async function smartSend(
   const attempts: SmartSendResult['attempts'] = []
   const codes: (SmartSendCode | undefined)[] = []
   const allowFreeform = input.allowFreeformInWindow ?? true
+  const img = imageParts(input.image)
 
   if (input.candidates.length === 0) {
     return {
@@ -176,7 +194,8 @@ export async function smartSend(
           cand.sessionId,
           input.to,
           input.text,
-          input.image?.url,
+          img.url,
+          img.data,
         )
         if (r.success) {
           return {
@@ -205,7 +224,8 @@ export async function smartSend(
           cand.sessionId,
           input.to,
           input.text,
-          input.image?.url,
+          img.url,
+          img.data,
         )
         if (r.success) {
           return {

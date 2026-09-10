@@ -52,6 +52,14 @@ const io = new IOServer(httpServer, {
 const manager = new WaManager(io, SESSIONS_DIR)
 
 app.use(cors({ origin: CORS_ORIGIN, credentials: true }))
+// Gambar base64 (imageBase64) ter-encode bisa ~7 MB — HANYA route send-message
+// yang menerima body sebesar itu (parser path-scoped ini jalan duluan;
+// body-parser berikutnya skip karena req sudah ter-parse). Endpoint lain
+// tetap 256kb supaya limit global tidak melonggar diam-diam.
+app.use(
+  '/sessions/:sessionId/send-message',
+  express.json({ limit: '8mb' }),
+)
 app.use(express.json({ limit: '256kb' }))
 
 // Middleware proteksi: Next.js harus kirim header `x-service-secret`.
@@ -196,25 +204,53 @@ app.post('/lid/resolve', requireSecret, async (req, res) => {
 app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) => {
   const sessionId = String(req.params.sessionId ?? '')
   const body = req.body as
-    | { phoneNumber?: string; content?: string; imageUrl?: string }
+    | {
+        phoneNumber?: string
+        content?: string
+        imageUrl?: string
+        imageBase64?: string
+      }
     | undefined
-  // imageUrl opsional: bila ada → kirim gambar (content jadi caption, boleh
-  // kosong). Tanpa imageUrl → teks biasa, content wajib.
-  if (!body?.phoneNumber || (!body?.content && !body?.imageUrl)) {
+  // imageUrl/imageBase64 opsional: bila ada → kirim gambar (content jadi
+  // caption, boleh kosong). Tanpa gambar → teks biasa, content wajib.
+  if (
+    !body?.phoneNumber ||
+    (!body?.content && !body?.imageUrl && !body?.imageBase64)
+  ) {
     res.status(400).json({
       success: false,
-      error: 'phoneNumber dan content (atau imageUrl) wajib diisi',
+      error: 'phoneNumber dan content (atau imageUrl/imageBase64) wajib diisi',
     })
     return
   }
-  const result = body.imageUrl
-    ? await manager.sendImage(
+  // imageBase64 datang dari platform yang SUDAH memvalidasi (decode + magic
+  // bytes + cap 5 MB) — cek ulang di sini cuma defense-in-depth murah.
+  let imageBuffer: Buffer | undefined
+  if (body.imageBase64) {
+    imageBuffer = Buffer.from(body.imageBase64, 'base64')
+    if (imageBuffer.byteLength === 0 || imageBuffer.byteLength > 5 * 1024 * 1024) {
+      res.status(400).json({
+        success: false,
+        error: 'imageBase64 tidak valid atau melebihi 5 MB',
+      })
+      return
+    }
+  }
+  const result = imageBuffer
+    ? await manager.sendImageBuffer(
         sessionId,
         body.phoneNumber,
-        body.imageUrl,
+        imageBuffer,
         body.content,
       )
-    : await manager.sendText(sessionId, body.phoneNumber, body.content ?? '')
+    : body.imageUrl
+      ? await manager.sendImage(
+          sessionId,
+          body.phoneNumber,
+          body.imageUrl,
+          body.content,
+        )
+      : await manager.sendText(sessionId, body.phoneNumber, body.content ?? '')
   if (!result.ok) {
     res.status(400).json({ success: false, error: result.error || 'gagal kirim' })
     return

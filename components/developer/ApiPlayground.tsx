@@ -163,7 +163,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: 'POST',
     label: 'Kirim WhatsApp Gambar',
     path: '/api/v1/messages',
-    desc: 'Kirim gambar dari URL publik (https) + caption opsional di content. Baileys kapan saja; Cloud API hanya selama window 24 jam terbuka (gambar tidak bisa fallback ke template).',
+    desc: 'Kirim gambar dari URL publik (https) ATAU image_base64 (base64/data URI, maks 5 MB — tanpa perlu hosting, tidak ada file tersimpan) + caption opsional di content. Baileys kapan saja; Cloud API hanya selama window 24 jam terbuka (gambar tidak bisa fallback ke template).',
     params: [],
     supportsSender: true,
     bodyExample: JSON.stringify(

@@ -1,6 +1,8 @@
 // Validasi body POST /api/v1/messages (teks) & /api/v1/messages/template.
 import { z } from 'zod'
 
+import { MAX_IMAGE_BASE64_CHARS } from '@/lib/services/public-api/image-data'
+
 // Nomor: normalisasi (buang non-digit) DI DALAM schema lalu validasi jumlah
 // DIGIT — bukan panjang string mentah. Tanpa transform, "++++++++" (8 char)
 // lolos lalu jadi string kosong saat dinormalisasi, dan tujuan kosong lolos
@@ -39,6 +41,19 @@ export const publicSendTextSchema = z
       .min(1)
       .max(2048, 'image_url terlalu panjang (maks 2048 karakter)')
       .nullish(),
+    // Opsional (alternatif image_url): GAMBAR sebagai base64 mentah / data URI
+    // ("fire and forget" — tidak ada file yang disimpan platform). Bentuk &
+    // ukuran string dicek di sini; decode + magic bytes di sendPublicText
+    // (decodeImageBase64) sebelum bytes menyentuh transport.
+    image_base64: z
+      .string()
+      .trim()
+      .min(1)
+      .max(
+        MAX_IMAGE_BASE64_CHARS,
+        'image_base64 terlalu besar (maksimal 5 MB sebelum encoding)',
+      )
+      .nullish(),
     // Opsional: dahulukan sesi tertentu (id sesi WhatsApp milik sendiri).
     // nullish: klien (dan contoh body di Playground) lazim mengirim null
     // eksplisit untuk "biar platform yang pilih" — jangan ditolak validasi.
@@ -52,7 +67,16 @@ export const publicSendTextSchema = z
       .transform((v) => v ?? false),
   })
   .superRefine((v, ctx) => {
-    if (!v.image_url) {
+    if (v.image_url && v.image_base64) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['image_base64'],
+        message:
+          'Pilih salah satu: image_url ATAU image_base64, bukan keduanya.',
+      })
+      return
+    }
+    if (!v.image_url && !v.image_base64) {
       // Teks murni: content wajib — pesan error sama dengan skema lama.
       if (!v.content) {
         ctx.addIssue({
@@ -63,24 +87,27 @@ export const publicSendTextSchema = z
       }
       return
     }
-    // Ada gambar: URL harus http(s) valid, caption maks 1024.
-    let parsedUrl: URL | null = null
-    try {
-      parsedUrl = new URL(v.image_url)
-    } catch {
-      parsedUrl = null
+    // Ada gambar by-URL: URL harus http(s) valid.
+    if (v.image_url) {
+      let parsedUrl: URL | null = null
+      try {
+        parsedUrl = new URL(v.image_url)
+      } catch {
+        parsedUrl = null
+      }
+      if (
+        !parsedUrl ||
+        (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:')
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['image_url'],
+          message:
+            'image_url harus URL http(s) valid ke file gambar yang bisa diakses publik.',
+        })
+      }
     }
-    if (
-      !parsedUrl ||
-      (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:')
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['image_url'],
-        message:
-          'image_url harus URL http(s) valid ke file gambar yang bisa diakses publik.',
-      })
-    }
+    // Caption berlaku untuk kedua bentuk gambar.
     if ((v.content ?? '').length > IMAGE_CAPTION_MAX) {
       ctx.addIssue({
         code: 'custom',

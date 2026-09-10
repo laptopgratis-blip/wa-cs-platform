@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
+import { uploadCloudMedia } from './media-upload'
 
 // Kode error Meta yang berarti token/sesi tidak sehat → sesi di-ERROR-kan.
 const TOKEN_ERROR_CODES = new Set([190])
@@ -25,17 +26,20 @@ interface CloudMessagesResponse {
 }
 
 /**
- * Kirim teks free-form — atau GAMBAR by-link bila imageUrl diisi (content
- * jadi caption opsional; Meta yang men-fetch URL-nya, harus https publik).
- * Keduanya pesan free-form dalam window 24 jam, aturan compliance sama.
- * Pra-cek window dari Contact.windowExpiresAt supaya kegagalan yang pasti
- * terjadi diberi pesan jelas tanpa memanggil Meta.
+ * Kirim teks free-form — atau GAMBAR: by-link bila imageUrl diisi (Meta yang
+ * men-fetch URL-nya, harus https publik), atau by-bytes bila imageData diisi
+ * (di-upload dulu ke media API Meta → kirim by id; tidak ada file tersimpan
+ * di platform). content jadi caption opsional saat ada gambar. Semuanya pesan
+ * free-form dalam window 24 jam, aturan compliance sama. Pra-cek window dari
+ * Contact.windowExpiresAt supaya kegagalan yang pasti terjadi diberi pesan
+ * jelas tanpa memanggil Meta.
  */
 export async function sendCloudText(input: {
   sessionId: string
   phoneNumber: string
   content: string
   imageUrl?: string
+  imageData?: { buffer: Buffer; mime: string }
 }): Promise<CloudSendResult> {
   try {
     // Aturan kepatuhan terpusat (sesi valid, blacklist, window 24 jam) —
@@ -58,6 +62,27 @@ export async function sendCloudText(input: {
       }
     const token = credRes.creds.token
 
+    // Gambar by-bytes: upload dulu ke media API Meta → kirim pakai media id.
+    // Kegagalan upload TIDAK meng-ERROR-kan sesi di sini (kalau token memang
+    // mati, panggilan /messages berikutnya yang menanganinya lengkap).
+    let mediaId: string | undefined
+    if (input.imageData) {
+      const uploaded = await uploadCloudMedia({
+        phoneNumberId: session.phoneNumberId,
+        token,
+        buffer: input.imageData.buffer,
+        mime: input.imageData.mime,
+      })
+      if (!uploaded.ok) {
+        return {
+          success: false,
+          error: `Upload media ke Meta gagal: ${uploaded.error.message}`,
+          code: 'META_ERROR',
+        }
+      }
+      mediaId = uploaded.data.id
+    }
+
     const result = await graphRequest<CloudMessagesResponse>(
       `/${session.phoneNumberId}/messages`,
       {
@@ -67,15 +92,23 @@ export async function sendCloudText(input: {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to,
-          ...(input.imageUrl
+          ...(mediaId
             ? {
                 type: 'image',
                 image: {
-                  link: input.imageUrl,
+                  id: mediaId,
                   ...(input.content ? { caption: input.content } : {}),
                 },
               }
-            : { type: 'text', text: { body: input.content } }),
+            : input.imageUrl
+              ? {
+                  type: 'image',
+                  image: {
+                    link: input.imageUrl,
+                    ...(input.content ? { caption: input.content } : {}),
+                  },
+                }
+              : { type: 'text', text: { body: input.content } }),
         },
       },
     )
