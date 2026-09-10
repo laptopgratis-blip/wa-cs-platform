@@ -72,8 +72,18 @@ const ENDPOINTS: EndpointDef[] = [
     path: '/api/v1/contacts',
     desc: 'Daftar kontak dengan paginasi cursor. Filter opsional: search, stage, tag.',
     params: [
-      { name: 'search', label: 'search', kind: 'query', placeholder: 'nama / nomor' },
-      { name: 'stage', label: 'stage', kind: 'query', placeholder: 'NEW / PROSPECT / …' },
+      {
+        name: 'search',
+        label: 'search',
+        kind: 'query',
+        placeholder: 'nama / nomor',
+      },
+      {
+        name: 'stage',
+        label: 'stage',
+        kind: 'query',
+        placeholder: 'NEW / PROSPECT / …',
+      },
       { name: 'tag', label: 'tag', kind: 'query' },
       { name: 'limit', label: 'limit', kind: 'query', placeholder: '25' },
       { name: 'cursor', label: 'cursor', kind: 'query' },
@@ -106,7 +116,12 @@ const ENDPOINTS: EndpointDef[] = [
     path: '/api/v1/messages/{externalMsgId}/status',
     desc: 'Status kirim (SENT/DELIVERED/READ/FAILED) satu pesan by externalMsgId (wamid).',
     params: [
-      { name: 'externalMsgId', label: 'externalMsgId (wamid)', kind: 'path', required: true },
+      {
+        name: 'externalMsgId',
+        label: 'externalMsgId (wamid)',
+        kind: 'path',
+        required: true,
+      },
     ],
   },
   {
@@ -137,6 +152,25 @@ const ENDPOINTS: EndpointDef[] = [
       {
         phone_number: '628123456789',
         content: 'Halo dari API Playground!',
+        session_id: null,
+      },
+      null,
+      2,
+    ),
+  },
+  {
+    id: 'send-image',
+    method: 'POST',
+    label: 'Kirim WhatsApp Gambar',
+    path: '/api/v1/messages',
+    desc: 'Kirim gambar dari URL publik (https) + caption opsional di content. Baileys kapan saja; Cloud API hanya selama window 24 jam terbuka (gambar tidak bisa fallback ke template).',
+    params: [],
+    supportsSender: true,
+    bodyExample: JSON.stringify(
+      {
+        phone_number: '628123456789',
+        image_url: 'https://contoh.com/gambar/promo.jpg',
+        content: 'Caption opsional untuk gambarnya',
         session_id: null,
       },
       null,
@@ -249,7 +283,9 @@ function MethodBadge({ method }: { method: Method }) {
     <span
       className={cn(
         'inline-flex w-12 shrink-0 justify-center rounded-md px-1.5 py-0.5 font-mono text-xs font-bold',
-        method === 'GET' ? 'bg-warm-100 text-warm-600' : 'bg-primary-100 text-primary-700',
+        method === 'GET'
+          ? 'bg-warm-100 text-warm-600'
+          : 'bg-primary-100 text-primary-700',
       )}
     >
       {method}
@@ -274,7 +310,11 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       }}
       className="text-warm-400 hover:text-warm-700 shrink-0"
     >
-      {copied ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+      {copied ? (
+        <Check className="size-3.5 text-emerald-600" />
+      ) : (
+        <Copy className="size-3.5" />
+      )}
     </button>
   )
 }
@@ -294,7 +334,9 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
 
   const endpoint = ENDPOINTS.find((e) => e.id === endpointId) ?? ENDPOINTS[0]
   const isPost = endpoint.method === 'POST'
-  const missingRequired = endpoint.params.some((p) => p.required && !values[p.name]?.trim())
+  const missingRequired = endpoint.params.some(
+    (p) => p.required && !values[p.name]?.trim(),
+  )
   let bodyInvalid = false
   if (isPost) {
     try {
@@ -349,7 +391,11 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
     setSenderId(nextId)
     setStrictSender(nextStrict)
     setBodyText((prev) =>
-      writeSenderIntoBody(prev, nextId === AUTO_SENDER ? null : nextId, nextStrict),
+      writeSenderIntoBody(
+        prev,
+        nextId === AUTO_SENDER ? null : nextId,
+        nextStrict,
+      ),
     )
   }
 
@@ -359,7 +405,8 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
     for (const p of endpoint.params) {
       const v = values[p.name]?.trim()
       if (!v) continue
-      if (p.kind === 'path') path = path.replace(/\{[^}]+\}/, encodeURIComponent(v))
+      if (p.kind === 'path')
+        path = path.replace(/\{[^}]+\}/, encodeURIComponent(v))
       else qs.set(p.name, v)
     }
     return qs.size > 0 ? `${path}?${qs}` : path
@@ -371,7 +418,10 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
     `curl -X ${endpoint.method} "${fullUrl}"`,
     `  -H "Authorization: Bearer ${keyForCurl}"`,
     ...(isPost
-      ? [`  -H "Content-Type: application/json"`, `  -d '${(bodyText || '{}').replace(/\n\s*/g, ' ')}'`]
+      ? [
+          `  -H "Content-Type: application/json"`,
+          `  -d '${(bodyText || '{}').replace(/\n\s*/g, ' ')}'`,
+        ]
       : []),
   ].join(' \\\n')
 
@@ -381,7 +431,14 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
     setResult(null)
     try {
       // fetch pakai path relatif (same-origin, tanpa CORS); tampilan pakai URL penuh.
-      setResult(await timedFetch(endpoint.method, buildPath(), apiKey.trim(), isPost ? bodyText : null))
+      setResult(
+        await timedFetch(
+          endpoint.method,
+          buildPath(),
+          apiKey.trim(),
+          isPost ? bodyText : null,
+        ),
+      )
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -395,26 +452,36 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
     <Card>
       <CardContent className="space-y-4 pt-6">
         <div>
-          <h2 className="font-display text-warm-900 text-lg font-semibold">API Playground</h2>
+          <h2 className="font-display text-warm-900 text-lg font-semibold">
+            API Playground
+          </h2>
           <p className="text-warm-500 text-sm">
-            Coba endpoint langsung dari sini. Kunci hanya dipakai untuk request ini — tidak disimpan.
+            Coba endpoint langsung dari sini. Kunci hanya dipakai untuk request
+            ini — tidak disimpan.
           </p>
         </div>
 
         {/* Info Base URL + autentikasi — supaya jelas dipakai dari luar. */}
         <div className="border-warm-200 bg-warm-50 space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-warm-500 text-xs font-medium uppercase tracking-wide">Base URL</span>
+            <span className="text-warm-500 text-xs font-medium tracking-wide uppercase">
+              Base URL
+            </span>
             <CopyButton text={`${baseUrl}/api/v1`} label="Salin base URL" />
           </div>
-          <code className="text-warm-800 block break-all font-mono text-sm">{baseUrl}/api/v1</code>
+          <code className="text-warm-800 block font-mono text-sm break-all">
+            {baseUrl}/api/v1
+          </code>
           <p className="text-warm-500 text-xs">
             Autentikasi: kirim header{' '}
             <code className="bg-warm-100 text-warm-700 rounded px-1 py-0.5 font-mono">
               Authorization: Bearer &lt;kunci&gt;
             </code>{' '}
             di setiap request. Semua respons berbentuk{' '}
-            <code className="font-mono">{'{ success, data | error, code }'}</code>.
+            <code className="font-mono">
+              {'{ success, data | error, code }'}
+            </code>
+            .
           </p>
         </div>
 
@@ -430,7 +497,8 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
             className="font-mono"
           />
           <p className="text-warm-500 text-xs">
-            Belum punya? Buat di tab <span className="font-medium">Kunci API</span>.
+            Belum punya? Buat di tab{' '}
+            <span className="font-medium">Kunci API</span>.
           </p>
         </div>
 
@@ -460,7 +528,9 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
           {/* URL penuh (bukan cuma path relatif). */}
           <div className="bg-warm-100 flex items-center gap-2 rounded px-2 py-1.5">
             <MethodBadge method={endpoint.method} />
-            <code className="text-warm-700 min-w-0 flex-1 break-all font-mono text-xs">{fullUrl}</code>
+            <code className="text-warm-700 min-w-0 flex-1 font-mono text-xs break-all">
+              {fullUrl}
+            </code>
             <CopyButton text={fullUrl} label="Salin URL" />
           </div>
         </div>
@@ -477,7 +547,9 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
                   id={`pg-${p.name}`}
                   value={values[p.name] ?? ''}
                   placeholder={p.placeholder}
-                  onChange={(e) => setValues((prev) => ({ ...prev, [p.name]: e.target.value }))}
+                  onChange={(e) =>
+                    setValues((prev) => ({ ...prev, [p.name]: e.target.value }))
+                  }
                   className="font-mono text-sm"
                 />
               </div>
@@ -514,7 +586,9 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
                 <SelectValue placeholder="Otomatis — platform yang pilih" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={AUTO_SENDER}>Otomatis — platform yang pilih</SelectItem>
+                <SelectItem value={AUTO_SENDER}>
+                  Otomatis — platform yang pilih
+                </SelectItem>
                 {(senders ?? []).map((snd) => (
                   <SelectItem key={snd.sessionId} value={snd.sessionId}>
                     {senderLabel(snd)}
@@ -532,9 +606,10 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
                 onChange={(e) => applySender(senderId, e.target.checked)}
               />
               <span>
-                Kunci ke nomor ini (<code className="font-mono">strict_session</code>) — kalau nomor
-                itu gagal, request ikut gagal. Tanpa ini, platform boleh memakai nomor lain sebagai
-                cadangan.
+                Kunci ke nomor ini (
+                <code className="font-mono">strict_session</code>) — kalau nomor
+                itu gagal, request ikut gagal. Tanpa ini, platform boleh memakai
+                nomor lain sebagai cadangan.
               </span>
             </label>
 
@@ -559,13 +634,20 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
               rows={7}
               className="font-mono text-sm"
             />
-            {bodyInvalid && <p className="text-xs text-red-600">JSON tidak valid.</p>}
+            {bodyInvalid && (
+              <p className="text-xs text-red-600">JSON tidak valid.</p>
+            )}
           </div>
         )}
 
         <Button
           onClick={run}
-          disabled={running || apiKey.trim().length < 10 || missingRequired || bodyInvalid}
+          disabled={
+            running ||
+            apiKey.trim().length < 10 ||
+            missingRequired ||
+            bodyInvalid
+          }
           className="w-full"
         >
           {running ? (
@@ -587,12 +669,20 @@ export function ApiPlayground({ baseUrl }: ApiPlaygroundProps) {
           </pre>
         </div>
 
-        {error && <p className="text-sm text-red-600">Request gagal: {error}</p>}
+        {error && (
+          <p className="text-sm text-red-600">Request gagal: {error}</p>
+        )}
 
         {result && (
           <div className="space-y-2">
             <p className="text-sm">
-              <span className={okStatus ? 'font-semibold text-emerald-700' : 'font-semibold text-red-600'}>
+              <span
+                className={
+                  okStatus
+                    ? 'font-semibold text-emerald-700'
+                    : 'font-semibold text-red-600'
+                }
+              >
                 HTTP {result.status}
               </span>{' '}
               <span className="text-warm-500">

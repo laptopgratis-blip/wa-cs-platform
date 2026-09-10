@@ -699,6 +699,43 @@ export class WaManager {
     }
   }
 
+  // Kirim GAMBAR dari URL (+ caption opsional) — pola sama dengan sendText;
+  // Baileys men-download URL lalu upload ke WA (pastikan URL bisa diakses
+  // dari container ini). Dipakai endpoint /send-message saat body.imageUrl ada.
+  async sendImage(
+    sessionId: string,
+    phoneNumber: string,
+    imageUrl: string,
+    caption?: string,
+  ): Promise<{ ok: boolean; error?: string; messageId?: string }> {
+    const entry = this.sessions.get(sessionId)
+    if (!entry || !entry.socket) {
+      return { ok: false, error: 'session tidak aktif' }
+    }
+    if (entry.state.status !== 'CONNECTED') {
+      return {
+        ok: false,
+        error: `session belum siap (status: ${entry.state.status})`,
+      }
+    }
+    const jid = phoneToSendJid(phoneNumber)
+    if (!jid) {
+      return { ok: false, error: `nomor tujuan tidak valid: "${phoneNumber}"` }
+    }
+    try {
+      const result = await entry.socket.sendMessage(jid, {
+        image: { url: imageUrl },
+        caption: caption?.trim() || undefined,
+      })
+      const messageId = result?.key?.id ?? undefined
+      if (messageId) this.markSent(entry, messageId)
+      return { ok: true, messageId }
+    } catch (err) {
+      console.error(`[wa-manager:${sessionId}] sendImage gagal:`, err)
+      return { ok: false, error: (err as Error).message }
+    }
+  }
+
   // Tandai messageId sebagai pesan outgoing yang sudah kita kirim — supaya
   // event messages.upsert fromMe untuk ID ini di-skip (cegah duplikat /
   // misclassification sebagai WA_DIRECT). Auto-evict 60 detik kemudian.

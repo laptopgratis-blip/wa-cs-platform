@@ -195,14 +195,26 @@ app.post('/lid/resolve', requireSecret, async (req, res) => {
 
 app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) => {
   const sessionId = String(req.params.sessionId ?? '')
-  const body = req.body as { phoneNumber?: string; content?: string } | undefined
-  if (!body?.phoneNumber || !body?.content) {
-    res
-      .status(400)
-      .json({ success: false, error: 'phoneNumber dan content wajib diisi' })
+  const body = req.body as
+    | { phoneNumber?: string; content?: string; imageUrl?: string }
+    | undefined
+  // imageUrl opsional: bila ada → kirim gambar (content jadi caption, boleh
+  // kosong). Tanpa imageUrl → teks biasa, content wajib.
+  if (!body?.phoneNumber || (!body?.content && !body?.imageUrl)) {
+    res.status(400).json({
+      success: false,
+      error: 'phoneNumber dan content (atau imageUrl) wajib diisi',
+    })
     return
   }
-  const result = await manager.sendText(sessionId, body.phoneNumber, body.content)
+  const result = body.imageUrl
+    ? await manager.sendImage(
+        sessionId,
+        body.phoneNumber,
+        body.imageUrl,
+        body.content,
+      )
+    : await manager.sendText(sessionId, body.phoneNumber, body.content ?? '')
   if (!result.ok) {
     res.status(400).json({ success: false, error: result.error || 'gagal kirim' })
     return

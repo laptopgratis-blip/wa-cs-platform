@@ -229,7 +229,7 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
             <Endpoint
               method="POST"
               path="/api/v1/messages"
-              desc="Kirim teks (Baileys / Cloud dalam window 24 jam). Body: { phone_number, content, session_id?, strict_session? }. Maks 30 kirim/menit per kunci. Lihat tab Nomor Pengirim."
+              desc="Kirim teks — atau gambar via image_url (https publik; content jadi caption opsional, maks 1024). Baileys / Cloud dalam window 24 jam; gambar tidak bisa fallback template. Body: { phone_number, content?, image_url?, session_id?, strict_session? }. Maks 30 kirim/menit per kunci."
             />
             <Endpoint
               method="POST"
@@ -252,30 +252,40 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
               </p>
             </div>
             <div className="mt-4 space-y-2">
-              <p className="text-warm-800 text-sm font-medium">Contoh kirim pesan</p>
+              <p className="text-warm-800 text-sm font-medium">
+                Contoh kirim pesan
+              </p>
               <Code>{`curl -X POST "${baseUrl}/api/v1/messages" \\
   -H "Authorization: Bearer \$KEY" \\
   -H "Content-Type: application/json" \\
   -H "Idempotency-Key: kirim-001" \\
-  -d '{"phone_number":"628123456789","content":"Halo dari API"}'`}</Code>
+  -d '{"phone_number":"628123456789","content":"Halo dari API"}'
+
+# kirim gambar (image_url harus https & bisa diakses publik; content = caption opsional)
+curl -X POST "${baseUrl}/api/v1/messages" \\
+  -H "Authorization: Bearer \$KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"phone_number":"628123456789","image_url":"https://contoh.com/promo.jpg","content":"Promo!"}'`}</Code>
               <p className="text-warm-500 text-xs">
-                Kirim teks butuh window 24 jam terbuka (atau nomor Baileys). Di luar window pakai{' '}
-                <code className="font-mono">/messages/template</code>. Header{' '}
-                <code className="font-mono">Idempotency-Key</code> (opsional) mencegah kirim ganda
-                saat retry.
+                Kirim teks/gambar butuh window 24 jam terbuka (atau nomor
+                Baileys); gambar tidak bisa fallback template. Di luar window
+                pakai <code className="font-mono">/messages/template</code>.
+                Header <code className="font-mono">Idempotency-Key</code>{' '}
+                (opsional) mencegah kirim ganda saat retry.
               </p>
             </div>
           </TabsContent>
 
           <TabsContent value="pengirim" className="space-y-3 pt-4">
             <p className="text-warm-600 text-sm">
-              Kalau akunmu punya lebih dari satu nomor terhubung, platform tidak memilih asal —
-              ia menyusun daftar prioritas lalu mencoba berurutan sampai ada yang berhasil.
-              Urutannya:
+              Kalau akunmu punya lebih dari satu nomor terhubung, platform tidak
+              memilih asal — ia menyusun daftar prioritas lalu mencoba berurutan
+              sampai ada yang berhasil. Urutannya:
             </p>
             <ol className="text-warm-600 list-decimal space-y-1 pl-5 text-sm">
               <li>
-                Nomor yang kamu sebut di <code className="font-mono text-xs">session_id</code>.
+                Nomor yang kamu sebut di{' '}
+                <code className="font-mono text-xs">session_id</code>.
               </li>
               <li>Nomor yang terakhir dipakai untuk chat dengan tujuan itu.</li>
               <li>Nomor Baileys (QR scan).</li>
@@ -283,8 +293,8 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
             </ol>
             <p className="text-warm-600 text-sm">
               Ambil daftar nomor beserta ID-nya lewat{' '}
-              <code className="font-mono text-xs">GET /api/v1/senders</code> — urutan responsnya
-              sama dengan urutan prioritas di atas.
+              <code className="font-mono text-xs">GET /api/v1/senders</code> —
+              urutan responsnya sama dengan urutan prioritas di atas.
             </p>
             <Code>{`curl "${baseUrl}/api/v1/senders" -H "Authorization: Bearer \$KEY"
 
@@ -295,11 +305,14 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
   ] }
 }`}</Code>
 
-            <p className="text-warm-800 pt-1 text-sm font-medium">Memilih nomor tertentu</p>
+            <p className="text-warm-800 pt-1 text-sm font-medium">
+              Memilih nomor tertentu
+            </p>
             <p className="text-warm-600 text-sm">
-              Sertakan <code className="font-mono text-xs">session_id</code> di body. Kalau ID itu
-              bukan milik akunmu, request ditolak{' '}
-              <code className="font-mono text-xs">404 not_found</code> — bukan diam-diam dipakai.
+              Sertakan <code className="font-mono text-xs">session_id</code> di
+              body. Kalau ID itu bukan milik akunmu, request ditolak{' '}
+              <code className="font-mono text-xs">404 not_found</code> — bukan
+              diam-diam dipakai.
             </p>
             <Code>{`curl -X POST "${baseUrl}/api/v1/messages" \\
   -H "Authorization: Bearer \$KEY" \\
@@ -310,24 +323,28 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
               Mengunci nomor (strict_session)
             </p>
             <p className="text-warm-600 text-sm">
-              Secara default <code className="font-mono text-xs">session_id</code> hanya{' '}
-              <strong>preferensi</strong>: kalau nomor itu gagal kirim, platform tetap mencoba nomor
-              lain supaya pesan tidak hilang. Untuk bisnis yang nomornya penting (beda brand atau
-              beda cabang), failover diam-diam itu justru merugikan — pelanggan menerima pesan dari
+              Secara default{' '}
+              <code className="font-mono text-xs">session_id</code> hanya{' '}
+              <strong>preferensi</strong>: kalau nomor itu gagal kirim, platform
+              tetap mencoba nomor lain supaya pesan tidak hilang. Untuk bisnis
+              yang nomornya penting (beda brand atau beda cabang), failover
+              diam-diam itu justru merugikan — pelanggan menerima pesan dari
               nomor tak dikenal dan membalas ke sana.
             </p>
             <p className="text-warm-600 text-sm">
-              Tambahkan <code className="font-mono text-xs">strict_session: true</code> untuk
-              mengunci. Kalau nomor itu tidak siap kirim, request gagal dengan{' '}
-              <code className="font-mono text-xs">409 session_unavailable</code> dan tidak ada pesan
-              yang keluar dari nomor lain.
+              Tambahkan{' '}
+              <code className="font-mono text-xs">strict_session: true</code>{' '}
+              untuk mengunci. Kalau nomor itu tidak siap kirim, request gagal
+              dengan{' '}
+              <code className="font-mono text-xs">409 session_unavailable</code>{' '}
+              dan tidak ada pesan yang keluar dari nomor lain.
             </p>
             <Code>{`-d '{"phone_number":"628123456789","content":"Halo","session_id":"cmt9j0gq...","strict_session":true}'`}</Code>
             <p className="text-warm-500 text-xs">
               Berlaku sama untuk{' '}
-              <code className="font-mono">/api/v1/messages/template</code>. Kirim{' '}
-              <code className="font-mono">session_id: null</code> (atau hilangkan field-nya) berarti
-              biarkan platform yang memilih.
+              <code className="font-mono">/api/v1/messages/template</code>.
+              Kirim <code className="font-mono">session_id: null</code> (atau
+              hilangkan field-nya) berarti biarkan platform yang memilih.
             </p>
           </TabsContent>
 
@@ -403,15 +420,21 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
 
           <TabsContent value="webhooks" className="space-y-3 pt-4">
             <p className="text-warm-600 text-sm">
-              Selain menarik data lewat API, Hulao bisa <strong>mengirim event ke sistemmu</strong>{' '}
-              lewat webhook — atur endpoint-nya di halaman{' '}
-              <a href="/pengembang/integrasi" className="text-primary-600 underline">
+              Selain menarik data lewat API, Hulao bisa{' '}
+              <strong>mengirim event ke sistemmu</strong> lewat webhook — atur
+              endpoint-nya di halaman{' '}
+              <a
+                href="/pengembang/integrasi"
+                className="text-primary-600 underline"
+              >
                 Integrasi
               </a>
-              . Event yang tersedia: <code className="font-mono text-xs">message.received</code>,{' '}
+              . Event yang tersedia:{' '}
+              <code className="font-mono text-xs">message.received</code>,{' '}
               <code className="font-mono text-xs">message.status.updated</code>,{' '}
               <code className="font-mono text-xs">contact.created</code> (+{' '}
-              <code className="font-mono text-xs">ping</code> untuk uji koneksi).
+              <code className="font-mono text-xs">ping</code> untuk uji
+              koneksi).
             </p>
             <p className="text-warm-600 text-sm">Bentuk kiriman — POST JSON:</p>
             <Code>{`{
@@ -422,9 +445,12 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
 }`}</Code>
             <p className="text-warm-600 text-sm">
               Setiap kiriman membawa header{' '}
-              <code className="font-mono text-xs">X-Hulao-Signature: t=&lt;unix&gt;,v1=&lt;hex&gt;</code>.
-              Verifikasi dengan menghitung ulang HMAC SHA-256 atas string{' '}
-              <code className="font-mono text-xs">{'`${t}.${rawBody}`'}</code> memakai signing secret{' '}
+              <code className="font-mono text-xs">
+                X-Hulao-Signature: t=&lt;unix&gt;,v1=&lt;hex&gt;
+              </code>
+              . Verifikasi dengan menghitung ulang HMAC SHA-256 atas string{' '}
+              <code className="font-mono text-xs">{'`${t}.${rawBody}`'}</code>{' '}
+              memakai signing secret{' '}
               <code className="font-mono text-xs">whsec_…</code> milik endpoint:
             </p>
             <Code>{`const [tPart, vPart] = sigHeader.split(',')
@@ -434,13 +460,25 @@ const expected = crypto.createHmac('sha256', process.env.HULAO_WEBHOOK_SECRET)
 const valid = crypto.timingSafeEqual(Buffer.from(v1, 'hex'), Buffer.from(expected, 'hex'))
 // tolak juga bila |now - t| > 5 menit (anti replay)`}</Code>
             <ul className="text-warm-600 list-inside list-disc space-y-1.5 text-sm">
-              <li>Balas <code className="font-mono text-xs">2xx</code> secepatnya (&lt;10 detik) — proses beratnya belakangan.</li>
-              <li>Gagal di-retry bertahap sampai 6× (±1m, 5m, 30m, 2j, 8j); gagal beruntun terus menonaktifkan endpoint otomatis.</li>
-              <li>Redirect tidak diikuti dan alamat internal/privat ditolak.</li>
-              <li>Kiriman bisa datang lebih dari sekali — jadikan <code className="font-mono text-xs">id</code> event kunci dedup.</li>
+              <li>
+                Balas <code className="font-mono text-xs">2xx</code> secepatnya
+                (&lt;10 detik) — proses beratnya belakangan.
+              </li>
+              <li>
+                Gagal di-retry bertahap sampai 6× (±1m, 5m, 30m, 2j, 8j); gagal
+                beruntun terus menonaktifkan endpoint otomatis.
+              </li>
+              <li>
+                Redirect tidak diikuti dan alamat internal/privat ditolak.
+              </li>
+              <li>
+                Kiriman bisa datang lebih dari sekali — jadikan{' '}
+                <code className="font-mono text-xs">id</code> event kunci dedup.
+              </li>
             </ul>
             <p className="text-warm-500 text-sm">
-              Berikutnya: <strong>kirim pesan</strong> (<code className="font-mono text-xs">POST /api/v1/messages</code>).
+              Berikutnya: <strong>kirim pesan</strong> (
+              <code className="font-mono text-xs">POST /api/v1/messages</code>).
               Butuh lebih cepat? Kabari lewat halaman Bantuan &amp; Dukungan.
             </p>
           </TabsContent>

@@ -106,6 +106,17 @@ Dokumentasi user (verifikasi tanda tangan, anti-replay, dedup by event id): tab 
 
 `POST /api/v1/messages` membungkus `smartSend` (sudah never-throw & sadar window/compliance).
 
+**Kirim gambar (2026-09-10).** Body menerima `image_url` opsional (URL https publik,
+maks 2048 char); `content` menjadi caption opsional (maks 1024 saat ada gambar) dan
+tetap wajib bila teks murni. Validasi bentuk di `lib/validations/public-message.ts`
+(ada test-nya), guard SSRF reuse `assertSafeWebhookUrl` di `sendPublicText` —
+WAJIB, karena jalur Baileys men-download URL dari dalam wa-service. Transport:
+Baileys `sendImage` (wa-manager, endpoint `/send-message` + `imageUrl`), Cloud API
+`type:image` by-link di `sendCloudText` (Meta yang fetch). Gambar hanya free-form:
+kandidat Cloud di luar window dilewati `smartSend` dengan `WINDOW_CLOSED` (template
+tidak bisa bawa gambar arbitrer), pesan errornya diganti supaya tidak menyarankan
+endpoint template.
+
 **Pemilihan nomor pengirim.** `listSenderCandidates` menyusun prioritas:
 `session_id` eksplisit → sesi terakhir dipakai kontak tujuan → BAILEYS → CLOUD_API
 (tie-break `updatedAt` desc). `smartSend` lalu mencoba berurutan dengan failover.

@@ -8,7 +8,10 @@
 import type { WaProvider, WaStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { sendCloudText } from '@/lib/services/waba/send'
-import { sendCloudTemplate, type SendCloudTemplateInput } from '@/lib/services/waba/send-template'
+import {
+  sendCloudTemplate,
+  type SendCloudTemplateInput,
+} from '@/lib/services/waba/send-template'
 
 const BASE = process.env.WA_SERVICE_URL || 'http://localhost:3001'
 const SECRET = process.env.WA_SERVICE_SECRET || ''
@@ -51,9 +54,14 @@ async function request<T>(
       // pesan error JSON yang jelas.
       signal: init.signal ?? AbortSignal.timeout(15_000),
     })
-    const json = (await res.json().catch(() => null)) as ServiceResponse<T> | null
+    const json = (await res
+      .json()
+      .catch(() => null)) as ServiceResponse<T> | null
     if (!json) {
-      return { success: false, error: `wa-service: respons tidak valid (${res.status})` }
+      return {
+        success: false,
+        error: `wa-service: respons tidak valid (${res.status})`,
+      }
     }
     return json
   } catch (err) {
@@ -72,7 +80,8 @@ const providerCache = new Map<string, { provider: WaProvider; at: number }>()
 
 async function resolveProvider(sessionId: string): Promise<WaProvider> {
   const cached = providerCache.get(sessionId)
-  if (cached && Date.now() - cached.at < PROVIDER_CACHE_TTL_MS) return cached.provider
+  if (cached && Date.now() - cached.at < PROVIDER_CACHE_TTL_MS)
+    return cached.provider
   try {
     const row = await prisma.whatsappSession.findUnique({
       where: { id: sessionId },
@@ -92,7 +101,9 @@ async function resolveProvider(sessionId: string): Promise<WaProvider> {
 
 // Sintesis WaServiceSession dari row DB — sesi Cloud API tidak punya state
 // in-memory di wa-service, DB adalah sumber kebenarannya.
-async function cloudStatus(sessionId: string): Promise<ServiceResponse<WaServiceSession>> {
+async function cloudStatus(
+  sessionId: string,
+): Promise<ServiceResponse<WaServiceSession>> {
   try {
     const s = await prisma.whatsappSession.findUnique({
       where: { id: sessionId },
@@ -120,7 +131,10 @@ async function cloudStatus(sessionId: string): Promise<ServiceResponse<WaService
       },
     }
   } catch (err) {
-    return { success: false, error: `Gagal baca status sesi: ${(err as Error).message}` }
+    return {
+      success: false,
+      error: `Gagal baca status sesi: ${(err as Error).message}`,
+    }
   }
 }
 
@@ -129,7 +143,8 @@ export const waService = {
     if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
       return {
         success: false,
-        error: 'Sesi Cloud API tidak memakai QR pairing — kelola koneksi via Embedded Signup',
+        error:
+          'Sesi Cloud API tidak memakai QR pairing — kelola koneksi via Embedded Signup',
       } satisfies ServiceResponse<WaServiceSession>
     }
     return request<WaServiceSession>('/sessions/connect', {
@@ -143,7 +158,8 @@ export const waService = {
       // di sini berarti pemanggil salah jalur; tolak defensif.
       return {
         success: false,
-        error: 'Sesi Cloud API diputus lewat route disconnect, bukan wa-service',
+        error:
+          'Sesi Cloud API diputus lewat route disconnect, bukan wa-service',
       } satisfies ServiceResponse<WaServiceSession | null>
     }
     return request<WaServiceSession | null>('/sessions/disconnect', {
@@ -155,11 +171,21 @@ export const waService = {
     if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
       return cloudStatus(sessionId)
     }
-    return request<WaServiceSession>(`/sessions/${encodeURIComponent(sessionId)}`)
+    return request<WaServiceSession>(
+      `/sessions/${encodeURIComponent(sessionId)}`,
+    )
   },
-  async sendMessage(sessionId: string, phoneNumber: string, content: string) {
+  // imageUrl opsional → kirim gambar (content jadi caption). Cloud: Meta yang
+  // fetch link-nya; Baileys: wa-service yang download — caller WAJIB sudah
+  // memvalidasi URL (assertSafeWebhookUrl) supaya bukan alamat internal.
+  async sendMessage(
+    sessionId: string,
+    phoneNumber: string,
+    content: string,
+    imageUrl?: string,
+  ) {
     if ((await resolveProvider(sessionId)) === 'CLOUD_API') {
-      return sendCloudText({ sessionId, phoneNumber, content })
+      return sendCloudText({ sessionId, phoneNumber, content, imageUrl })
     }
     return request<{
       sessionId: string
@@ -167,7 +193,11 @@ export const waService = {
       messageId: string | null
     }>(`/sessions/${encodeURIComponent(sessionId)}/send-message`, {
       method: 'POST',
-      body: JSON.stringify({ phoneNumber, content }),
+      body: JSON.stringify({
+        phoneNumber,
+        content,
+        ...(imageUrl ? { imageUrl } : {}),
+      }),
     })
   },
   /**
@@ -178,7 +208,8 @@ export const waService = {
     if ((await resolveProvider(input.sessionId)) !== 'CLOUD_API') {
       return {
         success: false,
-        error: 'Template Meta hanya untuk sesi Cloud API — sesi Baileys kirim teks biasa',
+        error:
+          'Template Meta hanya untuk sesi Cloud API — sesi Baileys kirim teks biasa',
         code: 'SESSION_UNAVAILABLE' as const,
       }
     }
@@ -195,7 +226,8 @@ export const waService = {
       // Kredit Pesan). Sampai di sini berarti pemanggil salah jalur.
       return {
         success: false,
-        error: 'Broadcast Cloud API dijalankan via startBroadcast (lib/services/broadcast), bukan wa-service',
+        error:
+          'Broadcast Cloud API dijalankan via startBroadcast (lib/services/broadcast), bukan wa-service',
       } satisfies ServiceResponse<{ broadcastId: string; total: number }>
     }
     return request<{ broadcastId: string; total: number }>(

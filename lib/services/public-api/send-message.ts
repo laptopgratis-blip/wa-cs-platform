@@ -4,6 +4,7 @@
 // compliance — kita hanya menyiapkan kandidat sesi (MILIK USER ini saja) dan
 // menerjemahkan hasilnya ke bentuk API + kode HTTP.
 import { prisma } from '@/lib/prisma'
+import { assertSafeWebhookUrl } from '@/lib/services/webhooks/url-guard'
 import { listSenderCandidates } from '@/lib/wa-session'
 import { applySessionPin } from '@/lib/services/public-api/sender-selection'
 import {
@@ -138,10 +139,31 @@ function strictSessionUnavailable(): PublicSendOutcome {
 export async function sendPublicText(input: {
   userId: string
   to: string
-  content: string
+  /** Teks pesan; saat imageUrl diisi jadi caption (boleh kosong). */
+  content?: string
+  /** Opsional: kirim gambar dari URL publik https (schema sudah validasi bentuk). */
+  imageUrl?: string
   sessionId?: string
   strictSession?: boolean
 }): Promise<PublicSendOutcome> {
+  // Guard SSRF untuk gambar: jalur Baileys men-download URL DARI DALAM
+  // infra kita (wa-service), jadi alamat internal/privat & kredensial di URL
+  // wajib ditolak sebelum menyentuh transport. Reuse guard webhook (https-only,
+  // resolve DNS, deny IP privat).
+  if (input.imageUrl) {
+    try {
+      await assertSafeWebhookUrl(input.imageUrl)
+    } catch (err) {
+      const reason = (err as Error).message.replace('URL webhook', 'URL gambar')
+      return {
+        ok: false,
+        httpStatus: 400,
+        code: 'invalid_image_url',
+        error: `image_url ditolak: ${reason}`,
+      }
+    }
+  }
+
   const owned = await ownedCandidates(
     input.userId,
     input.to,
@@ -157,14 +179,27 @@ export async function sendPublicText(input: {
   const res = await smartSend({
     candidates: owned.candidates,
     to: input.to,
-    text: input.content,
+    text: input.content ?? '',
+    image: input.imageUrl ? { url: input.imageUrl } : undefined,
     purpose: 'NOTIF',
     source: 'API',
     // Teks bebas: dalam window (atau Baileys). Di luar window Cloud tanpa
     // template → WINDOW_CLOSED (arahkan ke endpoint template).
     allowFreeformInWindow: true,
   })
-  if (!res.success) return mapFailure(res.code, res.error)
+  if (!res.success) {
+    const fail = mapFailure(res.code, res.error)
+    // Pesan WINDOW_CLOSED default mengarahkan ke endpoint template — untuk
+    // gambar itu menyesatkan (template tak bisa bawa gambar arbitrer).
+    if (fail.code === 'window_closed' && input.imageUrl) {
+      return {
+        ...fail,
+        error:
+          'Window 24 jam tutup — gambar tidak bisa dikirim lewat template. Minta pelanggan membalas dulu, atau kirim dari nomor Baileys.',
+      }
+    }
+    return fail
+  }
   return {
     ok: true,
     httpStatus: 200,

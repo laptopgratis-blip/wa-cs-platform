@@ -12,7 +12,10 @@ import type { SenderCandidate } from '@/lib/wa-session'
 import { waService } from '@/lib/wa-service'
 import { isWindowOpen } from '@/lib/services/waba/compliance'
 import { prisma } from '@/lib/prisma'
-import { sendCloudTemplate, type TemplateSendPurpose } from '@/lib/services/waba/send-template'
+import {
+  sendCloudTemplate,
+  type TemplateSendPurpose,
+} from '@/lib/services/waba/send-template'
 import type { TemplateSendParams } from '@/lib/services/waba/template-payload'
 import { findApprovedTemplate } from '@/lib/services/waba/templates'
 
@@ -29,8 +32,15 @@ export interface SmartSendTemplateSpec {
 export interface SmartSendInput {
   candidates: SenderCandidate[]
   to: string
-  /** Teks free-form (Baileys / Cloud dalam window). */
+  /** Teks free-form (Baileys / Cloud dalam window). Caption saat image diisi. */
   text: string
+  /**
+   * Opsional: kirim gambar dari URL publik (text jadi caption). Hanya jalur
+   * free-form — template TIDAK bisa membawa gambar arbitrer, jadi kandidat
+   * Cloud di luar window dilewati dengan WINDOW_CLOSED (tanpa fallback).
+   * URL WAJIB sudah lolos guard SSRF di pemanggil.
+   */
+  image?: { url: string }
   template?: SmartSendTemplateSpec
   purpose: SmartSendPurpose
   /** Message.source untuk pesan template Cloud (mis. 'SYSTEM', 'FOLLOWUP'). */
@@ -68,7 +78,9 @@ export interface SmartSendResult {
 
 function combineError(attempts: SmartSendResult['attempts']): string {
   if (attempts.length === 0) return 'Tidak ada sesi WhatsApp terhubung'
-  return attempts.map((a) => `${a.sessionId.slice(-6)}/${a.via}: ${a.error}`).join(' | ')
+  return attempts
+    .map((a) => `${a.sessionId.slice(-6)}/${a.via}: ${a.error}`)
+    .join(' | ')
 }
 
 // Prioritas kode gabungan: yang paling "actionable" untuk user.
@@ -132,25 +144,40 @@ async function resolveTemplateId(
     // Template milik WABA lain → coba purposeKey di WABA kandidat ini.
   }
   if (spec.purposeKey) {
-    const t = await findApprovedTemplate({ wabaId: cand.wabaId, purposeKey: spec.purposeKey })
+    const t = await findApprovedTemplate({
+      wabaId: cand.wabaId,
+      purposeKey: spec.purposeKey,
+    })
     return t?.id ?? null
   }
   return null
 }
 
-export async function smartSend(input: SmartSendInput): Promise<SmartSendResult> {
+export async function smartSend(
+  input: SmartSendInput,
+): Promise<SmartSendResult> {
   const attempts: SmartSendResult['attempts'] = []
   const codes: (SmartSendCode | undefined)[] = []
   const allowFreeform = input.allowFreeformInWindow ?? true
 
   if (input.candidates.length === 0) {
-    return { success: false, code: 'NO_SESSION', error: 'Tidak ada sesi WhatsApp terhubung', attempts }
+    return {
+      success: false,
+      code: 'NO_SESSION',
+      error: 'Tidak ada sesi WhatsApp terhubung',
+      attempts,
+    }
   }
 
   for (const cand of input.candidates) {
     try {
       if (cand.provider === 'BAILEYS') {
-        const r = await waService.sendMessage(cand.sessionId, input.to, input.text)
+        const r = await waService.sendMessage(
+          cand.sessionId,
+          input.to,
+          input.text,
+          input.image?.url,
+        )
         if (r.success) {
           return {
             success: true,
@@ -162,14 +189,24 @@ export async function smartSend(input: SmartSendInput): Promise<SmartSendResult>
             attempts,
           }
         }
-        attempts.push({ sessionId: cand.sessionId, via: 'BAILEYS', error: r.error ?? 'gagal', code: 'BAILEYS_ERROR' })
+        attempts.push({
+          sessionId: cand.sessionId,
+          via: 'BAILEYS',
+          error: r.error ?? 'gagal',
+          code: 'BAILEYS_ERROR',
+        })
         codes.push('BAILEYS_ERROR')
         continue
       }
 
       // ── CLOUD_API ──
       if (allowFreeform && (await cloudWindowOpen(cand.userId, input.to))) {
-        const r = await waService.sendMessage(cand.sessionId, input.to, input.text)
+        const r = await waService.sendMessage(
+          cand.sessionId,
+          input.to,
+          input.text,
+          input.image?.url,
+        )
         if (r.success) {
           return {
             success: true,
@@ -190,12 +227,32 @@ export async function smartSend(input: SmartSendInput): Promise<SmartSendResult>
         // lanjut coba template di sesi yang sama
       }
 
+      // Gambar tidak bisa dibawa template arbitrer (header template harus
+      // disetujui Meta per-template) → jangan fallback, catat sebagai window
+      // tutup supaya pesan errornya actionable.
+      if (input.image) {
+        attempts.push({
+          sessionId: cand.sessionId,
+          via: 'CLOUD_TEMPLATE',
+          error:
+            'gambar hanya bisa dikirim free-form dalam window 24 jam — tidak ada fallback template',
+          code: 'WINDOW_CLOSED',
+        })
+        codes.push('WINDOW_CLOSED')
+        continue
+      }
+
       const templateId = await resolveTemplateId(cand, input.template)
       if (!templateId) {
         const why = input.template
           ? `template ${input.template.purposeKey ? `"${input.template.purposeKey}"` : ''} belum APPROVED di WABA ini`
           : 'window 24 jam tutup & tidak ada template'
-        attempts.push({ sessionId: cand.sessionId, via: 'CLOUD_TEMPLATE', error: why, code: 'NO_TEMPLATE' })
+        attempts.push({
+          sessionId: cand.sessionId,
+          via: 'CLOUD_TEMPLATE',
+          error: why,
+          code: 'NO_TEMPLATE',
+        })
         codes.push(input.template ? 'NO_TEMPLATE' : 'WINDOW_CLOSED')
         continue
       }
@@ -222,13 +279,27 @@ export async function smartSend(input: SmartSendInput): Promise<SmartSendResult>
         }
       }
       const code = mapCloudCode(r.code)
-      attempts.push({ sessionId: cand.sessionId, via: 'CLOUD_TEMPLATE', error: r.error ?? 'gagal', code: r.code })
+      attempts.push({
+        sessionId: cand.sessionId,
+        via: 'CLOUD_TEMPLATE',
+        error: r.error ?? 'gagal',
+        code: r.code,
+      })
       codes.push(code)
     } catch (err) {
-      attempts.push({ sessionId: cand.sessionId, via: cand.provider, error: (err as Error).message })
+      attempts.push({
+        sessionId: cand.sessionId,
+        via: cand.provider,
+        error: (err as Error).message,
+      })
       codes.push(cand.provider === 'BAILEYS' ? 'BAILEYS_ERROR' : 'META_ERROR')
     }
   }
 
-  return { success: false, code: pickCode(codes), error: combineError(attempts), attempts }
+  return {
+    success: false,
+    code: pickCode(codes),
+    error: combineError(attempts),
+    attempts,
+  }
 }
