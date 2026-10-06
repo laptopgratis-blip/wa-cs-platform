@@ -38,7 +38,11 @@ const optionalString = z
   .optional()
   .transform((v) => (v === '' ? null : v))
 
-export const followupTemplateCreateSchema = z.object({
+// Base TANPA .default() — dipakai bersama create & update. Default sengaja
+// hanya di create: kalau update = create.partial(), zod tetap mengisi default
+// untuk key yang tidak dikirim sehingga PATCH {isActive:false} diam-diam
+// me-reset delayDays=0/scope=GLOBAL/order=0 (follow-up per-form jadi global).
+const followupTemplateBaseSchema = z.object({
   name: z.string().trim().min(2).max(120),
   trigger: z.enum(TRIGGER_VALUES),
   paymentMethod: z
@@ -62,18 +66,25 @@ export const followupTemplateCreateSchema = z.object({
     .nullable()
     .optional()
     .transform((v) => v ?? null),
-  delayDays: z.number().int().min(0).max(30).default(0),
+  delayDays: z.number().int().min(0).max(30),
   message: z.string().trim().min(1).max(4096),
-  isActive: z.boolean().default(true),
-  scope: z.enum(['GLOBAL', 'FORM']).default('GLOBAL'),
+  isActive: z.boolean(),
+  scope: z.enum(['GLOBAL', 'FORM']),
   orderFormId: optionalString,
-  order: z.number().int().min(0).max(9999).default(0),
+  order: z.number().int().min(0).max(9999),
   // Cloud API (Trek 2B): link ke WabaTemplate + peta placeholder per {{n}}.
   metaTemplateId: z.string().min(1).nullable().optional(),
   metaParamMap: z.array(z.string().max(64)).max(30).nullable().optional(),
 })
 
-export const followupTemplateUpdateSchema = followupTemplateCreateSchema
+export const followupTemplateCreateSchema = followupTemplateBaseSchema.extend({
+  delayDays: followupTemplateBaseSchema.shape.delayDays.default(0),
+  isActive: followupTemplateBaseSchema.shape.isActive.default(true),
+  scope: followupTemplateBaseSchema.shape.scope.default('GLOBAL'),
+  order: followupTemplateBaseSchema.shape.order.default(0),
+})
+
+export const followupTemplateUpdateSchema = followupTemplateBaseSchema
   .partial()
   .strict()
 

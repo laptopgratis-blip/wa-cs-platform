@@ -2,6 +2,8 @@
 // DELETE /api/followup/templates/[id]  — hapus template (cascade ke queue & log)
 //
 // Plan gating: POWER only.
+import { Prisma } from '@prisma/client'
+
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
@@ -67,7 +69,10 @@ export async function PATCH(req: Request, { params }: Params) {
         }),
         ...(data.order !== undefined && { order: data.order }),
         ...(data.metaTemplateId !== undefined && { metaTemplateId: data.metaTemplateId }),
-        ...(data.metaParamMap !== undefined && { metaParamMap: data.metaParamMap ?? undefined }),
+        // null = kosongkan peta (Json? butuh DbNull; `undefined` = tidak diubah).
+        ...(data.metaParamMap !== undefined && {
+          metaParamMap: data.metaParamMap ?? Prisma.DbNull,
+        }),
       },
     })
 
