@@ -9,6 +9,7 @@
 // /api/integrations/followup/enable untuk auto-seed default templates.
 import {
   AlertCircle,
+  AlertTriangle,
   Ban,
   Clock,
   History,
@@ -41,6 +42,8 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
+import { TONES } from '@/lib/ui-tones'
 
 type Tab = 'today' | 'upcoming' | 'history' | 'blacklist'
 
@@ -50,6 +53,9 @@ interface QueueItem {
   status: string
   customerPhone: string
   resolvedMessage: string
+  // Alasan percobaan terakhir yang gagal (item PENDING = sedang menunggu retry).
+  failedReason: string | null
+  retryCount: number
   template: { name: string; trigger: string }
   // order ATAU liveLead — salah satu terisi. liveLead untuk nurture lead Live
   // "belum order".
@@ -510,6 +516,9 @@ function QueueList({
                 </Button>
               </div>
             </div>
+            {item.status === 'PENDING' && item.failedReason && (
+              <RetryNotice reason={item.failedReason} retryCount={item.retryCount} />
+            )}
             <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {item.resolvedMessage}
             </pre>
@@ -517,6 +526,20 @@ function QueueList({
         </Card>
       ))}
     </div>
+  )
+}
+
+// Item PENDING yang sudah pernah gagal — dulu retry tidak terlihat sama
+// sekali sampai akhirnya FAILED. Tampilkan alasan terakhir supaya seller
+// bisa memperbaiki (mis. tautkan Template Meta) sebelum habis percobaan.
+function RetryNotice({ reason, retryCount }: { reason: string; retryCount: number }) {
+  return (
+    <p className={cn('flex items-start gap-1.5 text-xs', TONES.warning.text)}>
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      <span>
+        Percobaan terakhir gagal{retryCount > 0 ? ` (${retryCount}x)` : ''}: {reason}
+      </span>
+    </p>
   )
 }
 
