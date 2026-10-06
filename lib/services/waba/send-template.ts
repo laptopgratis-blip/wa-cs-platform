@@ -140,7 +140,9 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
         billing: {
           templateId: template.id,
           creditUserId,
-          creditChargedRp: expectedChargeRp,
+          // Tanpa penagih (billing Kredit Pesan nonaktif / sesi admin) → 0,
+          // supaya /api/v1/messages/{id}/status tidak melaporkan biaya palsu.
+          creditChargedRp: creditUserId ? expectedChargeRp : 0,
           pricingCategory: category.toLowerCase(),
           broadcastRecipientId: input.broadcastRecipientId ?? null,
         },
