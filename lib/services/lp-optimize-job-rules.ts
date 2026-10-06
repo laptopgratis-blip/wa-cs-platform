@@ -256,3 +256,65 @@ export function decideApplyOptimization(
   }
   return { kind: 'apply' }
 }
+
+// ─────────────────────────────────────────
+// Cek basi untuk list riwayat — perbandingan HTML dikerjakan di Postgres
+// (bisa beberapa MB per baris karena gambar base64 inline); Node hanya
+// menerima satu boolean per baris.
+// ─────────────────────────────────────────
+
+export function staleFlagsById(
+  rows: ReadonlyArray<{ id: string; stale: unknown }>,
+): ReadonlyMap<string, boolean> {
+  return new Map(rows.map((r) => [r.id, r.stale === true]))
+}
+
+// ─────────────────────────────────────────
+// Simpan hasil setelah token terpotong — wajib tahan gangguan DB sesaat.
+// ─────────────────────────────────────────
+
+// Jeda antar-percobaan ulang update DONE (total ±5 dtk, 4 percobaan).
+export const LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS: readonly number[] = [
+  500, 1500, 3000,
+]
+
+export interface RetryOptions {
+  // Jeda sebelum tiap percobaan ulang; jumlah percobaan = panjang + 1.
+  delaysMs: readonly number[]
+  sleep?: (ms: number) => Promise<void>
+  // Dipanggil sebelum percobaan ulang ke-`attempt` (1-based) dijadwalkan.
+  onRetry?: (attempt: number, err: unknown) => void
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+export async function retryAsync<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions,
+): Promise<T> {
+  const sleep = options.sleep ?? defaultSleep
+  let lastErr: unknown
+  for (let attempt = 0; attempt <= options.delaysMs.length; attempt += 1) {
+    if (attempt > 0) {
+      options.onRetry?.(attempt, lastErr)
+      await sleep(options.delaysMs[attempt - 1])
+    }
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr
+}
+
+// Pesan FAILED kalau hasil AI gagal disimpan padahal saldo sudah terpotong —
+// seller harus tahu ini bukan kegagalan biasa dan bisa minta refund.
+export function chargedSaveFailureMessage(tokensCharged: number): string {
+  const amount =
+    Number.isFinite(tokensCharged) && tokensCharged > 0
+      ? ` ±${Math.round(tokensCharged).toLocaleString('id-ID')} token`
+      : ''
+  return `Hasil optimasi gagal disimpan padahal saldo${amount} sudah terpotong. Hubungi admin dan sebutkan waktu optimasi ini untuk refund.`
+}

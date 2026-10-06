@@ -9,6 +9,8 @@
 // Sejak optimasi jadi background job (2026-10-06): tiap baris membawa
 // `status` (RUNNING|DONE|FAILED), `canApply` hanya untuk DONE, dan `isStale`
 // = LP sudah diedit sejak saran dibuat (apply akan menimpa editan itu).
+// Perbandingan HTML (bisa beberapa MB karena gambar base64 inline) dikerjakan
+// di Postgres — Node hanya menerima satu boolean per baris.
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
@@ -16,7 +18,7 @@ import { prisma } from '@/lib/prisma'
 import { sweepStaleLpOptimizations } from '@/lib/services/lp-optimize-job'
 import {
   deriveOptimizationView,
-  isApplyStale,
+  staleFlagsById,
 } from '@/lib/services/lp-optimize-job-rules'
 
 interface Params {
@@ -39,7 +41,6 @@ export async function GET(_req: Request, { params }: Params) {
       where: { id: lpId },
       select: {
         userId: true,
-        htmlContent: true,
         user: { select: { lpQuota: { select: { tier: true } } } },
       },
     })
@@ -75,15 +76,26 @@ export async function GET(_req: Request, { params }: Params) {
       take: LIST_LIMIT,
     })
 
-    // afterHtml besar — tidak ikut di list. Query terpisah hanya untuk baris
-    // yang punya hasil & belum di-apply, sekalian beforeHtml untuk cek basi.
-    const withResult = await prisma.lpOptimization.findMany({
-      where: { lpId, afterHtml: { not: null }, applied: false, status: 'DONE' },
-      select: { id: true, beforeHtml: true },
-      orderBy: { createdAt: 'desc' },
-      take: LIST_LIMIT,
-    })
-    const beforeById = new Map(withResult.map((o) => [o.id, o.beforeHtml]))
+    // afterHtml/beforeHtml besar — tidak ikut di list. Baris yang punya hasil
+    // & belum di-apply diambil terpisah; basi = beforeHtml ≠ htmlContent LP
+    // saat ini (beforeHtml NULL → tidak basi, sama dengan isApplyStale).
+    // Raw SQL terpaksa: Prisma tak bisa membandingkan kolom lintas tabel.
+    const staleRows = await prisma.$queryRaw<
+      Array<{ id: string; stale: boolean | null }>
+    >`
+      SELECT o."id",
+             (o."beforeHtml" IS NOT NULL
+               AND o."beforeHtml" IS DISTINCT FROM lp."htmlContent") AS "stale"
+      FROM "LpOptimization" o
+      JOIN "LandingPage" lp ON lp."id" = o."lpId"
+      WHERE o."lpId" = ${lpId}
+        AND o."afterHtml" IS NOT NULL
+        AND o."applied" = false
+        AND o."status" = 'DONE'
+      ORDER BY o."createdAt" DESC
+      LIMIT ${LIST_LIMIT}
+    `
+    const staleById = staleFlagsById(staleRows)
     const now = Date.now()
 
     return jsonOk({
@@ -91,14 +103,14 @@ export async function GET(_req: Request, { params }: Params) {
         const view = deriveOptimizationView(
           {
             status: o.status,
-            hasAfterHtml: beforeById.has(o.id) || o.applied,
+            hasAfterHtml: staleById.has(o.id) || o.applied,
             applied: o.applied,
             errorMessage: o.errorMessage,
             createdAt: o.createdAt,
           },
           now,
         )
-        const canApply = view.canApply && beforeById.has(o.id)
+        const canApply = view.canApply && staleById.has(o.id)
         return {
           id: o.id,
           model: o.model,
@@ -121,9 +133,7 @@ export async function GET(_req: Request, { params }: Params) {
           appliedAt: o.appliedAt?.toISOString() ?? null,
           appliedVersionId: o.appliedVersionId,
           canApply,
-          isStale: canApply
-            ? isApplyStale(beforeById.get(o.id) ?? null, lp.htmlContent)
-            : false,
+          isStale: canApply ? (staleById.get(o.id) ?? false) : false,
           errorMessage: view.error ?? o.errorMessage,
           createdAt: o.createdAt.toISOString(),
           finishedAt: o.finishedAt?.toISOString() ?? null,

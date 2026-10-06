@@ -11,18 +11,24 @@
 import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { executeAiWithCharge } from '@/lib/services/ai-generation-log'
+import {
+  type ComputedCharge,
+  executeAiWithCharge,
+} from '@/lib/services/ai-generation-log'
 import {
   estimateOptimizationCost,
   runOptimization,
 } from '@/lib/services/lp-optimize'
 import { buildOptimizeContext } from '@/lib/services/lp-optimize-context'
 import {
+  chargedSaveFailureMessage,
   friendlyOptimizeError,
   LP_OPTIMIZE_AI_TIMEOUT_MS,
+  LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS,
   LP_OPTIMIZE_STALE_MESSAGE,
   LP_OPTIMIZE_STALE_MS,
   LpOptimizeUserError,
+  retryAsync,
 } from '@/lib/services/lp-optimize-job-rules'
 
 const LOG_TAG = '[lp-optimize-job]'
@@ -118,28 +124,95 @@ async function executeJob(optimizationId: string): Promise<void> {
     },
   })
 
-  // Token sudah dipotong — hasil WAJIB tersimpan & terlihat walau baris
-  // sempat tersapu jadi FAILED (karena itu update by id, bukan by status).
-  await prisma.lpOptimization.update({
-    where: { id: row.id },
-    data: {
-      status: 'DONE',
-      finishedAt: new Date(),
-      errorMessage: null,
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      inputPricePer1MUsd: charge.pricingSnapshot.inputPricePer1M,
-      outputPricePer1MUsd: charge.pricingSnapshot.outputPricePer1M,
-      providerCostUsd: charge.apiCostUsd,
-      providerCostRp: charge.apiCostRp,
-      platformTokensCharged: charge.tokensCharged,
-      suggestionsJson: result.suggestions,
-      focusAreasJson: result.focusAreas,
-      scoreBefore: result.scoreBefore,
-      scoreAfter: result.scoreAfter,
-      afterHtml: result.rewrittenHtml,
-    },
-  })
+  await persistChargedResult(row.id, result, charge)
+}
+
+type OptimizationResult = Awaited<ReturnType<typeof runOptimization>>
+
+function chargeFields(charge: ComputedCharge) {
+  return {
+    inputPricePer1MUsd: charge.pricingSnapshot.inputPricePer1M,
+    outputPricePer1MUsd: charge.pricingSnapshot.outputPricePer1M,
+    providerCostUsd: charge.apiCostUsd,
+    providerCostRp: charge.apiCostRp,
+    platformTokensCharged: charge.tokensCharged,
+  }
+}
+
+// Token sudah dipotong — hasil WAJIB tersimpan & terlihat walau baris sempat
+// tersapu jadi FAILED (karena itu update by id, bukan by status). Gangguan DB
+// sesaat (pool putus, deadlock, restart) dicoba ulang dengan backoff.
+async function persistChargedResult(
+  optimizationId: string,
+  result: OptimizationResult,
+  charge: ComputedCharge,
+): Promise<void> {
+  const reference = `lp_optimize:${optimizationId}`
+  try {
+    await retryAsync(
+      () =>
+        prisma.lpOptimization.update({
+          where: { id: optimizationId },
+          data: {
+            ...chargeFields(charge),
+            status: 'DONE',
+            finishedAt: new Date(),
+            errorMessage: null,
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            suggestionsJson: result.suggestions,
+            focusAreasJson: result.focusAreas,
+            scoreBefore: result.scoreBefore,
+            scoreAfter: result.scoreAfter,
+            afterHtml: result.rewrittenHtml,
+          },
+        }),
+      {
+        delaysMs: LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS,
+        onRetry: (attempt, err) =>
+          console.warn(
+            `${LOG_TAG} ${reference} simpan DONE gagal, coba ulang #${attempt}:`,
+            err,
+          ),
+      },
+    )
+  } catch (err) {
+    // Jejak untuk refund manual — wajib memuat referensi & jumlah token.
+    console.error(
+      `${LOG_TAG} ${reference} HASIL HILANG setelah token terpotong ` +
+        `(tokensCharged=${charge.tokensCharged}, apiCostRp=${charge.apiCostRp}) — perlu refund manual:`,
+      err,
+    )
+    await markChargedFailure(optimizationId, charge)
+  }
+}
+
+// Fallback saat hasil tak tersimpan: tetap catat charge di baris supaya seller
+// tahu saldonya terpotong & admin punya data refund. Tidak menurunkan DONE.
+async function markChargedFailure(
+  optimizationId: string,
+  charge: ComputedCharge,
+): Promise<void> {
+  await prisma.lpOptimization
+    .updateMany({
+      where: { id: optimizationId, status: { not: 'DONE' } },
+      data: {
+        ...chargeFields(charge),
+        status: 'FAILED',
+        errorMessage: chargedSaveFailureMessage(charge.tokensCharged).slice(
+          0,
+          ERROR_MESSAGE_MAX,
+        ),
+        finishedAt: new Date(),
+      },
+    })
+    .catch((e) =>
+      console.error(
+        `${LOG_TAG} lp_optimize:${optimizationId} gagal mencatat charge ` +
+          `(tokensCharged=${charge.tokensCharged}) di baris FAILED:`,
+        e,
+      ),
+    )
 }
 
 // Never-throw: dipanggil dari `after()` — error yang lolos tak punya penangan.

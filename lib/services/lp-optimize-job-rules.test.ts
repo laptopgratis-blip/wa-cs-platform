@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 
 import {
+  chargedSaveFailureMessage,
   decideApplyOptimization,
   deriveOptimizationView,
   estimateOptimizeDuration,
@@ -11,7 +12,10 @@ import {
   LP_OPTIMIZE_AI_TIMEOUT_MS,
   LP_OPTIMIZE_STALE_MS,
   LP_OPTIMIZE_STALE_MESSAGE,
+  LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS,
   LpOptimizeUserError,
+  retryAsync,
+  staleFlagsById,
 } from './lp-optimize-job-rules'
 
 let passed = 0
@@ -345,4 +349,118 @@ check('force tidak membuka apply untuk job RUNNING/FAILED', () => {
   assert.equal(d.kind, 'reject')
 })
 
-console.log(`lp-optimize-job-rules.test.ts: ${passed} kasus lolos`)
+console.log('lp-optimize-job-rules: staleFlagsById (hasil cek basi di DB)')
+
+check('hanya boolean true yang dianggap basi', () => {
+  const map = staleFlagsById([
+    { id: 'a', stale: true },
+    { id: 'b', stale: false },
+    { id: 'c', stale: null },
+  ])
+  assert.equal(map.get('a'), true)
+  assert.equal(map.get('b'), false)
+  assert.equal(map.get('c'), false)
+  assert.equal(map.has('d'), false)
+})
+
+console.log('lp-optimize-job-rules: chargedSaveFailureMessage')
+
+check('menyebut token terpotong + arahkan hubungi admin', () => {
+  const msg = chargedSaveFailureMessage(2100)
+  assert.match(msg, /2\.100 token/)
+  assert.match(msg, /admin/i)
+  assert.ok(!/\s{2}/.test(msg))
+})
+check('token tak valid → tetap pesan aman tanpa angka', () => {
+  const msg = chargedSaveFailureMessage(Number.NaN)
+  assert.ok(!/NaN/.test(msg))
+  assert.match(msg, /admin/i)
+})
+
+console.log('lp-optimize-job-rules: retryAsync')
+
+async function checkAsync(name: string, fn: () => Promise<void>): Promise<void> {
+  await fn()
+  passed += 1
+  console.log(`  ok  ${name}`)
+}
+
+const noSleep = async (): Promise<void> => {}
+
+async function runAsyncChecks(): Promise<void> {
+  await checkAsync('jeda retry simpan hasil wajar (≥ 2 kali coba ulang)', async () => {
+    assert.ok(LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS.length >= 2)
+    assert.ok(LP_OPTIMIZE_SAVE_RETRY_DELAYS_MS.every((ms) => ms > 0))
+  })
+  await checkAsync('sukses di percobaan pertama → tanpa jeda', async () => {
+    const slept: number[] = []
+    const out = await retryAsync(async () => 'ok', {
+      delaysMs: [10, 20],
+      sleep: async (ms) => {
+        slept.push(ms)
+      },
+    })
+    assert.equal(out, 'ok')
+    assert.deepEqual(slept, [])
+  })
+  await checkAsync('gagal 2× lalu sukses → jeda sesuai urutan', async () => {
+    let calls = 0
+    const slept: number[] = []
+    const out = await retryAsync(
+      async () => {
+        calls += 1
+        if (calls < 3) throw new Error(`gagal ${calls}`)
+        return calls
+      },
+      {
+        delaysMs: [10, 20, 30],
+        sleep: async (ms) => {
+          slept.push(ms)
+        },
+      },
+    )
+    assert.equal(out, 3)
+    assert.deepEqual(slept, [10, 20])
+  })
+  await checkAsync('selalu gagal → lempar error TERAKHIR setelah semua percobaan', async () => {
+    let calls = 0
+    await assert.rejects(
+      retryAsync(
+        async () => {
+          calls += 1
+          throw new Error(`gagal ${calls}`)
+        },
+        { delaysMs: [1, 1], sleep: noSleep },
+      ),
+      /gagal 3/,
+    )
+    assert.equal(calls, 3)
+  })
+  await checkAsync('onRetry dipanggil per kegagalan yang akan dicoba ulang', async () => {
+    const seen: number[] = []
+    await assert.rejects(
+      retryAsync(
+        async () => {
+          throw new Error('x')
+        },
+        {
+          delaysMs: [1, 1],
+          sleep: noSleep,
+          onRetry: (attempt) => {
+            seen.push(attempt)
+          },
+        },
+      ),
+    )
+    assert.deepEqual(seen, [1, 2])
+  })
+}
+
+runAsyncChecks()
+  .then(() => {
+    console.log(`lp-optimize-job-rules.test.ts: ${passed} kasus lolos`)
+  })
+  .catch((err: unknown) => {
+    console.error(err)
+    process.exit(1)
+  })
