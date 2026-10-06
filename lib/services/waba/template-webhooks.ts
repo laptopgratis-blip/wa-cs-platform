@@ -5,6 +5,7 @@
 // (template dibuat di luar hulao).
 
 import { prisma } from '@/lib/prisma'
+import { relinkForWaba } from '@/lib/services/followup-meta-relink'
 
 import { mapMetaCategory, mapMetaStatus, syncTemplatesFromMeta } from './templates-sync'
 import type {
@@ -81,6 +82,9 @@ export async function handleTemplateStatusUpdate(
     },
   })
   console.log(`[waba/template-webhooks] ${tpl.name}/${tpl.language} → ${status}`)
+  // Template baru APPROVED → follow-up yang masih menunjuk template WABA
+  // lama/terhapus bisa ditautkan ke sini (best-effort, never-throw).
+  if (status === 'APPROVED') await relinkForWaba(wabaId, 'webhook template APPROVED')
 }
 
 export async function handleTemplateQualityUpdate(

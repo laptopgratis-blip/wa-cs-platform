@@ -7,6 +7,7 @@
 // di parameter body; tidak diawali/diakhiri variabel.
 
 import { prisma } from '@/lib/prisma'
+import { relinkStatusRank } from '@/lib/services/followup-meta-link'
 
 import { createTemplateDraft, submitTemplate } from './templates'
 import type { TemplateDraftInput } from './template-validate'
@@ -328,7 +329,9 @@ export async function getStarterPackStatus(wabaId: string, pool: StarterTemplate
  * Auto-link template Meta bawaan ke FollowUpTemplate default user yang cocok
  * (trigger + paymentMethod + orderType + delayDays). Dipanggil setelah
  * ensureTemplatesByPurpose supaya follow-up otomatis pakai template Meta di
- * sesi Cloud API. Hanya mengisi yang belum punya metaTemplateId.
+ * sesi Cloud API. Hanya mengisi yang belum punya metaTemplateId (tautan basi
+ * diurus relinkStaleFollowUpTemplates). Template DELETED/REJECTED/DISABLED
+ * dilewati; bila ada beberapa per purposeKey, APPROVED diutamakan.
  */
 export async function autoLinkStarterFollowUps(input: {
   userId: string
@@ -336,10 +339,15 @@ export async function autoLinkStarterFollowUps(input: {
 }): Promise<{ linked: number }> {
   const defs = STARTER_TEMPLATES.filter((d) => d.matchDefault?.length)
   const templates = await prisma.wabaTemplate.findMany({
-    where: { wabaId: input.wabaId, purposeKey: { in: defs.map((d) => d.purposeKey) }, status: { not: 'DELETED' } },
-    select: { id: true, purposeKey: true },
+    where: {
+      wabaId: input.wabaId,
+      purposeKey: { in: defs.map((d) => d.purposeKey) },
+      status: { notIn: ['DELETED', 'REJECTED', 'DISABLED'] },
+    },
+    select: { id: true, purposeKey: true, status: true },
+    orderBy: { updatedAt: 'desc' },
   })
-  const byPurpose = new Map(templates.map((t) => [t.purposeKey, t.id]))
+  const byPurpose = bestTemplateByPurpose(templates)
 
   let linked = 0
   for (const def of defs) {
@@ -363,4 +371,18 @@ export async function autoLinkStarterFollowUps(input: {
     }
   }
   return { linked }
+}
+
+/** purposeKey → id template terbaik (APPROVED > PENDING/IN_APPEAL > PAUSED > DRAFT). */
+function bestTemplateByPurpose(
+  templates: { id: string; purposeKey: string | null; status: string }[],
+): Map<string | null, string> {
+  const ranked = templates
+    .map((t) => ({ t, rank: relinkStatusRank(t.status) }))
+    .filter((x): x is { t: (typeof templates)[number]; rank: number } => x.rank !== null)
+    // sort stabil → urutan updatedAt desc dipertahankan untuk rank yang sama.
+    .sort((a, b) => a.rank - b.rank)
+  const out = new Map<string | null, string>()
+  for (const { t } of ranked) if (!out.has(t.purposeKey)) out.set(t.purposeKey, t.id)
+  return out
 }

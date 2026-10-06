@@ -8,6 +8,7 @@ import { after, type NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { syncTemplatesAndRelinkForSession } from '@/lib/services/followup-meta-relink'
 import { startCoexistenceSync } from '@/lib/services/waba/coexistence-sync'
 import { validateSignupState } from '@/lib/services/waba/oauth'
 import { completeEmbeddedSignup } from '@/lib/services/waba/onboarding'
@@ -56,10 +57,13 @@ export async function POST(req: Request) {
     // halaman HTML-nya sehingga pesan error tidak sampai ke user.
     if (!result.ok) return jsonError(result.error, result.status === 500 ? 400 : result.status)
 
+    const sessionId = result.data.sessionId
     if (result.data.syncScheduled) {
-      const sessionId = result.data.sessionId
       after(() => startCoexistenceSync(sessionId))
     }
+    // Nomor/WABA baru → tarik template lalu tautkan ulang follow-up yang masih
+    // menunjuk template WABA lama (best-effort, never-throw).
+    after(() => syncTemplatesAndRelinkForSession(sessionId))
 
     return jsonOk(result.data)
   } catch (err) {
