@@ -154,7 +154,12 @@ function passesSalesFlowGuard(
   ) {
     return false
   }
-  // (c) Placeholder yang datanya kosong.
+  // (c) Placeholder yang datanya kosong — HANYA tahap order (jalur baru dari
+  // flow-engine). Event lanjutan (PAYMENT_PAID/SHIPPED/COMPLETED/CANCELLED)
+  // sejak dulu sudah meng-queue template default ber-{invoice} untuk order
+  // flow lewat PATCH/bulk-update/auto-paid; jangan diputus (info resi,
+  // konfirmasi bayar, panen testimoni tetap jalan).
+  if (!ORDER_STAGE_TRIGGERS.includes(t.trigger)) return true
   return !usesMissingOrderData(t, order)
 }
 

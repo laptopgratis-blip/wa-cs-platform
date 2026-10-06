@@ -97,7 +97,8 @@ export async function generateQueueForOrder(
   // query sederhana — jumlah template per user kecil (puluhan). Logika ada
   // di helper pure followup-order-match, termasuk guard order Sales Flow
   // (orderSessionId terisi): skip konfirmasi ORDER_CREATED, metode tanpa
-  // tagihan, dan placeholder {invoice}/{total}/{produk} yang datanya kosong.
+  // tagihan, dan (khusus tahap order) placeholder {invoice}/{total}/{produk}
+  // yang datanya kosong.
   const matched = matchFollowUpTemplatesForOrder(templates, order, event)
 
   if (matched.length === 0) return { generated: 0 }
