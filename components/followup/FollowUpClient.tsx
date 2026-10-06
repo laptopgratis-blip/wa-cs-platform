@@ -42,6 +42,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchJson } from '@/lib/fetch-json'
 import { cn } from '@/lib/utils'
 import { TONES } from '@/lib/ui-tones'
 
@@ -187,16 +188,18 @@ export function FollowUpClient({
   async function handleSendNow(id: string) {
     setActionId(id)
     try {
-      const res = await fetch(`/api/followup/queue/${id}/send-now`, {
-        method: 'POST',
-      })
-      const json = await res.json()
-      if (!json.success) {
-        toast.error(json.error ?? 'Gagal kirim pesan')
-      } else {
-        setLoading(true)
-        reload()
-      }
+      // fetchJson never-throw: alasan gagal dari server (mis. template perlu
+      // dipilih ulang) tetap sampai sebagai toast, termasuk saat respons
+      // bukan JSON.
+      const res = await fetchJson(
+        `/api/followup/queue/${id}/send-now`,
+        { method: 'POST' },
+        'Gagal kirim pesan',
+      )
+      if (!res.ok) toast.error(res.error ?? 'Gagal kirim pesan')
+      // Muat ulang juga saat gagal: alasan (failedReason) tampil di item.
+      setLoading(true)
+      reload()
     } finally {
       setActionId(null)
     }
@@ -517,7 +520,10 @@ function QueueList({
               </div>
             </div>
             {item.status === 'PENDING' && item.failedReason && (
-              <RetryNotice reason={item.failedReason} retryCount={item.retryCount} />
+              <RetryNotice
+                reason={item.failedReason}
+                retryCount={item.retryCount}
+              />
             )}
             <pre className="bg-muted max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {item.resolvedMessage}
@@ -532,12 +538,19 @@ function QueueList({
 // Item PENDING yang sudah pernah gagal — dulu retry tidak terlihat sama
 // sekali sampai akhirnya FAILED. Tampilkan alasan terakhir supaya seller
 // bisa memperbaiki (mis. tautkan Template Meta) sebelum habis percobaan.
-function RetryNotice({ reason, retryCount }: { reason: string; retryCount: number }) {
+function RetryNotice({
+  reason,
+  retryCount,
+}: {
+  reason: string
+  retryCount: number
+}) {
   return (
     <p className={cn('flex items-start gap-1.5 text-xs', TONES.warning.text)}>
       <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
       <span>
-        Percobaan terakhir gagal{retryCount > 0 ? ` (${retryCount}x)` : ''}: {reason}
+        Percobaan terakhir gagal{retryCount > 0 ? ` (${retryCount}x)` : ''}:{' '}
+        {reason}
       </span>
     </p>
   )

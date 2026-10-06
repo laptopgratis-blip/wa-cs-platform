@@ -4,6 +4,7 @@
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
+import { manualSendFailureStatus } from '@/lib/services/followup-failure-policy'
 import { FOLLOWUP_SEND_INCLUDE, sendQueueItem } from '@/lib/services/followup-sender'
 
 interface Params {
@@ -72,7 +73,8 @@ export async function POST(_req: Request, { params }: Params) {
           source: 'MANUAL',
         },
       })
-      return jsonError(`Gagal kirim: ${reason}`, 500)
+      // 4xx disengaja — body 5xx diganti HTML oleh Cloudflare (alasan hilang).
+      return jsonError(`Gagal kirim: ${reason}`, manualSendFailureStatus(send))
     }
 
     // Status & sentAt sudah di-set saat claim di atas.

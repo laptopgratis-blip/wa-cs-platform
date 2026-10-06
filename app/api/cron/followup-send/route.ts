@@ -22,7 +22,10 @@ import {
 import { notifyEbookAccess } from '@/lib/services/ebook/access-notif'
 import { notifyNewOrder } from '@/lib/services/order-notif'
 import { notifyFollowUpFailure } from '@/lib/services/followup-alert'
-import { decideFollowUpFailure } from '@/lib/services/followup-failure-policy'
+import {
+  decideFollowUpFailure,
+  type FollowUpFailureScope,
+} from '@/lib/services/followup-failure-policy'
 import {
   FOLLOWUP_SEND_INCLUDE,
   sendQueueItem,
@@ -162,13 +165,14 @@ async function handle(req: Request) {
         permanent: send.permanent,
         detail: send.detail,
         error: send.error,
+        missingData: send.missingData,
         retryCount: item.retryCount,
       })
       if (decision.action === 'SKIP') {
         await markSkipped(item.id, decision.reason)
         skipped++
       } else if (decision.action === 'FAIL_FINAL') {
-        await failFinal(item, decision.reason, send.error)
+        await failFinal(item, decision, send.error)
         failed++
       } else {
         // Kembalikan ke PENDING dengan backoff + alasan (claim sebelumnya SENT).
@@ -317,11 +321,17 @@ function logBase(item: QueueItemForSend) {
 }
 
 /**
- * Gagal final: FAILED + FollowUpLog FAILED + notifikasi bell ke seller
- * (dedupe 24 jam per template; never-throw). errorMessage log menyimpan
+ * Gagal final: FAILED + FollowUpLog FAILED + notifikasi bell ke seller sesuai
+ * lingkup penyebab (template / nomor / kredit / generik; CUSTOMER tanpa
+ * notifikasi; dedupe 24 jam; never-throw). errorMessage log menyimpan
  * gabungan per-sesi untuk debug, failedReason menyimpan alasan ramah.
  */
-async function failFinal(item: QueueItemForSend, reason: string, rawError?: string) {
+async function failFinal(
+  item: QueueItemForSend,
+  decision: { reason: string; scope: FollowUpFailureScope },
+  rawError?: string,
+) {
+  const { reason, scope } = decision
   await markFailed(item.id, reason)
   await prisma.followUpLog.create({
     data: {
@@ -336,6 +346,7 @@ async function failFinal(item: QueueItemForSend, reason: string, rawError?: stri
     followUpTemplateId: item.templateId,
     templateName: item.template.name,
     reason,
+    scope,
   })
 }
 

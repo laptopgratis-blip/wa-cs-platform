@@ -1,13 +1,15 @@
 // Notifikasi in-app (bell) ke seller saat follow-up gagal FINAL.
-// Dedupe per (userId, type, link) 24 jam — satu template rusak yang membuat
-// puluhan queue gagal cukup satu notifikasi. NEVER throw: dipanggil dari
-// cron di tengah loop pengiriman.
+// Dedupe per (userId, type, link, title) 24 jam — link + judul mewakili
+// lingkup penyebab (template tertentu / nomor pengirim / kredit), jadi satu
+// template rusak yang membuat puluhan queue gagal cukup satu notifikasi, nomor
+// terputus cukup satu notifikasi per user, dan gagal generik tidak menelan
+// notifikasi template rusak yang nyata. Scope CUSTOMER tidak dinotifikasi.
+// NEVER throw: dipanggil dari cron di tengah loop pengiriman.
 
 import { prisma } from '@/lib/prisma'
 import {
   buildFollowUpFailureNotification,
-  FOLLOWUP_FAILURE_NOTIF_TYPE,
-  followUpTemplateLink,
+  type FollowUpFailureScope,
 } from '@/lib/services/followup-failure-policy'
 import { createNotification } from '@/lib/services/subscription'
 
@@ -18,23 +20,26 @@ export interface FollowUpFailureAlertInput {
   followUpTemplateId: string
   templateName: string
   reason: string
+  scope: FollowUpFailureScope
 }
 
 export async function notifyFollowUpFailure(input: FollowUpFailureAlertInput): Promise<boolean> {
   try {
-    const link = followUpTemplateLink(input.followUpTemplateId)
+    const notif = buildFollowUpFailureNotification(input)
+    if (!notif) return false
+
     const recent = await prisma.subscriptionNotification.findFirst({
       where: {
         userId: input.userId,
-        type: FOLLOWUP_FAILURE_NOTIF_TYPE,
-        link,
+        type: notif.type,
+        link: notif.link,
+        title: notif.title,
         createdAt: { gte: new Date(Date.now() - DEDUPE_WINDOW_MS) },
       },
       select: { id: true },
     })
     if (recent) return false
 
-    const notif = buildFollowUpFailureNotification(input)
     await createNotification({
       userId: input.userId,
       type: notif.type,

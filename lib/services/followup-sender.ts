@@ -21,6 +21,10 @@ import {
   resolveLeadTemplateParams,
   resolveTemplateParams,
 } from '@/lib/services/followup-variables'
+import {
+  emptyParamPlaceholders,
+  missingDataReason,
+} from '@/lib/services/followup-failure-policy'
 
 /** Include wajib saat memuat FollowUpQueue untuk dikirim (cron & send-now). */
 export const FOLLOWUP_SEND_INCLUDE = {
@@ -68,7 +72,7 @@ function cachedParams(item: QueueItemForSend, paramMap: string[] | null): string
  */
 export async function ensureResolvedParams(item: QueueItemForSend): Promise<string[] | null> {
   const tpl = item.template
-  const paramMap = Array.isArray(tpl.metaParamMap) ? (tpl.metaParamMap as string[]) : null
+  const paramMap = paramMapOf(item)
   // Peta berubah setelah queue dibuat (re-link / edit) → hitung ulang.
   const cached = cachedParams(item, paramMap)
   if (cached) return cached
@@ -109,12 +113,21 @@ export async function ensureResolvedParams(item: QueueItemForSend): Promise<stri
   return null
 }
 
+export interface FollowUpSendResult extends SmartSendResult {
+  /**
+   * Placeholder peta variabel yang datanya kosong untuk item ini (mis.
+   * `{resi}`) saat payload/Meta menolak jumlah parameter — masalah satu
+   * pesanan, bukan template rusak.
+   */
+  missingData?: string[]
+}
+
 export async function sendQueueItem(
   item: QueueItemForSend,
   // Konteks pemanggil (cron vs manual) — disimpan di signature untuk logging
   // future; belum dipakai.
   opts: { source: 'AUTOMATIC' | 'MANUAL' },
-): Promise<SmartSendResult> {
+): Promise<FollowUpSendResult> {
   void opts
   try {
     return await sendQueueItemInner(item)
@@ -131,7 +144,7 @@ export async function sendQueueItem(
   }
 }
 
-async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResult> {
+async function sendQueueItemInner(item: QueueItemForSend): Promise<FollowUpSendResult> {
   const candidates = await listSenderCandidates({
     userId: item.userId,
     preferContactPhone: item.customerPhone,
@@ -140,11 +153,9 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
   // Template Cloud API bila FollowUpTemplate sudah di-link ke WabaTemplate.
   let template: SmartSendTemplateSpec | undefined
   const metaTemplateId = item.template.metaTemplateId
-  if (metaTemplateId) {
-    const params = await ensureResolvedParams(item)
-    if (params) {
-      template = { templateId: metaTemplateId, params: { body: params }, fallbackFromLinked: true }
-    }
+  const params = metaTemplateId ? await ensureResolvedParams(item) : null
+  if (metaTemplateId && params) {
+    template = { templateId: metaTemplateId, params: { body: params }, fallbackFromLinked: true }
   }
 
   const result = await smartSend({
@@ -156,7 +167,10 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
     source: 'FOLLOWUP',
   })
 
-  if (!result.success) return withActionableDetail(result, metaTemplateId, Boolean(template))
+  if (!result.success) {
+    const explained = withActionableDetail(result, metaTemplateId, Boolean(template))
+    return withMissingData(explained, paramMapOf(item), params)
+  }
 
   if (result.sessionId) {
     await prisma.followUpQueue
@@ -171,6 +185,29 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
       .catch(() => undefined)
   }
   return result
+}
+
+function paramMapOf(item: QueueItemForSend): string[] | null {
+  const map = item.template.metaParamMap
+  return Array.isArray(map) ? (map as string[]) : null
+}
+
+/**
+ * Template ditolak karena jumlah parameter, dan ada variabel yang datanya
+ * kosong untuk item ini → tandai `missingData` + alasan yang menunjuk data
+ * pesanan (bukan template). Mengembalikan objek baru.
+ */
+function withMissingData(
+  result: SmartSendResult,
+  paramMap: string[] | null,
+  params: string[] | null,
+): FollowUpSendResult {
+  if (result.code !== 'NO_TEMPLATE' || !params) return result
+  const paramRejected = result.attempts.some((a) => a.code === 'TEMPLATE_PARAM_MISMATCH')
+  if (!paramRejected) return result
+  const missing = emptyParamPlaceholders(paramMap, params)
+  if (missing.length === 0) return result
+  return { ...result, missingData: missing, detail: missingDataReason(missing) }
 }
 
 /**

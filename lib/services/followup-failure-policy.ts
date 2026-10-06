@@ -16,31 +16,73 @@ export const WA_RECONNECT_BACKOFF_MS = 30 * 60 * 1000
 export const FOLLOWUP_FAILURE_NOTIF_TYPE = 'FOLLOWUP_SEND_FAILED'
 const MAX_REASON_CHARS = 400
 
+/**
+ * Lingkup penyebab gagal final — menentukan isi & link notifikasi seller:
+ * TEMPLATE  = konfigurasi follow-up/Template Meta (semua kiriman berikutnya ikut gagal)
+ * SENDER    = nomor pengirim tidak terhubung (semua follow-up tertahan)
+ * CREDIT    = saldo Kredit Pesan habis
+ * CUSTOMER  = khusus satu pelanggan/pesanan (data kosong) — tanpa notifikasi
+ * OTHER     = gagal transmisi generik setelah retry habis
+ */
+export type FollowUpFailureScope = 'TEMPLATE' | 'SENDER' | 'CREDIT' | 'CUSTOMER' | 'OTHER'
+
 export interface FollowUpFailureInput {
   code?: SmartSendCode
   permanent?: boolean
   detail?: string
   error?: string
+  /**
+   * Placeholder peta variabel yang nilainya kosong untuk item ini (mis.
+   * `{resi}` belum diisi) saat Meta/payload menolak jumlah parameter.
+   */
+  missingData?: string[]
   retryCount: number
 }
 
 export type FollowUpFailureDecision =
   | { action: 'RETRY'; reason: string; backoffMs: number }
-  | { action: 'FAIL_FINAL'; reason: string }
+  | { action: 'FAIL_FINAL'; reason: string; scope: FollowUpFailureScope }
   | { action: 'SKIP'; reason: string }
+
+// Akhiran alasan transient ("... — follow-up dicoba lagi otomatis") tidak
+// boleh terbawa ke status FAILED: seller akan menunggu retry yang tak datang.
+const TRANSIENT_SUFFIX = /\s*—\s*(follow-up\s+)?dicoba lagi otomatis\s*$/
 
 function pickReason(input: FollowUpFailureInput, fallback: string): string {
   return input.detail || input.error || fallback
 }
 
+function exhaustedReason(reason: string, maxRetry: number): string {
+  return `${reason.replace(TRANSIENT_SUFFIX, '')} — batas ${maxRetry}x percobaan habis, follow-up dibatalkan`
+}
+
 function retryOrFail(
   input: FollowUpFailureInput,
   reason: string,
-  maxRetry: number,
-  backoffMs: number,
+  opts: { maxRetry: number; backoffMs: number; scope: FollowUpFailureScope },
 ): FollowUpFailureDecision {
-  if (input.permanent || input.retryCount >= maxRetry) return { action: 'FAIL_FINAL', reason }
-  return { action: 'RETRY', reason, backoffMs }
+  if (input.permanent) return { action: 'FAIL_FINAL', reason, scope: opts.scope }
+  if (input.retryCount >= opts.maxRetry) {
+    return { action: 'FAIL_FINAL', reason: exhaustedReason(reason, opts.maxRetry), scope: opts.scope }
+  }
+  return { action: 'RETRY', reason, backoffMs: opts.backoffMs }
+}
+
+/** Placeholder peta yang nilainya kosong (unik, urut kemunculan). PURE. */
+export function emptyParamPlaceholders(
+  paramMap: readonly string[] | null,
+  params: readonly string[],
+): string[] {
+  if (!paramMap) return []
+  const empty = paramMap.filter((_, i) => !(params[i] ?? '').trim())
+  return [...new Set(empty)]
+}
+
+export function missingDataReason(missing: readonly string[]): string {
+  return (
+    `Data untuk variabel ${missing.join(', ')} kosong pada pesanan/lead ini — ` +
+    'Template Meta tidak bisa diisi, follow-up ini dilewati untuk pelanggan ini'
+  )
 }
 
 export function decideFollowUpFailure(input: FollowUpFailureInput): FollowUpFailureDecision {
@@ -50,6 +92,7 @@ export function decideFollowUpFailure(input: FollowUpFailureInput): FollowUpFail
         return {
           action: 'FAIL_FINAL',
           reason: `Sesi WhatsApp tidak terhubung setelah ${MAX_WA_RETRY}x percobaan — hubungkan ulang nomor`,
+          scope: 'SENDER',
         }
       }
       return {
@@ -58,24 +101,63 @@ export function decideFollowUpFailure(input: FollowUpFailureInput): FollowUpFail
         backoffMs: WA_RECONNECT_BACKOFF_MS,
       }
     case 'NO_TEMPLATE':
-      return retryOrFail(
-        input,
-        pickReason(input, 'Template Meta belum disetujui / belum disiapkan'),
-        MAX_WA_RETRY,
-        WA_RECONNECT_BACKOFF_MS,
-      )
+      // Data satu pesanan kosong (mis. {resi}) bukan template rusak — final
+      // tanpa menyalahkan template (retry tak akan mengisi datanya).
+      if (input.missingData && input.missingData.length > 0) {
+        return { action: 'FAIL_FINAL', reason: missingDataReason(input.missingData), scope: 'CUSTOMER' }
+      }
+      return retryOrFail(input, pickReason(input, 'Template Meta belum disetujui / belum disiapkan'), {
+        maxRetry: MAX_WA_RETRY,
+        backoffMs: WA_RECONNECT_BACKOFF_MS,
+        scope: 'TEMPLATE',
+      })
     case 'INSUFFICIENT_CREDIT':
       return retryOrFail(
         input,
         pickReason(input, 'Kredit pesan habis — top up untuk mengirim template Meta'),
-        MAX_WA_RETRY,
-        WA_RECONNECT_BACKOFF_MS,
+        { maxRetry: MAX_WA_RETRY, backoffMs: WA_RECONNECT_BACKOFF_MS, scope: 'CREDIT' },
       )
     case 'MARKETING_OPT_OUT':
       return { action: 'SKIP', reason: 'Customer opt-out pesan marketing' }
+    case 'BLACKLISTED':
+      // Blacklist kontak di inbox (compliance), beda dengan FollowUpBlacklist.
+      // Disengaja oleh seller — bukan kegagalan, jangan notifikasi.
+      return { action: 'SKIP', reason: 'Kontak di-blacklist — follow-up tidak dikirim' }
+    case 'WINDOW_CLOSED':
+      // Follow-up belum ditautkan / peta variabel belum lengkap: perbaikannya
+      // di pengaturan follow-up, jadi lingkupnya TEMPLATE.
+      return retryOrFail(input, pickReason(input, 'Window 24 jam customer sudah tutup'), {
+        maxRetry: MAX_SEND_RETRY,
+        backoffMs: RETRY_BACKOFF_MS,
+        scope: 'TEMPLATE',
+      })
     default:
-      return retryOrFail(input, pickReason(input, 'Gagal kirim'), MAX_SEND_RETRY, RETRY_BACKOFF_MS)
+      return retryOrFail(input, pickReason(input, 'Gagal kirim'), {
+        maxRetry: MAX_SEND_RETRY,
+        backoffMs: RETRY_BACKOFF_MS,
+        scope: 'OTHER',
+      })
   }
+}
+
+// Gagal yang perbaikannya di konfigurasi/kontak — tidak akan sembuh dengan
+// klik ulang. Sisanya (sesi/transmisi) boleh dicoba lagi.
+const UNPROCESSABLE_CODES: ReadonlySet<SmartSendCode> = new Set<SmartSendCode>([
+  'NO_TEMPLATE',
+  'WINDOW_CLOSED',
+  'BLACKLISTED',
+  'MARKETING_OPT_OUT',
+  'INSUFFICIENT_CREDIT',
+])
+
+/**
+ * Status HTTP untuk "Kirim sekarang" yang gagal. Selalu 4xx: Cloudflare
+ * mengganti body 5xx dari origin dengan halaman HTML sehingga alasan ramah
+ * tidak sampai ke seller (pola sama dengan route waba/exchange).
+ */
+export function manualSendFailureStatus(input: { code?: SmartSendCode; permanent?: boolean }): 400 | 422 {
+  if (input.permanent) return 422
+  return input.code && UNPROCESSABLE_CODES.has(input.code) ? 422 : 400
 }
 
 export function followUpTemplateLink(followUpTemplateId: string): string {
@@ -93,18 +175,52 @@ export interface FollowUpFailureNotification {
   link: string
 }
 
+interface ScopeCopy {
+  title: string
+  closing: string
+  link: (followUpTemplateId: string) => string
+}
+
+// Judul berbeda per scope — dipakai juga sebagai kunci dedupe (bersama link)
+// supaya gagal generik tidak menelan notifikasi template rusak yang nyata.
+const SCOPE_COPY: Record<Exclude<FollowUpFailureScope, 'CUSTOMER'>, ScopeCopy> = {
+  TEMPLATE: {
+    title: 'Template follow-up perlu diperbaiki',
+    closing: 'Follow-up berikutnya dengan template ini juga akan gagal sampai diperbaiki.',
+    link: followUpTemplateLink,
+  },
+  SENDER: {
+    title: 'Follow-up tertahan: nomor WhatsApp terputus',
+    closing: 'Semua follow-up tertahan sampai nomor pengirim terhubung kembali.',
+    link: () => '/whatsapp',
+  },
+  CREDIT: {
+    title: 'Follow-up tertahan: Kredit Pesan habis',
+    closing: 'Top up Kredit Pesan supaya follow-up via Template Meta terkirim lagi.',
+    link: () => '/billing',
+  },
+  OTHER: {
+    title: 'Follow-up gagal terkirim',
+    closing: 'Cek detailnya di riwayat follow-up.',
+    link: followUpTemplateLink,
+  },
+}
+
+/** Isi notifikasi bell per scope; null = tidak perlu notifikasi (CUSTOMER). */
 export function buildFollowUpFailureNotification(input: {
   followUpTemplateId: string
   templateName: string
   reason: string
-}): FollowUpFailureNotification {
+  scope: FollowUpFailureScope
+}): FollowUpFailureNotification | null {
+  if (input.scope === 'CUSTOMER') return null
+  const copy = SCOPE_COPY[input.scope]
   return {
     type: FOLLOWUP_FAILURE_NOTIF_TYPE,
-    title: 'Follow-up gagal terkirim',
+    title: copy.title,
     message:
       `Follow-up "${truncate(input.templateName, 120)}" gagal dikirim ke pelanggan. ` +
-      `Alasan: ${truncate(input.reason, MAX_REASON_CHARS)}. ` +
-      'Follow-up berikutnya dengan template ini juga akan gagal sampai diperbaiki.',
-    link: followUpTemplateLink(input.followUpTemplateId),
+      `Alasan: ${truncate(input.reason, MAX_REASON_CHARS)}. ${copy.closing}`,
+    link: copy.link(input.followUpTemplateId),
   }
 }
