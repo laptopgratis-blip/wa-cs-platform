@@ -4,7 +4,7 @@
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
-import { sendQueueItem } from '@/lib/services/followup-sender'
+import { FOLLOWUP_SEND_INCLUDE, sendQueueItem } from '@/lib/services/followup-sender'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -17,7 +17,7 @@ export async function POST(_req: Request, { params }: Params) {
 
     const item = await prisma.followUpQueue.findFirst({
       where: { id, userId: session.user.id },
-      include: { template: true },
+      include: FOLLOWUP_SEND_INCLUDE,
     })
     if (!item) return jsonError('Queue item tidak ditemukan', 404)
     if (item.status !== 'PENDING') {
@@ -51,10 +51,12 @@ export async function POST(_req: Request, { params }: Params) {
 
     const send = await sendQueueItem(item, { source: 'MANUAL' })
     if (!send.success) {
+      // Alasan ramah (detail) diutamakan; gabungan per-sesi tetap di log.
+      const reason = send.detail ?? send.error ?? 'Gagal kirim'
       // Lepas claim supaya bisa dikirim ulang (manual atau cron).
       await prisma.followUpQueue.updateMany({
         where: { id, status: 'SENT' },
-        data: { status: 'PENDING', sentAt: null, failedReason: send.error ?? 'Gagal kirim' },
+        data: { status: 'PENDING', sentAt: null, failedReason: reason },
       })
       await prisma.followUpLog.create({
         data: {
@@ -66,11 +68,11 @@ export async function POST(_req: Request, { params }: Params) {
           customerPhone: item.customerPhone,
           message: item.resolvedMessage,
           status: 'FAILED',
-          errorMessage: send.error,
+          errorMessage: send.error ?? reason,
           source: 'MANUAL',
         },
       })
-      return jsonError(`Gagal kirim: ${send.error}`, 500)
+      return jsonError(`Gagal kirim: ${reason}`, 500)
     }
 
     // Status & sentAt sudah di-set saat claim di atas.

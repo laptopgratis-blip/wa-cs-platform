@@ -1,24 +1,65 @@
 // Kirim satu item FollowUpQueue — provider-aware via smartSend:
 //   Baileys → free-text; Cloud API dalam window → free-text; di luar window →
-//   template Meta (metaTemplateId) dengan resolvedParams.
+//   template Meta (metaTemplateId) dengan resolvedParams. Template tertaut
+//   milik WABA lama (seller ganti nomor) → smartSend mencari padanan di WABA
+//   aktif (`fallbackFromLinked`), gagal → alasan actionable + flag permanen.
 // Dipakai cron followup-send, send-now, dan test-send. NEVER throw.
 //
 // Catatan: fungsi ini TIDAK mengubah status queue (PENDING/SENT/FAILED) —
 // itu tanggung jawab pemanggil (cron melakukan claim atomik dulu). Fungsi ini
 // hanya mengisi jejak pengiriman (waSessionId/sentVia/externalMsgId) saat sukses.
 
-import type { FollowUpQueue, FollowUpTemplate } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { listSenderCandidates } from '@/lib/wa-session'
-import { smartSend, type SmartSendResult } from '@/lib/services/wa-send/smart-send'
+import {
+  smartSend,
+  type SmartSendResult,
+  type SmartSendTemplateSpec,
+} from '@/lib/services/wa-send/smart-send'
 import {
   resolveLeadTemplateParams,
   resolveTemplateParams,
 } from '@/lib/services/followup-variables'
-import type { TemplateSendParams } from '@/lib/services/waba/template-payload'
 
-export interface QueueItemForSend extends FollowUpQueue {
-  template: FollowUpTemplate | null
+/** Include wajib saat memuat FollowUpQueue untuk dikirim (cron & send-now). */
+export const FOLLOWUP_SEND_INCLUDE = {
+  order: true,
+  template: {
+    include: {
+      metaTemplate: {
+        select: {
+          id: true,
+          wabaId: true,
+          status: true,
+          purposeKey: true,
+          name: true,
+          language: true,
+          category: true,
+          bodyText: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.FollowUpQueueInclude
+
+export type QueueItemForSend = Prisma.FollowUpQueueGetPayload<{
+  include: typeof FOLLOWUP_SEND_INCLUDE
+}>
+
+const UNLINKED_WINDOW_CLOSED =
+  'Window 24 jam customer sudah tutup dan follow-up ini belum ditautkan ke Template Meta — ' +
+  'pilih Template Meta di pengaturan follow-up supaya tetap terkirim di luar window'
+const PARAMS_UNRESOLVED =
+  'Variabel Template Meta follow-up ini belum bisa diisi (peta variabel kosong/tidak lengkap) — ' +
+  'pilih ulang Template Meta di pengaturan follow-up'
+
+/** Cache resolvedParams masih sah bila panjangnya sama dengan peta saat ini. */
+function cachedParams(item: QueueItemForSend, paramMap: string[] | null): string[] | null {
+  if (!Array.isArray(item.resolvedParams)) return null
+  const cached = item.resolvedParams as string[]
+  if (paramMap && cached.length !== paramMap.length) return null
+  return cached
 }
 
 /**
@@ -26,10 +67,12 @@ export interface QueueItemForSend extends FollowUpQueue {
  * resolvedParams belum dihitung (template Meta di-link setelah queue dibuat).
  */
 export async function ensureResolvedParams(item: QueueItemForSend): Promise<string[] | null> {
-  if (Array.isArray(item.resolvedParams)) return item.resolvedParams as string[]
   const tpl = item.template
-  if (!tpl?.metaTemplateId || !Array.isArray(tpl.metaParamMap)) return null
-  const paramMap = tpl.metaParamMap as string[]
+  const paramMap = Array.isArray(tpl.metaParamMap) ? (tpl.metaParamMap as string[]) : null
+  // Peta berubah setelah queue dibuat (re-link / edit) → hitung ulang.
+  const cached = cachedParams(item, paramMap)
+  if (cached) return cached
+  if (!tpl.metaTemplateId || !paramMap) return null
 
   try {
     if (item.orderId) {
@@ -95,11 +138,12 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
   })
 
   // Template Cloud API bila FollowUpTemplate sudah di-link ke WabaTemplate.
-  let template: { templateId: string; params: TemplateSendParams } | undefined
-  if (item.template?.metaTemplateId) {
+  let template: SmartSendTemplateSpec | undefined
+  const metaTemplateId = item.template.metaTemplateId
+  if (metaTemplateId) {
     const params = await ensureResolvedParams(item)
     if (params) {
-      template = { templateId: item.template.metaTemplateId, params: { body: params } }
+      template = { templateId: metaTemplateId, params: { body: params }, fallbackFromLinked: true }
     }
   }
 
@@ -112,7 +156,9 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
     source: 'FOLLOWUP',
   })
 
-  if (result.success && result.sessionId) {
+  if (!result.success) return withActionableDetail(result, metaTemplateId, Boolean(template))
+
+  if (result.sessionId) {
     await prisma.followUpQueue
       .update({
         where: { id: item.id },
@@ -125,4 +171,17 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<SmartSendResu
       .catch(() => undefined)
   }
   return result
+}
+
+/**
+ * Window tutup tanpa template → jelaskan ke seller apa yang harus dilakukan
+ * (bukan sekadar "tidak ada template"). Mengembalikan objek baru.
+ */
+function withActionableDetail(
+  result: SmartSendResult,
+  metaTemplateId: string | null,
+  hasTemplate: boolean,
+): SmartSendResult {
+  if (result.code !== 'WINDOW_CLOSED' || hasTemplate) return result
+  return { ...result, detail: metaTemplateId ? PARAMS_UNRESOLVED : UNLINKED_WINDOW_CLOSED }
 }

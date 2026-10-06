@@ -21,7 +21,7 @@ import {
 } from '@/lib/services/live/handoff'
 import { notifyEbookAccess } from '@/lib/services/ebook/access-notif'
 import { notifyNewOrder } from '@/lib/services/order-notif'
-import { sendQueueItem } from '@/lib/services/followup-sender'
+import { FOLLOWUP_SEND_INCLUDE, sendQueueItem } from '@/lib/services/followup-sender'
 
 const BATCH_SIZE = 50
 const MAX_SEND_RETRY = 3 // failure transmisi WA
@@ -40,7 +40,7 @@ async function handle(req: Request) {
 
   const due = await prisma.followUpQueue.findMany({
     where: { status: 'PENDING', scheduledAt: { lte: now } },
-    include: { order: true, template: true },
+    include: FOLLOWUP_SEND_INCLUDE,
     take: BATCH_SIZE,
     orderBy: { scheduledAt: 'asc' },
   })
