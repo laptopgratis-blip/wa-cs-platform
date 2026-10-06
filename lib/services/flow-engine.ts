@@ -14,6 +14,10 @@
 import { prisma } from '@/lib/prisma'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import {
+  isFollowUpDeliverablePhone,
+  resolveFlowOrderPhone,
+} from '@/lib/services/flow-order-phone'
+import {
   type SalesFlowFinalActionInput,
   type SalesFlowStepInput,
 } from '@/lib/validations/sales-flow'
@@ -278,7 +282,7 @@ async function processActiveStep(
 
     // Best-effort create order — kalau gagal (mis. duplicate orderSessionId
     // dari race), tetap kembalikan reply ke customer.
-    const createdOrderId = await createOrderFromCompletedSession(
+    const createdOrder = await createOrderFromCompletedSession(
       session,
       nextData,
     ).catch((err) => {
@@ -289,11 +293,10 @@ async function processActiveStep(
     // Generate follow-up queue (POWER only; gating + guard Sales Flow di
     // engine) — fire-and-forget, jangan tahan balasan ke customer. Pola sama
     // dengan app/api/orders/submit. null = order sudah ada (idempotent) /
-    // gagal dibuat → jangan generate ulang.
-    if (createdOrderId) {
-      generateQueueForOrder(createdOrderId, 'ORDER_CREATED').catch((err) =>
-        console.error('[flow-engine] followup generate gagal:', err),
-      )
+    // gagal dibuat → jangan generate ulang. Nomor kosong/tak layak kirim →
+    // skip: queue-nya pasti gagal (atau "terkirim" ke JID invalid).
+    if (createdOrder) {
+      queueFlowOrderFollowUps(createdOrder)
     }
 
     const finalReply = renderTemplate(
@@ -537,16 +540,38 @@ function paymentMethodFromFlow(template: string): string {
   }
 }
 
+interface CreatedFlowOrder {
+  id: string
+  customerPhone: string
+}
+
+// Generate follow-up ORDER_CREATED untuk order flow yang baru dibuat
+// (fire-and-forget). Nomor yang tak layak kirim (kosong / awalan 0 / terlalu
+// pendek) dilewati supaya tidak ada queue yang pasti gagal.
+function queueFlowOrderFollowUps(order: CreatedFlowOrder): void {
+  if (!isFollowUpDeliverablePhone(order.customerPhone)) {
+    console.warn(
+      `[flow-engine] follow-up order ${order.id} dilewati: nomor customer tidak valid untuk WA`,
+    )
+    return
+  }
+  generateQueueForOrder(order.id, 'ORDER_CREATED').catch((err) =>
+    console.error('[flow-engine] followup generate gagal:', err),
+  )
+}
+
 // Auto-create UserOrder dari session yang baru selesai. Field customerName/
 // Phone/Address di-extract dari collectedData kalau ada — selain itu fallback
 // ke phoneNumber kontak (dari prisma.contact).
-// Return id order yang BARU dibuat; null kalau order sudah ada (jalur
-// idempotent — follow-up-nya sudah/akan di-generate saat pertama dibuat) atau
+// customerPhone dinormalisasi ke "628xx" (lihat flow-order-phone) supaya
+// follow-up & blacklist memakai format yang sama dengan sumber order lain.
+// Return {id, customerPhone} order yang BARU dibuat; null kalau order sudah
+// ada (jalur idempotent — follow-up-nya sudah/akan di-generate saat pertama dibuat) atau
 // flow tidak ditemukan.
 async function createOrderFromCompletedSession(
   session: ActiveSessionWithFlow,
   collectedData: Record<string, string>,
-): Promise<string | null> {
+): Promise<CreatedFlowOrder | null> {
   // Idempotent guard: kalau order sudah ada untuk session ini (jarang, tapi
   // mungkin saat retry), jangan duplikasi.
   const existing = await prisma.userOrder.findUnique({
@@ -571,8 +596,10 @@ async function createOrderFromCompletedSession(
 
   const customerName =
     collectedData.customerName ?? contact?.name ?? 'Tanpa Nama'
-  const customerPhone =
-    collectedData.customerPhone ?? contact?.phoneNumber ?? ''
+  const customerPhone = resolveFlowOrderPhone(
+    collectedData.customerPhone,
+    contact?.phoneNumber,
+  )
   const customerAddress = collectedData.customerAddress ?? null
 
   // Notes: simpan field tambahan yang tidak masuk slot utama (mis.
@@ -606,9 +633,9 @@ async function createOrderFromCompletedSession(
       flowName: flow.name,
       notes,
     },
-    select: { id: true },
+    select: { id: true, customerPhone: true },
   })
-  return created.id
+  return created
 }
 
 // ── ADMIN NOTIFICATION ─────────────────────────────────────────────────────
