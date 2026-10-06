@@ -106,6 +106,34 @@ Dokumentasi user (verifikasi tanda tangan, anti-replay, dedup by event id): tab 
 
 `POST /api/v1/messages` membungkus `smartSend` (sudah never-throw & sadar window/compliance).
 
+**Kirim gambar (2026-09-10).** Body menerima `image_url` opsional (URL https publik,
+maks 2048 char); `content` menjadi caption opsional (maks 1024 saat ada gambar) dan
+tetap wajib bila teks murni. Validasi bentuk di `lib/validations/public-message.ts`
+(ada test-nya), guard SSRF reuse `assertSafeWebhookUrl` di `sendPublicText` —
+WAJIB, karena jalur Baileys men-download URL dari dalam wa-service. Transport:
+Baileys `sendImage` (wa-manager, endpoint `/send-message` + `imageUrl`), Cloud API
+`type:image` by-link di `sendCloudText` (Meta yang fetch). Gambar hanya free-form:
+kandidat Cloud di luar window dilewati `smartSend` dengan `WINDOW_CLOSED` (template
+tidak bisa bawa gambar arbitrer), pesan errornya diganti supaya tidak menyarankan
+endpoint template.
+
+**Kirim gambar base64 — fire and forget (2026-09-10).** Alternatif `image_url`:
+`image_base64` (base64 mentah atau data URI; eksklusif dgn `image_url`, dijaga
+schema). Tidak ada file yang pernah ditulis ke disk platform — bytes hanya lewat
+memori request. Decode + validasi terpusat di
+`lib/services/public-api/image-data.ts` (`decodeImageBase64`: cap 5 MB selaras
+batas media Meta, magic-bytes JPEG/PNG/WebP — prefix data URI klien tidak
+dipercaya; ada test-nya). Gagal decode → 400 `invalid_image`. Transport:
+Baileys terima `imageBase64` di `/send-message` (parser JSON route itu dinaikkan
+ke 8 MB, path-scoped; endpoint wa-service lain tetap 256kb) → `sendImageBuffer`
+kirim buffer langsung; Cloud API upload dulu ke media API Meta
+(`lib/services/waba/media-upload.ts`, multipart via `graphRequest` yang kini
+paham FormData) → kirim `image:{id}` — media numpang di penyimpanan Meta
+(retensi ±30 hari), bukan di platform. Catatan infra: body request bisa ~7 MB;
+kalau nginx di depan app membatasi `client_max_body_size` di bawah itu, klien
+kena 413 sebelum sampai Next — naikkan khusus `location /api/v1/messages` bila
+perlu gambar besar (klien kamera internal kita kirim ±150 KB, aman).
+
 **Pemilihan nomor pengirim.** `listSenderCandidates` menyusun prioritas:
 `session_id` eksplisit → sesi terakhir dipakai kontak tujuan → BAILEYS → CLOUD_API
 (tie-break `updatedAt` desc). `smartSend` lalu mencoba berurutan dengan failover.

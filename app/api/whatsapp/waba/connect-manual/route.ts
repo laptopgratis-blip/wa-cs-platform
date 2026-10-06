@@ -6,6 +6,7 @@ import { after, type NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import { syncTemplatesAndRelinkForSession } from '@/lib/services/followup-meta-relink'
 import { startCoexistenceSync } from '@/lib/services/waba/coexistence-sync'
 import { completeManualToken } from '@/lib/services/waba/onboarding'
 
@@ -44,8 +45,11 @@ export async function POST(req: Request) {
     // 5xx diganti HTML oleh Cloudflare → paksa 4xx supaya pesan sampai.
     if (!result.ok) return jsonError(result.error, result.status === 500 ? 400 : result.status)
 
+    const sessionId = result.data.sessionId
+    // Nomor/WABA baru → tarik template lalu tautkan ulang follow-up yang masih
+    // menunjuk template WABA lama (best-effort, never-throw).
+    after(() => syncTemplatesAndRelinkForSession(sessionId))
     if (result.data.syncScheduled) {
-      const sessionId = result.data.sessionId
       after(async () => {
         try {
           await startCoexistenceSync(sessionId)

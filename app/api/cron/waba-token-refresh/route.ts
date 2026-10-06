@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/lib/cron-auth'
 import { encrypt, decrypt } from '@/lib/crypto'
 import { prisma } from '@/lib/prisma'
+import { relinkForWaba } from '@/lib/services/followup-meta-relink'
 import { refreshLongLivedToken } from '@/lib/services/waba/oauth'
 import { ensureWebhookOverride } from '@/lib/services/waba/resources'
 import { syncTemplatesFromMeta } from '@/lib/services/waba/templates-sync'
@@ -47,8 +48,12 @@ async function syncStaleTemplates(): Promise<{ wabas: number; ok: number; failed
   let failed = 0
   for (const r of rows) {
     const res = await syncTemplatesFromMeta({ wabaId: r.wabaId, userId: r.userId })
-    if (res.ok) ok += 1
-    else {
+    if (res.ok) {
+      ok += 1
+      // Status template berubah (mis. PENDING → APPROVED) → relink follow-up
+      // pemilik sesi WABA ini yang masih basi. Never-throw.
+      await relinkForWaba(r.wabaId, 'cron waba-token-refresh')
+    } else {
       failed += 1
       console.error(`[cron/waba] sync template WABA ${r.wabaId} gagal: ${res.error}`)
     }

@@ -15,7 +15,11 @@ export const metadata = {
   title: 'Template Follow-Up · Hulao',
 }
 
-export default async function TemplatesPage() {
+export default async function TemplatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ highlight?: string | string[] }>
+}) {
   const session = await getServerSession(authOptions)
   if (!session) redirect('/login')
 
@@ -29,7 +33,11 @@ export default async function TemplatesPage() {
     )
   }
 
-  // Forms untuk dropdown scope=FORM + sesi Cloud API (untuk banner template Meta).
+  // ?highlight=<id> dari notifikasi follow-up gagal kirim.
+  const { highlight } = await searchParams
+
+  // Forms untuk dropdown scope=FORM + sesi Cloud API (untuk banner template
+  // Meta & pemilih Template Meta di modal — hasCloud).
   const [forms, cloudSessions] = await Promise.all([
     prisma.orderForm.findMany({
       where: { userId: session.user.id, isActive: true },
@@ -55,7 +63,11 @@ export default async function TemplatesPage() {
       {cloudSessions.length > 0 && (
         <MetaTemplateBanner sessions={cloudSessions} />
       )}
-      <TemplatesClient forms={forms} />
+      <TemplatesClient
+        forms={forms}
+        hasCloud={cloudSessions.length > 0}
+        highlightId={typeof highlight === 'string' ? highlight : null}
+      />
     </PageContainer>
   )
 }

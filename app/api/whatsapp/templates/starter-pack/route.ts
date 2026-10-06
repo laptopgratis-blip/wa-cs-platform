@@ -6,6 +6,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { relinkStaleFollowUpTemplatesSafe } from '@/lib/services/followup-meta-relink'
 import { autoLinkStarterFollowUps, ensureTemplatesByPurpose, getStarterPackStatus } from '@/lib/services/waba/starter-pack'
 import { starterPackSchema } from '@/lib/validations/waba-template'
 
@@ -54,9 +55,18 @@ export async function POST(req: Request) {
       keys: parsed.data.keys,
     })
     if (!r.ok) return jsonError(r.error ?? 'Gagal menyiapkan template', 400)
-    // Auto-link ke follow-up default yang cocok (best-effort).
-    const link = await autoLinkStarterFollowUps({ userId: session.user.id, wabaId }).catch(() => ({ linked: 0 }))
-    return jsonOk({ results: r.results, linkedFollowUps: link.linked, items: await getStarterPackStatus(wabaId) })
+    // Auto-link follow-up default yang belum tertaut + relink yang masih
+    // menunjuk template WABA lama/terhapus (best-effort, keduanya).
+    const link = await autoLinkStarterFollowUps({ userId: session.user.id, wabaId }).catch((err) => {
+      console.error('[starter-pack] autoLinkStarterFollowUps gagal:', err)
+      return { linked: 0 }
+    })
+    const relinked = await relinkStaleFollowUpTemplatesSafe(session.user.id, 'starter-pack')
+    return jsonOk({
+      results: r.results,
+      linkedFollowUps: link.linked + relinked,
+      items: await getStarterPackStatus(wabaId),
+    })
   } catch (err) {
     console.error('[POST /api/whatsapp/templates/starter-pack] gagal:', err)
     return jsonError('Terjadi kesalahan server', 500)

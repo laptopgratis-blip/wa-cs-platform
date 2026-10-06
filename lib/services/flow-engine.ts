@@ -12,6 +12,11 @@
 // perlakukan sebagai "no active session" supaya keyword detection bisa start
 // flow baru.
 import { prisma } from '@/lib/prisma'
+import { generateQueueForOrder } from '@/lib/services/followup-engine'
+import {
+  isFollowUpDeliverablePhone,
+  resolveFlowOrderPhone,
+} from '@/lib/services/flow-order-phone'
 import {
   type SalesFlowFinalActionInput,
   type SalesFlowStepInput,
@@ -277,9 +282,22 @@ async function processActiveStep(
 
     // Best-effort create order — kalau gagal (mis. duplicate orderSessionId
     // dari race), tetap kembalikan reply ke customer.
-    await createOrderFromCompletedSession(session, nextData).catch((err) =>
-      console.error('[flow-engine] createOrderFromCompletedSession gagal:', err),
-    )
+    const createdOrder = await createOrderFromCompletedSession(
+      session,
+      nextData,
+    ).catch((err) => {
+      console.error('[flow-engine] createOrderFromCompletedSession gagal:', err)
+      return null
+    })
+
+    // Generate follow-up queue (POWER only; gating + guard Sales Flow di
+    // engine) — fire-and-forget, jangan tahan balasan ke customer. Pola sama
+    // dengan app/api/orders/submit. null = order sudah ada (idempotent) /
+    // gagal dibuat → jangan generate ulang. Nomor kosong/tak layak kirim →
+    // skip: queue-nya pasti gagal (atau "terkirim" ke JID invalid).
+    if (createdOrder) {
+      queueFlowOrderFollowUps(createdOrder)
+    }
 
     const finalReply = renderTemplate(
       session.flow.finalAction.replyMessage,
@@ -522,27 +540,52 @@ function paymentMethodFromFlow(template: string): string {
   }
 }
 
+interface CreatedFlowOrder {
+  id: string
+  customerPhone: string
+}
+
+// Generate follow-up ORDER_CREATED untuk order flow yang baru dibuat
+// (fire-and-forget). Nomor yang tak layak kirim (kosong / awalan 0 / terlalu
+// pendek) dilewati supaya tidak ada queue yang pasti gagal.
+function queueFlowOrderFollowUps(order: CreatedFlowOrder): void {
+  if (!isFollowUpDeliverablePhone(order.customerPhone)) {
+    console.warn(
+      `[flow-engine] follow-up order ${order.id} dilewati: nomor customer tidak valid untuk WA`,
+    )
+    return
+  }
+  generateQueueForOrder(order.id, 'ORDER_CREATED').catch((err) =>
+    console.error('[flow-engine] followup generate gagal:', err),
+  )
+}
+
 // Auto-create UserOrder dari session yang baru selesai. Field customerName/
 // Phone/Address di-extract dari collectedData kalau ada — selain itu fallback
 // ke phoneNumber kontak (dari prisma.contact).
+// customerPhone dinormalisasi ke "628xx" (lihat flow-order-phone) supaya
+// follow-up & blacklist memakai format yang sama dengan sumber order lain.
+// Return {id, customerPhone} order yang BARU dibuat; null kalau order sudah
+// ada (jalur idempotent — follow-up-nya sudah/akan di-generate saat pertama dibuat) atau
+// flow tidak ditemukan.
 async function createOrderFromCompletedSession(
   session: ActiveSessionWithFlow,
   collectedData: Record<string, string>,
-): Promise<void> {
+): Promise<CreatedFlowOrder | null> {
   // Idempotent guard: kalau order sudah ada untuk session ini (jarang, tapi
   // mungkin saat retry), jangan duplikasi.
   const existing = await prisma.userOrder.findUnique({
     where: { orderSessionId: session.id },
     select: { id: true },
   })
-  if (existing) return
+  if (existing) return null
 
   // Resolve flow.template untuk paymentMethod.
   const flow = await prisma.userSalesFlow.findUnique({
     where: { id: session.flow.id },
     select: { template: true, name: true },
   })
-  if (!flow) return
+  if (!flow) return null
 
   // Resolve contact.phoneNumber sebagai fallback kalau customerPhone tidak
   // ditangkap di salah satu step.
@@ -553,8 +596,10 @@ async function createOrderFromCompletedSession(
 
   const customerName =
     collectedData.customerName ?? contact?.name ?? 'Tanpa Nama'
-  const customerPhone =
-    collectedData.customerPhone ?? contact?.phoneNumber ?? ''
+  const customerPhone = resolveFlowOrderPhone(
+    collectedData.customerPhone,
+    contact?.phoneNumber,
+  )
   const customerAddress = collectedData.customerAddress ?? null
 
   // Notes: simpan field tambahan yang tidak masuk slot utama (mis.
@@ -574,7 +619,7 @@ async function createOrderFromCompletedSession(
       ? extraEntries.map(([k, v]) => `${k}: ${v}`).join('\n')
       : null
 
-  await prisma.userOrder.create({
+  const created = await prisma.userOrder.create({
     data: {
       userId: session.userId,
       contactId: session.contactId,
@@ -588,7 +633,9 @@ async function createOrderFromCompletedSession(
       flowName: flow.name,
       notes,
     },
+    select: { id: true, customerPhone: true },
   })
+  return created
 }
 
 // ── ADMIN NOTIFICATION ─────────────────────────────────────────────────────

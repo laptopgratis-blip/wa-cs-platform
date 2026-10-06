@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
+import { uploadCloudMedia } from './media-upload'
 
 // Kode error Meta yang berarti token/sesi tidak sehat → sesi di-ERROR-kan.
 const TOKEN_ERROR_CODES = new Set([190])
@@ -25,13 +26,20 @@ interface CloudMessagesResponse {
 }
 
 /**
- * Kirim teks free-form. Pra-cek window 24 jam dari Contact.windowExpiresAt
- * supaya kegagalan yang pasti terjadi diberi pesan jelas tanpa memanggil Meta.
+ * Kirim teks free-form — atau GAMBAR: by-link bila imageUrl diisi (Meta yang
+ * men-fetch URL-nya, harus https publik), atau by-bytes bila imageData diisi
+ * (di-upload dulu ke media API Meta → kirim by id; tidak ada file tersimpan
+ * di platform). content jadi caption opsional saat ada gambar. Semuanya pesan
+ * free-form dalam window 24 jam, aturan compliance sama. Pra-cek window dari
+ * Contact.windowExpiresAt supaya kegagalan yang pasti terjadi diberi pesan
+ * jelas tanpa memanggil Meta.
  */
 export async function sendCloudText(input: {
   sessionId: string
   phoneNumber: string
   content: string
+  imageUrl?: string
+  imageData?: { buffer: Buffer; mime: string }
 }): Promise<CloudSendResult> {
   try {
     // Aturan kepatuhan terpusat (sesi valid, blacklist, window 24 jam) —
@@ -41,12 +49,39 @@ export async function sendCloudText(input: {
       to: input.phoneNumber,
       intent: { kind: 'freeform' },
     })
-    if (!check.ok) return { success: false, error: check.message, code: check.code }
+    if (!check.ok)
+      return { success: false, error: check.message, code: check.code }
     const { session, to } = check
 
     const credRes = await getWabaCredentialsBySession(session.id)
-    if (!credRes.ok) return { success: false, error: credRes.error, code: 'SESSION_UNAVAILABLE' }
+    if (!credRes.ok)
+      return {
+        success: false,
+        error: credRes.error,
+        code: 'SESSION_UNAVAILABLE',
+      }
     const token = credRes.creds.token
+
+    // Gambar by-bytes: upload dulu ke media API Meta → kirim pakai media id.
+    // Kegagalan upload TIDAK meng-ERROR-kan sesi di sini (kalau token memang
+    // mati, panggilan /messages berikutnya yang menanganinya lengkap).
+    let mediaId: string | undefined
+    if (input.imageData) {
+      const uploaded = await uploadCloudMedia({
+        phoneNumberId: session.phoneNumberId,
+        token,
+        buffer: input.imageData.buffer,
+        mime: input.imageData.mime,
+      })
+      if (!uploaded.ok) {
+        return {
+          success: false,
+          error: `Upload media ke Meta gagal: ${uploaded.error.message}`,
+          code: 'META_ERROR',
+        }
+      }
+      mediaId = uploaded.data.id
+    }
 
     const result = await graphRequest<CloudMessagesResponse>(
       `/${session.phoneNumberId}/messages`,
@@ -57,8 +92,23 @@ export async function sendCloudText(input: {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to,
-          type: 'text',
-          text: { body: input.content },
+          ...(mediaId
+            ? {
+                type: 'image',
+                image: {
+                  id: mediaId,
+                  ...(input.content ? { caption: input.content } : {}),
+                },
+              }
+            : input.imageUrl
+              ? {
+                  type: 'image',
+                  image: {
+                    link: input.imageUrl,
+                    ...(input.content ? { caption: input.content } : {}),
+                  },
+                }
+              : { type: 'text', text: { body: input.content } }),
         },
       },
     )
@@ -66,22 +116,44 @@ export async function sendCloudText(input: {
     if (!result.ok) {
       const { code, httpStatus, message } = result.error
       // Token mati/dicabut → tandai sesi ERROR supaya UI & cron tahu.
-      if ((code !== undefined && TOKEN_ERROR_CODES.has(code)) || httpStatus === 401) {
+      if (
+        (code !== undefined && TOKEN_ERROR_CODES.has(code)) ||
+        httpStatus === 401
+      ) {
         // lastError tampil di tooltip kartu sesi — pakai copy ramah, pesan
         // mentah Meta (Inggris) cukup di log server.
-        console.error(`[waba/send] token ditolak sesi ${session.id}: ${message}`)
+        console.error(
+          `[waba/send] token ditolak sesi ${session.id}: ${message}`,
+        )
         await prisma.whatsappSession
           .update({
             where: { id: session.id },
-            data: { status: 'ERROR', lastError: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup' },
+            data: {
+              status: 'ERROR',
+              lastError:
+                'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup',
+            },
           })
           .catch(() => undefined)
-        return { success: false, error: 'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup', code: 'TOKEN_INVALID' }
+        return {
+          success: false,
+          error:
+            'Token Meta ditolak — hubungkan ulang nomor via Embedded Signup',
+          code: 'TOKEN_INVALID',
+        }
       }
       if (code !== undefined && WINDOW_ERROR_CODES.has(code)) {
-        return { success: false, error: 'Meta menolak: window 24 jam sudah tutup untuk kontak ini', code: 'WINDOW_CLOSED' }
+        return {
+          success: false,
+          error: 'Meta menolak: window 24 jam sudah tutup untuk kontak ini',
+          code: 'WINDOW_CLOSED',
+        }
       }
-      return { success: false, error: `Meta menolak pesan: ${message}${code ? ` (code ${code})` : ''}`, code: 'META_ERROR' }
+      return {
+        success: false,
+        error: `Meta menolak pesan: ${message}${code ? ` (code ${code})` : ''}`,
+        code: 'META_ERROR',
+      }
     }
 
     return {
@@ -95,6 +167,10 @@ export async function sendCloudText(input: {
   } catch (err) {
     // Jaring pengaman terakhir — kontrak never-throw.
     console.error('[waba/send] gagal:', err)
-    return { success: false, error: `Gagal kirim via Cloud API: ${(err as Error).message}`, code: 'META_ERROR' }
+    return {
+      success: false,
+      error: `Gagal kirim via Cloud API: ${(err as Error).message}`,
+      code: 'META_ERROR',
+    }
   }
 }

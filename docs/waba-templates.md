@@ -43,7 +43,15 @@ wajib **template ter-approve** dan **berbayar per pesan** → dompet **Kredit Pe
 - Starter pack (`lib/services/waba/starter-pack.ts`): 11 template follow-up `hulao_*` +
   `PLATFORM_TEMPLATES` (`hulao_otp` AUTH, `hulao_platform_info` UTILITY).
   `ensureTemplatesByPurpose` idempoten; `autoLinkStarterFollowUps` mengisi
-  `FollowUpTemplate.metaTemplateId/metaParamMap` untuk default yang cocok.
+  `FollowUpTemplate.metaTemplateId/metaParamMap` untuk default yang cocok
+  (lewati DELETED/REJECTED/DISABLED, utamakan APPROVED).
+- Relink follow-up (`lib/services/followup-meta-relink.ts`, keputusan pure di
+  `followup-meta-link.ts`): tautan ke template WABA tidak aktif (ganti nomor) atau
+  DELETED/REJECTED/DISABLED dipindah ke padanan di WABA aktif (purposeKey → nama+bahasa,
+  jumlah variabel wajib sama). Dipicu otomatis setelah connect WABA (exchange/connect-manual),
+  sync template, starter pack, polling `waba-token-refresh`, dan webhook template APPROVED.
+  Tidak pernah submit template ke Meta. Kirim follow-up juga fallback ke padanan APPROVED
+  di WABA pengirim (`smartSend` `fallbackFromLinked`); gagal permanen → FAILED + notifikasi bell.
 - UI: `/whatsapp/templates`; inbox `send` 409 `WINDOW_CLOSED` → `SendTemplateDialog`.
 
 ## Broadcast Cloud API
@@ -57,6 +65,8 @@ wajib **template ter-approve** dan **berbayar per pesan** → dompet **Kredit Pe
 ## Cron (cron-job.org, `?secret=CRON_SECRET`)
 
 - `followup-send` /5 menit · `waba-token-refresh` /1 jam · **`broadcast-send` /1 menit (BARU)**.
+- `followup-relink` /1 jam (jaring pengaman relink di atas). Query: `userId=` (satu user),
+  `dryRun=1` (laporan rencana tanpa menulis), `limit=` (maks user per run, default 50).
 
 ## Prasyarat dashboard Meta
 

@@ -13,12 +13,14 @@ export interface MetaApiError {
   httpStatus?: number
 }
 
-export type GraphResult<T> = { ok: true; data: T } | { ok: false; error: MetaApiError }
+export type GraphResult<T> =
+  { ok: true; data: T } | { ok: false; error: MetaApiError }
 
 interface GraphRequestInit {
   method?: 'GET' | 'POST' | 'DELETE'
   /** Access token — user token per sesi, atau app token `appId|appSecret`. */
   token: string
+  /** JSON (di-stringify) — atau FormData untuk upload multipart (media). */
   body?: unknown
   timeoutMs?: number
 }
@@ -39,13 +41,23 @@ export async function graphRequest<T>(
   }
 
   try {
+    // FormData: biar fetch yang menyusun multipart boundary sendiri —
+    // meng-override Content-Type malah merusak request upload.
+    const isForm =
+      typeof FormData !== 'undefined' && init.body instanceof FormData
     const res = await fetch(`${baseUrl}${path}`, {
       method: init.method ?? 'GET',
       headers: {
         Authorization: `Bearer ${init.token}`,
-        ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(init.body !== undefined && !isForm
+          ? { 'Content-Type': 'application/json' }
+          : {}),
       },
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      body: isForm
+        ? (init.body as FormData)
+        : init.body !== undefined
+          ? JSON.stringify(init.body)
+          : undefined,
       cache: 'no-store',
       signal: AbortSignal.timeout(init.timeoutMs ?? 30_000),
     })
@@ -77,13 +89,21 @@ export async function graphRequest<T>(
       }
     }
     if (json === null) {
-      return { ok: false, error: { message: 'Graph API: respons bukan JSON', httpStatus: res.status } }
+      return {
+        ok: false,
+        error: {
+          message: 'Graph API: respons bukan JSON',
+          httpStatus: res.status,
+        },
+      }
     }
     return { ok: true, data: json as T }
   } catch (err) {
     return {
       ok: false,
-      error: { message: `Graph API tidak bisa dihubungi: ${(err as Error).message}` },
+      error: {
+        message: `Graph API tidak bisa dihubungi: ${(err as Error).message}`,
+      },
     }
   }
 }
@@ -127,8 +147,12 @@ export async function graphRequestPaged<T>(
     pages += 1
     // `paging.next` = URL absolut; kurangi ke path relatif supaya lewat
     // graphRequest (header Bearer, timeout, normalisasi error).
-    const rel: string = nextUrl.startsWith(baseUrl) ? nextUrl.slice(baseUrl.length) : nextUrl
-    const res: GraphResult<GraphPagedResponse<T>> = await graphRequest<GraphPagedResponse<T>>(rel, {
+    const rel: string = nextUrl.startsWith(baseUrl)
+      ? nextUrl.slice(baseUrl.length)
+      : nextUrl
+    const res: GraphResult<GraphPagedResponse<T>> = await graphRequest<
+      GraphPagedResponse<T>
+    >(rel, {
       token: init.token,
       timeoutMs: init.timeoutMs,
     })
@@ -137,7 +161,9 @@ export async function graphRequestPaged<T>(
     const next: string | undefined = res.data.paging?.next
     // `paging.next` dari Meta membawa access_token di query — strip supaya
     // tidak bocor ke log; token tetap dikirim via header.
-    nextUrl = next ? next.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '') : null
+    nextUrl = next
+      ? next.replace(/([?&])access_token=[^&]*&?/, '$1').replace(/[?&]$/, '')
+      : null
   }
   return { ok: true, data: all, truncated: Boolean(nextUrl) }
 }
@@ -148,7 +174,12 @@ export async function graphRequestPaged<T>(
  */
 export async function graphUploadBinary<T>(
   path: string,
-  init: { token: string; body: Buffer; fileOffset?: number; timeoutMs?: number },
+  init: {
+    token: string
+    body: Buffer
+    fileOffset?: number
+    timeoutMs?: number
+  },
 ): Promise<GraphResult<T>> {
   let baseUrl: string
   try {
@@ -170,7 +201,12 @@ export async function graphUploadBinary<T>(
     })
     const json = (await res.json().catch(() => null)) as
       | (Record<string, unknown> & {
-          error?: { code?: number; error_subcode?: number; message?: string; type?: string }
+          error?: {
+            code?: number
+            error_subcode?: number
+            message?: string
+            type?: string
+          }
         })
       | null
     if (!res.ok || json?.error) {
@@ -187,10 +223,19 @@ export async function graphUploadBinary<T>(
       }
     }
     if (json === null) {
-      return { ok: false, error: { message: 'Graph upload: respons bukan JSON', httpStatus: res.status } }
+      return {
+        ok: false,
+        error: {
+          message: 'Graph upload: respons bukan JSON',
+          httpStatus: res.status,
+        },
+      }
     }
     return { ok: true, data: json as T }
   } catch (err) {
-    return { ok: false, error: { message: `Graph upload gagal: ${(err as Error).message}` } }
+    return {
+      ok: false,
+      error: { message: `Graph upload gagal: ${(err as Error).message}` },
+    }
   }
 }

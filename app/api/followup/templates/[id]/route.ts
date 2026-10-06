@@ -1,14 +1,48 @@
-// PATCH  /api/followup/templates/[id]  — update template
+// PATCH  /api/followup/templates/[id]  — update template (tautan Template Meta
+//        divalidasi; perubahan tautan/peta me-reset resolvedParams queue PENDING)
 // DELETE /api/followup/templates/[id]  — hapus template (cascade ke queue & log)
 //
 // Plan gating: POWER only.
+import { Prisma, type FollowUpTemplate } from '@prisma/client'
+
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
-import { followupTemplateUpdateSchema } from '@/lib/validations/followup'
+import { resolveMetaLinkInput } from '@/lib/services/followup-template-meta'
+import {
+  followupTemplateUpdateSchema,
+  type FollowupTemplateUpdateInput,
+} from '@/lib/validations/followup'
 
 interface Params {
   params: Promise<{ id: string }>
+}
+
+/** Field biasa yang dikirim saja (undefined = tidak diubah). */
+function scalarUpdate(
+  data: FollowupTemplateUpdateInput,
+  existing: FollowUpTemplate,
+): Prisma.FollowUpTemplateUncheckedUpdateInput {
+  return {
+    ...(data.name !== undefined && { name: data.name }),
+    ...(data.trigger !== undefined && { trigger: data.trigger }),
+    ...(data.orderType !== undefined && { orderType: data.orderType }),
+    ...(data.paymentMethod !== undefined && { paymentMethod: data.paymentMethod }),
+    ...(data.applyOnPaymentStatus !== undefined && {
+      applyOnPaymentStatus: data.applyOnPaymentStatus,
+    }),
+    ...(data.applyOnDeliveryStatus !== undefined && {
+      applyOnDeliveryStatus: data.applyOnDeliveryStatus,
+    }),
+    ...(data.delayDays !== undefined && { delayDays: data.delayDays }),
+    ...(data.message !== undefined && { message: data.message }),
+    ...(data.isActive !== undefined && { isActive: data.isActive }),
+    ...(data.scope !== undefined && { scope: data.scope }),
+    ...(data.orderFormId !== undefined && {
+      orderFormId: (data.scope ?? existing.scope) === 'FORM' ? data.orderFormId : null,
+    }),
+    ...(data.order !== undefined && { order: data.order }),
+  }
 }
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -40,35 +74,31 @@ export async function PATCH(req: Request, { params }: Params) {
       if (!form) return jsonError('Form tidak ditemukan', 404)
     }
 
-    const updated = await prisma.followUpTemplate.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined && { name: data.name }),
-        ...(data.trigger !== undefined && { trigger: data.trigger }),
-        ...(data.orderType !== undefined && {
-          orderType: data.orderType,
-        }),
-        ...(data.paymentMethod !== undefined && {
-          paymentMethod: data.paymentMethod,
-        }),
-        ...(data.applyOnPaymentStatus !== undefined && {
-          applyOnPaymentStatus: data.applyOnPaymentStatus,
-        }),
-        ...(data.applyOnDeliveryStatus !== undefined && {
-          applyOnDeliveryStatus: data.applyOnDeliveryStatus,
-        }),
-        ...(data.delayDays !== undefined && { delayDays: data.delayDays }),
-        ...(data.message !== undefined && { message: data.message }),
-        ...(data.isActive !== undefined && { isActive: data.isActive }),
-        ...(data.scope !== undefined && { scope: data.scope }),
-        ...(data.orderFormId !== undefined && {
-          orderFormId:
-            (data.scope ?? existing.scope) === 'FORM' ? data.orderFormId : null,
-        }),
-        ...(data.order !== undefined && { order: data.order }),
-        ...(data.metaTemplateId !== undefined && { metaTemplateId: data.metaTemplateId }),
-        ...(data.metaParamMap !== undefined && { metaParamMap: data.metaParamMap ?? undefined }),
-      },
+    // Tautan Template Meta: milik user, didukung, peta {{n}} lengkap & sah.
+    // metaTemplateId null → peta dikosongkan (DbNull).
+    const link = await resolveMetaLinkInput({
+      userId: session.user.id,
+      trigger: data.trigger ?? existing.trigger,
+      metaTemplateId: data.metaTemplateId,
+      metaParamMap: data.metaParamMap,
+      existing,
+    })
+    if (!link.ok) return jsonError(link.error, link.status)
+    const linkData = link.data
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.followUpTemplate.update({
+        where: { id },
+        data: { ...scalarUpdate(data, existing), ...(linkData ?? {}) },
+      })
+      // Tautan/peta berubah → nilai param yang di-cache queue PENDING basi.
+      if (linkData) {
+        await tx.followUpQueue.updateMany({
+          where: { templateId: id, status: 'PENDING' },
+          data: { resolvedParams: Prisma.DbNull },
+        })
+      }
+      return row
     })
 
     return jsonOk(updated)

@@ -1,5 +1,7 @@
 // GET  /api/v1/messages?contactId=&limit=&cursor= — riwayat pesan satu kontak.
-// POST /api/v1/messages — kirim TEKS (Baileys / Cloud dalam window 24 jam).
+// POST /api/v1/messages — kirim TEKS atau GAMBAR via image_url ATAU
+// image_base64 (fire-and-forget, tanpa file tersimpan). Baileys / Cloud dalam
+// window 24 jam; gambar tidak punya fallback template.
 //
 // GET: `contactId` WAJIB — tanpa itu jadi dump seluruh riwayat. Model Message
 // tak punya userId; kepemilikan lewat contactId → Contact.userId.
@@ -164,6 +166,8 @@ export async function POST(req: Request) {
       userId: gate.auth.userId,
       to: parsed.data.phone_number,
       content: parsed.data.content,
+      imageUrl: parsed.data.image_url ?? undefined,
+      imageBase64: parsed.data.image_base64 ?? undefined,
       sessionId: parsed.data.session_id ?? undefined,
       strictSession: parsed.data.strict_session,
     })

@@ -1,37 +1,38 @@
 // POST /api/lp/[lpId]/optimize
-// Trigger AI optimization. Flow:
-// 1. Validate LP + plan POWER + saldo cukup (re-check actual)
-// 2. Build context: analytics 30d + signals + current HTML
-// 3. Call Sonnet → suggestions + rewrittenHtml
-// 4. Charge token (atomic transaction) — tidak charge kalau AI fail
-// 5. Insert LpOptimization record dengan applied=false (apply via separate endpoint)
-// 6. Return suggestions + diff data ke client untuk preview
+// Mulai optimasi AI sebagai BACKGROUND JOB (2026-10-06).
 //
-// Kalau user discard, tidak ada cleanup (record sudah ter-charge). User
-// bisa apply nanti via /apply endpoint pakai optimizationId.
-import Anthropic from '@anthropic-ai/sdk'
-import type { NextResponse } from 'next/server'
+// Dulu route ini menunggu AI selesai (144–212 dtk) — Cloudflare memutus
+// request di 100 dtk (524), jadi user melihat "Network error" padahal token
+// sudah terpotong & hasil tersimpan. Sekarang:
+// 1. Precheck: LP milik user, plan POWER, ukuran LP, saldo cukup (estimasi).
+// 2. Transaksi + advisory lock per LP: sapu RUNNING basi → kalau masih ada
+//    RUNNING, kembalikan id itu (alreadyRunning) → else buat baris RUNNING.
+// 3. `after()` menjalankan runLpOptimizeJob (AI + potong token + simpan hasil).
+// 4. Balas 202 { optimizationId, status:'RUNNING', estimate } — client polling
+//    GET /optimize/status?id=…
+import { after, type NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
-import {
-  executeAiWithCharge,
-  InsufficientBalanceError,
-} from '@/lib/services/ai-generation-log'
+import { prisma } from '@/lib/prisma'
 import {
   estimateOptimizationCost,
   getOptimizeModel,
-  runOptimization,
 } from '@/lib/services/lp-optimize'
-import { SIGNAL_LABELS, type SignalCategory } from '@/lib/services/lp-chat-signals'
-import { prisma } from '@/lib/prisma'
+import { loadOptimizeEstimateInputs } from '@/lib/services/lp-optimize-context'
+import {
+  runLpOptimizeJob,
+  sweepStaleLpOptimizations,
+} from '@/lib/services/lp-optimize-job'
+import { estimateOptimizeDuration } from '@/lib/services/lp-optimize-job-rules'
 
 interface Params {
   params: Promise<{ lpId: string }>
 }
 
-// Next.js route config — cap durasi 5 menit (Sonnet output panjang bisa
-// 60-180s). Default Vercel/serverless 30-60s — di self-hosted Node tidak
-// strict, tapi explicit set supaya predictable + future deploy compat.
+// Route sendiri kini selesai < 2 dtk. Nilai ini tetap 300 karena di platform
+// yang menegakkan maxDuration, callback `after()` ikut dibatasi olehnya; di
+// server Node self-hosted (hulao) tidak ditegakkan — job dibatasi timeout AI
+// internal (LP_OPTIMIZE_AI_TIMEOUT_MS) dan sapuan baris basi.
 export const maxDuration = 300
 export const dynamic = 'force-dynamic'
 
@@ -43,297 +44,107 @@ export async function POST(_req: Request, { params }: Params) {
     return res as NextResponse
   }
   const { lpId } = await params
-
-  const lp = await prisma.landingPage.findUnique({
-    where: { id: lpId },
-    select: {
-      id: true,
-      userId: true,
-      htmlContent: true,
-      user: { select: { lpQuota: { select: { tier: true } } } },
-    },
-  })
-  if (!lp) return jsonError('LP tidak ditemukan', 404)
-  if (lp.userId !== session.user.id) return jsonError('Forbidden', 403)
-  if ((lp.user.lpQuota?.tier ?? 'FREE') !== 'POWER') {
-    return jsonError('AI optimization eksklusif POWER plan', 403)
-  }
-
-  // Pre-flight cost estimate — cek saldo cukup sebelum panggil AI.
-  const signalsCount = await prisma.lpChatSignal
-    .aggregate({
-      where: { landingPageId: lpId, periodDays: 30 },
-      _sum: { count: true },
-    })
-    .then((r) => r._sum.count ?? 0)
-    .catch(() => 0)
-  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-  const recentVisits = await prisma.lpVisit.count({
-    where: { landingPageId: lpId, createdAt: { gte: since30d } },
-  })
-  const estimate = await estimateOptimizationCost({
-    htmlContent: lp.htmlContent,
-    signalsCount: Math.min(signalsCount, 30),
-    hasAnalytics: recentVisits > 0,
-  })
-
-  // Tolak DI MUKA kalau LP ukurannya melebihi context window AI — supaya
-  // user dapat pesan jelas, bukan generic "AI service error 400" dari Anthropic.
-  if (estimate.exceedsContextLimit) {
-    return jsonError(
-      estimate.contextLimitMessage ?? 'LP terlalu besar untuk AI optimization.',
-      413,
-    )
-  }
-
-  const balance = await prisma.tokenBalance
-    .findUnique({
-      where: { userId: session.user.id },
-      select: { balance: true },
-    })
-    .then((b) => b?.balance ?? 0)
-  if (balance < estimate.platformTokensCharge) {
-    return Response.json(
-      {
-        success: false,
-        error: 'INSUFFICIENT_TOKEN',
-        message: `Saldo token tidak cukup. Butuh ${estimate.platformTokensCharge.toLocaleString('id-ID')} token, kamu punya ${balance.toLocaleString('id-ID')}.`,
-        required: estimate.platformTokensCharge,
-        currentBalance: balance,
-      },
-      { status: 402 },
-    )
-  }
-
-  // Build context: analytics + signals.
-  const [signals, analytics] = await Promise.all([
-    prisma.lpChatSignal.findMany({
-      where: { landingPageId: lpId, periodDays: 30 },
-      orderBy: { count: 'desc' },
-      take: 5,
-    }),
-    buildAnalyticsContext(lpId, since30d),
-  ])
-
-  const signalsForPrompt = signals
-    .filter((s) => s.count > 0)
-    .map((s) => ({
-      category: s.category,
-      label: SIGNAL_LABELS[s.category as SignalCategory] ?? s.category,
-      count: s.count,
-      samples: Array.isArray(s.sampleQuotes) ? (s.sampleQuotes as string[]) : [],
-    }))
-
-  // Insert pre-record dgn applied=false untuk audit kalau AI fail tetap ada
-  // log. Update setelah AI sukses (charge tokens, attach suggestions).
-  const optimizeModel = await getOptimizeModel()
-  const opt = await prisma.lpOptimization.create({
-    data: {
-      lpId,
-      userId: session.user.id,
-      model: optimizeModel,
-      inputTokens: 0,
-      outputTokens: 0,
-      beforeHtml: lp.htmlContent,
-      contextSummary: `signals=${signalsForPrompt.length}, visits=${recentVisits}`,
-      applied: false,
-    },
-    select: { id: true },
-  })
+  const userId = session.user.id
 
   try {
-    const { result, charge } = await executeAiWithCharge<
-      Awaited<ReturnType<typeof runOptimization>>
-    >({
-      featureKey: 'LP_OPTIMIZE',
-      userId: session.user.id,
-      ctx: {
-        referencePrefix: `lp_optimize:${opt.id}`,
-        description: 'LP AI Optimization',
-        subjectType: 'LP',
-        subjectId: lpId,
-        estimateInputTokens: estimate.estimatedInputTokens,
-        estimateOutputTokens: estimate.estimatedOutputTokens,
-        aiCall: async () => {
-          const r = await runOptimization({
-            htmlContent: lp.htmlContent,
-            signals: signalsForPrompt,
-            analytics,
-          })
-          return {
-            result: r,
-            inputTokens: r.inputTokens,
-            outputTokens: r.outputTokens,
-          }
-        },
+    const lp = await prisma.landingPage.findUnique({
+      where: { id: lpId },
+      select: {
+        id: true,
+        userId: true,
+        htmlContent: true,
+        user: { select: { lpQuota: { select: { tier: true } } } },
       },
     })
+    if (!lp) return jsonError('LP tidak ditemukan', 404)
+    if (lp.userId !== userId) return jsonError('Forbidden', 403)
+    if ((lp.user.lpQuota?.tier ?? 'FREE') !== 'POWER') {
+      return jsonError('AI optimization eksklusif POWER plan', 403)
+    }
 
-    await prisma.lpOptimization.update({
-      where: { id: opt.id },
-      data: {
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        inputPricePer1MUsd: charge.pricingSnapshot.inputPricePer1M,
-        outputPricePer1MUsd: charge.pricingSnapshot.outputPricePer1M,
-        providerCostUsd: charge.apiCostUsd,
-        providerCostRp: charge.apiCostRp,
-        platformTokensCharged: charge.tokensCharged,
-        suggestionsJson: result.suggestions,
-        focusAreasJson: result.focusAreas,
-        scoreBefore: result.scoreBefore,
-        scoreAfter: result.scoreAfter,
-        afterHtml: result.rewrittenHtml,
-      },
+    const inputs = await loadOptimizeEstimateInputs(lpId)
+    const estimate = await estimateOptimizationCost({
+      htmlContent: lp.htmlContent,
+      signalsCount: inputs.signalsCount,
+      hasAnalytics: inputs.hasAnalytics,
     })
 
-    return jsonOk({
-      optimizationId: opt.id,
-      suggestions: result.suggestions,
-      focusAreas: result.focusAreas,
-      scoreBefore: result.scoreBefore,
-      scoreAfter: result.scoreAfter,
-      rewrittenHtml: result.rewrittenHtml,
-      cost: {
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        providerCostUsd: charge.apiCostUsd,
-        providerCostRp: charge.apiCostRp,
-        platformTokensCharged: charge.tokensCharged,
-      },
-      preEstimate: estimate,
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    await prisma.lpOptimization
-      .update({
-        where: { id: opt.id },
-        data: { errorMessage: msg.slice(0, 1000) },
-      })
-      .catch(() => {})
+    // Tolak DI MUKA kalau LP melebihi context window AI — pesan jelas, bukan
+    // generic "AI service error 400" dari Anthropic.
+    if (estimate.exceedsContextLimit) {
+      return jsonError(
+        estimate.contextLimitMessage ??
+          'LP terlalu besar untuk AI optimization.',
+        413,
+      )
+    }
 
-    if (err instanceof InsufficientBalanceError) {
+    const balance = await prisma.tokenBalance
+      .findUnique({ where: { userId }, select: { balance: true } })
+      .then((b) => b?.balance ?? 0)
+    if (balance < estimate.platformTokensCharge) {
+      // `error` = pesan siap tampil (fetchJson client hanya membaca field ini).
       return Response.json(
         {
           success: false,
-          error: 'INSUFFICIENT_TOKEN',
-          message: `Saldo token tidak cukup. Butuh ±${err.tokensRequired.toLocaleString('id-ID')} token.`,
-          required: err.tokensRequired,
+          error: `Saldo token tidak cukup. Butuh ±${estimate.platformTokensCharge.toLocaleString('id-ID')} token, saldo kamu ${balance.toLocaleString('id-ID')} token. Top-up dulu lalu coba lagi.`,
+          code: 'INSUFFICIENT_TOKEN',
+          required: estimate.platformTokensCharge,
+          currentBalance: balance,
         },
         { status: 402 },
       )
     }
-    if (err instanceof Anthropic.RateLimitError) {
-      return jsonError('AI service sedang sibuk, coba lagi sebentar.', 429)
+
+    const model = await getOptimizeModel()
+    const job = await prisma.$transaction(async (tx) => {
+      // Satu job per LP. findFirst lalu create adalah check-then-act — dua
+      // klik/tab paralel bisa sama-sama lolos & bayar dua kali. Advisory lock
+      // per LP membuatnya berurutan; lepas otomatis saat commit.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('lp_optimize'), hashtext(${lpId}))`
+      await sweepStaleLpOptimizations(lpId, tx)
+      const running = await tx.lpOptimization.findFirst({
+        where: { lpId, status: 'RUNNING' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      })
+      if (running) return { id: running.id, alreadyRunning: true }
+
+      const created = await tx.lpOptimization.create({
+        data: {
+          lpId,
+          userId,
+          model,
+          status: 'RUNNING',
+          inputTokens: 0,
+          outputTokens: 0,
+          beforeHtml: lp.htmlContent,
+          contextSummary: `signals=${inputs.signalsCount}, visits=${inputs.recentVisits}`,
+          applied: false,
+        },
+        select: { id: true },
+      })
+      return { id: created.id, alreadyRunning: false }
+    })
+
+    if (!job.alreadyRunning) {
+      after(() => runLpOptimizeJob(job.id))
     }
-    if (err instanceof Anthropic.APIError) {
-      return jsonError(`AI service error: ${err.message}`, 502)
-    }
-    console.error('[POST /api/lp/:id/optimize] gagal:', err)
-    return jsonError(msg || 'Terjadi kesalahan server', 500)
-  }
-}
 
-// Build analytics context — visits, CTR, bounce, top CTAs, device split,
-// funnel drop terbesar.
-async function buildAnalyticsContext(lpId: string, since: Date) {
-  const visits = await prisma.lpVisit.count({
-    where: {
-      landingPageId: lpId,
-      createdAt: { gte: since },
-      OR: [{ deviceType: { not: 'BOT' } }, { deviceType: null }],
-    },
-  })
-  if (visits === 0) return null
-
-  const [ctaCount, bounceCount, avgTime, scroll50, ctas, devices, formSubmits] =
-    await Promise.all([
-      prisma.lpVisit.count({
-        where: {
-          landingPageId: lpId,
-          createdAt: { gte: since },
-          ctaClicked: true,
-          OR: [{ deviceType: { not: 'BOT' } }, { deviceType: null }],
+    return jsonOk(
+      {
+        optimizationId: job.id,
+        status: 'RUNNING' as const,
+        alreadyRunning: job.alreadyRunning,
+        estimate: {
+          ...estimate,
+          duration: estimateOptimizeDuration(estimate.estimatedOutputTokens),
         },
-      }),
-      prisma.lpVisit.count({
-        where: {
-          landingPageId: lpId,
-          createdAt: { gte: since },
-          bounced: true,
-          OR: [{ deviceType: { not: 'BOT' } }, { deviceType: null }],
-        },
-      }),
-      prisma.lpVisit.aggregate({
-        where: {
-          landingPageId: lpId,
-          createdAt: { gte: since },
-          timeOnPageSec: { not: null },
-        },
-        _avg: { timeOnPageSec: true },
-      }),
-      prisma.lpVisit.count({
-        where: {
-          landingPageId: lpId,
-          createdAt: { gte: since },
-          scrollMaxPct: { gte: 50 },
-        },
-      }),
-      prisma.lpEvent.groupBy({
-        by: ['eventValue'],
-        where: {
-          landingPageId: lpId,
-          eventType: 'cta_click',
-          createdAt: { gte: since },
-          eventValue: { not: null },
-        },
-        _count: { _all: true },
-        orderBy: { _count: { eventValue: 'desc' } },
-        take: 5,
-      }),
-      prisma.lpVisit.groupBy({
-        by: ['deviceType'],
-        where: { landingPageId: lpId, createdAt: { gte: since } },
-        _count: { _all: true },
-      }),
-      prisma.lpEvent.count({
-        where: {
-          landingPageId: lpId,
-          eventType: 'form_submit',
-          createdAt: { gte: since },
-        },
-      }),
-    ])
-
-  const ctaRate = visits > 0 ? (ctaCount / visits) * 100 : 0
-  const bounceRate = visits > 0 ? (bounceCount / visits) * 100 : 0
-
-  // Identify funnel drop terbesar — between visit→scroll50 atau scroll50→cta.
-  const dropScroll = visits > 0 ? ((visits - scroll50) / visits) * 100 : 0
-  const dropCta = scroll50 > 0 ? ((scroll50 - ctaCount) / scroll50) * 100 : 0
-  const dropForm = ctaCount > 0 ? ((ctaCount - formSubmits) / ctaCount) * 100 : 0
-  let funnelDropAt: string | null = null
-  const drops = [
-    { stage: 'scroll 50% (visitor langsung bounce)', pct: dropScroll },
-    { stage: 'klik CTA (visitor scroll tapi tidak klik)', pct: dropCta },
-    { stage: 'submit form (klik CTA tapi tidak submit)', pct: dropForm },
-  ]
-  drops.sort((a, b) => b.pct - a.pct)
-  if (drops[0] && drops[0].pct > 30) funnelDropAt = drops[0].stage
-
-  return {
-    visits,
-    ctaRate,
-    bounceRate,
-    avgTimeSec: avgTime._avg.timeOnPageSec ?? 0,
-    topCtas: ctas.map((c) => ({
-      label: c.eventValue ?? '(unknown)',
-      count: c._count._all,
-    })),
-    deviceSplit: devices.map((d) => ({
-      key: d.deviceType ?? 'unknown',
-      count: d._count._all,
-    })),
-    funnelDropAt,
+      },
+      202,
+    )
+  } catch (err) {
+    console.error('[POST /api/lp/:id/optimize] gagal memulai:', err)
+    return jsonError('Gagal memulai optimasi AI. Coba lagi sebentar lagi.', 500)
   }
 }

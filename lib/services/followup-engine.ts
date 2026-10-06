@@ -1,6 +1,7 @@
 // Follow-Up Order System engine — generate FollowUpQueue items saat event order
 // terjadi, dan cancel queue saat order ditutup. Dipanggil dari endpoint:
 //   - app/api/orders/submit (ORDER_CREATED)
+//   - lib/services/flow-engine (ORDER_CREATED, order Sales Flow WA)
 //   - app/api/orders/[id] PATCH (PAYMENT_PAID, SHIPPED, COMPLETED, CANCELLED)
 //   - app/api/internal/order-auto-paid (PAYMENT_PAID)
 //
@@ -21,36 +22,16 @@ import {
   resolveTemplateParams,
   resolveTemplateVariables,
 } from './followup-variables'
+import {
+  type FollowupEvent,
+  MAX_DELAY_DAYS,
+  mapEventToTriggers,
+  matchFollowUpTemplatesForOrder,
+} from './followup-order-match'
 
-export type FollowupEvent =
-  | 'ORDER_CREATED'
-  | 'PAYMENT_PAID'
-  | 'SHIPPED'
-  | 'COMPLETED'
-  | 'CANCELLED'
-
-const MAX_DELAY_DAYS = 30
-
-// Map event → trigger types yang harus dicari di FollowUpTemplate.
-// DAYS_AFTER_* di-trigger sekaligus karena base event-nya sama, hanya delay
-// yang beda. Misal saat ORDER_CREATED kita generate juga template
-// DAYS_AFTER_ORDER (delay 1, 2, dst) dengan scheduledAt = now + delayDays.
-function mapEventToTriggers(event: FollowupEvent): string[] {
-  switch (event) {
-    case 'ORDER_CREATED':
-      return ['ORDER_CREATED', 'DAYS_AFTER_ORDER']
-    case 'PAYMENT_PAID':
-      return ['PAYMENT_PAID', 'DAYS_AFTER_PAID']
-    case 'SHIPPED':
-      return ['SHIPPED', 'DAYS_AFTER_SHIPPED']
-    case 'COMPLETED':
-      return ['COMPLETED', 'DAYS_AFTER_DELIVERED']
-    case 'CANCELLED':
-      return ['CANCELLED']
-    default:
-      return []
-  }
-}
+// Tipe event & pencocokan template dipindah ke helper pure (bisa diuji tanpa
+// DB). Re-export supaya caller lama tetap import dari sini.
+export type { FollowupEvent } from './followup-order-match'
 
 export async function generateQueueForOrder(
   orderId: string,
@@ -112,29 +93,13 @@ export async function generateQueueForOrder(
     },
   })
 
-  // Filter sesuai paymentMethod & status. Filter di Node biar query
-  // sederhana — jumlah template per user kecil (puluhan).
-  const matched = templates.filter((t) => {
-    if (t.paymentMethod && t.paymentMethod !== order.paymentMethod) return false
-    // Filter jenis order: DIGITAL hanya utk order digital-only, PHYSICAL
-    // hanya utk order yang punya barang fisik. null = semua.
-    if (t.orderType === 'DIGITAL' && !order.isDigitalOnly) return false
-    if (t.orderType === 'PHYSICAL' && order.isDigitalOnly) return false
-    if (
-      t.applyOnPaymentStatus &&
-      t.applyOnPaymentStatus !== order.paymentStatus
-    ) {
-      return false
-    }
-    if (
-      t.applyOnDeliveryStatus &&
-      t.applyOnDeliveryStatus !== order.deliveryStatus
-    ) {
-      return false
-    }
-    if (t.delayDays < 0 || t.delayDays > MAX_DELAY_DAYS) return false
-    return true
-  })
+  // Filter sesuai paymentMethod, jenis order & status. Filter di Node biar
+  // query sederhana — jumlah template per user kecil (puluhan). Logika ada
+  // di helper pure followup-order-match, termasuk guard order Sales Flow
+  // (orderSessionId terisi): skip konfirmasi ORDER_CREATED, metode tanpa
+  // tagihan, dan (khusus tahap order) placeholder {invoice}/{total}/{produk}
+  // yang datanya kosong.
+  const matched = matchFollowUpTemplatesForOrder(templates, order, event)
 
   if (matched.length === 0) return { generated: 0 }
 

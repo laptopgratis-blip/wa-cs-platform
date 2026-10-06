@@ -21,16 +21,18 @@ import {
 } from '@/lib/services/live/handoff'
 import { notifyEbookAccess } from '@/lib/services/ebook/access-notif'
 import { notifyNewOrder } from '@/lib/services/order-notif'
-import { sendQueueItem } from '@/lib/services/followup-sender'
+import { notifyFollowUpFailure } from '@/lib/services/followup-alert'
+import {
+  decideFollowUpFailure,
+  type FollowUpFailureScope,
+} from '@/lib/services/followup-failure-policy'
+import {
+  FOLLOWUP_SEND_INCLUDE,
+  sendQueueItem,
+  type QueueItemForSend,
+} from '@/lib/services/followup-sender'
 
 const BATCH_SIZE = 50
-const MAX_SEND_RETRY = 3 // failure transmisi WA
-// WA session tidak CONNECTED → tunda 30 menit per retry. 12× ≈ window 6 jam
-// (dulu 5× ≈ 2,5 jam — kasus prod 2026-07-16: owner reconnect lebih lambat
-// dari window, konfirmasi order customer ikut hangus).
-const MAX_WA_RETRY = 12
-const RETRY_BACKOFF_MS = 15 * 60 * 1000
-const WA_RECONNECT_BACKOFF_MS = 30 * 60 * 1000
 
 async function handle(req: Request) {
   const authErr = requireCronAuth(req)
@@ -40,7 +42,7 @@ async function handle(req: Request) {
 
   const due = await prisma.followUpQueue.findMany({
     where: { status: 'PENDING', scheduledAt: { lte: now } },
-    include: { order: true, template: true },
+    include: FOLLOWUP_SEND_INCLUDE,
     take: BATCH_SIZE,
     orderBy: { scheduledAt: 'asc' },
   })
@@ -144,111 +146,47 @@ async function handle(req: Request) {
       // dalam window free-text, di luar window → template Meta ter-approve.
       // NEVER throw — hasil {success, code, error}.
       const send = await sendQueueItem(item, { source: 'AUTOMATIC' })
-      const sendResult = send.success
-        ? { ok: true as const }
-        : { ok: false as const, error: send.error ?? 'Gagal kirim', code: send.code }
 
-      // Tidak ada sesi terhubung sama sekali → tunda (mungkin lagi reconnect).
-      if (!sendResult.ok && sendResult.code === 'NO_SESSION') {
-        if (item.retryCount >= MAX_WA_RETRY) {
-          await markFailed(item.id, `WA session not connected after ${MAX_WA_RETRY} retries`)
-          failed++
-        } else {
-          await prisma.followUpQueue.update({
-            where: { id: item.id },
-            data: {
-              status: 'PENDING',
-              sentAt: null,
-              retryCount: { increment: 1 },
-              scheduledAt: new Date(Date.now() + WA_RECONNECT_BACKOFF_MS),
-              failedReason: 'WA session disconnected — retry later',
-            },
-          })
-          retried++
-        }
-        continue
-      }
-
-      // Cloud API di luar window & template belum siap / kredit habis → tunda
-      // 30 menit dengan alasan jelas. Customer opt-out marketing → SKIPPED.
-      if (!sendResult.ok && (sendResult.code === 'NO_TEMPLATE' || sendResult.code === 'INSUFFICIENT_CREDIT')) {
-        const reason =
-          sendResult.code === 'INSUFFICIENT_CREDIT'
-            ? 'Kredit pesan habis — top up untuk mengirim template Meta'
-            : 'Template Meta belum disetujui / belum disiapkan'
-        if (item.retryCount >= MAX_WA_RETRY) {
-          await markFailed(item.id, reason)
-          failed++
-        } else {
-          await prisma.followUpQueue.update({
-            where: { id: item.id },
-            data: {
-              status: 'PENDING',
-              sentAt: null,
-              retryCount: { increment: 1 },
-              scheduledAt: new Date(Date.now() + WA_RECONNECT_BACKOFF_MS),
-              failedReason: reason,
-            },
-          })
-          retried++
-        }
-        continue
-      }
-      if (!sendResult.ok && sendResult.code === 'MARKETING_OPT_OUT') {
-        await markSkipped(item.id, 'Customer opt-out pesan marketing')
-        skipped++
-        continue
-      }
-
-      if (sendResult.ok) {
+      if (send.success) {
         // Status & sentAt sudah di-set saat claim di atas.
         await prisma.followUpLog.create({
-          data: {
-            userId: item.userId,
-            orderId: item.orderId,
-            liveLeadId: item.liveLeadId,
-            templateId: item.templateId,
-            queueId: item.id,
-            customerPhone: item.customerPhone,
-            message: item.resolvedMessage,
-            status: 'SENT',
-            source: 'AUTOMATIC',
-          },
+          data: { ...logBase(item), status: 'SENT', source: 'AUTOMATIC' },
         })
         sent++
+        continue
+      }
+
+      // Gagal: putuskan retry / final / skip (lib/services/followup-failure-policy).
+      // Gagal permanen (template DRAFT, beda jumlah variabel, tak ada padanan
+      // di WABA aktif) langsung FAILED + log + notifikasi — tidak lagi
+      // diulang 12x lalu FAILED senyap.
+      const decision = decideFollowUpFailure({
+        code: send.code,
+        permanent: send.permanent,
+        detail: send.detail,
+        error: send.error,
+        missingData: send.missingData,
+        retryCount: item.retryCount,
+      })
+      if (decision.action === 'SKIP') {
+        await markSkipped(item.id, decision.reason)
+        skipped++
+      } else if (decision.action === 'FAIL_FINAL') {
+        await failFinal(item, decision, send.error)
+        failed++
       } else {
-        if (item.retryCount >= MAX_SEND_RETRY) {
-          await markFailed(item.id, sendResult.error || 'Send failed')
-          await prisma.followUpLog.create({
-            data: {
-              userId: item.userId,
-              orderId: item.orderId,
-              liveLeadId: item.liveLeadId,
-              templateId: item.templateId,
-              queueId: item.id,
-              customerPhone: item.customerPhone,
-              message: item.resolvedMessage,
-              status: 'FAILED',
-              errorMessage: sendResult.error || 'Send failed',
-              source: 'AUTOMATIC',
-            },
-          })
-          failed++
-        } else {
-          // Pengiriman gagal setelah claim → kembalikan ke PENDING dengan
-          // backoff + catatan retry (claim sebelumnya sudah set SENT).
-          await prisma.followUpQueue.update({
-            where: { id: item.id },
-            data: {
-              status: 'PENDING',
-              sentAt: null,
-              retryCount: { increment: 1 },
-              scheduledAt: new Date(Date.now() + RETRY_BACKOFF_MS),
-              failedReason: sendResult.error,
-            },
-          })
-          retried++
-        }
+        // Kembalikan ke PENDING dengan backoff + alasan (claim sebelumnya SENT).
+        await prisma.followUpQueue.update({
+          where: { id: item.id },
+          data: {
+            status: 'PENDING',
+            sentAt: null,
+            retryCount: { increment: 1 },
+            scheduledAt: new Date(Date.now() + decision.backoffMs),
+            failedReason: decision.reason,
+          },
+        })
+        retried++
       }
     } catch (err) {
       console.error('[followup-send] item error:', item.id, err)
@@ -367,6 +305,48 @@ async function markSkipped(queueId: string, reason: string) {
   await prisma.followUpQueue.update({
     where: { id: queueId },
     data: { status: 'SKIPPED', failedReason: reason },
+  })
+}
+
+function logBase(item: QueueItemForSend) {
+  return {
+    userId: item.userId,
+    orderId: item.orderId,
+    liveLeadId: item.liveLeadId,
+    templateId: item.templateId,
+    queueId: item.id,
+    customerPhone: item.customerPhone,
+    message: item.resolvedMessage,
+  }
+}
+
+/**
+ * Gagal final: FAILED + FollowUpLog FAILED + notifikasi bell ke seller sesuai
+ * lingkup penyebab (template / nomor / kredit / generik; CUSTOMER tanpa
+ * notifikasi; dedupe 24 jam; never-throw). errorMessage log menyimpan
+ * gabungan per-sesi untuk debug, failedReason menyimpan alasan ramah.
+ */
+async function failFinal(
+  item: QueueItemForSend,
+  decision: { reason: string; scope: FollowUpFailureScope },
+  rawError?: string,
+) {
+  const { reason, scope } = decision
+  await markFailed(item.id, reason)
+  await prisma.followUpLog.create({
+    data: {
+      ...logBase(item),
+      status: 'FAILED',
+      errorMessage: rawError && rawError !== reason ? `${reason}\n\n${rawError}` : reason,
+      source: 'AUTOMATIC',
+    },
+  })
+  await notifyFollowUpFailure({
+    userId: item.userId,
+    followUpTemplateId: item.templateId,
+    templateName: item.template.name,
+    reason,
+    scope,
   })
 }
 
