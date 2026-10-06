@@ -1130,11 +1130,19 @@ model LpOptimization {
   errorMessage String?  @db.Text
   createdAt    DateTime @default(now())
 
+  // Status job background (2026-10-06): RUNNING | DONE | FAILED. Optimasi AI
+  // tidak lagi sinkron (Cloudflare memutus di 100 dtk) — route membuat baris
+  // RUNNING, job `after()` mengisi hasil lalu set DONE/FAILED + finishedAt.
+  // Default DONE supaya penulis lain (rule-based-live-bridge) tetap benar.
+  status     String    @default("DONE")
+  finishedAt DateTime?
+
   user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   lp   LandingPage @relation(fields: [lpId], references: [id], onDelete: Cascade)
 
   @@index([lpId, createdAt(sort: Desc)])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([lpId, status])
 }
 
 // LpVersion — snapshot HTML LP per perubahan signifikan. Source: 'manual'

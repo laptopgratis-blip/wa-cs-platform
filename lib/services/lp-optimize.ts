@@ -2,14 +2,23 @@
 // analytics + chat signals + current HTML, return suggestions + rewritten HTML.
 //
 // Pricing: pakai featureKey 'LP_OPTIMIZE' di AiFeatureConfig (admin-tunable).
-// Charge dilakukan via executeAiWithCharge di route handler — service ini
-// fokus ke AI call + parsing saja.
+// Charge dilakukan via executeAiWithCharge di job background
+// (lp-optimize-job.ts) — service ini fokus ke AI call + parsing saja.
 import Anthropic from '@anthropic-ai/sdk'
+import type { Prisma } from '@prisma/client'
 
 import { getAnthropicClient } from '@/lib/anthropic'
 import { prisma } from '@/lib/prisma'
 import { estimateCharge } from '@/lib/services/ai-generation-log'
 import { getAiFeatureConfig } from '@/lib/services/ai-feature-config'
+import type {
+  OptimizeAnalytics,
+  OptimizeSignal,
+} from '@/lib/services/lp-optimize-context'
+import {
+  LP_OPTIMIZE_AI_TIMEOUT_MS,
+  LpOptimizeUserError,
+} from '@/lib/services/lp-optimize-job-rules'
 
 const LP_OPTIMIZE_FEATURE_KEY = 'LP_OPTIMIZE'
 
@@ -30,9 +39,8 @@ const OUTPUT_OVERHEAD_CHARS = 2000
 const MIN_OUTPUT_TOKENS = 32_000
 const MAX_OUTPUT_TOKENS = 60_000
 const OUTPUT_MULTIPLIER = 2.0
-// Output 30-50K token di Haiku ~150-250 detik. Cap 280s sebagai safety —
-// route maxDuration 300s.
-const AI_CALL_TIMEOUT_MS = 280_000
+// Batas waktu panggilan AI = LP_OPTIMIZE_AI_TIMEOUT_MS (10 menit) — job jalan
+// di background, jadi tidak lagi terikat batas 100 dtk Cloudflare.
 
 // Anthropic context window untuk Haiku 4.5 = 200K token. Sisakan 20K headroom
 // untuk system prompt + analytics + signals. Kalau estimasi input > batas ini
@@ -104,11 +112,11 @@ export async function estimateOptimizationCost(input: {
   // Context: signals (~150 char per signal) + analytics summary (~600 char)
   // + system prompt overhead (~1500 char).
   const contextChars =
-    1500 +
-    input.signalsCount * 150 +
-    (input.hasAnalytics ? 600 : 0)
+    1500 + input.signalsCount * 150 + (input.hasAnalytics ? 600 : 0)
 
-  const estimatedInputTokens = Math.ceil((htmlChars + contextChars) / CHARS_PER_TOKEN)
+  const estimatedInputTokens = Math.ceil(
+    (htmlChars + contextChars) / CHARS_PER_TOKEN,
+  )
   // Output expansion realistic ×1.5 (kompromi antara compact rewrite dan
   // ambitious rewrite).
   const estimatedOutputTokens = Math.ceil(
@@ -205,16 +213,9 @@ EVALUASI:
 
 interface BuildPromptInput {
   htmlContent: string
-  signals: Array<{ category: string; label: string; count: number; samples: string[] }>
-  analytics: {
-    visits: number
-    ctaRate: number
-    bounceRate: number
-    avgTimeSec: number
-    topCtas: Array<{ label: string; count: number }>
-    deviceSplit: Array<{ key: string; count: number }>
-    funnelDropAt: string | null // human-readable: "scroll 50%" or "klik CTA"
-  } | null
+  signals: OptimizeSignal[]
+  // funnelDropAt human-readable: "scroll 50%" atau "klik CTA".
+  analytics: OptimizeAnalytics | null
 }
 
 function buildUserPrompt(input: BuildPromptInput): string {
@@ -242,9 +243,7 @@ function buildUserPrompt(input: BuildPromptInput): string {
     if (a.deviceSplit.length > 0) {
       lines.push(
         '- Device split: ' +
-          a.deviceSplit
-            .map((d) => `${d.key}=${d.count}`)
-            .join(', '),
+          a.deviceSplit.map((d) => `${d.key}=${d.count}`).join(', '),
       )
     }
     lines.push('')
@@ -265,7 +264,9 @@ function buildUserPrompt(input: BuildPromptInput): string {
     }
   } else {
     lines.push('# CUSTOMER SIGNALS')
-    lines.push('Belum ada signal customer dari chat (atau chat belum ter-record).')
+    lines.push(
+      'Belum ada signal customer dari chat (atau chat belum ter-record).',
+    )
     lines.push('')
   }
 
@@ -290,7 +291,16 @@ export interface OptimizationOutput {
   outputTokens: number
 }
 
-export async function runOptimization(input: BuildPromptInput): Promise<OptimizationOutput> {
+export interface RunOptimizationOptions {
+  // Abort dari luar (mis. job dibatalkan) — digabung dengan timer internal.
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+export async function runOptimization(
+  input: BuildPromptInput,
+  opts: RunOptimizationOptions = {},
+): Promise<OptimizationOutput> {
   // Strip base64 image inline supaya tidak boros context — AI tidak butuh
   // pixel data untuk optimasi struktur LP.
   const { stripped: strippedHtml, map: base64Map } = stripBase64ImagesForPrompt(
@@ -299,9 +309,10 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
 
   // Pre-flight context check — kalau bahkan setelah strip masih melebihi
   // batas, throw user-friendly error sebelum panggil API.
-  const approxInputTokens = Math.ceil(strippedHtml.length / CHARS_PER_TOKEN) + 500
+  const approxInputTokens =
+    Math.ceil(strippedHtml.length / CHARS_PER_TOKEN) + 500
   if (approxInputTokens > MAX_INPUT_TOKENS_HARD_LIMIT) {
-    throw new Error(
+    throw new LpOptimizeUserError(
       `LP terlalu besar untuk AI optimization (~${approxInputTokens.toLocaleString('id-ID')} token, batas ${MAX_INPUT_TOKENS_HARD_LIMIT.toLocaleString('id-ID')}). Coba pecah jadi LP lebih kecil atau kurangi konten.`,
     )
   }
@@ -318,34 +329,28 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
     strippedHtml.length * OUTPUT_MULTIPLIER + OUTPUT_OVERHEAD_CHARS + 5000
   const dynamicMaxOutput = Math.min(
     MAX_OUTPUT_TOKENS,
-    Math.max(MIN_OUTPUT_TOKENS, Math.ceil(expectedOutputChars / CHARS_PER_TOKEN)),
+    Math.max(
+      MIN_OUTPUT_TOKENS,
+      Math.ceil(expectedOutputChars / CHARS_PER_TOKEN),
+    ),
   )
 
-  const stream = client.messages.stream({
-    model,
-    max_tokens: dynamicMaxOutput,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userPrompt }],
-  })
-
-  // Promise.race timeout — output besar bisa lambat.
-  const final = (await Promise.race([
-    stream.finalMessage(),
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () =>
-          reject(
-            new Error(
-              `AI optimization timeout setelah ${Math.round(AI_CALL_TIMEOUT_MS / 1000)} detik. Coba lagi — kalau berulang, kemungkinan provider sedang lambat.`,
-            ),
-          ),
-        AI_CALL_TIMEOUT_MS,
-      ),
-    ),
-  ])) as Anthropic.Messages.Message
+  const final = await streamWithTimeout(
+    client,
+    {
+      model,
+      max_tokens: dynamicMaxOutput,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: userPrompt }],
+    },
+    opts,
+  )
 
   const raw = final.content
-    .filter((b: Anthropic.ContentBlock): b is Anthropic.TextBlock => b.type === 'text')
+    .filter(
+      (b: Anthropic.ContentBlock): b is Anthropic.TextBlock =>
+        b.type === 'text',
+    )
     .map((b) => b.text)
     .join('')
     .trim()
@@ -357,14 +362,14 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
   // HTML_END belum sempat tercetak. Surface error spesifik daripada generic
   // "format tidak valid".
   if (final.stop_reason === 'max_tokens') {
-    throw new Error(
+    throw new LpOptimizeUserError(
       `Output AI terpotong (max_tokens=${dynamicMaxOutput.toLocaleString('id-ID')}). LP terlalu besar untuk single-pass rewrite. Coba pecah LP jadi lebih ringkas atau hubungi admin.`,
     )
   }
 
   const parsed = parseTwoSectionOutput(raw)
   if (!parsed) {
-    throw new Error(
+    throw new LpOptimizeUserError(
       'AI tidak mengembalikan format yang valid (marker meta/html tidak lengkap). Coba lagi atau hubungi admin.',
     )
   }
@@ -380,6 +385,45 @@ export async function runOptimization(input: BuildPromptInput): Promise<Optimiza
     rewrittenHtml: parsed.rewrittenHtml,
     inputTokens,
     outputTokens,
+  }
+}
+
+// Stream AI dengan batas waktu. Timer internal + signal luar digabung ke satu
+// AbortController yang dioper ke SDK, jadi saat timeout request HTTP ke
+// Anthropic benar-benar diputus (bukan cuma promise-nya ditinggal seperti
+// Promise.race lama — stream tetap jalan & makan kuota di belakang).
+async function streamWithTimeout(
+  client: Anthropic,
+  body: Anthropic.Messages.MessageStreamParams,
+  opts: RunOptimizationOptions,
+): Promise<Anthropic.Messages.Message> {
+  const timeoutMs = opts.timeoutMs ?? LP_OPTIMIZE_AI_TIMEOUT_MS
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  const onOuterAbort = () => controller.abort()
+  if (opts.signal?.aborted) controller.abort()
+  else opts.signal?.addEventListener('abort', onOuterAbort, { once: true })
+
+  let stream: ReturnType<Anthropic['messages']['stream']> | null = null
+  try {
+    stream = client.messages.stream(body, { signal: controller.signal })
+    return await stream.finalMessage()
+  } catch (err) {
+    if (timedOut) {
+      stream?.abort()
+      const minutes = Math.round(timeoutMs / 60_000)
+      throw new LpOptimizeUserError(
+        `AI tidak selesai dalam ${minutes} menit. Coba lagi nanti — kalau berulang, kemungkinan layanan AI sedang lambat.`,
+      )
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+    opts.signal?.removeEventListener('abort', onOuterAbort)
   }
 }
 
@@ -483,12 +527,16 @@ function parseLegacyJsonOutput(raw: string): ParsedOpt | null {
       return null
     }
   }
-  const html = typeof json.rewrittenHtml === 'string' ? json.rewrittenHtml.trim() : ''
+  const html =
+    typeof json.rewrittenHtml === 'string' ? json.rewrittenHtml.trim() : ''
   if (!html || !html.toLowerCase().includes('<html')) return null
   return buildParsedOpt(json, html)
 }
 
-function buildParsedOpt(meta: Record<string, unknown>, html: string): ParsedOpt {
+function buildParsedOpt(
+  meta: Record<string, unknown>,
+  html: string,
+): ParsedOpt {
   const suggestions = Array.isArray(meta.suggestions) ? meta.suggestions : []
   const focusAreas = Array.isArray(meta.focusAreas) ? meta.focusAreas : []
   return {
@@ -497,11 +545,17 @@ function buildParsedOpt(meta: Record<string, unknown>, html: string): ParsedOpt 
       .map((s) => {
         const obj = s as Record<string, unknown>
         return {
-          title: typeof obj.title === 'string' ? obj.title.slice(0, 200) : '(tanpa judul)',
+          title:
+            typeof obj.title === 'string'
+              ? obj.title.slice(0, 200)
+              : '(tanpa judul)',
           rationale:
-            typeof obj.rationale === 'string' ? obj.rationale.slice(0, 1000) : '',
+            typeof obj.rationale === 'string'
+              ? obj.rationale.slice(0, 1000)
+              : '',
           impact:
-            typeof obj.impact === 'string' && ['high', 'medium', 'low'].includes(obj.impact)
+            typeof obj.impact === 'string' &&
+            ['high', 'medium', 'low'].includes(obj.impact)
               ? obj.impact
               : 'medium',
         }
@@ -532,15 +586,21 @@ function clampScoreOrNull(v: unknown): number | null {
 
 const KEEP_LAST_VERSIONS = 20
 
-export async function snapshotVersion(input: {
-  lpId: string
-  htmlContent: string
-  source: 'manual' | 'ai' | 'restore'
-  optimizationId?: string | null
-  scoreSnapshot?: number | null
-  note?: string | null
-}): Promise<string> {
-  const created = await prisma.lpVersion.create({
+// `db` bisa diisi klien transaksi (`tx`) supaya snapshot ikut atomik dengan
+// perubahan LP (dipakai apply optimasi). Prune tetap lewat klien global —
+// best-effort di luar transaksi.
+export async function snapshotVersion(
+  input: {
+    lpId: string
+    htmlContent: string
+    source: 'manual' | 'ai' | 'restore'
+    optimizationId?: string | null
+    scoreSnapshot?: number | null
+    note?: string | null
+  },
+  db: Prisma.TransactionClient = prisma,
+): Promise<string> {
+  const created = await db.lpVersion.create({
     data: {
       lpId: input.lpId,
       htmlContent: input.htmlContent,

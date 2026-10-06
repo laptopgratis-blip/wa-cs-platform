@@ -4,7 +4,11 @@
 // lihat suggestions & focus areas. Kalau record punya hasil HTML tapi belum
 // applied (user discard sebelumnya), tampil tombol "Apply Sekarang" yang
 // langsung commit (tidak charge ulang token — sudah dipotong saat generate).
+//
+// Sejak optimasi jadi background job: baris RUNNING tampil "Sedang diproses",
+// dan saran yang dibuat dari versi LP lama (isStale) diberi peringatan.
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -14,7 +18,7 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -28,6 +32,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { fetchJson } from '@/lib/fetch-json'
 import { TONES, type Tone } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
@@ -40,6 +45,7 @@ interface Suggestion {
 interface Optimization {
   id: string
   model: string
+  status: 'RUNNING' | 'DONE' | 'FAILED'
   suggestions: Suggestion[]
   focusAreas: string[]
   scoreBefore: number | null
@@ -49,6 +55,8 @@ interface Optimization {
   applied: boolean
   appliedAt: string | null
   canApply: boolean
+  // LP sudah diedit sejak saran dibuat — apply akan menimpa editan itu.
+  isStale: boolean
   errorMessage: string | null
   createdAt: string
 }
@@ -85,54 +93,49 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
 
   async function load() {
     setLoading(true)
-    try {
-      const res = await fetch(
-        `/api/lp/${encodeURIComponent(lpId)}/optimizations`,
-        { cache: 'no-store' },
-      )
-      const j = await res.json()
-      if (j.success) setRecords(j.data.optimizations as Optimization[])
-      else toast.error(j.error ?? 'Gagal load history')
-    } catch {
-      toast.error('Network error')
-    } finally {
-      setLoading(false)
+    const r = await fetchJson<{ data?: { optimizations: Optimization[] } }>(
+      `/api/lp/${encodeURIComponent(lpId)}/optimizations`,
+      { cache: 'no-store' },
+      'Gagal memuat riwayat',
+    )
+    setLoading(false)
+    if (!r.ok || !r.data?.data) {
+      toast.error(r.error ?? 'Gagal memuat riwayat')
+      return
     }
+    setRecords(r.data.data.optimizations)
   }
 
-  useEffect(() => {
-    if (open) void load()
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Muat ulang tiap kali dialog dibuka (status RUNNING bisa sudah selesai).
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
+    if (next) void load()
+  }
 
   async function handleApply(optId: string) {
     setPendingApplyId(null)
     setApplyingId(optId)
-    try {
-      const res = await fetch(
-        `/api/lp/${encodeURIComponent(lpId)}/optimize/apply`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ optimizationId: optId }),
-        },
-      )
-      const j = await res.json()
-      if (!j.success) {
-        toast.error(j.error ?? 'Gagal apply')
-        return
-      }
-      toast.success('Saran berhasil di-apply ke LP')
-      await load()
-      onApplied?.()
-    } catch {
-      toast.error('Network error')
-    } finally {
-      setApplyingId(null)
+    const r = await fetchJson(
+      `/api/lp/${encodeURIComponent(lpId)}/optimize/apply`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ optimizationId: optId }),
+      },
+      'Gagal apply',
+    )
+    setApplyingId(null)
+    if (!r.ok) {
+      toast.error(r.error ?? 'Gagal apply')
+      return
     }
+    toast.success('Saran berhasil di-apply ke LP')
+    await load()
+    onApplied?.()
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" size="sm">
           <History className="mr-1.5 size-4" /> Riwayat Saran AI
@@ -165,13 +168,16 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
           <ul className="space-y-2">
             {records.map((r) => {
               const isExpanded = expandedId === r.id
-              const status = r.errorMessage
-                ? 'error'
-                : r.applied
-                  ? 'applied'
-                  : r.canApply
-                    ? 'pending'
-                    : 'no_html'
+              const status =
+                r.status === 'RUNNING'
+                  ? 'running'
+                  : r.status === 'FAILED'
+                    ? 'error'
+                    : r.applied
+                      ? 'applied'
+                      : r.canApply
+                        ? 'pending'
+                        : 'no_html'
               return (
                 <li key={r.id} className="border-warm-200 rounded-lg border">
                   <button
@@ -185,6 +191,13 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
+                          {status === 'running' && (
+                            <StatusBadge
+                              tone="info"
+                              label="Sedang diproses"
+                              pulse
+                            />
+                          )}
                           {status === 'applied' && (
                             <StatusBadge
                               tone="success"
@@ -247,7 +260,13 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                           <strong>Error:</strong> {r.errorMessage}
                         </div>
                       )}
-                      {r.suggestions.length === 0 ? (
+                      {status === 'running' ? (
+                        <p className="text-warm-500 text-xs">
+                          AI masih memproses optimasi ini. Hasilnya muncul di
+                          sini setelah selesai — buka ulang riwayat untuk
+                          memperbarui.
+                        </p>
+                      ) : r.suggestions.length === 0 ? (
                         <p className="text-warm-500 text-xs italic">
                           Tidak ada saran tersimpan.
                         </p>
@@ -273,6 +292,24 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
                             </li>
                           ))}
                         </ol>
+                      )}
+                      {r.canApply && r.isStale && (
+                        <div
+                          className={cn(
+                            'flex items-start gap-2 rounded-md border p-2.5 text-xs',
+                            TONES.warning.bg,
+                            TONES.warning.border,
+                            TONES.warning.text,
+                          )}
+                        >
+                          <AlertTriangle
+                            className="mt-0.5 size-3.5 shrink-0"
+                            aria-hidden
+                          />
+                          LP sudah diedit sejak saran ini dibuat. Apply akan
+                          menimpa editan tersebut (versi saat ini tetap
+                          tersimpan di Riwayat Versi).
+                        </div>
                       )}
                       {r.canApply && (
                         <div

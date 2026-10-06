@@ -46,8 +46,9 @@ async function aggregate(
       _count: { _all: true },
       _sum: { providerCostRp: true, platformTokensCharged: true },
     }),
+    // Hanya job yang selesai — RUNNING/FAILED belum/tidak ditagih.
     prisma.lpOptimization.aggregate({
-      where: { createdAt: range },
+      where: { createdAt: range, status: 'DONE' },
       _count: { _all: true },
       _sum: { providerCostRp: true, platformTokensCharged: true },
     }),
@@ -96,7 +97,13 @@ async function aggregate(
   const revenueRp = Object.values(bySource).reduce((s, x) => s + x.revenue, 0)
   const count = Object.values(bySource).reduce((s, x) => s + x.calls, 0)
 
-  return { count, apiCostRp, revenueRp, profitRp: revenueRp - apiCostRp, bySource }
+  return {
+    count,
+    apiCostRp,
+    revenueRp,
+    profitRp: revenueRp - apiCostRp,
+    bySource,
+  }
 }
 
 export async function GET(req: Request) {
