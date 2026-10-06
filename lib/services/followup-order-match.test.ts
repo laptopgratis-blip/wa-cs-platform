@@ -2,6 +2,7 @@
 // Bagian 1 = characterization: MENGUNCI perilaku lama followup-engine untuk
 // order non-flow (orderSessionId null) — harus identik dengan filter query
 // Prisma + filter Node sebelum refactor.
+// Bagian 2 = guard khusus order Sales Flow (orderSessionId terisi).
 import assert from 'node:assert/strict'
 
 import {
@@ -54,6 +55,18 @@ function order(over: Partial<MatchableOrder> = {}): MatchableOrder {
 
 function ids(list: readonly MatchableTemplate[]): string[] {
   return list.map((t) => t.id)
+}
+
+// Order Sales Flow tipikal: tanpa invoice, total 0, items kosong.
+function flowOrder(over: Partial<MatchableOrder> = {}): MatchableOrder {
+  return order({
+    orderSessionId: 'sess-1',
+    orderFormId: null,
+    invoiceNumber: null,
+    totalRp: 0,
+    items: [],
+    ...over,
+  })
 }
 
 console.log('followup-order-match: characterization (order non-flow)')
@@ -175,6 +188,102 @@ check('urutan input dipertahankan & input tidak dimutasi', () => {
   assert.equal(JSON.stringify(list), snapshot)
   // Objek template dikembalikan apa adanya (engine butuh field lain).
   assert.equal(r[0], list[0])
+})
+
+console.log('followup-order-match: guard order Sales Flow')
+
+check('flow: ORDER_CREATED dilewati, DAYS_AFTER_ORDER tetap (TRANSFER)', () => {
+  const list = [
+    tpl({ id: 'oc', trigger: 'ORDER_CREATED' }),
+    tpl({ id: 'dao', trigger: 'DAYS_AFTER_ORDER', delayDays: 1 }),
+  ]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'ORDER_CREATED')), ['dao'])
+})
+
+check('flow: COD tetap dapat DAYS_AFTER_ORDER', () => {
+  const list = [tpl({ id: 'dao', trigger: 'DAYS_AFTER_ORDER', delayDays: 2 })]
+  const r = matchFollowUpTemplatesForOrder(list, flowOrder({ paymentMethod: 'COD' }), 'ORDER_CREATED')
+  assert.deepEqual(ids(r), ['dao'])
+})
+
+check('flow: BOOKING/CONSULTATION/FREE lewati ORDER_CREATED & DAYS_AFTER_ORDER', () => {
+  const list = [
+    tpl({ id: 'oc', trigger: 'ORDER_CREATED' }),
+    tpl({ id: 'dao', trigger: 'DAYS_AFTER_ORDER', delayDays: 1 }),
+    tpl({ id: 'pp', trigger: 'PAYMENT_PAID' }),
+  ]
+  for (const pm of ['BOOKING', 'CONSULTATION', 'FREE']) {
+    const o = flowOrder({ paymentMethod: pm })
+    assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, o, 'ORDER_CREATED')), [], pm)
+    assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, o, 'PAYMENT_PAID')), ['pp'], pm)
+  }
+})
+
+check('flow: {invoice} / {invoice_url} dilewati bila invoiceNumber kosong', () => {
+  const list = [
+    tpl({ id: 'inv', trigger: 'PAYMENT_PAID', message: 'Invoice {invoice}' }),
+    tpl({ id: 'url', trigger: 'PAYMENT_PAID', message: 'Cek {invoice_url}' }),
+    tpl({ id: 'nama', trigger: 'PAYMENT_PAID', message: 'Halo {nama}' }),
+  ]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')), ['nama'])
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder({ invoiceNumber: '' }), 'PAYMENT_PAID')),
+    ['nama'],
+  )
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder({ invoiceNumber: 'INV-9' }), 'PAYMENT_PAID')),
+    ['inv', 'url', 'nama'],
+  )
+})
+
+check('flow: {total} dilewati bila totalRp 0/null', () => {
+  const list = [tpl({ id: 'tot', trigger: 'PAYMENT_PAID', message: 'Total {total}' })]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')), [])
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder({ totalRp: null }), 'PAYMENT_PAID')),
+    [],
+  )
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder({ totalRp: 50000 }), 'PAYMENT_PAID')),
+    ['tot'],
+  )
+})
+
+check('flow: {produk} dilewati bila items kosong/bukan array', () => {
+  const list = [tpl({ id: 'pr', trigger: 'PAYMENT_PAID', message: 'Pesanan:\n{produk}' })]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')), [])
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder({ items: null }), 'PAYMENT_PAID')),
+    [],
+  )
+  const withItems = flowOrder({ items: [{ name: 'A', qty: 1, price: 1000 }] })
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, withItems, 'PAYMENT_PAID')), ['pr'])
+})
+
+check('flow: placeholder di metaParamMap ikut dicek', () => {
+  const list = [
+    tpl({ id: 'meta', trigger: 'PAYMENT_PAID', message: 'Halo {nama}', metaParamMap: ['{nama}', '{total}'] }),
+    tpl({ id: 'meta-ok', trigger: 'PAYMENT_PAID', metaParamMap: ['{nama}', '{nama_toko}'] }),
+    tpl({ id: 'meta-bad-shape', trigger: 'PAYMENT_PAID', metaParamMap: { a: '{total}' } }),
+  ]
+  assert.deepEqual(
+    ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')),
+    ['meta-ok', 'meta-bad-shape'],
+  )
+})
+
+check('flow: {produk_minat} bukan {produk}', () => {
+  const list = [tpl({ id: 'pm', trigger: 'PAYMENT_PAID', message: 'Minat {produk_minat}' })]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')), ['pm'])
+})
+
+check('flow: filter lama tetap berlaku (isActive, paymentMethod)', () => {
+  const list = [
+    tpl({ id: 'off', trigger: 'PAYMENT_PAID', isActive: false }),
+    tpl({ id: 'cod', trigger: 'PAYMENT_PAID', paymentMethod: 'COD' }),
+    tpl({ id: 'ok', trigger: 'PAYMENT_PAID' }),
+  ]
+  assert.deepEqual(ids(matchFollowUpTemplatesForOrder(list, flowOrder(), 'PAYMENT_PAID')), ['ok'])
 })
 
 console.log(`\n${passed} test lulus`)

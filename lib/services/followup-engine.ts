@@ -1,6 +1,7 @@
 // Follow-Up Order System engine — generate FollowUpQueue items saat event order
 // terjadi, dan cancel queue saat order ditutup. Dipanggil dari endpoint:
 //   - app/api/orders/submit (ORDER_CREATED)
+//   - lib/services/flow-engine (ORDER_CREATED, order Sales Flow WA)
 //   - app/api/orders/[id] PATCH (PAYMENT_PAID, SHIPPED, COMPLETED, CANCELLED)
 //   - app/api/internal/order-auto-paid (PAYMENT_PAID)
 //
@@ -94,7 +95,9 @@ export async function generateQueueForOrder(
 
   // Filter sesuai paymentMethod, jenis order & status. Filter di Node biar
   // query sederhana — jumlah template per user kecil (puluhan). Logika ada
-  // di helper pure followup-order-match.
+  // di helper pure followup-order-match, termasuk guard order Sales Flow
+  // (orderSessionId terisi): skip konfirmasi ORDER_CREATED, metode tanpa
+  // tagihan, dan placeholder {invoice}/{total}/{produk} yang datanya kosong.
   const matched = matchFollowUpTemplatesForOrder(templates, order, event)
 
   if (matched.length === 0) return { generated: 0 }

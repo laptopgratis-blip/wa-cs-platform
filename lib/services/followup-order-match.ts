@@ -6,11 +6,7 @@
 // hasil query tsb hasilnya identik dengan perilaku lama.
 
 export type FollowupEvent =
-  | 'ORDER_CREATED'
-  | 'PAYMENT_PAID'
-  | 'SHIPPED'
-  | 'COMPLETED'
-  | 'CANCELLED'
+  'ORDER_CREATED' | 'PAYMENT_PAID' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED'
 
 export const MAX_DELAY_DAYS = 30
 
@@ -73,20 +69,93 @@ function matchesScope(t: MatchableTemplate, order: MatchableOrder): boolean {
 }
 
 // Filter lama per template (paymentMethod, jenis order, status, delay).
-function matchesOrderFilters(t: MatchableTemplate, order: MatchableOrder): boolean {
+function matchesOrderFilters(
+  t: MatchableTemplate,
+  order: MatchableOrder,
+): boolean {
   if (t.paymentMethod && t.paymentMethod !== order.paymentMethod) return false
   // Filter jenis order: DIGITAL hanya utk order digital-only, PHYSICAL
   // hanya utk order yang punya barang fisik. null = semua.
   if (t.orderType === 'DIGITAL' && !order.isDigitalOnly) return false
   if (t.orderType === 'PHYSICAL' && order.isDigitalOnly) return false
-  if (t.applyOnPaymentStatus && t.applyOnPaymentStatus !== order.paymentStatus) {
+  if (
+    t.applyOnPaymentStatus &&
+    t.applyOnPaymentStatus !== order.paymentStatus
+  ) {
     return false
   }
-  if (t.applyOnDeliveryStatus && t.applyOnDeliveryStatus !== order.deliveryStatus) {
+  if (
+    t.applyOnDeliveryStatus &&
+    t.applyOnDeliveryStatus !== order.deliveryStatus
+  ) {
     return false
   }
   if (t.delayDays < 0 || t.delayDays > MAX_DELAY_DAYS) return false
   return true
+}
+
+// ── Guard order Sales Flow (orderSessionId terisi) ─────────────────────────
+// Order dari Sales Flow WA dibuat otomatis oleh flow-engine: TANPA invoice,
+// total 0, items kosong, dan flow sudah mengirim konfirmasi + info bank
+// sendiri. Order non-flow TIDAK kena guard ini (perilaku lama utuh).
+
+// Metode tanpa tagihan — jangan kirim konfirmasi/pengingat bayar.
+const NON_BILLING_PAYMENT_METHODS: readonly string[] = [
+  'BOOKING',
+  'CONSULTATION',
+  'FREE',
+]
+const ORDER_STAGE_TRIGGERS: readonly string[] = [
+  'ORDER_CREATED',
+  'DAYS_AFTER_ORDER',
+]
+
+// Placeholder yang butuh data order tertentu; kalau datanya kosong pesan jadi
+// "Invoice -" / "Rp 0" yang menyesatkan customer.
+function placeholderHasData(order: MatchableOrder): Record<string, boolean> {
+  const hasInvoice = Boolean(order.invoiceNumber)
+  return {
+    '{invoice}': hasInvoice,
+    '{invoice_url}': hasInvoice,
+    '{total}': Boolean(order.totalRp && order.totalRp > 0),
+    '{produk}': Array.isArray(order.items) && order.items.length > 0,
+  }
+}
+
+function templateTexts(t: MatchableTemplate): string[] {
+  const params = Array.isArray(t.metaParamMap)
+    ? t.metaParamMap.filter((p): p is string => typeof p === 'string')
+    : []
+  return [t.message, ...params]
+}
+
+function usesMissingOrderData(
+  t: MatchableTemplate,
+  order: MatchableOrder,
+): boolean {
+  const texts = templateTexts(t)
+  return Object.entries(placeholderHasData(order)).some(
+    ([placeholder, hasData]) =>
+      !hasData && texts.some((txt) => txt.includes(placeholder)),
+  )
+}
+
+function passesSalesFlowGuard(
+  t: MatchableTemplate,
+  order: MatchableOrder,
+): boolean {
+  if (!order.orderSessionId) return true
+  // (a) Konfirmasi order sudah dikirim flow-engine sendiri.
+  if (t.trigger === 'ORDER_CREATED') return false
+  // (b) Tanpa tagihan → tak ada konfirmasi/pengingat bayar.
+  if (
+    NON_BILLING_PAYMENT_METHODS.includes(order.paymentMethod) &&
+    ORDER_STAGE_TRIGGERS.includes(t.trigger)
+  ) {
+    return false
+  }
+  // (c) Placeholder yang datanya kosong.
+  return !usesMissingOrderData(t, order)
 }
 
 // Kembalikan template (array BARU, urutan input dipertahankan) yang harus
@@ -104,6 +173,7 @@ export function matchFollowUpTemplatesForOrder<T extends MatchableTemplate>(
       t.isActive &&
       triggers.includes(t.trigger) &&
       matchesScope(t, order) &&
-      matchesOrderFilters(t, order),
+      matchesOrderFilters(t, order) &&
+      passesSalesFlowGuard(t, order),
   )
 }

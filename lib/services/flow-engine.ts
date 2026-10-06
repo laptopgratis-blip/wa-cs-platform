@@ -12,6 +12,7 @@
 // perlakukan sebagai "no active session" supaya keyword detection bisa start
 // flow baru.
 import { prisma } from '@/lib/prisma'
+import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import {
   type SalesFlowFinalActionInput,
   type SalesFlowStepInput,
@@ -277,9 +278,23 @@ async function processActiveStep(
 
     // Best-effort create order — kalau gagal (mis. duplicate orderSessionId
     // dari race), tetap kembalikan reply ke customer.
-    await createOrderFromCompletedSession(session, nextData).catch((err) =>
-      console.error('[flow-engine] createOrderFromCompletedSession gagal:', err),
-    )
+    const createdOrderId = await createOrderFromCompletedSession(
+      session,
+      nextData,
+    ).catch((err) => {
+      console.error('[flow-engine] createOrderFromCompletedSession gagal:', err)
+      return null
+    })
+
+    // Generate follow-up queue (POWER only; gating + guard Sales Flow di
+    // engine) — fire-and-forget, jangan tahan balasan ke customer. Pola sama
+    // dengan app/api/orders/submit. null = order sudah ada (idempotent) /
+    // gagal dibuat → jangan generate ulang.
+    if (createdOrderId) {
+      generateQueueForOrder(createdOrderId, 'ORDER_CREATED').catch((err) =>
+        console.error('[flow-engine] followup generate gagal:', err),
+      )
+    }
 
     const finalReply = renderTemplate(
       session.flow.finalAction.replyMessage,
@@ -525,24 +540,27 @@ function paymentMethodFromFlow(template: string): string {
 // Auto-create UserOrder dari session yang baru selesai. Field customerName/
 // Phone/Address di-extract dari collectedData kalau ada — selain itu fallback
 // ke phoneNumber kontak (dari prisma.contact).
+// Return id order yang BARU dibuat; null kalau order sudah ada (jalur
+// idempotent — follow-up-nya sudah/akan di-generate saat pertama dibuat) atau
+// flow tidak ditemukan.
 async function createOrderFromCompletedSession(
   session: ActiveSessionWithFlow,
   collectedData: Record<string, string>,
-): Promise<void> {
+): Promise<string | null> {
   // Idempotent guard: kalau order sudah ada untuk session ini (jarang, tapi
   // mungkin saat retry), jangan duplikasi.
   const existing = await prisma.userOrder.findUnique({
     where: { orderSessionId: session.id },
     select: { id: true },
   })
-  if (existing) return
+  if (existing) return null
 
   // Resolve flow.template untuk paymentMethod.
   const flow = await prisma.userSalesFlow.findUnique({
     where: { id: session.flow.id },
     select: { template: true, name: true },
   })
-  if (!flow) return
+  if (!flow) return null
 
   // Resolve contact.phoneNumber sebagai fallback kalau customerPhone tidak
   // ditangkap di salah satu step.
@@ -574,7 +592,7 @@ async function createOrderFromCompletedSession(
       ? extraEntries.map(([k, v]) => `${k}: ${v}`).join('\n')
       : null
 
-  await prisma.userOrder.create({
+  const created = await prisma.userOrder.create({
     data: {
       userId: session.userId,
       contactId: session.contactId,
@@ -588,7 +606,9 @@ async function createOrderFromCompletedSession(
       flowName: flow.name,
       notes,
     },
+    select: { id: true },
   })
+  return created.id
 }
 
 // ── ADMIN NOTIFICATION ─────────────────────────────────────────────────────
