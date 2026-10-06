@@ -21,6 +21,12 @@ import {
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  isStaleApplyConflict,
+  postApplyOptimization,
+  STALE_APPLY_DESCRIPTION,
+  STALE_APPLY_TITLE,
+} from '@/components/lp-lab/apply-optimization'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -90,6 +96,8 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [applyingId, setApplyingId] = useState<string | null>(null)
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null)
+  // 409 dari /apply — id saran yang menunggu konfirmasi menimpa editan LP.
+  const [staleApplyId, setStaleApplyId] = useState<string | null>(null)
 
   async function load() {
     setLoading(true)
@@ -112,19 +120,17 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
     if (next) void load()
   }
 
-  async function handleApply(optId: string) {
+  async function handleApply(optId: string, force = false) {
     setPendingApplyId(null)
+    setStaleApplyId(null)
     setApplyingId(optId)
-    const r = await fetchJson(
-      `/api/lp/${encodeURIComponent(lpId)}/optimize/apply`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ optimizationId: optId }),
-      },
-      'Gagal apply',
-    )
+    const r = await postApplyOptimization(lpId, optId, force)
     setApplyingId(null)
+    if (isStaleApplyConflict(r)) {
+      // LP diedit sejak saran dibuat — minta konfirmasi menimpa.
+      setStaleApplyId(optId)
+      return
+    }
     if (!r.ok) {
       toast.error(r.error ?? 'Gagal apply')
       return
@@ -371,6 +377,20 @@ export function OptimizationsHistoryDialog({ lpId, onApplied }: Props) {
         variant="default"
         onConfirm={() => {
           if (pendingApplyId) void handleApply(pendingApplyId)
+        }}
+      />
+
+      <ConfirmDialog
+        open={staleApplyId !== null}
+        onOpenChange={(o) => {
+          if (!o) setStaleApplyId(null)
+        }}
+        title={STALE_APPLY_TITLE}
+        description={STALE_APPLY_DESCRIPTION}
+        confirmLabel="Tetap Apply"
+        variant="default"
+        onConfirm={() => {
+          if (staleApplyId) void handleApply(staleApplyId, true)
         }}
       />
     </Dialog>

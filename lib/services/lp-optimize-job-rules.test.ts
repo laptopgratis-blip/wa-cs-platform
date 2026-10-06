@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 
 import {
+  decideApplyOptimization,
   deriveOptimizationView,
   estimateOptimizeDuration,
   friendlyOptimizeError,
@@ -264,6 +265,84 @@ check('status tak dikenal → diperlakukan DONE', () => {
     deriveOptimizationView({ ...base, status: 'WEIRD' }, NOW).status,
     'DONE',
   )
+})
+
+console.log('lp-optimize-job-rules: decideApplyOptimization')
+
+const applyBase = {
+  status: 'DONE',
+  hasAfterHtml: true,
+  applied: false,
+  errorMessage: null as string | null,
+  createdAt: minutesAgo(10),
+  beforeHtml: '<html>v1</html>' as string | null,
+  currentHtml: '<html>v1</html>',
+  force: false,
+}
+
+check('DONE, LP tidak berubah → apply', () => {
+  assert.deepEqual(decideApplyOptimization(applyBase, NOW), { kind: 'apply' })
+})
+check('sudah applied → already (idempoten), bahkan kalau LP berubah', () => {
+  assert.deepEqual(
+    decideApplyOptimization(
+      { ...applyBase, applied: true, currentHtml: '<html>v2</html>' },
+      NOW,
+    ),
+    { kind: 'already' },
+  )
+})
+check('RUNNING → 400, belum ada hasil', () => {
+  const d = decideApplyOptimization(
+    { ...applyBase, status: 'RUNNING', createdAt: minutesAgo(1) },
+    NOW,
+  )
+  assert.equal(d.kind, 'reject')
+  if (d.kind === 'reject') {
+    assert.equal(d.httpStatus, 400)
+    assert.match(d.message, /masih diproses/)
+  }
+})
+check('FAILED → 400', () => {
+  const d = decideApplyOptimization(
+    { ...applyBase, status: 'FAILED', hasAfterHtml: false, errorMessage: 'x' },
+    NOW,
+  )
+  assert.equal(d.kind, 'reject')
+  if (d.kind === 'reject') assert.equal(d.httpStatus, 400)
+})
+check('DONE tanpa afterHtml (saran rule-based) → 400', () => {
+  const d = decideApplyOptimization({ ...applyBase, hasAfterHtml: false }, NOW)
+  assert.equal(d.kind, 'reject')
+  if (d.kind === 'reject') assert.equal(d.httpStatus, 400)
+})
+check('LP diedit sejak saran dibuat & tanpa force → 409 STALE', () => {
+  const d = decideApplyOptimization(
+    { ...applyBase, currentHtml: '<html>v2</html>' },
+    NOW,
+  )
+  assert.equal(d.kind, 'reject')
+  if (d.kind === 'reject') {
+    assert.equal(d.httpStatus, 409)
+    assert.equal(d.code, 'STALE')
+    assert.match(d.message, /LP sudah diedit sejak saran ini dibuat/)
+  }
+})
+check('LP diedit tapi force:true → apply', () => {
+  assert.deepEqual(
+    decideApplyOptimization(
+      { ...applyBase, currentHtml: '<html>v2</html>', force: true },
+      NOW,
+    ),
+    { kind: 'apply' },
+  )
+})
+check('force tidak membuka apply untuk job RUNNING/FAILED', () => {
+  const d = decideApplyOptimization(
+    { ...applyBase, status: 'RUNNING', createdAt: minutesAgo(1), force: true },
+    NOW,
+  )
+  assert.equal(d.kind, 'reject')
 })
 
 console.log(`lp-optimize-job-rules.test.ts: ${passed} kasus lolos`)

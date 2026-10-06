@@ -7,7 +7,8 @@
 //      polling tetap jalan (useOptimizeJob) dan hasil juga tersimpan di
 //      Riwayat Saran AI. Reload di tengah proses → polling dilanjutkan.
 //   4. Result dialog: suggestions + preview iframe + Apply / Tutup
-//   5. Apply → POST /apply → toast sukses + onApplied callback (parent refresh)
+//   5. Apply → POST /apply → toast sukses + onApplied callback (parent refresh).
+//      409 = LP diedit sejak saran dibuat → konfirmasi → ulang dengan force.
 //
 // Kalau saldo tidak cukup, dialog langsung tampil pesan + tombol top-up.
 import { AlertCircle, Loader2, Sparkles, Wand2 } from 'lucide-react'
@@ -15,12 +16,19 @@ import Link from 'next/link'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  isStaleApplyConflict,
+  postApplyOptimization,
+  STALE_APPLY_DESCRIPTION,
+  STALE_APPLY_TITLE,
+} from '@/components/lp-lab/apply-optimization'
 import { OptimizeResultDialog } from '@/components/lp-lab/OptimizeResultDialog'
 import {
   formatElapsed,
   type OptimizationResult,
   useOptimizeJob,
 } from '@/components/lp-lab/useOptimizeJob'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -78,6 +86,8 @@ export function OptimizeFlow({ lpId, onApplied }: Props) {
   // apakah hasil langsung dibuka atau cukup lewat toast "Lihat hasil".
   const [runningOpen, setRunningOpen] = useState(false)
   const runningOpenRef = useRef(false)
+  // 409 dari /apply — LP diedit sejak saran dibuat, tunggu konfirmasi user.
+  const [confirmStaleApply, setConfirmStaleApply] = useState(false)
 
   function showRunning(open: boolean) {
     runningOpenRef.current = open
@@ -144,18 +154,16 @@ export function OptimizeFlow({ lpId, onApplied }: Props) {
     }
   }
 
-  async function applyOptimization() {
+  async function applyOptimization(force = false) {
     if (!result) return
     setStep('applying')
-    const r = await fetchJson(
-      `/api/lp/${encodeURIComponent(lpId)}/optimize/apply`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ optimizationId: result.optimizationId }),
-      },
-      'Gagal apply',
-    )
+    const r = await postApplyOptimization(lpId, result.optimizationId, force)
+    if (isStaleApplyConflict(r)) {
+      // LP diedit sejak saran dibuat — minta konfirmasi menimpa.
+      setStep('result')
+      setConfirmStaleApply(true)
+      return
+    }
     if (!r.ok) {
       toast.error(r.error ?? 'Gagal apply')
       setStep('result')
@@ -243,6 +251,19 @@ export function OptimizeFlow({ lpId, onApplied }: Props) {
         applying={step === 'applying'}
         onApply={() => void applyOptimization()}
         onDiscard={closeAll}
+      />
+
+      <ConfirmDialog
+        open={confirmStaleApply}
+        onOpenChange={setConfirmStaleApply}
+        title={STALE_APPLY_TITLE}
+        description={STALE_APPLY_DESCRIPTION}
+        confirmLabel="Tetap Apply"
+        variant="default"
+        onConfirm={() => {
+          setConfirmStaleApply(false)
+          void applyOptimization(true)
+        }}
       />
     </>
   )

@@ -198,3 +198,61 @@ export function deriveOptimizationView(
   }
   return { status, canApply: input.hasAfterHtml && !input.applied, error: null }
 }
+
+// ─────────────────────────────────────────
+// Keputusan apply hasil optimasi ke LP.
+// ─────────────────────────────────────────
+
+export const LP_APPLY_STALE_MESSAGE =
+  'LP sudah diedit sejak saran ini dibuat. Apply akan menimpa editan tersebut — versi saat ini tetap tersimpan di Riwayat Versi dan bisa dipulihkan.'
+
+export interface ApplyDecisionInput extends OptimizationViewInput {
+  beforeHtml: string | null
+  currentHtml: string
+  // User sudah mengonfirmasi menimpa editan terbaru.
+  force: boolean
+}
+
+export type ApplyDecision =
+  | { kind: 'apply' }
+  | { kind: 'already' }
+  | { kind: 'reject'; httpStatus: 400 | 409; message: string; code?: 'STALE' }
+
+export function decideApplyOptimization(
+  input: ApplyDecisionInput,
+  now: number = Date.now(),
+): ApplyDecision {
+  if (input.applied) return { kind: 'already' }
+
+  const view = deriveOptimizationView(input, now)
+  if (view.status === 'RUNNING') {
+    return {
+      kind: 'reject',
+      httpStatus: 400,
+      message: 'Optimasi masih diproses — tunggu sampai selesai.',
+    }
+  }
+  if (view.status === 'FAILED') {
+    return {
+      kind: 'reject',
+      httpStatus: 400,
+      message: 'Optimasi ini gagal, tidak ada hasil untuk di-apply.',
+    }
+  }
+  if (!input.hasAfterHtml) {
+    return {
+      kind: 'reject',
+      httpStatus: 400,
+      message: 'Optimasi ini tidak punya hasil HTML untuk di-apply.',
+    }
+  }
+  if (!input.force && isApplyStale(input.beforeHtml, input.currentHtml)) {
+    return {
+      kind: 'reject',
+      httpStatus: 409,
+      code: 'STALE',
+      message: LP_APPLY_STALE_MESSAGE,
+    }
+  }
+  return { kind: 'apply' }
+}
