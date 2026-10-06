@@ -7,12 +7,14 @@
 import type { PipelineStage } from '@prisma/client'
 import { after } from 'next/server'
 
+import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import { buildTargetWhere, renderBroadcastMessage } from '@/lib/broadcast'
 import { prisma } from '@/lib/prisma'
 import { formatRp, getMessageCreditBalance, getMessageCreditRates } from '@/lib/services/message-credits'
 import { waService } from '@/lib/wa-service'
 
 import { runCloudBroadcastBatch } from './cloud-runner'
+import { estimateBroadcastCreditRp } from './credit-estimate'
 
 export type StartBroadcastResult =
   | { ok: true; status: 'SENDING' | 'COMPLETED'; totalTargets: number; estimatedCreditRp?: number }
@@ -173,11 +175,18 @@ async function startCloudBroadcast(broadcast: LoadedBroadcast): Promise<StartBro
 
   // Estimasi konservatif: semua pesan berbayar (UTILITY dalam window gratis
   // dikoreksi saat kirim/rekonsiliasi). Sesi admin (platform) tidak ditagih.
-  const rates = await getMessageCreditRates()
-  const rate = rates[tpl.category]
+  // Billing Kredit Pesan nonaktif → estimasi 0 & tanpa cek saldo (Meta
+  // menagih seller langsung) — lihat lib/billing/message-credit-mode.ts.
   const isPlatform = broadcast.waSession.user.role === 'ADMIN'
-  const estimated = isPlatform ? 0 : pendingCount * rate
-  if (!isPlatform && estimated > 0) {
+  const chargeable = MESSAGE_CREDIT_BILLING_ENABLED && !isPlatform
+  const rate = chargeable ? (await getMessageCreditRates())[tpl.category] : 0
+  const estimated = estimateBroadcastCreditRp({
+    billingEnabled: MESSAGE_CREDIT_BILLING_ENABLED,
+    isPlatform,
+    pendingCount,
+    ratePerMessageRp: rate,
+  })
+  if (estimated > 0) {
     const balance = await getMessageCreditBalance(broadcast.userId)
     if (balance < estimated) {
       return {
