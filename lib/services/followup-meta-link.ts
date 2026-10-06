@@ -6,7 +6,12 @@
 // menyusun rencana relink (planRelinks). Eksekusi DB ada di
 // followup-meta-relink.ts. Tidak pernah submit template ke Meta.
 
-import { expectedBodyParamCount } from '@/lib/services/waba/template-payload'
+import { allowedPlaceholdersForTrigger } from '@/lib/services/followup-placeholders'
+import {
+  buildSendComponents,
+  expectedBodyParamCount,
+  type TemplateLike,
+} from '@/lib/services/waba/template-payload'
 
 export interface MetaTemplateLite {
   id: string
@@ -216,4 +221,86 @@ export function planRelinks(input: {
     })
   }
   return { changes, unresolved }
+}
+
+// ── Validasi tautan yang dipilih seller (API POST/PATCH follow-up) ──
+
+export type MetaLinkTemplate = TemplateLike & { status: string }
+
+export const MAX_PARAM_ENTRY_CHARS = 64
+// Token placeholder = apa pun di dalam kurung kurawal tunggal, mis. {nama}.
+const TOKEN_RE = /\{[^{}]*\}/g
+
+export type MetaLinkValidation =
+  | { ok: true; paramMap: string[] }
+  | { ok: false; error: string }
+
+/** Cek dukungan via builder kirim asli: follow-up hanya mengirim param body. */
+function unsupportedReason(template: MetaLinkTemplate, n: number): string | null {
+  try {
+    buildSendComponents(template, { body: Array.from({ length: n }, () => 'contoh') })
+    return null
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err)
+  }
+}
+
+/**
+ * Validasi entri peta {{n}}. Keputusan format: entri boleh token placeholder
+ * (`{nama}`), teks literal, atau campuran (`Kak {nama}`) — semuanya di-resolve
+ * oleh resolver yang sama dengan pesan bebas. Wajib tidak kosong, maks 64
+ * karakter, dan setiap token harus placeholder sah untuk trigger.
+ */
+function entryError(entry: string, index: number, allowed: readonly string[]): string | null {
+  const label = `Variabel {{${index + 1}}}`
+  const value = entry.trim()
+  if (!value) return `${label} belum dipilih`
+  if (value.length > MAX_PARAM_ENTRY_CHARS) return `${label} maksimal ${MAX_PARAM_ENTRY_CHARS} karakter`
+  const bad = (value.match(TOKEN_RE) ?? []).find((t) => !allowed.includes(t))
+  if (bad) return `${label}: ${bad} tidak tersedia untuk trigger ini`
+  return null
+}
+
+/**
+ * Alasan template TIDAK bisa dipakai follow-up sama sekali (terlepas dari
+ * peta variabel): AUTHENTICATION, status rusak, atau butuh parameter selain
+ * body (header bervariabel, header media tanpa URL publik, tombol URL
+ * bervariabel / salin kode). null = bisa dipakai. Dipakai juga oleh UI untuk
+ * menonaktifkan pilihan.
+ */
+export function metaLinkTemplateError(template: MetaLinkTemplate): string | null {
+  const label = `Template Meta "${template.name}"`
+  if (template.category === 'AUTHENTICATION') {
+    return 'Template AUTHENTICATION (OTP) tidak bisa dipakai untuk follow-up'
+  }
+  if (UNUSABLE_TEMPLATE_STATUSES.includes(template.status)) {
+    return `${label} berstatus ${template.status} — pilih template lain`
+  }
+  const unsupported = unsupportedReason(template, expectedBodyParamCount(template))
+  return unsupported ? `${label} tidak didukung follow-up: ${unsupported}` : null
+}
+
+export function validateFollowUpMetaLink(input: {
+  template: MetaLinkTemplate
+  paramMap: readonly string[] | null | undefined
+  trigger: string
+}): MetaLinkValidation {
+  const { template } = input
+  const templateError = metaLinkTemplateError(template)
+  if (templateError) return { ok: false, error: templateError }
+
+  const n = expectedBodyParamCount(template)
+  const map = input.paramMap ?? []
+  if (map.length !== n) {
+    return {
+      ok: false,
+      error: `Template Meta "${template.name}" punya ${n} variabel — isi tepat ${n} pemetaan (diberikan ${map.length})`,
+    }
+  }
+  const allowed = allowedPlaceholdersForTrigger(input.trigger)
+  for (const [i, entry] of map.entries()) {
+    const err = entryError(entry, i, allowed)
+    if (err) return { ok: false, error: err }
+  }
+  return { ok: true, paramMap: map.map((e) => e.trim()) }
 }

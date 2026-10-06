@@ -8,6 +8,8 @@ import {
   pickRelinkTarget,
   planRelinkParamMap,
   planRelinks,
+  validateFollowUpMetaLink,
+  type MetaLinkTemplate,
   type MetaTemplateLite,
   type RelinkFollowUpRow,
 } from './followup-meta-link'
@@ -231,6 +233,149 @@ check('tanpa padanan → masuk unresolved dengan alasan', () => {
   assert.equal(plan.changes.length, 0)
   assert.equal(plan.unresolved.length, 1)
   assert.ok(plan.unresolved[0].reason.length > 0)
+})
+
+console.log('followup-meta-link: validateFollowUpMetaLink')
+
+// Template custom seller ARLI (body nyata, {{2}} dipakai dua kali → 4 variabel).
+const BANK_TRANSFER: MetaLinkTemplate = {
+  name: 'pesananbanktransfer',
+  language: 'id',
+  category: 'UTILITY',
+  status: 'APPROVED',
+  bodyText:
+    'Halo kak {{1}}! Terima kasih sudah order {{2}}. Pesanan: {{3}} {{2}} Total Bayar: {{4}}',
+  headerType: null,
+  buttons: null,
+}
+
+check('pesananbanktransfer: peta 4 entri sah → ok', () => {
+  const r = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.deepEqual(r, { ok: true, paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'] })
+})
+check('pesananbanktransfer: peta 3 atau 5 entri → ditolak', () => {
+  for (const paramMap of [['{nama}', '{produk}', '{invoice}'], ['{nama}', '{produk}', '{invoice}', '{total}', '{etd}']]) {
+    const r = validateFollowUpMetaLink({ template: BANK_TRANSFER, paramMap, trigger: 'ORDER_CREATED' })
+    assert.equal(r.ok, false)
+    assert.match(r.ok ? '' : r.error, /4/)
+  }
+})
+check('entri kosong ditolak', () => {
+  const r = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', ' ', '{invoice}', '{total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, false)
+})
+check('teks literal + token boleh, token asing ditolak', () => {
+  const ok = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['Kak {nama}', '{produk}', '{invoice}', 'Rp {total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(ok.ok, true)
+  const bad = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', '{produk}', '{invoice}', '{harga}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(bad.ok, false)
+  assert.match(bad.ok ? '' : bad.error, /\{harga\}/)
+})
+check('entri > 64 karakter ditolak', () => {
+  const r = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', '{produk}', '{invoice}', 'x'.repeat(65)],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, false)
+})
+check('trigger lead menolak {invoice}', () => {
+  const r = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', '{produk_minat}', '{invoice}', '{link_order}'],
+    trigger: 'DAYS_AFTER_LIVE_LEAD',
+  })
+  assert.equal(r.ok, false)
+  assert.match(r.ok ? '' : r.error, /\{invoice\}/)
+})
+check('trigger lead menerima placeholder lead', () => {
+  const r = validateFollowUpMetaLink({
+    template: BANK_TRANSFER,
+    paramMap: ['{nama}', '{produk_minat}', '{nama_toko}', '{link_order}'],
+    trigger: 'DAYS_AFTER_LIVE_LEAD',
+  })
+  assert.equal(r.ok, true)
+})
+check('header TEXT bervariabel → tidak didukung', () => {
+  const r = validateFollowUpMetaLink({
+    template: { ...BANK_TRANSFER, headerType: 'TEXT', headerText: 'Pesanan {{1}}' },
+    paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, false)
+  assert.match(r.ok ? '' : r.error, /tidak didukung/)
+})
+check('tombol URL bervariabel → tidak didukung', () => {
+  const r = validateFollowUpMetaLink({
+    template: { ...BANK_TRANSFER, buttons: [{ type: 'URL', text: 'Lihat', url: 'https://x.id/{{1}}' }] },
+    paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, false)
+})
+check('header TEXT tanpa variabel & tombol quick reply → ok', () => {
+  const r = validateFollowUpMetaLink({
+    template: {
+      ...BANK_TRANSFER,
+      headerType: 'TEXT',
+      headerText: 'Pesanan baru',
+      buttons: [{ type: 'QUICK_REPLY', text: 'OK' }],
+    },
+    paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, true)
+})
+check('AUTHENTICATION ditolak', () => {
+  const r = validateFollowUpMetaLink({
+    template: { ...BANK_TRANSFER, category: 'AUTHENTICATION', bodyText: '' },
+    paramMap: ['{nama}'],
+    trigger: 'ORDER_CREATED',
+  })
+  assert.equal(r.ok, false)
+})
+check('DELETED/REJECTED/DISABLED ditolak', () => {
+  for (const status of ['DELETED', 'REJECTED', 'DISABLED']) {
+    const r = validateFollowUpMetaLink({
+      template: { ...BANK_TRANSFER, status },
+      paramMap: ['{nama}', '{produk}', '{invoice}', '{total}'],
+      trigger: 'ORDER_CREATED',
+    })
+    assert.equal(r.ok, false, status)
+  }
+})
+check('0 variabel → peta [] (null/[] diterima)', () => {
+  const t = { ...BANK_TRANSFER, bodyText: 'Terima kasih sudah order.' }
+  assert.deepEqual(validateFollowUpMetaLink({ template: t, paramMap: null, trigger: 'ORDER_CREATED' }), {
+    ok: true,
+    paramMap: [],
+  })
+  assert.deepEqual(validateFollowUpMetaLink({ template: t, paramMap: [], trigger: 'ORDER_CREATED' }), {
+    ok: true,
+    paramMap: [],
+  })
+})
+check('peta null untuk template bervariabel → ditolak', () => {
+  assert.equal(
+    validateFollowUpMetaLink({ template: BANK_TRANSFER, paramMap: null, trigger: 'ORDER_CREATED' }).ok,
+    false,
+  )
 })
 
 console.log(`followup-meta-link: ${passed} ok`)
