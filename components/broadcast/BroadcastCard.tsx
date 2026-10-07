@@ -164,6 +164,12 @@ export function BroadcastCard({ broadcast, onChanged }: BroadcastCardProps) {
         )}
 
         <div className="flex flex-wrap gap-1">
+          {/* Target kosong = "Semua kontak di nomor ini" (broadcast lama selalu ≥1 target). */}
+          {broadcast.targetTags.length === 0 && broadcast.targetStages.length === 0 && (
+            <Badge variant="secondary" className="font-normal">
+              Semua kontak
+            </Badge>
+          )}
           {broadcast.targetTags.map((t) => (
             <Badge key={`tag-${t}`} variant="secondary" className="font-normal">
               #{t}

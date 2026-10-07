@@ -11,6 +11,7 @@ import type {
 import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listContactTags } from '@/lib/services/contacts/tags'
 import {
   BROADCAST_LIST_SELECT,
   serializeBroadcastRow,
@@ -24,7 +25,7 @@ export default async function BroadcastPage() {
 
   const userId = session.user.id
 
-  const [broadcasts, sessions, contactsForTags] = await Promise.all([
+  const [broadcasts, sessions, availableTags] = await Promise.all([
     prisma.broadcast.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -43,15 +44,9 @@ export default async function BroadcastPage() {
         wabaId: true,
       },
     }),
-    prisma.contact.findMany({
-      where: { userId },
-      select: { tags: true },
-      take: 500,
-    }),
+    // DISTINCT — tag hasil impor kontak wajib bisa dipilih sebagai target.
+    listContactTags(userId),
   ])
-
-  const tagSet = new Set<string>()
-  for (const c of contactsForTags) for (const t of c.tags) tagSet.add(t)
 
   const initialBroadcasts: BroadcastListItem[] = broadcasts.map((b) => ({
     ...serializeBroadcastRow(b),
@@ -65,7 +60,7 @@ export default async function BroadcastPage() {
       <BroadcastView
         initialBroadcasts={initialBroadcasts}
         sessions={sessionOptions}
-        availableTags={[...tagSet].sort()}
+        availableTags={availableTags}
       />
     </PageContainer>
   )
