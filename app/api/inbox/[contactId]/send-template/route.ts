@@ -117,7 +117,12 @@ export async function POST(req: Request, { params }: Params) {
       pushName: contact.name,
     })
     if (!r.success) {
-      const status = r.code === 'INSUFFICIENT_CREDIT' ? 402 : r.code === 'META_ERROR' ? 502 : 409
+      const status =
+        r.code === 'INSUFFICIENT_CREDIT'
+          ? 402
+          : r.code === 'META_ERROR' || r.code === 'HEADER_MEDIA_TEMPORARY'
+            ? 502
+            : 409
       return NextRes.json({ success: false, error: r.error, code: r.code }, { status })
     }
 

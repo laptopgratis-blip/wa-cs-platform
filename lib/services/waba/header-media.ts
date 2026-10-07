@@ -126,3 +126,42 @@ export function headerMediaUnavailableMessage(kind: HeaderMediaKind): string {
     `unggah ulang ${noun} di menu Template Meta lalu ajukan ulang`
   )
 }
+
+/**
+ * Pesan untuk gagal SEMENTARA (timeout/jaringan/5xx Meta) — media template
+ * tidak rusak, cukup dicoba lagi. Jangan suruh seller unggah ulang.
+ */
+export function headerMediaTemporaryMessage(kind: HeaderMediaKind): string {
+  return (
+    `${RULES[kind].label} header template gagal disiapkan karena gangguan sementara ` +
+    `(Meta/jaringan) — coba lagi beberapa saat lagi`
+  )
+}
+
+// ── Klasifikasi gagal sementara vs permanen ──
+// Sementara → follow-up di-retry otomatis & broadcast di-PAUSE (lanjutkan
+// manual); permanen → TEMPLATE_PARAM_MISMATCH (seller harus memperbaiki
+// template). Salah klasifikasi = follow-up hilang saat Meta sekadar gangguan.
+
+/** Status HTTP unduhan: tanpa status (timeout/jaringan), 408, 429, 5xx = sementara. */
+export function isTransientHttpStatus(status: number | undefined): boolean {
+  if (status === undefined) return true
+  return status === 408 || status === 429 || status >= 500
+}
+
+// Kode error Meta yang bersifat sementara walau HTTP-nya 400:
+// 1 unknown, 2 service unavailable, 4/17/32/613/80007/130429 rate limit.
+const TRANSIENT_GRAPH_CODES = new Set([1, 2, 4, 17, 32, 613, 80007, 130429])
+
+/** Error Graph API (MetaApiError) yang layak dicoba lagi. */
+export function isTransientGraphError(err: { code?: number; httpStatus?: number; message?: string }): boolean {
+  if (err.code !== undefined && TRANSIENT_GRAPH_CODES.has(err.code)) return true
+  return isTransientHttpStatus(err.httpStatus)
+}
+
+/** Kode gagal sendCloudTemplate untuk kegagalan menyiapkan media header. */
+export function headerMediaFailureSendCode(
+  transient: boolean,
+): 'HEADER_MEDIA_TEMPORARY' | 'TEMPLATE_PARAM_MISMATCH' {
+  return transient ? 'HEADER_MEDIA_TEMPORARY' : 'TEMPLATE_PARAM_MISMATCH'
+}

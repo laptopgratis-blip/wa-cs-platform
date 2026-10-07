@@ -4,8 +4,12 @@ import assert from 'node:assert/strict'
 
 import {
   chooseSyncedHeaderMediaUrl,
+  headerMediaFailureSendCode,
   headerMediaRule,
+  headerMediaTemporaryMessage,
   isMetaCdnUrl,
+  isTransientGraphError,
+  isTransientHttpStatus,
   mediaKindForHeader,
   resolveHeaderMediaMime,
 } from './header-media'
@@ -139,6 +143,56 @@ check('jenis tidak cocok dengan header → null (mis. HTML error page, video di 
   assert.equal(resolveHeaderMediaMime('image', 'video/mp4', MP4), null)
   assert.equal(resolveHeaderMediaMime('document', 'image/jpeg', JPEG), null)
   assert.equal(resolveHeaderMediaMime('image', 'image/webp', Buffer.from('RIFF....WEBP')), null)
+})
+
+console.log('waba/header-media: klasifikasi gagal sementara vs permanen')
+
+check('isTransientHttpStatus: tanpa status (timeout/jaringan), 408, 429, 5xx → sementara', () => {
+  assert.equal(isTransientHttpStatus(undefined), true)
+  assert.equal(isTransientHttpStatus(408), true)
+  assert.equal(isTransientHttpStatus(429), true)
+  assert.equal(isTransientHttpStatus(500), true)
+  assert.equal(isTransientHttpStatus(503), true)
+})
+
+check('isTransientHttpStatus: 403/404/410/400/200 → permanen', () => {
+  assert.equal(isTransientHttpStatus(403), false)
+  assert.equal(isTransientHttpStatus(404), false)
+  assert.equal(isTransientHttpStatus(410), false)
+  assert.equal(isTransientHttpStatus(400), false)
+  assert.equal(isTransientHttpStatus(200), false)
+})
+
+check('isTransientGraphError: timeout/jaringan, 5xx, 429, kode Meta sementara → sementara', () => {
+  assert.equal(isTransientGraphError({ message: 'Graph API tidak bisa dihubungi: aborted' }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 500, code: 1 }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 503 }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 429 }), true)
+  // Meta sering membalas 400 untuk "service temporarily unavailable"/rate limit.
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 400, code: 2 }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 400, code: 4 }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 400, code: 80007 }), true)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 400, code: 130429 }), true)
+})
+
+check('isTransientGraphError: 4xx lain (param salah, token invalid) → permanen', () => {
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 400, code: 100 }), false)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 401, code: 190 }), false)
+  assert.equal(isTransientGraphError({ message: 'x', httpStatus: 403, code: 10 }), false)
+})
+
+check('headerMediaFailureSendCode: sementara → HEADER_MEDIA_TEMPORARY, permanen → TEMPLATE_PARAM_MISMATCH', () => {
+  assert.equal(headerMediaFailureSendCode(true), 'HEADER_MEDIA_TEMPORARY')
+  assert.equal(headerMediaFailureSendCode(false), 'TEMPLATE_PARAM_MISMATCH')
+})
+
+check('headerMediaTemporaryMessage: sebut jenis, minta coba lagi, TIDAK menyuruh unggah ulang', () => {
+  const img = headerMediaTemporaryMessage('image')
+  assert.match(img, /^Gambar header template/)
+  assert.match(img, /coba lagi/)
+  assert.doesNotMatch(img, /unggah ulang/)
+  assert.match(headerMediaTemporaryMessage('video'), /^Video header template/)
+  assert.match(headerMediaTemporaryMessage('document'), /^Dokumen header template/)
 })
 
 console.log(`\nwaba/header-media: ${passed} pemeriksaan lolos`)

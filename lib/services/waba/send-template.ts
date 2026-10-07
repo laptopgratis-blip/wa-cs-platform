@@ -13,7 +13,7 @@ import { markMarketingOptOut } from './billing-reconcile'
 import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
-import { mediaKindForHeader } from './header-media'
+import { headerMediaFailureSendCode, mediaKindForHeader } from './header-media'
 import { resolveTemplateHeaderMedia } from './header-media-resolver'
 import { relayEmit } from './realtime'
 import {
@@ -33,6 +33,8 @@ export type CloudTemplateSendCode =
   | 'META_ERROR'
   | 'RATE_LIMIT'
   | 'TEMPLATE_PARAM_MISMATCH'
+  /** Media header gagal disiapkan karena gangguan sementara — boleh dicoba lagi. */
+  | 'HEADER_MEDIA_TEMPORARY'
   | 'TOKEN_INVALID'
   | 'PAYMENT_REQUIRED'
 
@@ -87,8 +89,9 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
 
     // Header media yang URL-nya CDN Meta (hasil sync) DITOLAK pengunduh Meta
     // (131053) → ubah jadi media id SEBELUM kirim. Gagal → berhenti di sini
-    // (tanpa wamid, tanpa charge); kode PARAM_MISMATCH = permanen (broadcast
-    // di-PAUSE dengan alasan jelas, follow-up tidak di-retry).
+    // (tanpa wamid, tanpa charge). Gagal permanen → PARAM_MISMATCH (broadcast
+    // di-PAUSE, follow-up final); gangguan sementara (timeout/5xx Meta) →
+    // HEADER_MEDIA_TEMPORARY (broadcast di-PAUSE, follow-up di-retry).
     let params = input.params
     if (mediaKindForHeader(template.headerType) && !hasExplicitHeaderMedia(input.params.header)) {
       const media = await resolveTemplateHeaderMedia({
@@ -96,7 +99,9 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
         phoneNumberId: session.phoneNumberId,
         token: credRes.creds.token,
       })
-      if (!media.ok) return { success: false, error: media.error, code: 'TEMPLATE_PARAM_MISMATCH' }
+      if (!media.ok) {
+        return { success: false, error: media.error, code: headerMediaFailureSendCode(media.transient) }
+      }
       if (media.header) params = { ...input.params, header: media.header }
     }
 

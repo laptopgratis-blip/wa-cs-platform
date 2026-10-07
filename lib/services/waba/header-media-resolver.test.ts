@@ -50,7 +50,7 @@ function fakeDeps(over: Partial<HeaderMediaResolverDeps> = {}): { deps: HeaderMe
     },
     fetchTemplateHeaderUrl: async (metaTemplateId) => {
       log.refreshes.push(metaTemplateId)
-      return CDN_URL_FRESH
+      return { ok: true, url: CDN_URL_FRESH }
     },
     saveTemplateHeaderUrl: async (templateId, oldUrl, newUrl) => {
       log.saves.push({ templateId, oldUrl, newUrl })
@@ -184,6 +184,7 @@ async function main(): Promise<void> {
       assert.match(!r.ok ? r.error : '', /unggah ulang gambar di menu Template Meta/)
       assert.equal(log.downloads.length, 2) // URL lama + URL hasil refresh
       assert.equal(log.uploads.length, 0)
+      assert.equal(!r.ok && r.transient, false) // URL kedaluwarsa permanen → seller harus unggah ulang
     } finally {
       console.error = origError
     }
@@ -200,11 +201,12 @@ async function main(): Promise<void> {
         },
         fetchTemplateHeaderUrl: async (id) => {
           log.refreshes.push(id)
-          return null
+          return { ok: true, url: null }
         },
       })
       const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
       assert.equal(r.ok, false)
+      assert.equal(!r.ok && r.transient, false)
       assert.equal(log.downloads.length, 1)
       assert.equal(log.saves.length, 0)
     } finally {
@@ -221,7 +223,7 @@ async function main(): Promise<void> {
           log.downloads.push(url)
           return { ok: false, status: 403, error: 'HTTP 403' }
         },
-        fetchTemplateHeaderUrl: async () => 'http://169.254.169.254/latest/meta-data',
+        fetchTemplateHeaderUrl: async () => ({ ok: true, url: 'http://169.254.169.254/latest/meta-data' }),
       })
       const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
       assert.equal(r.ok, false)
@@ -244,6 +246,7 @@ async function main(): Promise<void> {
       })
       const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
       assert.equal(r.ok, false)
+      assert.equal(!r.ok && r.transient, false) // jenis salah tidak sembuh dengan retry
       assert.equal(log.uploads.length, 0)
     } finally {
       console.error = origError
@@ -266,10 +269,166 @@ async function main(): Promise<void> {
       }
       const r1 = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
       assert.equal(r1.ok, false)
+      assert.equal(!r1.ok && r1.transient, true)
       fail = false
       const r2 = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
       assert.equal(r2.ok, true)
       assert.equal(log.uploads.length, 2)
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('unduh timeout (tanpa status HTTP) → ok:false SEMENTARA, tanpa refresh Graph', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps, log } = fakeDeps({
+        download: async (url) => {
+          log.downloads.push(url)
+          return { ok: false, error: 'unduh gagal: The operation was aborted due to timeout' }
+        },
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(r.ok, false)
+      assert.equal(!r.ok && r.transient, true)
+      assert.match(!r.ok ? r.error : '', /coba lagi/)
+      assert.doesNotMatch(!r.ok ? r.error : '', /unggah ulang/)
+      assert.deepEqual(log.downloads, [CDN_URL])
+      assert.equal(log.refreshes.length, 0)
+      assert.equal(log.uploads.length, 0)
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('unduh 503/429 dari CDN → SEMENTARA, tanpa refresh', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      for (const status of [503, 429]) {
+        clearHeaderMediaCache()
+        const { deps, log } = fakeDeps({
+          download: async (url) => {
+            log.downloads.push(url)
+            return { ok: false, status, error: `HTTP ${status}` }
+          },
+        })
+        const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+        assert.equal(!r.ok && r.transient, true, `status ${status}`)
+        assert.equal(log.refreshes.length, 0)
+      }
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('download menandai gagal permanen (redirect ke host non-CDN) → refresh dicoba', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps, log } = fakeDeps({
+        download: async (url) => {
+          log.downloads.push(url)
+          if (url === CDN_URL) return { ok: false, transient: false, error: 'host bukan CDN Meta' }
+          return { ok: true, bytes: JPEG, contentType: 'image/jpeg' }
+        },
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(r.ok, true)
+      assert.deepEqual(log.refreshes, ['meta_123'])
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('403 → refresh → unduh ulang timeout → SEMENTARA', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps, log } = fakeDeps({
+        download: async (url) => {
+          log.downloads.push(url)
+          if (url === CDN_URL) return { ok: false, status: 403, error: 'HTTP 403' }
+          return { ok: false, error: 'unduh gagal: fetch failed' }
+        },
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(!r.ok && r.transient, true)
+      assert.deepEqual(log.downloads, [CDN_URL, CDN_URL_FRESH])
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('403 → refresh Graph gangguan sementara → SEMENTARA (bukan suruh unggah ulang)', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps, log } = fakeDeps({
+        download: async (url) => {
+          log.downloads.push(url)
+          return { ok: false, status: 403, error: 'HTTP 403' }
+        },
+        fetchTemplateHeaderUrl: async (id) => {
+          log.refreshes.push(id)
+          return { ok: false, transient: true, error: 'Graph API tidak bisa dihubungi' }
+        },
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(!r.ok && r.transient, true)
+      assert.doesNotMatch(!r.ok ? r.error : '', /unggah ulang/)
+      assert.equal(log.downloads.length, 1)
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('403 → refresh Graph ditolak permanen (template dihapus) → PERMANEN', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps } = fakeDeps({
+        download: async () => ({ ok: false, status: 403, error: 'HTTP 403' }),
+        fetchTemplateHeaderUrl: async () => ({ ok: false, transient: false, error: 'Unsupported get request' }),
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(!r.ok && r.transient, false)
+      assert.match(!r.ok ? r.error : '', /unggah ulang gambar/)
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('upload ke Meta 5xx / timeout → SEMENTARA, pesan coba lagi', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      for (const error of [
+        { message: 'Service temporarily unavailable', code: 2, httpStatus: 503 },
+        { message: 'Graph API tidak bisa dihubungi: The operation was aborted due to timeout' },
+      ]) {
+        clearHeaderMediaCache()
+        const { deps } = fakeDeps({ upload: async () => ({ ok: false, error }) })
+        const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+        assert.equal(!r.ok && r.transient, true, error.message)
+        assert.match(!r.ok ? r.error : '', /coba lagi/)
+      }
+    } finally {
+      console.error = origError
+    }
+  })
+
+  await check('upload ditolak Meta 400 (param/format) → PERMANEN, pesan unggah ulang', async () => {
+    const origError = console.error
+    console.error = () => undefined
+    try {
+      const { deps } = fakeDeps({
+        upload: async () => ({ ok: false, error: { message: 'Invalid parameter', code: 100, httpStatus: 400 } }),
+      })
+      const r = await resolveTemplateHeaderMedia({ ...BASE, template: tpl(), deps })
+      assert.equal(!r.ok && r.transient, false)
+      assert.match(!r.ok ? r.error : '', /unggah ulang gambar/)
     } finally {
       console.error = origError
     }
