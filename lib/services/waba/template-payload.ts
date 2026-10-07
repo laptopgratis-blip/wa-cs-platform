@@ -9,6 +9,7 @@
 // - Contoh header media memakai `header_handle` dari Resumable Upload,
 //   bukan media_id dari /media.
 
+import { isMetaCdnUrl, mediaKindForHeader } from './header-media'
 import { extractPlaceholders } from './template-validate'
 import type { WabaTemplateButton } from './types'
 
@@ -32,11 +33,16 @@ export interface TemplateLike {
   authCodeExpirationMinutes?: number | null
 }
 
-export interface TemplateSendHeaderParam {
-  type: 'text' | 'image' | 'video' | 'document'
-  value: string // teks {{1}} header, atau URL publik media
-  filename?: string // document
-}
+export type TemplateSendHeaderMediaType = 'image' | 'video' | 'document'
+
+/**
+ * Parameter header saat kirim. Media boleh berupa `value` (URL publik yang
+ * diunduh Meta) ATAU `mediaId` (hasil POST /{phoneNumberId}/media) — mediaId
+ * diutamakan. Tanpa keduanya → pakai headerMediaUrl template.
+ */
+export type TemplateSendHeaderParam =
+  | { type: 'text'; value: string; filename?: string }
+  | { type: TemplateSendHeaderMediaType; value?: string; mediaId?: string; filename?: string }
 
 export interface TemplateSendButtonParam {
   index: number // posisi tombol di template (0-based)
@@ -211,6 +217,37 @@ export function expectedBodyParamCount(tpl: TemplateLike): number {
 }
 
 /**
+ * Komponen header media kirim. Urutan sumber: `mediaId` (upload ke Meta) →
+ * `value` (URL eksplisit) → headerMediaUrl template.
+ */
+function buildMediaHeaderComponent(
+  tpl: TemplateLike,
+  headerType: Exclude<TemplateHeaderType, 'TEXT'>,
+  header: TemplateSendHeaderParam | undefined,
+): Record<string, unknown> {
+  const given = header && header.type !== 'text' ? header : undefined
+  const kind = headerType.toLowerCase() as TemplateSendHeaderMediaType
+  const mediaId = given?.mediaId?.trim()
+  const explicitLink = given?.value?.trim() || undefined
+  const link = explicitLink ?? tpl.headerMediaUrl
+  if (!mediaId && !link) throw new TemplateParamError(`Header ${headerType} butuh URL media publik`)
+  // headerMediaUrl hasil sync dari Meta = URL CDN contoh (scontent.whatsapp.net,
+  // *.fbcdn.net, lookaside.fbsbx.com) — DITOLAK pengunduh Meta saat kirim
+  // (131053 / 403) walau URL masih hidup; wamid tetap keluar → pesan failed.
+  // Cocokkan per hostname (regex lama tak pernah cocok `https://scontent...`).
+  // Pengirim wajib mengubahnya jadi mediaId dulu (header-media-resolver).
+  if (!mediaId && !explicitLink && isMetaCdnUrl(link)) {
+    throw new TemplateParamError(
+      `Header ${headerType} template ini memakai URL contoh Meta yang kedaluwarsa — ` +
+        'sertakan URL media publik saat kirim, atau unggah ulang media di editor template',
+    )
+  }
+  const media: Record<string, unknown> = mediaId ? { id: mediaId } : { link }
+  if (kind === 'document' && given?.filename) media.filename = given.filename
+  return { type: 'header', parameters: [{ type: kind, [kind]: media }] }
+}
+
+/**
  * Susun `components` untuk POST /{phoneNumberId}/messages type template.
  * Throw TemplateParamError bila jumlah/jenis param tidak cocok (cegah 132000).
  */
@@ -237,21 +274,7 @@ export function buildSendComponents(tpl: TemplateLike, params: TemplateSendParam
     if (!v) throw new TemplateParamError('Parameter header {{1}} wajib diisi')
     components.push({ type: 'header', parameters: [{ type: 'text', text: v }] })
   } else if (headerType && headerType !== 'TEXT') {
-    const link = params.header && params.header.type !== 'text' ? params.header.value : tpl.headerMediaUrl
-    if (!link) throw new TemplateParamError(`Header ${headerType} butuh URL media publik`)
-    // headerMediaUrl hasil sync dari Meta = URL CDN contoh (lookaside/scontent)
-    // yang BERUMUR PENDEK — dipakai kirim akan gagal diunduh Meta setelah
-    // kedaluwarsa (wamid tetap keluar → kredit terpotong, pesan failed).
-    if (!params.header && /(^|\.)(lookaside\.fbsbx\.com|fbcdn\.net|scontent[.-])/i.test(link)) {
-      throw new TemplateParamError(
-        `Header ${headerType} template ini memakai URL contoh Meta yang kedaluwarsa — ` +
-          'sertakan URL media publik saat kirim, atau unggah ulang media di editor template',
-      )
-    }
-    const kind = headerType.toLowerCase() as 'image' | 'video' | 'document'
-    const media: Record<string, unknown> = { link }
-    if (kind === 'document' && params.header?.filename) media.filename = params.header.filename
-    components.push({ type: 'header', parameters: [{ type: kind, [kind]: media }] })
+    components.push(buildMediaHeaderComponent(tpl, headerType, params.header))
   }
 
   const expected = expectedBodyParamCount(tpl)
@@ -302,6 +325,26 @@ export function buildSendComponents(tpl: TemplateLike, params: TemplateSendParam
   })
 
   return components
+}
+
+/**
+ * Params untuk VALIDASI pra-kirim (buat broadcast, tautkan follow-up) lewat
+ * buildSendComponents. Header media ber-URL CDN Meta tidak bisa dikirim
+ * sebagai link, tapi sendCloudTemplate mengubahnya jadi media id saat kirim
+ * (header-media-resolver) — jadi di sini dianggap tersedia lewat media id
+ * placeholder. Kegagalan resolve tetap tertangkap saat kirim. Return objek
+ * baru (params asli tidak dimutasi); tanpa perubahan → objek yang sama.
+ */
+export function preflightSendParams(tpl: TemplateLike, params: TemplateSendParams): TemplateSendParams {
+  const kind = mediaKindForHeader(tpl.headerType)
+  if (!kind || !isMetaCdnUrl(tpl.headerMediaUrl) || hasExplicitHeaderMedia(params.header)) return params
+  return { ...params, header: { type: kind, mediaId: 'preflight-resolved-at-send' } }
+}
+
+/** Pemanggil sudah memberi media header sendiri (URL eksplisit / media id). */
+export function hasExplicitHeaderMedia(header: TemplateSendHeaderParam | undefined): boolean {
+  if (!header || header.type === 'text') return false
+  return Boolean(header.value?.trim() || header.mediaId?.trim())
 }
 
 // ── Render teks (preview & Message.content) ──

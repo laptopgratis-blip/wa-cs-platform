@@ -24,6 +24,9 @@ export function BroadcastView({
   availableTags,
 }: BroadcastViewProps) {
   const [broadcasts, setBroadcasts] = useState(initialBroadcasts)
+  // Daftar tag datang dari SSR; impor kontak dari form menambah tag baru tanpa
+  // reload, jadi disimpan di state supaya langsung bisa dicentang.
+  const [tags, setTags] = useState(availableTags)
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/broadcast')
@@ -53,8 +56,11 @@ export function BroadcastView({
 
       <BroadcastForm
         sessions={sessions}
-        availableTags={availableTags}
+        availableTags={tags}
         onCreated={refresh}
+        onTagImported={(t) =>
+          setTags((prev) => (prev.includes(t) ? prev : [...prev, t].sort()))
+        }
       />
 
       <div>

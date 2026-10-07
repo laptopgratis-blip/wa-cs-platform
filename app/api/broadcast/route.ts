@@ -10,6 +10,7 @@ import { getMessageCreditRates } from '@/lib/services/message-credits'
 import { BROADCAST_LIST_SELECT, serializeBroadcastRow } from '@/lib/services/broadcast/list-select'
 import {
   buildSendComponents,
+  preflightSendParams,
   renderTemplateText,
   TemplateParamError,
   type TemplateSendParams,
@@ -79,10 +80,14 @@ export async function POST(req: Request) {
       templateParams = data.templateParams ?? { body: [] }
       try {
         // Validasi jumlah/jenis param dengan nilai sampel ({nama}/{nomor} diganti contoh).
-        buildSendComponents(tpl, {
-          ...templateParams,
-          body: templateParams.body.map((v) => v.replaceAll('{nama}', 'Budi').replaceAll('{nomor}', '628123456789')),
-        })
+        // Header media CDN Meta di-resolve jadi media id saat kirim → anggap tersedia.
+        buildSendComponents(
+          tpl,
+          preflightSendParams(tpl, {
+            ...templateParams,
+            body: templateParams.body.map((v) => v.replaceAll('{nama}', 'Budi').replaceAll('{nomor}', '628123456789')),
+          }),
+        )
       } catch (err) {
         if (err instanceof TemplateParamError) return jsonError(err.message, 400)
         throw err

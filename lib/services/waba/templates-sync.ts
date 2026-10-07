@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 
 import { getWabaCredentialsByWaba } from './credentials'
 import { graphRequestPaged } from './graph'
+import { chooseSyncedHeaderMediaUrl } from './header-media'
 import { parseMetaComponents } from './template-payload'
 
 export interface MetaTemplateRow {
@@ -117,7 +118,7 @@ export async function syncTemplatesFromMeta(input: {
 
       const existing = await prisma.wabaTemplate.findUnique({
         where: { wabaId_name_language: { wabaId: input.wabaId, name: row.name, language } },
-        select: { id: true, status: true, approvedAt: true, metaTemplateId: true },
+        select: { id: true, status: true, approvedAt: true, metaTemplateId: true, headerMediaUrl: true },
       })
 
       if (existing) {
@@ -132,7 +133,10 @@ export async function syncTemplatesFromMeta(input: {
             headerType: parsed.headerType,
             headerText: parsed.headerText,
             headerTextExample: parsed.headerTextExample,
-            ...(parsed.headerMediaUrl ? { headerMediaUrl: parsed.headerMediaUrl } : {}),
+            // KECUALI URL media: Meta mengembalikan URL contoh CDN-nya sendiri
+            // yang DITOLAK pengunduh Meta saat kirim (131053 / 403) — URL
+            // publik hulao hasil upload editor wajib dipertahankan.
+            headerMediaUrl: chooseSyncedHeaderMediaUrl(existing.headerMediaUrl, parsed.headerMediaUrl),
             bodyText: parsed.bodyText,
             bodyExamples: parsed.bodyExamples,
             footerText: parsed.footerText,

@@ -34,6 +34,10 @@ const PAUSE_CODES = new Set([
   // (templateParams disimpan sekali di Broadcast; template bisa diedit di
   // antara create dan start) — tanpa pause, seluruh penerima habis FAILED.
   'TEMPLATE_PARAM_MISMATCH',
+  // Media header gagal disiapkan karena gangguan sementara Meta/jaringan —
+  // berlaku untuk semua penerima; pause (bukan FAILED massal / unduh 20 dtk
+  // per penerima) lalu seller melanjutkan setelah gangguan reda.
+  'HEADER_MEDIA_TEMPORARY',
   'PAYMENT_REQUIRED',
   'TOKEN_INVALID',
   'SESSION_UNAVAILABLE',

@@ -223,6 +223,8 @@ check('isPermanentCloudCode', () => {
   assert.equal(isPermanentCloudCode('MARKETING_OPT_OUT'), true)
   assert.equal(isPermanentCloudCode('RATE_LIMIT'), false)
   assert.equal(isPermanentCloudCode('META_ERROR'), false)
+  // Gangguan sementara menyiapkan media header → follow-up di-retry.
+  assert.equal(isPermanentCloudCode('HEADER_MEDIA_TEMPORARY'), false)
   assert.equal(isPermanentCloudCode('INSUFFICIENT_CREDIT'), false)
   assert.equal(isPermanentCloudCode(undefined), false)
 })
