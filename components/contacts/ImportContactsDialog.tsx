@@ -47,7 +47,8 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   sessions: ImportSessionOption[]
-  onImported: () => void
+  /** `tag` = tag yang dipakai impor ini — pemanggil boleh langsung menargetkannya. */
+  onImported: (tag: string) => void
 }
 
 function sessionLabel(s: ImportSessionOption): string {
@@ -170,7 +171,7 @@ export function ImportContactsDialog({ open, onOpenChange, sessions, onImported 
       parts.push(`${res.invalidCount.toLocaleString('id-ID')} baris dilewati`)
     }
     toast.success(`${parts.join(', ')}. Tag: ${res.tag}`)
-    onImported()
+    onImported(res.tag)
     reset()
     onOpenChange(false)
   }

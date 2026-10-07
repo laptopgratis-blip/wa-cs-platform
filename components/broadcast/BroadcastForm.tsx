@@ -6,7 +6,7 @@
 // Sesi Cloud API (Trek 2B): pilih template Meta APPROVED + parameter
 // (boleh {nama}/{nomor}) + preview + estimasi Kredit Pesan vs saldo.
 import type { PipelineStage } from '@prisma/client'
-import { BadgeCheck, Calendar, Loader2, Send, Users } from 'lucide-react'
+import { BadgeCheck, Calendar, Loader2, Send, Upload, Users } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -39,12 +39,16 @@ import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 import { PIPELINE_LABELS } from '@/lib/validations/contact'
 
+import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog'
+
 import type { SessionOption } from './types'
 
 interface BroadcastFormProps {
   sessions: SessionOption[]
   availableTags: string[]
   onCreated: () => void
+  /** Tag baru hasil impor — dinaikkan supaya ikut jadi pilihan target. */
+  onTagImported: (tag: string) => void
 }
 
 const STAGES: PipelineStage[] = [
@@ -70,6 +74,7 @@ export function BroadcastForm({
   sessions,
   availableTags,
   onCreated,
+  onTagImported,
 }: BroadcastFormProps) {
   const [name, setName] = useState('')
   const [waSessionId, setWaSessionId] = useState<string>(sessions[0]?.id ?? '')
@@ -78,6 +83,10 @@ export function BroadcastForm({
   const [stages, setStages] = useState<PipelineStage[]>([])
   // Semua kontak di nomor pengirim — tag & stage diabaikan (disimpan kosong).
   const [targetAll, setTargetAll] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  // Tag yang baru diimpor di sesi ini — diberi lencana supaya user tahu
+  // centang mana yang baru muncul.
+  const [justImported, setJustImported] = useState<string[]>([])
   const [scheduleNow, setScheduleNow] = useState(true)
   const [scheduledAt, setScheduledAt] = useState('')
   const [fetchedPreview, setFetchedPreview] = useState<PreviewInfo | null>(null)
@@ -205,6 +214,17 @@ export function BroadcastForm({
       prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
     )
   }
+  // Impor dari form broadcast: tag hasil impor langsung dicentang sebagai
+  // target, dan "Semua kontak" dimatikan — kalau dibiarkan menyala, tag yang
+  // baru dicentang justru diabaikan dan user mengira impornya tidak terpakai.
+  function useImportedTag(t: string) {
+    onTagImported(t)
+    setTargetAll(false)
+    setTags((prev) => (prev.includes(t) ? prev : [...prev, t]))
+    setJustImported((prev) => (prev.includes(t) ? prev : [...prev, t]))
+    if (!name.trim()) setName(t)
+  }
+
   function toggleStage(s: PipelineStage) {
     setStages((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
@@ -436,11 +456,21 @@ export function BroadcastForm({
           aria-disabled={targetAll}
         >
           <div className="space-y-2">
-            <Label>Target — Tags</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label>Target — Tags</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="mr-2 size-4" /> Impor Kontak
+              </Button>
+            </div>
             {availableTags.length === 0 ? (
               <p className="bg-muted/30 text-muted-foreground rounded-md border p-3 text-xs">
-                Belum ada kontak yang punya tag. Tambahkan tag di halaman
-                Kontak, atau impor kontak dengan tag.
+                Belum ada kontak yang punya tag. Impor daftar nomor lewat tombol
+                di atas, atau tambahkan tag di halaman Kontak.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2 rounded-md border p-3">
@@ -455,6 +485,17 @@ export function BroadcastForm({
                       disabled={targetAll}
                     />
                     {t}
+                    {justImported.includes(t) && (
+                      <span
+                        className={cn(
+                          'rounded-full px-1.5 py-0.5 text-xs',
+                          TONES.success.bg,
+                          TONES.success.text,
+                        )}
+                      >
+                        baru
+                      </span>
+                    )}
                   </label>
                 ))}
               </div>
@@ -554,6 +595,13 @@ export function BroadcastForm({
           )}
           {scheduleNow ? 'Buat & Kirim' : 'Jadwalkan'}
         </Button>
+
+        <ImportContactsDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          sessions={sessions}
+          onImported={useImportedTag}
+        />
       </CardContent>
     </Card>
   )

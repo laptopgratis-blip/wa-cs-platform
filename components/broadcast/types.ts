@@ -1,5 +1,10 @@
 // Tipe shared untuk komponen broadcast.
-import type { BroadcastStatus, PipelineStage, WaProvider } from '@prisma/client'
+import type {
+  BroadcastStatus,
+  PipelineStage,
+  WaProvider,
+  WaStatus,
+} from '@prisma/client'
 
 export type BroadcastCategory = 'MARKETING' | 'UTILITY' | 'AUTHENTICATION'
 
@@ -35,11 +40,13 @@ export interface BroadcastListItem {
   } | null
 }
 
+// Superset dari ImportSessionOption (components/contacts/types) — dipakai apa
+// adanya oleh ImportContactsDialog yang dibuka dari form broadcast.
 export interface SessionOption {
   id: string
   displayName: string | null
   phoneNumber: string | null
-  status: string
+  status: WaStatus
   provider: WaProvider
   wabaId: string | null
 }
