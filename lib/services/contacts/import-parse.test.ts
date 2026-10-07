@@ -72,6 +72,18 @@ check('kosong / spasi / apostrof saja → nomor kosong', () => {
   assert.equal(badReason('   '), 'nomor kosong')
   assert.equal(badReason("'"), 'nomor kosong')
 })
+check("akhiran desimal Excel/pandas ('….0', '….00') → ditolak, bukan digit tambahan", () => {
+  // Dulu '.' dibuang semua: '6281234567890.0' jadi 14 digit & lolos sebagai
+  // nomor ASING yang valid — broadcast nyasar ke orang lain.
+  assert.match(badReason('6281234567890.0'), /format angka Excel/)
+  assert.match(badReason('081234567890.0'), /format angka Excel/)
+  assert.match(badReason('81234567890.00'), /format angka Excel/)
+  assert.match(badReason('6281234567890,00'), /format angka Excel/)
+  assert.match(badReason('+6281234567890.0'), /format angka Excel/)
+})
+check('pemisah titik per kelompok tetap valid', () => {
+  assert.equal(okPhone('0812.3456.7890'), '6281234567890')
+})
 check('huruf di nomor → tidak valid', () => {
   assert.match(badReason('0812abc'), /karakter/)
 })
@@ -152,6 +164,71 @@ check('baris yang mirip header tapi berisi nomor valid → bukan header', () => 
   const r = parseContactTable('Nama Budi,081234567890\nSiti,081298765432')
   assert.equal(r.hasHeader, false)
   assert.equal(r.rows.length, 2)
+})
+check("header 'Nama WA,Nomor WA' → kolom nomor = Nomor WA (dinilai dari isi)", () => {
+  const r = parseContactTable('Nama WA,Nomor WA\nBudi,081234567890\nSiti,081298765432')
+  assert.equal(r.phoneColumn, 1)
+  assert.equal(r.nameColumn, 0)
+  assert.equal(buildImportPlan(r.rows).valid.length, 2)
+})
+check("header 'Nama Kontak WhatsApp,Nomor' → nomor kolom 1, nama kolom 0", () => {
+  const r = parseContactTable('Nama Kontak WhatsApp,Nomor\nBudi,081234567890')
+  assert.equal(r.phoneColumn, 1)
+  assert.equal(r.nameColumn, 0)
+})
+check("ekspor order 'Nomor Order,Nama Pembeli,No HP' → No HP & Nama Pembeli", () => {
+  const r = parseContactTable(
+    'Nomor Order,Nama Pembeli,No HP\nINV-0001,Budi,081234567890\n10023,Siti,081298765432',
+  )
+  assert.equal(r.phoneColumn, 2)
+  assert.equal(r.nameColumn, 1)
+  assert.deepEqual(r.rows[0], { line: 2, name: 'Budi', phoneRaw: '081234567890' })
+})
+check("'Nama,Telepon Rumah,No WA' → No WA (telepon rumah bukan nomor WA)", () => {
+  const r = parseContactTable('Nama,Telepon Rumah,No WA\nBudi,022-1234567,081234567890')
+  assert.equal(r.phoneColumn, 2)
+  assert.equal(r.nameColumn, 0)
+})
+check("'Nama,Telepon Rumah,No WA' dua-duanya ponsel → utamakan header WA", () => {
+  const r = parseContactTable('Nama,Telepon Rumah,No WA\nBudi,081111111111,081234567890')
+  assert.equal(r.phoneColumn, 2)
+})
+check("'Nama Produk,Nama Pembeli,No HP' → nama = pembeli, bukan produk", () => {
+  const r = parseContactTable('Nama Produk,Nama Pembeli,No HP\nKaos,Budi,081234567890')
+  assert.equal(r.nameColumn, 1)
+  assert.equal(r.rows[0]?.name, 'Budi')
+})
+check("'Username,No HP' → username bukan kolom nama", () => {
+  const r = parseContactTable('Username,Nama Lengkap,No HP\nbudi99,Budi,081234567890')
+  assert.equal(r.nameColumn, 1)
+})
+check('ekspor Google Contacts (Phonetic, Phone 1 - Label/Value)', () => {
+  const r = parseContactTable(
+    'First Name,Middle Name,Last Name,Phonetic First Name,Phone 1 - Label,Phone 1 - Value\n' +
+      'Budi,,Santoso,,Mobile,+62 812-3456-7890\n' +
+      'Siti,,,,Mobile,0812 9876 5432',
+  )
+  assert.equal(r.phoneColumn, 5)
+  assert.equal(r.nameColumn, 0)
+  assert.equal(buildImportPlan(r.rows).valid.length, 2)
+})
+check('ekspor Outlook (Home Phone sebelum Mobile Phone)', () => {
+  const r = parseContactTable(
+    'First Name,Last Name,Home Phone,Mobile Phone\nBudi,Santoso,,081234567890\nSiti,,(022) 1234567,081298765432',
+  )
+  assert.equal(r.phoneColumn, 3)
+  assert.equal(r.nameColumn, 0)
+})
+check('header nomor tanpa satu pun nomor valid → tetap kolom header (alasan jelas)', () => {
+  const r = parseContactTable('Nama,No HP\nBudi,6.28123E+12\nSiti,6.28129E+12')
+  assert.equal(r.phoneColumn, 1)
+  assert.match(buildImportPlan(r.rows).invalid[0]?.reason ?? '', /format angka Excel/)
+})
+check('header tanpa kolom nomor yang dikenali → kolom nomor dideteksi dari isi', () => {
+  const r = parseContactTable('Nama,Kontak\nBudi,081234567890')
+  assert.equal(r.hasHeader, true)
+  assert.equal(r.phoneColumn, 1)
+  assert.equal(r.nameColumn, 0)
 })
 check('teks kosong → tanpa baris', () => {
   const r = parseContactTable('   \n\n')
