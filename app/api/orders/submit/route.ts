@@ -13,6 +13,7 @@
 // di scope user-pemilik-form, dengan source PUBLIC_FORM.
 import { jsonError, jsonOk } from '@/lib/api'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
+import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { notifyNewOrder } from '@/lib/services/order-notif'
 import { createTripayForOrder } from '@/lib/services/order-payment'
@@ -214,9 +215,12 @@ export async function POST(req: Request) {
     // 6. Find existing contact by phone (best-effort linking ke WA contact).
     // Customer publik tidak selalu punya kontak WA → contactId null OK.
     const phoneNorm = normalizePhone(data.customerPhone)
+    // Banyak baris per nomor (satu per sesi WA, mis. hasil impor kontak) →
+    // tautkan ke percakapan terbaru, bukan baris sembarang.
     const contact = await prisma.contact.findFirst({
       where: { userId: form.userId, phoneNumber: phoneNorm },
       select: { id: true },
+      orderBy: CONTACT_RECENCY_ORDER,
     })
 
     // 7. Generate invoice + uniqueCode (untuk TRANSFER, tambahkan ke total).
