@@ -1,14 +1,15 @@
 'use client'
 
-// Halaman /contacts: tabel + filter + search + slide-over detail.
+// Halaman /contacts: tabel + filter + search + slide-over detail + impor.
 import type { PipelineStage } from '@prisma/client'
-import { Loader2, Search, Trash2, Users } from 'lucide-react'
+import { Loader2, Search, Trash2, Upload, Users } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ContactDetailSheet } from '@/components/contacts/ContactDetailSheet'
+import { ImportContactsDialog } from '@/components/contacts/ImportContactsDialog'
 import { PipelineBadge } from '@/components/contacts/PipelineBadge'
-import type { ContactRow } from '@/components/contacts/types'
+import type { ContactRow, ImportSessionOption } from '@/components/contacts/types'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Pagination } from '@/components/shared/Pagination'
@@ -49,6 +50,7 @@ interface ContactsViewProps {
   initialContacts: ContactRow[]
   initialTags: string[]
   initialTotal: number
+  importSessions: ImportSessionOption[]
 }
 
 const STAGES: PipelineStage[] = [
@@ -68,6 +70,7 @@ export function ContactsView({
   initialContacts,
   initialTags,
   initialTotal,
+  importSessions,
 }: ContactsViewProps) {
   const [contacts, setContacts] = useState(initialContacts)
   const [tags, setTags] = useState(initialTags)
@@ -81,6 +84,7 @@ export function ContactsView({
   const [openId, setOpenId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ContactRow | null>(null)
   const [isDeleting, setDeleting] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const isFirst = useRef(true)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -152,6 +156,12 @@ export function ContactsView({
       <PageHeader
         title="Kontak"
         description="Kelola customer — ubah pipeline stage, tag, catatan, dan lihat history."
+        actions={
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload />
+            Impor Kontak
+          </Button>
+        }
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -332,6 +342,13 @@ export function ContactsView({
           noun="kontak"
         />
       )}
+
+      <ImportContactsDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        sessions={importSessions}
+        onImported={() => void fetchList()}
+      />
 
       <ContactDetailSheet
         contactId={openId}
