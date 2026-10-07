@@ -40,6 +40,8 @@ export interface ImportPreview {
   maxRows: number
   tag: string
   existingInSession: number
+  /** Nomor baru yang diblokir/opt-out di nomor WA lain — ikut ditandai. */
+  suppressedElsewhere: number
   hasHeader: boolean
   invalidSample: { line: number; raw: string; reason: string }[]
   /** Nomor sudah disamarkan server. */
@@ -51,6 +53,7 @@ export interface ImportResult {
   created: number
   updatedExisting: number
   alreadyTagged: number
+  suppressedFromOtherSessions: number
   invalidCount: number
   truncated: boolean
   tag: string

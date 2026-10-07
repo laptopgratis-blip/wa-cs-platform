@@ -46,6 +46,20 @@ export function ImportPreviewSummary({ preview }: { preview: ImportPreview }) {
           : ` dengan tag "${preview.tag}".`}
       </p>
 
+      {preview.suppressedElsewhere > 0 && (
+        <p className="text-warm-700 text-sm">
+          {preview.suppressedElsewhere.toLocaleString('id-ID')} nomor diblokir atau berhenti
+          langganan di nomor WhatsApp lain Anda — kontak barunya ikut ditandai sehingga tidak
+          menerima broadcast.
+        </p>
+      )}
+
+      <p className="text-muted-foreground text-xs">
+        Kontak baru masuk stage Baru. Broadcast yang menargetkan stage Baru — termasuk yang
+        sudah terjadwal — ikut menjangkau mereka; pakai tag impor untuk menargetkan secara
+        terpisah.
+      </p>
+
       {preview.truncated && (
         <div
           className={cn(

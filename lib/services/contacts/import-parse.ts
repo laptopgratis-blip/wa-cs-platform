@@ -451,3 +451,56 @@ export function planExistingContactUpdates(
 
   return { needTagIds, nameFills, updatedExisting, alreadyTagged }
 }
+
+// ─── Blacklist / opt-out lintas sesi ──────────────────────────────────────
+
+export interface ContactFlagRow {
+  phoneNumber: string
+  waSessionId: string
+  isBlacklisted: boolean
+  marketingOptOut: boolean
+}
+
+export interface SuppressionFlags {
+  isBlacklisted: boolean
+  marketingOptOut: boolean
+}
+
+/**
+ * Gabungan flag blacklist/opt-out per nomor dari baris di sesi LAIN milik
+ * user. Kontak baru hasil impor mewarisinya — broadcast memfilter per baris,
+ * jadi tanpa ini pelanggan yang sudah diblokir/berhenti langganan di nomor B
+ * tetap menerima broadcast dari nomor A setelah diimpor ulang.
+ */
+export function suppressionFlagsFromOtherSessions(
+  rows: ContactFlagRow[],
+  sessionId: string,
+): Map<string, SuppressionFlags> {
+  const out = new Map<string, SuppressionFlags>()
+  for (const r of rows) {
+    if (r.waSessionId === sessionId || !(r.isBlacklisted || r.marketingOptOut)) continue
+    const prev = out.get(r.phoneNumber) ?? { isBlacklisted: false, marketingOptOut: false }
+    out.set(r.phoneNumber, {
+      isBlacklisted: prev.isBlacklisted || r.isBlacklisted,
+      marketingOptOut: prev.marketingOptOut || r.marketingOptOut,
+    })
+  }
+  return out
+}
+
+/**
+ * Ringkasan pratinjau: nomor yang sudah ada di sesi tujuan, dan nomor BARU
+ * (belum ada di sesi tujuan) yang diblokir/opt-out di nomor lain.
+ */
+export function summarizeSessionOverlap(
+  rows: ContactFlagRow[],
+  sessionId: string,
+): { existingInSession: number; suppressedElsewhere: number } {
+  const inSession = new Set(
+    rows.filter((r) => r.waSessionId === sessionId).map((r) => r.phoneNumber),
+  )
+  const flagged = suppressionFlagsFromOtherSessions(rows, sessionId)
+  let suppressedElsewhere = 0
+  for (const phone of flagged.keys()) if (!inSession.has(phone)) suppressedElsewhere += 1
+  return { existingInSession: inSession.size, suppressedElsewhere }
+}

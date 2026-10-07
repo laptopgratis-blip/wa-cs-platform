@@ -7,13 +7,21 @@
 //   - kontak lama di sesi ini: hanya tag impor ditambahkan & nama diisi bila
 //     kosong. Stage/blacklist/opt-out dibiarkan — broadcast sudah
 //     mengecualikan blacklist & opt-out sendiri.
+//   - kontak BARU mewarisi blacklist/opt-out nomor itu di sesi lain milik
+//     user (broadcast memfilter per baris, tanpa cek lintas sesi).
 //
-// Performa: 10.000 baris = 20 chunk × (findMany + createMany + updateMany +
+// Performa: 10.000 baris = 20 chunk × (2 findMany + createMany + updateMany +
 // satu transaksi isi-nama). Tanpa N+1 untuk tag; isi nama dibatch per chunk.
 
 import { prisma } from '@/lib/prisma'
 
-import { planExistingContactUpdates } from './import-parse'
+import {
+  type ContactFlagRow,
+  type SuppressionFlags,
+  planExistingContactUpdates,
+  summarizeSessionOverlap,
+  suppressionFlagsFromOtherSessions,
+} from './import-parse'
 
 const CHUNK = 500
 
@@ -27,7 +35,16 @@ export interface ImportContactsResult {
   created: number
   updatedExisting: number
   alreadyTagged: number
+  /** Kontak baru yang ikut ditandai blacklist/opt-out dari nomor lain. */
+  suppressedFromOtherSessions: number
 }
+
+const FLAG_ROW_SELECT = {
+  phoneNumber: true,
+  waSessionId: true,
+  isBlacklisted: true,
+  marketingOptOut: true,
+} as const
 
 function chunked<T>(list: T[], size: number): T[][] {
   const out: T[][] = []
@@ -35,19 +52,41 @@ function chunked<T>(list: T[], size: number): T[][] {
   return out
 }
 
-/** Jumlah nomor (dari daftar) yang sudah punya kontak di sesi ini. */
-export async function countExistingInSession(input: {
+/**
+ * Baris kontak user untuk nomor-nomor ini yang relevan bagi impor: yang di
+ * sesi tujuan + yang di-blacklist/opt-out di sesi mana pun.
+ */
+async function loadFlagRows(
+  input: { userId: string; sessionId: string },
+  phones: string[],
+): Promise<ContactFlagRow[]> {
+  return prisma.contact.findMany({
+    where: {
+      userId: input.userId,
+      phoneNumber: { in: phones },
+      OR: [{ waSessionId: input.sessionId }, { isBlacklisted: true }, { marketingOptOut: true }],
+    },
+    select: FLAG_ROW_SELECT,
+  })
+}
+
+/**
+ * Pratinjau: jumlah nomor yang sudah punya kontak di sesi ini, dan nomor
+ * baru yang diblokir/opt-out di nomor WA lain (akan ikut ditandai).
+ */
+export async function previewSessionOverlap(input: {
   userId: string
   sessionId: string
   phones: string[]
-}): Promise<number> {
-  let total = 0
+}): Promise<{ existingInSession: number; suppressedElsewhere: number }> {
+  let existingInSession = 0
+  let suppressedElsewhere = 0
   for (const phones of chunked(input.phones, CHUNK)) {
-    total += await prisma.contact.count({
-      where: { userId: input.userId, waSessionId: input.sessionId, phoneNumber: { in: phones } },
-    })
+    const r = summarizeSessionOverlap(await loadFlagRows(input, phones), input.sessionId)
+    existingInSession += r.existingInSession
+    suppressedElsewhere += r.suppressedElsewhere
   }
-  return total
+  return { existingInSession, suppressedElsewhere }
 }
 
 async function importChunk(
@@ -66,6 +105,13 @@ async function importChunk(
   // Kontak baru → createMany berkunci unique (waSessionId, phoneNumber);
   // skipDuplicates menelan race dengan pesan masuk yang membuat baris sama.
   const missing = slice.filter((c) => !existingPhones.has(c.phone))
+  const flags =
+    missing.length > 0
+      ? suppressionFlagsFromOtherSessions(
+          await loadFlagRows(input, missing.map((c) => c.phone)),
+          input.sessionId,
+        )
+      : new Map<string, SuppressionFlags>()
   const created =
     missing.length > 0
       ? (
@@ -75,6 +121,7 @@ async function importChunk(
               phoneNumber: c.phone,
               name: c.name,
               tags: [input.tag],
+              ...(flags.get(c.phone) ?? {}),
             })),
             skipDuplicates: true,
           })
@@ -109,7 +156,12 @@ async function importChunk(
     )
   }
 
-  return { created, updatedExisting: plan.updatedExisting, alreadyTagged: plan.alreadyTagged }
+  return {
+    created,
+    updatedExisting: plan.updatedExisting,
+    alreadyTagged: plan.alreadyTagged,
+    suppressedFromOtherSessions: flags.size,
+  }
 }
 
 /** Impor kontak ke satu sesi WA. Pemanggil wajib memastikan sesi milik user. */
@@ -119,13 +171,19 @@ export async function importContactsForSession(input: {
   contacts: ImportContactInput[]
   tag: string
 }): Promise<ImportContactsResult> {
-  let total: ImportContactsResult = { created: 0, updatedExisting: 0, alreadyTagged: 0 }
+  let total: ImportContactsResult = {
+    created: 0,
+    updatedExisting: 0,
+    alreadyTagged: 0,
+    suppressedFromOtherSessions: 0,
+  }
   for (const slice of chunked(input.contacts, CHUNK)) {
     const r = await importChunk(input, slice)
     total = {
       created: total.created + r.created,
       updatedExisting: total.updatedExisting + r.updatedExisting,
       alreadyTagged: total.alreadyTagged + r.alreadyTagged,
+      suppressedFromOtherSessions: total.suppressedFromOtherSessions + r.suppressedFromOtherSessions,
     }
   }
   return total

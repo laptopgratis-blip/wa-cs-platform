@@ -13,7 +13,7 @@ import type { NextResponse } from 'next/server'
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit-memory'
-import { countExistingInSession, importContactsForSession } from '@/lib/services/contacts/import-contacts'
+import { importContactsForSession, previewSessionOverlap } from '@/lib/services/contacts/import-contacts'
 import {
   buildImportPlan,
   DEFAULT_IMPORT_MAX_ROWS,
@@ -88,14 +88,15 @@ export async function POST(req: Request) {
     if (dryRun) {
       // validCount 0 tetap 200 di pratinjau supaya UI bisa menampilkan
       // alasan per baris; impor sungguhan menolaknya (400) di bawah.
-      const existingInSession = await countExistingInSession({
+      const overlap = await previewSessionOverlap({
         userId,
         sessionId,
         phones: plan.valid.map((c) => c.phone),
       })
       return jsonOk({
         ...summary,
-        existingInSession,
+        existingInSession: overlap.existingInSession,
+        suppressedElsewhere: overlap.suppressedElsewhere,
         hasHeader: table.hasHeader,
         invalidSample: plan.invalid.slice(0, INVALID_SAMPLE),
         validSample: plan.valid

@@ -161,6 +161,11 @@ export function ImportContactsDialog({ open, onOpenChange, sessions, onImported 
     if (res.updatedExisting > 0) {
       parts.push(`${res.updatedExisting.toLocaleString('id-ID')} kontak lama diperbarui`)
     }
+    if (res.suppressedFromOtherSessions > 0) {
+      parts.push(
+        `${res.suppressedFromOtherSessions.toLocaleString('id-ID')} ikut diblokir/berhenti langganan seperti di nomor lain`,
+      )
+    }
     if (res.invalidCount > 0) {
       parts.push(`${res.invalidCount.toLocaleString('id-ID')} baris dilewati`)
     }

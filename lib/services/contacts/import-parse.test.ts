@@ -10,6 +10,8 @@ import {
   parseContactTable,
   planExistingContactUpdates,
   sanitizeImportName,
+  suppressionFlagsFromOtherSessions,
+  summarizeSessionOverlap,
   ymdInJakarta,
 } from './import-parse'
 
@@ -317,6 +319,40 @@ check('kontak lama: tag ditambah bila belum ada, nama diisi hanya bila kosong', 
 check('tanpa kontak lama → semua nol', () => {
   const plan = planExistingContactUpdates([], new Map(), 'impor-x')
   assert.deepEqual(plan, { needTagIds: [], nameFills: [], updatedExisting: 0, alreadyTagged: 0 })
+})
+
+console.log('contacts/import-parse: blacklist/opt-out lintas sesi')
+
+const flagRows = [
+  // Budi di-blacklist CS di nomor B → impor ke nomor A wajib ikut terblokir.
+  { phoneNumber: '6281', waSessionId: 'B', isBlacklisted: true, marketingOptOut: false },
+  // Siti opt-out di B, dan sudah punya baris (tanpa flag) di sesi tujuan A.
+  { phoneNumber: '6282', waSessionId: 'B', isBlacklisted: false, marketingOptOut: true },
+  { phoneNumber: '6282', waSessionId: 'A', isBlacklisted: false, marketingOptOut: false },
+  // Ani opt-out di C & blacklist di D → kedua flag digabung.
+  { phoneNumber: '6283', waSessionId: 'C', isBlacklisted: false, marketingOptOut: true },
+  { phoneNumber: '6283', waSessionId: 'D', isBlacklisted: true, marketingOptOut: false },
+  // Flag di sesi tujuan sendiri bukan urusan "lintas sesi".
+  { phoneNumber: '6284', waSessionId: 'A', isBlacklisted: true, marketingOptOut: false },
+  // Baris sesi lain tanpa flag tidak menghasilkan apa-apa.
+  { phoneNumber: '6285', waSessionId: 'B', isBlacklisted: false, marketingOptOut: false },
+]
+
+check('flag blacklist/opt-out dari sesi lain digabung per nomor', () => {
+  const flags = suppressionFlagsFromOtherSessions(flagRows, 'A')
+  assert.deepEqual(flags.get('6281'), { isBlacklisted: true, marketingOptOut: false })
+  assert.deepEqual(flags.get('6282'), { isBlacklisted: false, marketingOptOut: true })
+  assert.deepEqual(flags.get('6283'), { isBlacklisted: true, marketingOptOut: true })
+  assert.equal(flags.has('6284'), false)
+  assert.equal(flags.has('6285'), false)
+})
+check('ringkasan pratinjau: sudah ada di sesi & diblokir di nomor lain (baru saja)', () => {
+  // 6282 & 6284 sudah ada di A (tidak disentuh impor) → tidak dihitung
+  // sebagai "diblokir di nomor lain"; 6281 & 6283 baru dan ikut ditandai.
+  assert.deepEqual(summarizeSessionOverlap(flagRows, 'A'), {
+    existingInSession: 2,
+    suppressedElsewhere: 2,
+  })
 })
 
 console.log(`contacts/import-parse: ${passed} lulus`)
