@@ -10,6 +10,7 @@ import { allowedPlaceholdersForTrigger } from '@/lib/services/followup-placehold
 import {
   buildSendComponents,
   expectedBodyParamCount,
+  preflightSendParams,
   type TemplateLike,
 } from '@/lib/services/waba/template-payload'
 
@@ -238,7 +239,8 @@ export type MetaLinkValidation =
 /** Cek dukungan via builder kirim asli: follow-up hanya mengirim param body. */
 function unsupportedReason(template: MetaLinkTemplate, n: number): string | null {
   try {
-    buildSendComponents(template, { body: Array.from({ length: n }, () => 'contoh') })
+    // Header media CDN Meta di-resolve jadi media id saat kirim → anggap tersedia.
+    buildSendComponents(template, preflightSendParams(template, { body: Array.from({ length: n }, () => 'contoh') }))
     return null
   } catch (err) {
     return err instanceof Error ? err.message : String(err)

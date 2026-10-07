@@ -1,5 +1,6 @@
 // Kirim pesan TEMPLATE via Cloud API — satu-satunya jalur kirim template.
-// Alur: assertCanSendCloud → buildSendComponents → Graph POST messages →
+// Alur: assertCanSendCloud → (header media CDN Meta → media id) →
+// buildSendComponents → Graph POST messages →
 // error map (+ efek samping) → simpan Message (+ jejak billing) →
 // chargeMessageCredit (reference wamid, idempoten) → relay realtime.
 // Kontrak: NEVER throw.
@@ -12,9 +13,12 @@ import { markMarketingOptOut } from './billing-reconcile'
 import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
+import { mediaKindForHeader } from './header-media'
+import { resolveTemplateHeaderMedia } from './header-media-resolver'
 import { relayEmit } from './realtime'
 import {
   buildSendComponents,
+  hasExplicitHeaderMedia,
   renderTemplateText,
   TemplateParamError,
   type TemplateSendParams,
@@ -78,18 +82,33 @@ export async function sendCloudTemplate(input: SendCloudTemplateInput): Promise<
     const { session, template, to, expectedChargeRp, creditUserId } = check
     if (!template) return { success: false, error: 'Template tidak ditemukan', code: 'TEMPLATE_NOT_APPROVED' }
 
+    const credRes = await getWabaCredentialsBySession(session.id)
+    if (!credRes.ok) return { success: false, error: credRes.error, code: 'SESSION_UNAVAILABLE' }
+
+    // Header media yang URL-nya CDN Meta (hasil sync) DITOLAK pengunduh Meta
+    // (131053) → ubah jadi media id SEBELUM kirim. Gagal → berhenti di sini
+    // (tanpa wamid, tanpa charge); kode PARAM_MISMATCH = permanen (broadcast
+    // di-PAUSE dengan alasan jelas, follow-up tidak di-retry).
+    let params = input.params
+    if (mediaKindForHeader(template.headerType) && !hasExplicitHeaderMedia(input.params.header)) {
+      const media = await resolveTemplateHeaderMedia({
+        template,
+        phoneNumberId: session.phoneNumberId,
+        token: credRes.creds.token,
+      })
+      if (!media.ok) return { success: false, error: media.error, code: 'TEMPLATE_PARAM_MISMATCH' }
+      if (media.header) params = { ...input.params, header: media.header }
+    }
+
     let components: unknown[]
     try {
-      components = buildSendComponents(template, input.params)
+      components = buildSendComponents(template, params)
     } catch (err) {
       if (err instanceof TemplateParamError) {
         return { success: false, error: err.message, code: 'TEMPLATE_PARAM_MISMATCH' }
       }
       throw err
     }
-
-    const credRes = await getWabaCredentialsBySession(session.id)
-    if (!credRes.ok) return { success: false, error: credRes.error, code: 'SESSION_UNAVAILABLE' }
 
     const res = await graphRequest<CloudMessagesResponse>(`/${session.phoneNumberId}/messages`, {
       method: 'POST',

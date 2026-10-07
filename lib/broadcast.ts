@@ -49,7 +49,7 @@ export function renderRecipientParams(
   const r = (v: string) => flattenParamValue(renderBroadcastMessage(v, contact))
   return {
     ...(params.header
-      ? { header: { ...params.header, value: params.header.type === 'text' ? r(params.header.value) : params.header.value } }
+      ? { header: params.header.type === 'text' ? { ...params.header, value: r(params.header.value) } : { ...params.header } }
       : {}),
     body: (params.body ?? []).map(r),
     ...(params.buttons ? { buttons: params.buttons.map((b) => ({ ...b, value: r(b.value) })) } : {}),
