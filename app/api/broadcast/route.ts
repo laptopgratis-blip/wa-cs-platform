@@ -93,7 +93,8 @@ export async function POST(req: Request) {
       return jsonError('Pesan tidak boleh kosong', 400)
     }
 
-    // Hitung jumlah target (MARKETING Cloud → kecualikan opt-out).
+    // Hitung jumlah target (MARKETING Cloud → kecualikan opt-out). targetAll
+    // sudah dikosongkan schema → tags & stages [] = semua kontak sesi ini.
     const totalTargets = await prisma.contact.count({
       where: buildTargetWhere({
         userId: session.user.id,

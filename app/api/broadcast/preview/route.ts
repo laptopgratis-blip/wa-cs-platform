@@ -1,4 +1,5 @@
 // GET /api/broadcast/preview?waSessionId=...&tags=a,b&stages=NEW,PROSPECT[&templateId=]
+//     /api/broadcast/preview?waSessionId=...&all=1  → semua kontak di nomor itu
 // Hitung jumlah kontak yang akan menerima broadcast — dipakai form untuk
 // preview "Akan dikirim ke X kontak". Dengan templateId (Cloud API): juga
 // jumlah opt-out yang dikecualikan (MARKETING), estimasi kredit, saldo.
@@ -33,15 +34,21 @@ export async function GET(req: Request) {
   const waSessionId = url.searchParams.get('waSessionId')
   if (!waSessionId) return jsonError('waSessionId wajib')
   const templateId = url.searchParams.get('templateId')
+  // all=1 → target kosong = semua kontak sesi (buildTargetWhere tanpa OR).
+  const targetAll = url.searchParams.get('all') === '1'
 
-  const tags = (url.searchParams.get('tags') ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const stages = (url.searchParams.get('stages') ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s): s is Stage => (VALID_STAGES as readonly string[]).includes(s))
+  const tags = targetAll
+    ? []
+    : (url.searchParams.get('tags') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+  const stages = targetAll
+    ? []
+    : (url.searchParams.get('stages') ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s): s is Stage => (VALID_STAGES as readonly string[]).includes(s))
 
   try {
     const wa = await prisma.whatsappSession.findFirst({
@@ -50,7 +57,7 @@ export async function GET(req: Request) {
     })
     if (!wa) return jsonError('WhatsApp session tidak ditemukan', 404)
 
-    if (tags.length === 0 && stages.length === 0) {
+    if (!targetAll && tags.length === 0 && stages.length === 0) {
       return jsonOk({ count: 0, excludedOptOut: 0, estimatedCreditRp: 0, balanceRp: null })
     }
 

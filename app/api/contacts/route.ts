@@ -4,6 +4,7 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { listContactTags } from '@/lib/services/contacts/tags'
 import { pipelineEnum } from '@/lib/validations/contact'
 
 export async function GET(req: Request) {
@@ -60,14 +61,9 @@ export async function GET(req: Request) {
       prisma.contact.count({ where: where as never }),
     ])
 
-    // Tag list unik untuk dropdown filter (max 50 tag teratas).
-    const allTags = await prisma.contact.findMany({
-      where: { userId: session.user.id },
-      select: { tags: true },
-      take: 500,
-    })
-    const tagSet = new Set<string>()
-    for (const c of allTags) for (const t of c.tags) tagSet.add(t)
+    // Tag list unik untuk dropdown filter (DISTINCT, bukan sampel 500 kontak —
+    // tag hasil impor wajib selalu muncul).
+    const tags = await listContactTags(session.user.id)
 
     return jsonOk({
       contacts: contacts.map((c) => ({
@@ -76,7 +72,7 @@ export async function GET(req: Request) {
         createdAt: c.createdAt.toISOString(),
       })),
       total,
-      tags: [...tagSet].sort(),
+      tags,
     })
   } catch (err) {
     console.error('[GET /api/contacts] gagal:', err)

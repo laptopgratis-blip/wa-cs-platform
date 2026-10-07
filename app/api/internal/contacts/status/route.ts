@@ -11,6 +11,7 @@ import { z } from 'zod'
 
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
+import { findContactPreferSession } from '@/lib/services/contacts/session-lookup'
 
 const bodySchema = z.object({
   sessionId: z.string().min(1),
@@ -32,9 +33,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Resolve userId dari sessionId, lalu cari kontak by userId+phoneNumber
-    // (sama logika dengan /api/internal/messages — kontak unik per user, bukan
-    // per session, supaya pindah session tidak bikin duplikat).
+    // Resolve userId dari sessionId, lalu cari kontak: baris sesi ini dulu,
+    // baru lintas sesi berurut recency (sama urutan dengan saveMessage) —
+    // baris hasil impor kontak di nomor lain tidak boleh menutupi status
+    // takeover percakapan nyata.
     const wa = await prisma.whatsappSession.findUnique({
       where: { id: body.sessionId },
       select: { userId: true },
@@ -43,10 +45,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, data: null })
     }
 
-    const contact = await prisma.contact.findFirst({
-      where: { userId: wa.userId, phoneNumber: body.phoneNumber },
-      select: { id: true, aiPaused: true },
-    })
+    const contact = await findContactPreferSession(
+      (args) => prisma.contact.findFirst({ ...args, select: { id: true, aiPaused: true } }),
+      { userId: wa.userId, sessionId: body.sessionId, phoneNumber: body.phoneNumber },
+    )
     if (!contact) {
       return NextResponse.json({ success: true, data: null })
     }

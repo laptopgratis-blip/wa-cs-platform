@@ -9,6 +9,7 @@
 // atas lib yang sama.
 
 import { prisma } from '@/lib/prisma'
+import { findContactPreferSession } from '@/lib/services/contacts/session-lookup'
 import { generateCsReply } from '@/lib/services/cs-reply-ai'
 import {
   applyFollowupStop,
@@ -113,10 +114,12 @@ export async function runCsPipeline(
   let history: SavedMessageHistoryItem[]
 
   if (input.skipSave) {
-    const contact = await prisma.contact.findFirst({
-      where: { userId, phoneNumber: input.phoneNumber },
-      select: { id: true, aiPaused: true },
-    })
+    // Baris sesi pesan dulu, lalu lintas sesi berurut recency — jangan sampai
+    // baris impor kosong (aiPaused false) terbaca saat CS sedang takeover.
+    const contact = await findContactPreferSession(
+      (args) => prisma.contact.findFirst({ ...args, select: { id: true, aiPaused: true } }),
+      { userId, sessionId: input.sessionId, phoneNumber: input.phoneNumber },
+    )
     if (!contact) return stop('save_message_failed', 'kontak drain tidak ditemukan')
     contactId = contact.id
     aiPaused = contact.aiPaused

@@ -1,12 +1,14 @@
-// Halaman /contacts — list semua kontak user dengan filter & search.
+// Halaman /contacts — list semua kontak user dengan filter & search, plus
+// impor kontak (CSV / tempel spreadsheet) ke salah satu nomor WA aktif.
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
 import { ContactsView } from '@/components/contacts/ContactsView'
-import type { ContactRow } from '@/components/contacts/types'
+import type { ContactRow, ImportSessionOption } from '@/components/contacts/types'
 import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listContactTags } from '@/lib/services/contacts/tags'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +18,7 @@ export default async function ContactsPage() {
 
   const userId = session.user.id
 
-  const [contacts, total, allContacts] = await Promise.all([
+  const [contacts, total, tags, sessions] = await Promise.all([
     prisma.contact.findMany({
       where: { userId },
       orderBy: [{ lastMessageAt: 'desc' }, { createdAt: 'desc' }],
@@ -36,15 +38,15 @@ export default async function ContactsPage() {
       },
     }),
     prisma.contact.count({ where: { userId } }),
-    prisma.contact.findMany({
-      where: { userId },
-      select: { tags: true },
-      take: 500,
+    listContactTags(userId),
+    prisma.whatsappSession.findMany({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, displayName: true, phoneNumber: true, provider: true, status: true },
     }),
   ])
 
-  const tagSet = new Set<string>()
-  for (const c of allContacts) for (const t of c.tags) tagSet.add(t)
+  const importSessions: ImportSessionOption[] = sessions
 
   const initialContacts: ContactRow[] = contacts.map((c) => ({
     id: c.id,
@@ -64,8 +66,9 @@ export default async function ContactsPage() {
     <PageContainer width="wide">
       <ContactsView
         initialContacts={initialContacts}
-        initialTags={[...tagSet].sort()}
+        initialTags={tags}
         initialTotal={total}
+        importSessions={importSessions}
       />
     </PageContainer>
   )

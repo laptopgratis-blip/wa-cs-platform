@@ -20,6 +20,7 @@
 // buta provider di pemanggil.
 import type { WaProvider } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 
 export async function resolveConnectedSessionId(
   userId: string,
@@ -116,7 +117,7 @@ export async function listSenderCandidates(input: {
     const c = await prisma.contact.findFirst({
       where: { userId: input.userId, phoneNumber: phone },
       select: { waSessionId: true },
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: CONTACT_RECENCY_ORDER,
     })
     contactSessionId = c?.waSessionId ?? null
   }

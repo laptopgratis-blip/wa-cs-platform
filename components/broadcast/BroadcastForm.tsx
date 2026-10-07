@@ -1,7 +1,7 @@
 'use client'
 
-// Form buat broadcast: pilih WA session, pesan, target (tags & stages),
-// jadwal. Live preview jumlah penerima.
+// Form buat broadcast: pilih WA session, pesan, target (semua kontak di
+// nomor itu, atau tags & stages), jadwal. Live preview jumlah penerima.
 // Sesi Baileys: pesan bebas dengan {nama}/{nomor}.
 // Sesi Cloud API (Trek 2B): pilih template Meta APPROVED + parameter
 // (boleh {nama}/{nomor}) + preview + estimasi Kredit Pesan vs saldo.
@@ -76,9 +76,11 @@ export function BroadcastForm({
   const [message, setMessage] = useState(DEFAULT_MESSAGE)
   const [tags, setTags] = useState<string[]>([])
   const [stages, setStages] = useState<PipelineStage[]>([])
+  // Semua kontak di nomor pengirim — tag & stage diabaikan (disimpan kosong).
+  const [targetAll, setTargetAll] = useState(false)
   const [scheduleNow, setScheduleNow] = useState(true)
   const [scheduledAt, setScheduledAt] = useState('')
-  const [preview, setPreview] = useState<PreviewInfo | null>(null)
+  const [fetchedPreview, setFetchedPreview] = useState<PreviewInfo | null>(null)
   const [isPreviewing, setPreviewing] = useState(false)
   const [isSubmitting, setSubmitting] = useState(false)
 
@@ -97,6 +99,7 @@ export function BroadcastForm({
     [sessions, waSessionId],
   )
   const isCloud = session?.provider === 'CLOUD_API'
+  const hasTarget = targetAll || tags.length > 0 || stages.length > 0
   const template = useMemo(
     () => templates.find((t) => t.id === templateId) ?? null,
     [templates, templateId],
@@ -153,7 +156,7 @@ export function BroadcastForm({
       (isCloud
         ? Boolean(template) && paramsComplete(template!, templateParams)
         : message.trim().length > 0) &&
-      (tags.length > 0 || stages.length > 0),
+      hasTarget,
     [
       name,
       waSessionId,
@@ -161,31 +164,33 @@ export function BroadcastForm({
       template,
       templateParams,
       message,
-      tags,
-      stages,
+      hasTarget,
     ],
   )
 
-  // Preview jumlah penerima — debounced 400ms.
+  // Preview jumlah penerima — debounced 400ms. Tanpa target, preview
+  // diturunkan jadi null saat render (bukan setState di effect).
+  const preview = waSessionId && hasTarget ? fetchedPreview : null
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (!waSessionId || (tags.length === 0 && stages.length === 0)) {
-      setPreview(null)
-      return
-    }
+    if (!waSessionId || !hasTarget) return
     debounceRef.current = setTimeout(async () => {
       setPreviewing(true)
       try {
         const params = new URLSearchParams({ waSessionId })
-        if (tags.length > 0) params.set('tags', tags.join(','))
-        if (stages.length > 0) params.set('stages', stages.join(','))
+        if (targetAll) {
+          params.set('all', '1')
+        } else {
+          if (tags.length > 0) params.set('tags', tags.join(','))
+          if (stages.length > 0) params.set('stages', stages.join(','))
+        }
         if (isCloud && templateId) params.set('templateId', templateId)
         const res = await fetch(`/api/broadcast/preview?${params}`)
         const json = (await res.json()) as {
           success: boolean
           data?: PreviewInfo
         }
-        if (json.success && json.data) setPreview(json.data)
+        if (json.success && json.data) setFetchedPreview(json.data)
       } finally {
         setPreviewing(false)
       }
@@ -193,7 +198,7 @@ export function BroadcastForm({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }, [waSessionId, tags, stages, isCloud, templateId])
+  }, [waSessionId, hasTarget, targetAll, tags, stages, isCloud, templateId])
 
   function toggleTag(t: string) {
     setTags((prev) =>
@@ -215,8 +220,9 @@ export function BroadcastForm({
         message: isCloud ? '' : message.trim(),
         templateId: isCloud ? templateId : null,
         templateParams: isCloud ? templateParams : null,
-        targetTags: tags,
-        targetStages: stages,
+        targetAll,
+        targetTags: targetAll ? [] : tags,
+        targetStages: targetAll ? [] : stages,
         scheduledAt:
           !scheduleNow && scheduledAt
             ? new Date(scheduledAt).toISOString()
@@ -243,6 +249,7 @@ export function BroadcastForm({
       setMessage(DEFAULT_MESSAGE)
       setTags([])
       setStages([])
+      setTargetAll(false)
       setScheduleNow(true)
       setScheduledAt('')
       if (template) setTemplateParams(emptyParamsFor(template))
@@ -405,13 +412,35 @@ export function BroadcastForm({
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex items-start gap-2 rounded-md border p-3">
+          <Checkbox
+            id="bc-all"
+            checked={targetAll}
+            onCheckedChange={(v) => setTargetAll(Boolean(v))}
+          />
+          <div className="space-y-1">
+            <Label htmlFor="bc-all" className="cursor-pointer">
+              Semua kontak di nomor ini
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              Kirim ke seluruh kontak nomor pengirim, termasuk hasil impor
+              (kecuali yang diblokir
+              {isCloud ? '; template Marketing juga melewati yang berhenti menerima promo' : ''}).
+              Pilihan tag & stage diabaikan.
+            </p>
+          </div>
+        </div>
+
+        <div
+          className={`grid gap-4 md:grid-cols-2 ${targetAll ? 'opacity-50' : ''}`}
+          aria-disabled={targetAll}
+        >
           <div className="space-y-2">
             <Label>Target — Tags</Label>
             {availableTags.length === 0 ? (
               <p className="bg-muted/30 text-muted-foreground rounded-md border p-3 text-xs">
                 Belum ada kontak yang punya tag. Tambahkan tag di halaman
-                Contacts.
+                Kontak, atau impor kontak dengan tag.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2 rounded-md border p-3">
@@ -423,6 +452,7 @@ export function BroadcastForm({
                     <Checkbox
                       checked={tags.includes(t)}
                       onCheckedChange={() => toggleTag(t)}
+                      disabled={targetAll}
                     />
                     {t}
                   </label>
@@ -442,6 +472,7 @@ export function BroadcastForm({
                   <Checkbox
                     checked={stages.includes(s)}
                     onCheckedChange={() => toggleStage(s)}
+                    disabled={targetAll}
                   />
                   {PIPELINE_LABELS[s]}
                 </label>

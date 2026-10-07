@@ -12,6 +12,7 @@
 
 import type { MetaTemplateCategory, WabaTemplate } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 import { MESSAGE_CREDIT_BILLING_ENABLED } from '@/lib/billing/message-credit-mode'
 import {
   formatRp,
@@ -113,7 +114,7 @@ export async function assertCanSendCloud(input: {
   const contactRow = await prisma.contact.findFirst({
     where: { userId: row.userId, phoneNumber: to },
     select: { id: true, phoneNumber: true, windowExpiresAt: true, isBlacklisted: true, marketingOptOut: true },
-    orderBy: { lastMessageAt: 'desc' },
+    orderBy: CONTACT_RECENCY_ORDER,
   })
   const contact: ComplianceContact | null = contactRow
     ? {
