@@ -14,6 +14,7 @@ import type { SenderCandidate } from '@/lib/wa-session'
 import { waService } from '@/lib/wa-service'
 import { isWindowOpen } from '@/lib/services/waba/compliance'
 import { prisma } from '@/lib/prisma'
+import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 import {
   sendCloudTemplate,
   type TemplateSendPurpose,
@@ -172,7 +173,7 @@ async function cloudWindowOpen(userId: string, to: string): Promise<boolean> {
   const c = await prisma.contact.findFirst({
     where: { userId, phoneNumber: phone },
     select: { windowExpiresAt: true },
-    orderBy: { lastMessageAt: 'desc' },
+    orderBy: CONTACT_RECENCY_ORDER,
   })
   return isWindowOpen(c?.windowExpiresAt)
 }

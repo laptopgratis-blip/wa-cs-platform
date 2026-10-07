@@ -4,6 +4,7 @@
 
 import { Prisma, type MessageRole, type MessageStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 import { emitWebhookEvent } from '@/lib/services/webhooks/dispatch'
 
 // Window customer service Meta: 24 jam sejak pesan masuk terakhir.
@@ -139,10 +140,12 @@ export async function saveMessage(
   })
   if (!contact) {
     // (2) Baru cari lintas sesi — deterministik: percakapan TERBARU yang
-    //     di-repin, bukan baris sembarang.
+    //     di-repin, bukan baris sembarang. NULL di akhir: baris hasil impor
+    //     kontak (belum pernah bercakap) tidak boleh menang atas percakapan
+    //     nyata di sesi lain.
     contact = await prisma.contact.findFirst({
       where: { userId: wa.userId, phoneNumber },
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: CONTACT_RECENCY_ORDER,
     })
   }
   let contactCreated = false
