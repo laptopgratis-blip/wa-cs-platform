@@ -8,6 +8,7 @@ import {
   normalizeImportPhone,
   normalizeImportTag,
   parseContactTable,
+  planExistingContactUpdates,
   sanitizeImportName,
   ymdInJakarta,
 } from './import-parse'
@@ -87,8 +88,8 @@ check('kosong / null → null', () => {
   assert.equal(sanitizeImportName('   '), null)
   assert.equal(sanitizeImportName(null), null)
 })
-check('dipotong maks 100 karakter', () => {
-  assert.equal(sanitizeImportName('a'.repeat(150))?.length, 100)
+check('dipotong maks 80 karakter (selaras contactUpdateSchema)', () => {
+  assert.equal(sanitizeImportName('a'.repeat(150))?.length, 80)
 })
 
 console.log('contacts/import-parse: parseContactTable')
@@ -197,7 +198,8 @@ check('tag kosong → impor-YYYYMMDD', () => {
 check('tag di-slug: huruf kecil, spasi → -, karakter aneh dibuang', () => {
   assert.equal(normalizeImportTag('Pelanggan Lama 2024!', '20261007'), 'pelanggan-lama-2024')
   assert.equal(normalizeImportTag('vip:reseller_jkt', '20261007'), 'vip:reseller_jkt')
-  assert.equal(normalizeImportTag('a'.repeat(60), '20261007').length, 40)
+  // Maks 30 = batas tag di contactUpdateSchema (edit kontak tidak boleh gagal).
+  assert.equal(normalizeImportTag('a'.repeat(60), '20261007').length, 30)
 })
 check('ymdInJakarta pakai zona WIB', () => {
   // 2026-10-06 18:30 UTC = 2026-10-07 01:30 WIB
@@ -206,6 +208,38 @@ check('ymdInJakarta pakai zona WIB', () => {
 check('maskImportPhone menyamarkan bagian tengah', () => {
   assert.equal(maskImportPhone('6281234567890'), '62812****7890')
   assert.equal(maskImportPhone('123'), '***')
+})
+
+console.log('contacts/import-parse: planExistingContactUpdates')
+
+check('kontak lama: tag ditambah bila belum ada, nama diisi hanya bila kosong', () => {
+  const plan = planExistingContactUpdates(
+    [
+      { id: 'a', phoneNumber: '6281', name: null, tags: ['vip'] },
+      { id: 'b', phoneNumber: '6282', name: 'Lama', tags: ['impor-x'] },
+      { id: 'c', phoneNumber: '6283', name: '', tags: ['impor-x'] },
+      { id: 'd', phoneNumber: '6284', name: null, tags: [] },
+    ],
+    new Map([
+      ['6281', 'Budi'],
+      ['6282', 'Baru'],
+      ['6283', 'Siti'],
+      ['6284', null],
+    ]),
+    'impor-x',
+  )
+  assert.deepEqual(plan.needTagIds, ['a', 'd'])
+  assert.deepEqual(plan.nameFills, [
+    { id: 'a', name: 'Budi' },
+    { id: 'c', name: 'Siti' },
+  ])
+  // a (tag+nama), c (nama), d (tag) → 3 diperbarui; b sudah bertag & bernama.
+  assert.equal(plan.updatedExisting, 3)
+  assert.equal(plan.alreadyTagged, 1)
+})
+check('tanpa kontak lama → semua nol', () => {
+  const plan = planExistingContactUpdates([], new Map(), 'impor-x')
+  assert.deepEqual(plan, { needTagIds: [], nameFills: [], updatedExisting: 0, alreadyTagged: 0 })
 })
 
 console.log(`contacts/import-parse: ${passed} lulus`)

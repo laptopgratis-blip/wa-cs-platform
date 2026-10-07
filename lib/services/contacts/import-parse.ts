@@ -34,8 +34,10 @@ export interface ImportPlan {
 }
 
 export const DEFAULT_IMPORT_MAX_ROWS = 10_000
-const NAME_MAX = 100
-const TAG_MAX = 40
+// Selaras contactUpdateSchema (nama ≤80, tag ≤30) — kalau lebih panjang,
+// edit kontak hasil impor di dashboard akan ditolak validasi.
+const NAME_MAX = 80
+const TAG_MAX = 30
 const DETECT_SAMPLE_ROWS = 50
 const INTL_MIN_DIGITS = 10
 const INTL_MAX_DIGITS = 15
@@ -89,7 +91,7 @@ export function normalizeImportPhone(raw: string): NormalizedPhoneResult {
   return { ok: true, phone: digits }
 }
 
-/** Rapikan nama: buang control char, rapatkan spasi, maks 100 karakter. */
+/** Rapikan nama: buang control char, rapatkan spasi, maks 80 karakter. */
 export function sanitizeImportName(raw: string | null | undefined): string | null {
   if (!raw) return null
   const clean = raw.replace(CONTROL_CHARS_RE, ' ').replace(/\s+/g, ' ').trim()
@@ -321,4 +323,51 @@ export function ymdInJakarta(date: Date): string {
 export function maskImportPhone(phone: string): string {
   if (phone.length < 9) return '***'
   return `${phone.slice(0, 5)}****${phone.slice(-4)}`
+}
+
+// ─── Gabung dengan kontak lama ────────────────────────────────────────────
+
+export interface ExistingContactSnapshot {
+  id: string
+  phoneNumber: string
+  name: string | null
+  tags: string[]
+}
+
+export interface ExistingContactUpdatePlan {
+  /** Kontak lama yang belum punya tag impor → tag ditambahkan. */
+  needTagIds: string[]
+  /** Kontak lama bernama kosong yang punya nama di file → nama diisi. */
+  nameFills: { id: string; name: string }[]
+  /** Jumlah kontak lama yang berubah (tag ditambah dan/atau nama diisi). */
+  updatedExisting: number
+  /** Kontak lama yang sudah bertag & tidak berubah sama sekali. */
+  alreadyTagged: number
+}
+
+/**
+ * Tentukan perubahan untuk kontak yang SUDAH ada di sesi tujuan. Hanya tag
+ * & nama kosong yang disentuh — stage/blacklist/opt-out/nama editan CS tetap.
+ */
+export function planExistingContactUpdates(
+  existing: ExistingContactSnapshot[],
+  incomingNames: Map<string, string | null>,
+  tag: string,
+): ExistingContactUpdatePlan {
+  const needTagIds: string[] = []
+  const nameFills: { id: string; name: string }[] = []
+  let updatedExisting = 0
+  let alreadyTagged = 0
+
+  for (const c of existing) {
+    const needsTag = !c.tags.includes(tag)
+    const incoming = incomingNames.get(c.phoneNumber) ?? null
+    const fillName = !c.name?.trim() && incoming ? incoming : null
+    if (needsTag) needTagIds.push(c.id)
+    if (fillName) nameFills.push({ id: c.id, name: fillName })
+    if (needsTag || fillName) updatedExisting += 1
+    else alreadyTagged += 1
+  }
+
+  return { needTagIds, nameFills, updatedExisting, alreadyTagged }
 }
