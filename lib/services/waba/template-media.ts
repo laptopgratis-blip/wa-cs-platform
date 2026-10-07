@@ -14,12 +14,10 @@ import path from 'node:path'
 import { getMetaConfig } from './config'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest, graphUploadBinary } from './graph'
+import { TEMPLATE_MEDIA_LIMITS } from './header-media'
 
-export const TEMPLATE_MEDIA_LIMITS = {
-  IMAGE: { maxBytes: 5 * 1024 * 1024, mimes: ['image/jpeg', 'image/png'] },
-  VIDEO: { maxBytes: 16 * 1024 * 1024, mimes: ['video/mp4'] },
-  DOCUMENT: { maxBytes: 100 * 1024 * 1024, mimes: ['application/pdf'] },
-} as const
+// Batas didefinisikan di helper pure header-media.ts (dipakai juga saat kirim).
+export { TEMPLATE_MEDIA_LIMITS }
 
 export type TemplateMediaKind = keyof typeof TEMPLATE_MEDIA_LIMITS
 
