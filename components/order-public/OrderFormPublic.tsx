@@ -397,18 +397,23 @@ export function OrderFormPublic({
     const phoneQ = searchParams?.get('phone')
     if (nameQ) setCustomerName((v) => v || nameQ)
     if (phoneQ) setCustomerPhone((v) => v || phoneQ)
+    // Form 1 produk → qty default 1 tanpa perlu klik "+" (qty 0 bikin bingung).
+    // ponytail: form multi-produk tetap 0, biar pembeli tak ikut beli semua.
     const productQ = searchParams?.get('product')
-    if (productQ) {
-      const p = products.find((x) => x.id === productQ)
-      if (p) {
-        const hasVariants = (p.variants?.length ?? 0) > 0
-        const variantQ = searchParams?.get('variant')
-        const key = hasVariants
-          ? lineKey(
-              p.id,
-              (p.variants!.find((x) => x.id === variantQ) ?? p.variants![0]).id,
-            )
-          : p.id
+    const p = productQ
+      ? products.find((x) => x.id === productQ)
+      : products.length === 1
+        ? products[0]
+        : undefined
+    if (p) {
+      const hasVariants = (p.variants?.length ?? 0) > 0
+      const variantQ = searchParams?.get('variant')
+      const v = hasVariants
+        ? (p.variants!.find((x) => x.id === variantQ) ?? p.variants![0])
+        : null
+      const stock = v ? v.stock : p.stock
+      const key = v ? lineKey(p.id, v.id) : p.id
+      if (stock == null || stock > 0) {
         setQty((q) => (q[key] ? q : { ...q, [key]: 1 }))
       }
     }
