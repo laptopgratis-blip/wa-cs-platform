@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
 import { smartSend } from '@/lib/services/wa-send/smart-send'
 import { listSenderCandidates } from '@/lib/wa-session'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
@@ -63,6 +64,8 @@ export async function POST(req: Request) {
         customerPhone: true,
         customerName: true,
         totalRp: true,
+        // Snapshot item — sumber CS WhatsApp per produk (pengirim notif).
+        items: true,
         paymentStatus: true,
         autoConfirmedBy: true,
       },
@@ -112,6 +115,7 @@ async function sendAutoPaidNotification(order: {
   customerPhone: string
   customerName: string
   totalRp: number
+  items: unknown
 }) {
   // Bug lama (2026-08): endpoint POST `${WA_SERVICE_URL}/send` TIDAK ADA di
   // wa-service (yang benar /sessions/:id/send-message) → notif tak pernah
@@ -120,8 +124,15 @@ async function sendAutoPaidNotification(order: {
   const phone = normalizePhone(order.customerPhone)
   if (!phone) return
 
+  // CS WhatsApp per produk: sesi CS produk di order ini didahulukan sebagai
+  // pengirim (mode lunak — tidak tersedia → urutan kandidat lama).
+  const orderCs = await loadOrderCs({
+    userId: order.userId,
+    items: order.items,
+  })
   const candidates = await listSenderCandidates({
     userId: order.userId,
+    preferredSessionId: orderCs.preferredSessionId,
     preferContactPhone: phone,
   })
   if (candidates.length === 0) return // user belum connect WA, skip diam-diam

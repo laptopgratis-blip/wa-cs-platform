@@ -8,6 +8,7 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 import { resolveTemplateVariables } from '@/lib/services/followup-variables'
+import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
 import { smartSend } from '@/lib/services/wa-send/smart-send'
 import { followupManualSendSchema } from '@/lib/validations/followup'
 import { listSenderCandidates } from '@/lib/wa-session'
@@ -53,8 +54,15 @@ export async function POST(req: Request, { params }: Params) {
 
     // Provider-aware (Trek 2B): Baileys / Cloud dalam window → teks; Cloud
     // di luar window → template INFO_GENERIC (bila APPROVED).
+    // CS WhatsApp per produk: sesi CS produk di order ini didahulukan sebagai
+    // pengirim (mode lunak — tidak tersedia → urutan kandidat lama).
+    const orderCs = await loadOrderCs({
+      userId: order.userId,
+      items: order.items,
+    })
     const candidates = await listSenderCandidates({
       userId: session.user.id,
+      preferredSessionId: orderCs.preferredSessionId,
       preferContactPhone: order.customerPhone,
     })
     if (candidates.length === 0) {
