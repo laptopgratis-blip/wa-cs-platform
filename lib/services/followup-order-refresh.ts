@@ -26,9 +26,10 @@
 // sebelum jadwal kirim).
 //
 // Keterbatasan yang disengaja: "hasil resolve lama" dihitung dengan template,
-// rekening dan profil toko SAAT INI. Bila salah satunya berubah sejak antrean
-// dibuat, pesan terlihat seperti editan manual → dibiarkan (nomor tujuan &
-// param tetap diperbarui). Lebih aman membiarkan daripada menimpa editan.
+// rekening, profil toko dan CS WhatsApp produk SAAT INI. Bila salah satunya
+// berubah sejak antrean dibuat, pesan terlihat seperti editan manual →
+// dibiarkan (nomor tujuan & param tetap diperbarui). Lebih aman membiarkan
+// daripada menimpa editan.
 //
 // NEVER throw — dipanggil best-effort dari PATCH /api/orders/[id]; kegagalan
 // di sini tidak boleh menggagalkan penyimpanan pesanan.
@@ -38,7 +39,7 @@ import type { UserOrder } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 import { refreshQueueItem } from './followup-order-refresh-item'
-import { loadSellerResolveExtras } from './followup-resolve-context'
+import { loadOrderResolveExtras } from './followup-resolve-context'
 import type { ResolveContext } from './followup-variables'
 
 export interface FollowUpRefreshResult {
@@ -81,7 +82,9 @@ export async function refreshPendingFollowUpsForOrder(input: {
     })
     if (!order) return NOTHING
 
-    const extras = await loadSellerResolveExtras(order.userId)
+    // extras membawa csNumber (CS WhatsApp per produk) SAAT INI — dipakai
+    // newCtx maupun oldCtx, sama seperti template/rekening/profil toko.
+    const extras = await loadOrderResolveExtras(order)
     const newCtx: ResolveContext = { order, user: order.user, ...extras }
     const oldCtx: ResolveContext = { ...newCtx, order: previousOrder }
 

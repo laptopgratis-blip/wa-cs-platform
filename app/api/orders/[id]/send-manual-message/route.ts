@@ -96,6 +96,8 @@ export async function POST(req: Request, { params }: Params) {
       user: order.user,
       bankAccounts,
       shippingProfile,
+      // {wa_admin} → nomor CS produk di order ini bila ada.
+      csNumber: orderCs.csNumber,
     })
 
     const send = await smartSend({
