@@ -34,10 +34,13 @@ export default async function ProductsPage() {
     },
   })
 
-  // Opsi "CS WhatsApp" per produk: nomor yang sedang terhubung + sesi yang
-  // sedang dipakai produk walau offline (supaya pilihan tersimpan tetap
-  // terlihat). Baris tanpa nomor (belum pernah pair) tidak diambil.
-  // Pengelompokan per nomor: lib/services/products/cs-session-options.ts.
+  // Opsi "CS WhatsApp" per produk: semua nomor yang masih terdaftar di akun
+  // (isActive=true, status APA PUN — nomor yang sedang offline karena token
+  // habis / menunggu scan ulang tetap bisa dipilih, berlabel "offline") +
+  // sesi yang sedang dipakai produk walau sudah dihapus (supaya pilihan
+  // tersimpan tetap terlihat). Baris tanpa nomor (belum pernah pair) tidak
+  // diambil. Pengelompokan per nomor & penanda offline/terhapus:
+  // lib/services/products/cs-session-options.ts.
   const csSessionIdsInUse = products.flatMap((p) =>
     p.csSessionId ? [p.csSessionId] : [],
   )
@@ -45,10 +48,7 @@ export default async function ProductsPage() {
     where: {
       userId: session.user.id,
       phoneNumber: { not: null },
-      OR: [
-        { status: 'CONNECTED', isActive: true },
-        { id: { in: csSessionIdsInUse } },
-      ],
+      OR: [{ isActive: true }, { id: { in: csSessionIdsInUse } }],
     },
     select: {
       id: true,

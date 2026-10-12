@@ -14,10 +14,13 @@ import {
 } from '@/components/ui/select'
 import {
   type CsSessionOption,
+  csSessionMetaLabel,
   csSessionOptionLabel,
   findCsSessionOption,
-  formatCsNumber,
+  selectableCsSessionOptions,
 } from '@/lib/services/products/cs-session-options'
+import { TONES } from '@/lib/ui-tones'
+import { cn } from '@/lib/utils'
 
 // Radix Select menolak value string kosong → sentinel untuk "tanpa CS".
 const FOLLOW_DEFAULT = '__none__'
@@ -30,18 +33,17 @@ interface ProductCsSectionProps {
   onChange: (csSessionId: string | null) => void
 }
 
-/** Meta kecil di kartu daftar produk: "CS: +62…" bila produk punya CS. */
+/**
+ * Meta kecil di kartu daftar produk: "CS: +62…" bila produk punya CS, dengan
+ * tanda "offline" / "sudah dihapus" supaya seller tahu nomornya bermasalah.
+ */
 export function ProductCsMeta({
   options,
   csSessionId,
 }: Pick<ProductCsSectionProps, 'options' | 'csSessionId'>) {
   const option = findCsSessionOption(options, csSessionId)
   if (!option) return null
-  return (
-    <p className="text-warm-500 text-xs">
-      CS: {formatCsNumber(option.phoneNumber)}
-    </p>
-  )
+  return <p className="text-warm-500 text-xs">{csSessionMetaLabel(option)}</p>
 }
 
 export function ProductCsSection({
@@ -49,16 +51,20 @@ export function ProductCsSection({
   csSessionId,
   onChange,
 }: ProductCsSectionProps) {
-  // Seller belum punya nomor WA tersambung → tidak ada yang bisa dipilih.
-  if (options.length === 0) return null
+  // Nomor yang sudah dihapus seller hanya tampil di produk yang memakainya.
+  const selectable = selectableCsSessionOptions(options, csSessionId)
 
   // Produk bisa menunjuk id sesi basi (nomor di-scan ulang) — tetap tampil
   // sebagai nomor yang sama. Nilai form TIDAK diubah sampai seller memilih.
-  const selected = findCsSessionOption(options, csSessionId)
+  const selected = findCsSessionOption(selectable, csSessionId)
   // Id tersimpan yang tidak dikenali sama sekali: tampilkan apa adanya supaya
   // tidak terlihat seolah "ikuti nomor utama" padahal masih tersimpan.
   const unknownId = csSessionId && !selected ? csSessionId : null
   const value = selected?.id ?? unknownId ?? FOLLOW_DEFAULT
+
+  // Seller belum punya nomor WA ber-nomor (dan produk ini tidak menyimpan
+  // pilihan apa pun) → tidak ada yang bisa dipilih.
+  if (selectable.length === 0 && !unknownId) return null
 
   return (
     <div className="space-y-2">
@@ -86,7 +92,7 @@ export function ProductCsSection({
               Nomor lama (sudah tidak tersedia)
             </SelectItem>
           )}
-          {options.map((option) => (
+          {selectable.map((option) => (
             <SelectItem key={option.id} value={option.id}>
               {csSessionOptionLabel(option)}
             </SelectItem>
@@ -98,6 +104,18 @@ export function ProductCsSection({
         WhatsApp di invoice mengarah ke nomor ini. Order berisi beberapa produk
         memakai CS produk pertama.
       </p>
+      {selected?.isRemoved && (
+        <p className={cn('text-xs', TONES.warning.text)}>
+          Nomor ini sudah dihapus dari akun, jadi order produk ini memakai nomor
+          utama. Pilih nomor lain atau kembalikan ke nomor utama.
+        </p>
+      )}
+      {selected && !selected.isRemoved && !selected.isConnected && (
+        <p className="text-warm-500 text-xs">
+          Nomor ini sedang offline: pesan otomatis dikirim dari nomor lain yang
+          terhubung sampai nomor ini tersambung lagi.
+        </p>
+      )}
     </div>
   )
 }

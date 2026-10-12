@@ -5,13 +5,26 @@
 // dropdown penuh nomor kembar, jadi opsi dikelompokkan per NOMOR — pola yang
 // sama dengan filter Inbox (lib/services/inbox/sender-options.ts).
 //
+// Tiga keadaan nomor (lihat juga resolveCsSender di orders/order-cs.ts):
+// - TERHUBUNG  : ada baris CONNECTED && isActive.
+// - OFFLINE    : masih terdaftar (ada baris isActive=true) tapi tidak
+//                CONNECTED — token habis (PAUSED), menunggu scan ulang,
+//                wa-service baru restart. Nomornya masih milik seller, jadi
+//                TETAP bisa dipilih (label "· offline").
+// - DIHAPUS    : semua barisnya isActive=false. "Hapus nomor" di /whatsapp
+//                adalah soft-delete — baris & phoneNumber tetap ada.
+//
 // Aturan:
 // - Sesi tanpa nomor (belum pernah pair) DIBUANG.
-// - Sebuah nomor jadi opsi bila punya baris CONNECTED && aktif, ATAU salah
-//   satu barisnya sedang dipakai produk (walau offline — supaya pilihan yang
-//   tersimpan tetap terlihat, tidak diam-diam tampil "ikuti nomor utama").
+// - Sebuah nomor jadi opsi bila masih terdaftar (terhubung/offline), ATAU
+//   sudah dihapus tapi salah satu barisnya sedang dipakai produk (supaya
+//   pilihan yang tersimpan tetap terlihat, tidak diam-diam tampil "ikuti
+//   nomor utama"). Opsi terhapus ditandai `isRemoved` — UI hanya
+//   menampilkannya di produk yang memakainya, tidak menawarkannya ke produk
+//   lain.
 // - Wakil nomor = baris CONNECTED && aktif terbaru; kalau tidak ada, baris
-//   terpakai terbaru. Id wakil inilah yang disimpan ke Product.csSessionId.
+//   belum-dihapus terbaru; kalau tidak ada juga, baris terpakai terbaru. Id
+//   wakil inilah yang disimpan ke Product.csSessionId.
 // - Baris lain senomor jadi `aliasIds`: produk yang masih menunjuk id basi
 //   tetap dikenali sebagai nomor yang sama.
 
@@ -37,6 +50,11 @@ export interface CsSessionOption {
   displayName: string | null
   provider: CsSessionProvider
   isConnected: boolean
+  /**
+   * Nomor sudah dihapus seller dari akun (tidak ada baris isActive=true).
+   * Order produk ber-CS nomor ini jatuh ke nomor utama.
+   */
+  isRemoved: boolean
 }
 
 function digitsOf(value: string | null): string {
@@ -77,8 +95,9 @@ export function buildCsSessionOptions(
   const options: CsSessionOption[] = []
   for (const [phone, rows] of byPhone) {
     const online = newest(rows.filter(isOnline))
+    const registered = newest(rows.filter((row) => row.isActive))
     const representative =
-      online ?? newest(rows.filter((row) => inUse.has(row.id)))
+      online ?? registered ?? newest(rows.filter((row) => inUse.has(row.id)))
     if (!representative) continue
     options.push({
       id: representative.id,
@@ -93,12 +112,14 @@ export function buildCsSessionOptions(
       provider:
         representative.provider === 'CLOUD_API' ? 'CLOUD_API' : 'BAILEYS',
       isConnected: online !== null,
+      isRemoved: registered === null,
     })
   }
-  // Nomor terhubung dulu; urutan asal dipertahankan di dalam tiap kelompok.
+  // Terhubung → offline → terhapus; urutan asal dipertahankan di tiap kelompok.
   return [
     ...options.filter((o) => o.isConnected),
-    ...options.filter((o) => !o.isConnected),
+    ...options.filter((o) => !o.isConnected && !o.isRemoved),
+    ...options.filter((o) => o.isRemoved),
   ]
 }
 
@@ -114,8 +135,27 @@ export function findCsSessionOption(
   )
 }
 
+/**
+ * Opsi yang ditawarkan di dialog SATU produk: semua nomor yang masih terdaftar
+ * + nomor terhapus hanya bila produk ini sendiri yang sedang memakainya
+ * (nomor yang sudah dilepas seller tidak boleh bisa dipilih produk lain).
+ */
+export function selectableCsSessionOptions(
+  options: readonly CsSessionOption[],
+  currentSessionId: string | null | undefined,
+): CsSessionOption[] {
+  const current = findCsSessionOption(options, currentSessionId)
+  return options.filter((o) => !o.isRemoved || o.id === current?.id)
+}
+
 export function formatCsNumber(phoneNumber: string): string {
   return `+${phoneNumber}`
+}
+
+/** Akhiran keadaan nomor: '' (terhubung) / ' · offline' / ' · sudah dihapus'. */
+function stateSuffix(option: CsSessionOption): string {
+  if (option.isRemoved) return ' · sudah dihapus'
+  return option.isConnected ? '' : ' · offline'
 }
 
 /** "Toko Kopi (+62812…) · WhatsApp Web · offline" */
@@ -124,5 +164,10 @@ export function csSessionOptionLabel(option: CsSessionOption): string {
   const who = option.displayName ? `${option.displayName} (${number})` : number
   const via =
     option.provider === 'CLOUD_API' ? 'Meta Cloud API' : 'WhatsApp Web'
-  return `${who} · ${via}${option.isConnected ? '' : ' · offline'}`
+  return `${who} · ${via}${stateSuffix(option)}`
+}
+
+/** Meta kartu daftar produk: "CS: +62812… · offline". */
+export function csSessionMetaLabel(option: CsSessionOption): string {
+  return `CS: ${formatCsNumber(option.phoneNumber)}${stateSuffix(option)}`
 }
