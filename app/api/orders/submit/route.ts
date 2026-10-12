@@ -16,6 +16,7 @@ import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { CONTACT_RECENCY_ORDER } from '@/lib/services/contacts/recency'
 import { generateQueueForOrder } from '@/lib/services/followup-engine'
 import { notifyNewOrder } from '@/lib/services/order-notif'
+import { toOrderPhoneDigits } from '@/lib/services/orders/customer-edit'
 import { createTripayForOrder } from '@/lib/services/order-payment'
 import {
   OngkirUnavailableError,
@@ -41,14 +42,6 @@ function generateInvoiceNumber(): string {
 
 function uniqueCode(): number {
   return Math.floor(100 + Math.random() * 900)  // 100-999
-}
-
-// Normalisasi nomor HP ke format Indonesia: 6281234567890
-function normalizePhone(input: string): string {
-  let p = input.replace(/[^\d]/g, '')
-  if (p.startsWith('0')) p = '62' + p.slice(1)
-  else if (p.startsWith('8')) p = '62' + p
-  return p
 }
 
 export async function POST(req: Request) {
@@ -214,7 +207,9 @@ export async function POST(req: Request) {
 
     // 6. Find existing contact by phone (best-effort linking ke WA contact).
     // Customer publik tidak selalu punya kontak WA → contactId null OK.
-    const phoneNorm = normalizePhone(data.customerPhone)
+    // Normalisasi nomor HP ke format Indonesia: 6281234567890. Helper dipakai
+    // bersama dengan edit data pelanggan di PATCH /api/orders/[id].
+    const phoneNorm = toOrderPhoneDigits(data.customerPhone)
     // Banyak baris per nomor (satu per sesi WA, mis. hasil impor kontak) →
     // tautkan ke percakapan terbaru, bukan baris sembarang.
     const contact = await prisma.contact.findFirst({
