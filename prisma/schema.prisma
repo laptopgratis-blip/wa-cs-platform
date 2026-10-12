@@ -407,6 +407,8 @@ model WhatsappSession {
   contacts   Contact[]
   messages   Message[]
   broadcasts Broadcast[]
+  // Produk yang memakai sesi ini sebagai nomor CS (Product.csSessionId).
+  csProducts Product[]   @relation("ProductCsSession")
 
   @@index([userId])
   @@index([status])
@@ -2254,10 +2256,24 @@ model Product {
   ebookId String? @unique
   ebook   Ebook?  @relation(fields: [ebookId], references: [id], onDelete: SetNull)
 
+  // CS WhatsApp per produk (2026-10-12). Kalau set → order yang berisi produk
+  // ini: pesan otomatis ke pelanggan dikirim DARI sesi ini, dan pelanggan
+  // diarahkan KE nomornya (tombol WhatsApp di invoice + {wa_admin}). null =
+  // ikuti nomor utama (perilaku lama). Order multi-produk memakai CS item
+  // PERTAMA yang punya CS — diturunkan live dari UserOrder.items, tanpa
+  // kolom di UserOrder (lib/services/orders/order-cs.ts). Scan ulang Baileys
+  // membuat baris sesi BARU, jadi id di sini bisa basi: resolver mencari
+  // sesi aktif bernomor sama milik user yang sama. "Hapus nomor" = soft-delete
+  // (isActive=false) → kolom ini TIDAK ikut null; resolver mengabaikan nomor
+  // yang sudah dihapus (order jatuh ke nomor toko).
+  csSessionId String?
+  csSession   WhatsappSession? @relation("ProductCsSession", fields: [csSessionId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, isActive])
+  @@index([csSessionId])
 }
 
 // Varian produk — opsional. Setiap baris = satu kombinasi varian dengan

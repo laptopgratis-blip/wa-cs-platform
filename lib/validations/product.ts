@@ -84,6 +84,10 @@ export const productCreateSchema = z
     // E-Book (2026-08-06). Kalau diisi → produk ini = e-book digital;
     // hook on-PAID grant EbookEntitlement. null = lepas link.
     ebookId: z.string().min(1).nullable().optional(),
+
+    // CS WhatsApp per produk (2026-10-12). id WhatsappSession milik seller;
+    // null = ikuti nomor utama. Kepemilikan sesi dicek di route.
+    csSessionId: z.string().min(1).max(64).nullable().optional(),
   })
   .refine(
     (v) => {
@@ -138,6 +142,8 @@ const productBaseSchema = z.object({
     .max(VARIANT_LIMIT_PER_PRODUCT),
   // E-Book — null = lepas link produk↔e-book.
   ebookId: z.string().min(1).nullable(),
+  // CS WhatsApp per produk — null = lepas (ikuti nomor utama).
+  csSessionId: z.string().min(1).max(64).nullable(),
 })
 
 export const productUpdateSchema = productBaseSchema.partial()

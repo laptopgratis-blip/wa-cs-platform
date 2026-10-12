@@ -2,8 +2,16 @@
 // Generate wa.me URL dengan template pesan yang sudah di-fill variable.
 // Variabel: {invoiceNumber}, {totalRp}, {bankName}, {accountName},
 //           {customerName}.
+//
+// Nomor tujuan: nomor CS WhatsApp produk di order ini bila ada, selain itu
+// nomor konfirmasi toko (aktif & valid). Keputusannya lewat
+// chooseCustomerWaNumber — fungsi yang SAMA dengan gate tombol di halaman
+// invoice, supaya tombol tidak pernah tampil lalu endpoint ini menolak.
+// Endpoint publik: hanya mengembalikan URL wa.me, tidak pernah id sesi.
 import { jsonError, jsonOk } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { chooseCustomerWaNumber } from '@/lib/services/orders/order-cs'
+import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
 
 const DEFAULT_TEMPLATE = `Halo kak, ini bukti transfer untuk pesanan #{invoiceNumber}.
 
@@ -53,11 +61,16 @@ export async function GET(
   if (!order) return jsonError('Invoice tidak ditemukan', 404)
 
   const profile = order.user.shippingProfile
-  if (
-    !profile?.waConfirmActive ||
-    !profile.waConfirmNumber ||
-    !/^62\d{8,15}$/.test(profile.waConfirmNumber)
-  ) {
+  const orderCs = await loadOrderCs({
+    userId: order.userId,
+    items: order.items,
+  })
+  const target = chooseCustomerWaNumber({
+    csNumber: orderCs.csNumber,
+    waConfirmActive: profile?.waConfirmActive,
+    waConfirmNumber: profile?.waConfirmNumber,
+  })
+  if (!target) {
     return jsonError(
       'Penjual belum mengaktifkan WA konfirmasi. Pakai upload bukti.',
       400,
@@ -73,7 +86,8 @@ export async function GET(
   }> | null) ?? []
   const bank = banks.find((b) => b.isDefault) ?? banks[0]
 
-  const template = profile.waConfirmTemplate?.trim() || DEFAULT_TEMPLATE
+  // Template pesan tetap milik toko (atau default) — hanya nomor yang ikut CS.
+  const template = profile?.waConfirmTemplate?.trim() || DEFAULT_TEMPLATE
   const filled = fillTemplate(template, {
     invoiceNumber: order.invoiceNumber ?? '',
     totalRp: formatRupiah(order.totalRp),
@@ -82,6 +96,6 @@ export async function GET(
     customerName: order.customerName,
   })
 
-  const url = `https://wa.me/${profile.waConfirmNumber}?text=${encodeURIComponent(filled)}`
+  const url = `https://wa.me/${target.number}?text=${encodeURIComponent(filled)}`
   return jsonOk({ url })
 }

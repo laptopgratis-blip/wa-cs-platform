@@ -5,6 +5,8 @@ import { notFound } from 'next/navigation'
 
 import { InvoicePublic } from '@/components/order-public/InvoicePublic'
 import { prisma } from '@/lib/prisma'
+import { chooseCustomerWaNumber } from '@/lib/services/orders/order-cs'
+import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -58,6 +60,20 @@ export default async function InvoicePage({ params }: PageProps) {
           where: { id: { in: itemProductIds }, ebookId: { not: null } },
         })) > 0
       : false
+
+  // Tombol "Kirim via WhatsApp": nomor CS WhatsApp produk di order ini bila
+  // ada, selain itu nomor konfirmasi toko (aktif & valid). Keputusan lewat
+  // chooseCustomerWaNumber — fungsi yang SAMA dengan GET
+  // /api/orders/[id]/wa-link, supaya tombol tidak tampil lalu API menolak.
+  const orderCs = await loadOrderCs({
+    userId: order.userId,
+    items: order.items,
+  })
+  const waTarget = chooseCustomerWaNumber({
+    csNumber: orderCs.csNumber,
+    waConfirmActive: order.user.shippingProfile?.waConfirmActive,
+    waConfirmNumber: order.user.shippingProfile?.waConfirmNumber,
+  })
 
   // Pixel tracking — load pixel yang aktif untuk OrderForm asal order
   // supaya invoice page bisa fire AddPaymentInfo (Transfer browser-side).
@@ -145,11 +161,11 @@ export default async function InvoicePage({ params }: PageProps) {
           : null
       }
       waConfirm={
-        order.user.shippingProfile?.waConfirmActive &&
-        order.user.shippingProfile.waConfirmNumber
+        waTarget
           ? {
-              number: order.user.shippingProfile.waConfirmNumber,
-              template: order.user.shippingProfile.waConfirmTemplate,
+              number: waTarget.number,
+              template:
+                order.user.shippingProfile?.waConfirmTemplate ?? null,
             }
           : null
       }

@@ -24,13 +24,20 @@ export interface ResolveContext {
   user: Pick<User, 'id' | 'name'>
   bankAccounts: UserBankAccount[]
   shippingProfile?: UserShippingProfile | null
+  /**
+   * Nomor CS WhatsApp produk di order ini (digit saja) — bila terisi,
+   * menggantikan nomor konfirmasi toko untuk {wa_admin}. Diisi lewat
+   * loadOrderResolveExtras (followup-resolve-context.ts). Opsional: konteks
+   * tanpa field ini berperilaku seperti sebelum fitur CS per produk.
+   */
+  csNumber?: string | null
 }
 
 export function resolveTemplateVariables(
   template: string,
   ctx: ResolveContext,
 ): string {
-  const { order, user, bankAccounts, shippingProfile } = ctx
+  const { order, user, bankAccounts, shippingProfile, csNumber } = ctx
 
   let resolved = template
 
@@ -55,7 +62,7 @@ export function resolveTemplateVariables(
   resolved = replaceAll(
     resolved,
     '{wa_admin}',
-    shippingProfile?.waConfirmNumber || '-',
+    csNumber || shippingProfile?.waConfirmNumber || '-',
   )
 
   const alamatParts = [

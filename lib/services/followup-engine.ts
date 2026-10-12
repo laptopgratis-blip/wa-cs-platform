@@ -16,7 +16,7 @@ import {
   ensureLeadNurtureTemplates,
   ensureReviewTemplates,
 } from './followup-defaults'
-import { loadSellerResolveExtras } from './followup-resolve-context'
+import { loadOrderResolveExtras } from './followup-resolve-context'
 import {
   resolveLeadTemplateParams,
   resolveLeadTemplateVariables,
@@ -104,9 +104,9 @@ export async function generateQueueForOrder(
 
   if (matched.length === 0) return { generated: 0 }
 
-  const { bankAccounts, shippingProfile } = await loadSellerResolveExtras(
-    order.userId,
-  )
+  // csNumber = nomor CS WhatsApp produk di order ini (untuk {wa_admin}).
+  const { bankAccounts, shippingProfile, csNumber } =
+    await loadOrderResolveExtras(order)
 
   let generated = 0
   for (const template of matched) {
@@ -131,6 +131,7 @@ export async function generateQueueForOrder(
       user: order.user,
       bankAccounts,
       shippingProfile,
+      csNumber,
     }
     const resolvedMessage = resolveTemplateVariables(template.message, resolveCtx)
     // Cloud API: kalau template punya metaParamMap, hitung param sekarang.
