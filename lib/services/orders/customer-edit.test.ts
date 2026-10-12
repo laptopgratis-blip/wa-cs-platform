@@ -1,6 +1,7 @@
 // Uji helper edit data pelanggan pesanan. Jalankan lewat `npm test`.
 import assert from 'node:assert/strict'
 
+import { orderUpdateSchema } from '../../validations/order'
 import {
   type CustomerEditExisting,
   PHONE_INVALID_ERROR,
@@ -9,8 +10,10 @@ import {
   customerDraftFromOrder,
   normalizeOrderPhone,
   orderHasShipping,
+  orderPhoneForEdit,
   planQueueRefresh,
   toOrderPhoneDigits,
+  toOrderPhoneWire,
 } from './customer-edit'
 
 let passed = 0
@@ -134,6 +137,50 @@ check('luar negeri di luar 10-15 digit / diawali 0 → error', () => {
   assert.equal(normalizeOrderPhone('+601234567').ok, false) // 9 digit
   assert.equal(normalizeOrderPhone('+1234567890123456').ok, false) // 16
   assert.equal(normalizeOrderPhone('+0123456789').ok, false)
+})
+
+check('\'62\' + awalan lokal 0 ("+62 0812…") → 0 dibuang, jadi 628…', () => {
+  // Ketikan umum: kode negara ditambah di depan nomor lokal apa adanya.
+  // Tanpa aturan ini hasilnya '62081…' — bukan nomor WA yang bisa dikirimi.
+  for (const raw of [
+    '+62 0812-3456-7890',
+    '+62 (0) 812 3456 7890',
+    '+62081234567890',
+    '62 0812 3456 7890',
+    '62081234567890',
+  ]) {
+    assert.deepEqual(
+      normalizeOrderPhone(raw),
+      { ok: true, phone: '6281234567890' },
+      raw,
+    )
+  }
+  // Hanya SATU '0' yang dibuang.
+  assert.equal(normalizeOrderPhone('+62 00812 3456 7890').ok, false)
+})
+
+check("awalan '00' (kode akses internasional) tanpa '+' → tetap error", () => {
+  // '62' hasil konversi awalan lokal 0 TIDAK ikut aturan buang-0: kalau ikut,
+  // '0081 90…' (Jepang via 00) diam-diam jadi nomor Indonesia '62819…'.
+  for (const raw of ['0081 90 1234 5678', '0081234567890', '008613800138000']) {
+    assert.deepEqual(
+      normalizeOrderPhone(raw),
+      { ok: false, error: PHONE_INVALID_ERROR },
+      raw,
+    )
+  }
+})
+
+check("awalan '+62' wajib nomor seluler (628…) — telepon rumah ditolak", () => {
+  // '+62…' bukan "nomor luar negeri": tidak boleh lolos lewat aturan
+  // internasional 10-15 digit.
+  for (const raw of ['+62 21 5551234', '+62215551234', '+62 (021) 555-1234']) {
+    assert.deepEqual(
+      normalizeOrderPhone(raw),
+      { ok: false, error: PHONE_INVALID_ERROR },
+      raw,
+    )
+  }
 })
 
 check('selain itu → error "Nomor HP tidak valid"', () => {
@@ -431,19 +478,25 @@ check('draft tidak diubah → body kosong', () => {
   assert.deepEqual(r, { ok: true, body: {}, anyChanged: false })
 })
 
-check('hanya field yang diubah yang dikirim, nomor ternormalisasi', () => {
-  const draft = {
-    ...customerDraftFromOrder(PHYSICAL),
-    phone: '0857-1111-2222',
-    address: 'Jl. Melati 7',
-  }
-  const r = buildCustomerEditRequest(PHYSICAL, draft)
-  assert.deepEqual(r, {
-    ok: true,
-    body: { customerPhone: '6285711112222', customerAddress: 'Jl. Melati 7' },
-    anyChanged: true,
-  })
-})
+check(
+  "hanya field yang diubah yang dikirim, nomor format kawat '+digit'",
+  () => {
+    const draft = {
+      ...customerDraftFromOrder(PHYSICAL),
+      phone: '0857-1111-2222',
+      address: 'Jl. Melati 7',
+    }
+    const r = buildCustomerEditRequest(PHYSICAL, draft)
+    assert.deepEqual(r, {
+      ok: true,
+      body: {
+        customerPhone: '+6285711112222',
+        customerAddress: 'Jl. Melati 7',
+      },
+      anyChanged: true,
+    })
+  },
+)
 
 check('body tidak pernah memuat shippingAddress (diturunkan server)', () => {
   const draft = { ...customerDraftFromOrder(PHYSICAL), address: 'Jl. Baru 9' }
@@ -502,6 +555,160 @@ check(
     })
   },
 )
+
+console.log('orders/customer-edit: nomor HP klien → server (round-trip)')
+
+// Meniru perjalanan asli: draft dialog → body PATCH → JSON → orderUpdateSchema
+// → buildCustomerEditData di route. Mengembalikan nomor yang AKAN tersimpan,
+// atau error (dari klien maupun server).
+function savePhoneViaDialog(
+  existing: CustomerEditExisting,
+  typed: string,
+): { stored: string | undefined } | { error: string; at: 'client' | 'server' } {
+  const draft = { ...customerDraftFromOrder(existing), phone: typed }
+  const req = buildCustomerEditRequest(existing, draft)
+  if (!req.ok) return { error: req.error, at: 'client' }
+  const parsed = orderUpdateSchema.safeParse(
+    JSON.parse(JSON.stringify(req.body)),
+  )
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? '', at: 'server' }
+  }
+  const server = buildCustomerEditData(existing, {
+    customerName: parsed.data.customerName,
+    customerPhone: parsed.data.customerPhone,
+    customerAddress: parsed.data.customerAddress,
+    shippingPostalCode: parsed.data.shippingPostalCode,
+  })
+  if (!server.ok) return { error: server.error, at: 'server' }
+  return { stored: server.data.customerPhone }
+}
+
+check('toOrderPhoneWire: digit → "+digit" dan lolos normalisasi ulang', () => {
+  assert.equal(toOrderPhoneWire('6281234567890'), '+6281234567890')
+  assert.equal(toOrderPhoneWire('8613800138000'), '+8613800138000')
+  for (const digits of ['6281234567890', '8613800138000', '14155552671']) {
+    assert.deepEqual(normalizeOrderPhone(toOrderPhoneWire(digits)), {
+      ok: true,
+      phone: digits,
+    })
+  }
+})
+
+check('yang tersimpan server === normalizeOrderPhone(ketikan)', () => {
+  const typedSamples = [
+    // Indonesia
+    '085711112222',
+    '0857-1111-2222',
+    '85711112222',
+    '6285711112222',
+    '+6285711112222',
+    '+62 857 1111 2222',
+    '+62 0857 1111 2222',
+    // Luar negeri — termasuk kode negara berawalan 8 (Jepang, Korea, Vietnam,
+    // Tiongkok) yang dulu diam-diam diberi prefiks 62 oleh server.
+    '+81 90 1234 5678',
+    '+819012345678',
+    '+82 10 1234 5678',
+    '+84912345678',
+    '+8613800138000',
+    '+60123456789',
+    '+60 12-345 6789',
+    '+6591234567',
+    '+14155552671',
+    '+1 (415) 555-2671',
+    '+44 7911 123456',
+  ]
+  for (const typed of typedSamples) {
+    const expected = normalizeOrderPhone(typed)
+    assert.equal(expected.ok, true, typed)
+    assert.deepEqual(
+      savePhoneViaDialog(PHYSICAL, typed),
+      { stored: expected.ok ? expected.phone : '' },
+      typed,
+    )
+  }
+})
+
+check('nomor luar negeri berawalan 8 TIDAK menjadi 628… (regresi)', () => {
+  assert.deepEqual(savePhoneViaDialog(PHYSICAL, '+8613800138000'), {
+    stored: '8613800138000',
+  })
+  assert.deepEqual(savePhoneViaDialog(PHYSICAL, '+81 90 1234 5678'), {
+    stored: '819012345678',
+  })
+  assert.deepEqual(savePhoneViaDialog(PHYSICAL, '+84912345678'), {
+    stored: '84912345678',
+  })
+})
+
+check(
+  'ketikan tidak valid ditolak di klien, tidak pernah sampai server',
+  () => {
+    for (const typed of [
+      '60123456789', // luar negeri tanpa '+'
+      '+62 21 5551234', // telepon rumah
+      '12345678',
+      '0812abc34567890',
+      '+601234567',
+    ]) {
+      assert.deepEqual(
+        savePhoneViaDialog(PHYSICAL, typed),
+        { error: PHONE_INVALID_ERROR, at: 'client' },
+        typed,
+      )
+    }
+  },
+)
+
+check(
+  'orderPhoneForEdit: nomor luar negeri tersimpan → ditampilkan ber-"+"',
+  () => {
+    assert.equal(orderPhoneForEdit('8613800138000'), '+8613800138000')
+    assert.equal(orderPhoneForEdit('60123456789'), '+60123456789')
+    // Indonesia, JID, nomor lama ber-0 dan nilai aneh: apa adanya.
+    for (const stored of [
+      '6281234567890',
+      '62215551234',
+      '123456@lid',
+      '081234567890',
+      '12345',
+      '',
+    ]) {
+      assert.equal(orderPhoneForEdit(stored), stored, stored)
+    }
+  },
+)
+
+check(
+  'order bernomor luar negeri: draft awal ber-"+" & tidak dianggap berubah',
+  () => {
+    const foreign = { ...PHYSICAL, customerPhone: '8613800138000' }
+    const draft = customerDraftFromOrder(foreign)
+    assert.equal(draft.phone, '+8613800138000')
+    assert.deepEqual(buildCustomerEditRequest(foreign, draft), {
+      ok: true,
+      body: {},
+      anyChanged: false,
+    })
+    // Hanya nama yang diubah → nomor tidak ikut terkirim.
+    assert.deepEqual(
+      buildCustomerEditRequest(foreign, { ...draft, name: 'Budi S' }),
+      { ok: true, body: { customerName: 'Budi S' }, anyChanged: true },
+    )
+  },
+)
+
+check('order bernomor luar negeri: ubah satu digit → tetap luar negeri', () => {
+  // Dulu: form menampilkan '8613800138000' tanpa '+', seller mengubah satu
+  // digit, lalu nomor tersimpan sebagai '628613800138001'.
+  const foreign = { ...PHYSICAL, customerPhone: '8613800138000' }
+  const draft = customerDraftFromOrder(foreign)
+  const typed = draft.phone.replace(/0$/, '1')
+  assert.deepEqual(savePhoneViaDialog(foreign, typed), {
+    stored: '8613800138001',
+  })
+})
 
 console.log('orders/customer-edit: planQueueRefresh')
 
