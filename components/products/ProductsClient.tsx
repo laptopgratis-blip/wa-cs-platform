@@ -56,6 +56,11 @@ interface ProductVariant {
 }
 
 import { EbookSection } from '@/components/products/EbookSection'
+import {
+  ProductCsMeta,
+  ProductCsSection,
+} from '@/components/products/ProductCsSection'
+import type { CsSessionOption } from '@/lib/services/products/cs-session-options'
 
 interface Product {
   id: string
@@ -79,6 +84,8 @@ interface Product {
   variants?: ProductVariant[]
   // E-Book (2026-08-06) — id aset e-book yang terhubung (null = produk biasa).
   ebookId?: string | null
+  // CS WhatsApp per produk (2026-10-12) — id sesi WA; null = nomor utama.
+  csSessionId?: string | null
 }
 
 const MAX_IMAGES = 10
@@ -107,6 +114,8 @@ function makeVariantKey(): string {
 interface ProductsClientProps {
   initialProducts: Product[]
   limit: number
+  // Nomor WA seller (dikelompokkan per nomor) untuk pemilih CS produk.
+  csSessionOptions: CsSessionOption[]
 }
 
 // Format ISO datetime → string yang dipakai di <input type="datetime-local">.
@@ -144,6 +153,8 @@ const EMPTY_FORM = {
   variants: [] as VariantFormRow[],
   // E-Book (2026-08-06) — link ke aset e-book digital.
   ebookId: null as string | null,
+  // CS WhatsApp per produk — null = ikuti nomor utama.
+  csSessionId: null as string | null,
 }
 
 const VARIANT_LIMIT = 50
@@ -151,6 +162,7 @@ const VARIANT_LIMIT = 50
 export function ProductsClient({
   initialProducts,
   limit,
+  csSessionOptions,
 }: ProductsClientProps) {
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -208,6 +220,7 @@ export function ProductsClient({
         isActive: v.isActive,
       })),
       ebookId: p.ebookId ?? null,
+      csSessionId: p.csSessionId ?? null,
     })
     setUnlimitedStock(p.stock === null)
     setDialogOpen(true)
@@ -480,6 +493,7 @@ export function ProductsClient({
           sortOrder: idx,
         })),
         ebookId: form.ebookId,
+        csSessionId: form.csSessionId,
       }
       const url = editingId ? `/api/products/${editingId}` : '/api/products'
       const res = await fetch(url, {
@@ -629,6 +643,10 @@ export function ProductsClient({
                       ? 'Stok unlimited'
                       : `Stok: ${formatNumber(p.stock)}`}
                   </p>
+                  <ProductCsMeta
+                    options={csSessionOptions}
+                    csSessionId={p.csSessionId ?? null}
+                  />
                   <div className="mt-2 flex gap-2">
                     <Button
                       size="sm"
@@ -883,6 +901,13 @@ export function ProductsClient({
                 onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
+
+            {/* CS WhatsApp per produk (2026-10-12) */}
+            <ProductCsSection
+              options={csSessionOptions}
+              csSessionId={form.csSessionId}
+              onChange={(id) => setForm((f) => ({ ...f, csSessionId: id }))}
+            />
 
             {/* E-Book section (2026-08-06) */}
             <EbookSection

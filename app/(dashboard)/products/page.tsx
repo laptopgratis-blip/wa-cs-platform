@@ -8,6 +8,7 @@ import { PageContainer } from '@/components/shared/PageContainer'
 import { authOptions } from '@/lib/auth'
 import { checkOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
+import { buildCsSessionOptions } from '@/lib/services/products/cs-session-options'
 import { PRODUCT_LIMIT_PER_USER } from '@/lib/validations/product'
 
 export const metadata = {
@@ -32,6 +33,35 @@ export default async function ProductsPage() {
       },
     },
   })
+
+  // Opsi "CS WhatsApp" per produk: nomor yang sedang terhubung + sesi yang
+  // sedang dipakai produk walau offline (supaya pilihan tersimpan tetap
+  // terlihat). Baris tanpa nomor (belum pernah pair) tidak diambil.
+  // Pengelompokan per nomor: lib/services/products/cs-session-options.ts.
+  const csSessionIdsInUse = products.flatMap((p) =>
+    p.csSessionId ? [p.csSessionId] : [],
+  )
+  const waSessions = await prisma.whatsappSession.findMany({
+    where: {
+      userId: session.user.id,
+      phoneNumber: { not: null },
+      OR: [
+        { status: 'CONNECTED', isActive: true },
+        { id: { in: csSessionIdsInUse } },
+      ],
+    },
+    select: {
+      id: true,
+      displayName: true,
+      phoneNumber: true,
+      provider: true,
+      status: true,
+      isActive: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const csSessionOptions = buildCsSessionOptions(waSessions, csSessionIdsInUse)
 
   return (
     <PageContainer>
@@ -58,6 +88,7 @@ export default async function ProductsPage() {
           })),
         }))}
         limit={PRODUCT_LIMIT_PER_USER}
+        csSessionOptions={csSessionOptions}
       />
     </PageContainer>
   )
