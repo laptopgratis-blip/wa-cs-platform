@@ -214,6 +214,65 @@ check('tidak ada padanan → preferred null, csNumber TETAP nomor CS', () => {
   )
 })
 
+// "Hapus nomor" di /whatsapp = soft-delete (isActive=false, phoneNumber tetap
+// tersimpan). Nomor yang sudah dihapus tidak boleh terus dipakai sebagai
+// tujuan chat pelanggan — beda dengan nomor yang sekadar offline.
+check(
+  'sesi CS DIHAPUS (isActive=false) tanpa padanan → csNumber null (jatuh ke nomor toko)',
+  () => {
+    const wiped = sess({ id: 'lama', status: 'DISCONNECTED', isActive: false })
+    const other = sess({ id: 'lain', phoneNumber: '6289999999999' })
+    assert.deepEqual(
+      resolveCsSender({ csSession: wiped, userSessions: [other, wiped] }),
+      { preferredSessionId: null, csNumber: null },
+    )
+    assert.deepEqual(resolveCsSender({ csSession: wiped, userSessions: [] }), {
+      preferredSessionId: null,
+      csNumber: null,
+    })
+  },
+)
+
+check(
+  'sesi CS dihapus, nomor sama terdaftar lagi tapi sedang offline → preferred null, csNumber tetap',
+  () => {
+    const wiped = sess({ id: 'lama', status: 'DISCONNECTED', isActive: false })
+    const rescanned = sess({ id: 'baru', status: 'PAUSED' })
+    assert.deepEqual(
+      resolveCsSender({ csSession: wiped, userSessions: [rescanned] }),
+      { preferredSessionId: null, csNumber: '6281234567890' },
+    )
+  },
+)
+
+check(
+  'sesi CS dihapus, baris senomor lain juga dihapus → csNumber null',
+  () => {
+    const wiped = sess({ id: 'lama', status: 'DISCONNECTED', isActive: false })
+    const alsoWiped = sess({ id: 'x', status: 'DISCONNECTED', isActive: false })
+    assert.deepEqual(
+      resolveCsSender({ csSession: wiped, userSessions: [alsoWiped] }),
+      { preferredSessionId: null, csNumber: null },
+    )
+  },
+)
+
+check(
+  'sesi CS offline SEMENTARA (isActive=true: PAUSED/CONNECTING/ERROR) tanpa padanan → csNumber tetap',
+  () => {
+    for (const status of ['PAUSED', 'CONNECTING', 'WAITING_QR', 'ERROR']) {
+      assert.deepEqual(
+        resolveCsSender({
+          csSession: sess({ id: 'cs', status }),
+          userSessions: [],
+        }),
+        { preferredSessionId: null, csNumber: '6281234567890' },
+        status,
+      )
+    }
+  },
+)
+
 check(
   'nomor sesi null → csNumber null; sesi online tetap jadi pengirim',
   () => {

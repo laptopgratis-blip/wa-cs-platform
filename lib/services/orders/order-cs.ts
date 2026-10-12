@@ -104,11 +104,19 @@ export function normalizeCsNumber(
  * basi. Bila sesi produk tidak (CONNECTED && aktif), pakai sesi lain MILIK
  * USER YANG SAMA dengan nomor sama yang CONNECTED && aktif (terbaru).
  *
- * `userSessions` WAJIB sudah difilter milik user pemilik order oleh pemanggil.
+ * `userSessions` WAJIB sudah difilter milik user pemilik order oleh pemanggil,
+ * dan memuat semua sesi yang BELUM dihapus (isActive=true, status apa pun) —
+ * bukan hanya yang CONNECTED.
  *
- * Mode lunak: tidak ada padanan → preferredSessionId null (pengirim ikut
- * failover lama), tapi csNumber TETAP nomor sesi produk — nomor yang sedang
- * offline di hulao tetap bisa menerima chat pelanggan.
+ * Mode lunak: tidak ada padanan online → preferredSessionId null (pengirim
+ * ikut failover lama). csNumber dibedakan antara dua keadaan:
+ * - OFFLINE SEMENTARA (nomor masih terdaftar: ada baris isActive=true untuk
+ *   nomor itu, mis. PAUSED karena token habis / menunggu scan ulang) → csNumber
+ *   TETAP nomor CS; nomor itu masih dipegang seller dan bisa menerima chat.
+ * - DIHAPUS seller ("hapus nomor" = soft-delete: isActive=false, phoneNumber
+ *   tetap tersimpan, baris tidak pernah di-DELETE) dan tidak didaftarkan lagi
+ *   → csNumber null. Pelanggan tidak boleh diarahkan ke nomor yang sudah
+ *   dilepas seller (mis. nomor eks-staf); jatuh ke nomor toko.
  */
 export function resolveCsSender(input: {
   csSession: CsSessionState | null
@@ -125,18 +133,23 @@ export function resolveCsSender(input: {
   const csDigits = digitsOf(csSession.phoneNumber)
   if (!csDigits) return { preferredSessionId: null, csNumber }
 
-  const twin = userSessions
-    .filter(
-      (s) =>
-        s.id !== csSession.id &&
-        isCsSessionOnline(s) &&
-        digitsOf(s.phoneNumber) === csDigits,
-    )
+  const sameNumber = userSessions.filter(
+    (s) => s.id !== csSession.id && digitsOf(s.phoneNumber) === csDigits,
+  )
+  const twin = sameNumber
+    .filter(isCsSessionOnline)
     .reduce<CsSessionState | null>(
       (best, s) => (best && updatedMs(best) >= updatedMs(s) ? best : s),
       null,
     )
-  return { preferredSessionId: twin?.id ?? null, csNumber }
+  if (twin) return { preferredSessionId: twin.id, csNumber }
+
+  const stillRegistered =
+    csSession.isActive || sameNumber.some((s) => s.isActive)
+  return {
+    preferredSessionId: null,
+    csNumber: stillRegistered ? csNumber : null,
+  }
 }
 
 function updatedMs(s: CsSessionState): number {

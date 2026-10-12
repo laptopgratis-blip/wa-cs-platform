@@ -2263,7 +2263,9 @@ model Product {
   // PERTAMA yang punya CS — diturunkan live dari UserOrder.items, tanpa
   // kolom di UserOrder (lib/services/orders/order-cs.ts). Scan ulang Baileys
   // membuat baris sesi BARU, jadi id di sini bisa basi: resolver mencari
-  // sesi aktif bernomor sama milik user yang sama.
+  // sesi aktif bernomor sama milik user yang sama. "Hapus nomor" = soft-delete
+  // (isActive=false) → kolom ini TIDAK ikut null; resolver mengabaikan nomor
+  // yang sudah dihapus (order jatuh ke nomor toko).
   csSessionId String?
   csSession   WhatsappSession? @relation("ProductCsSession", fields: [csSessionId], references: [id], onDelete: SetNull)
 

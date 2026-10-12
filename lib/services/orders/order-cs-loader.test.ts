@@ -67,8 +67,8 @@ function fakeDb(products: FakeProduct[], sessions: FakeSession[]) {
         return sessions.filter(
           (s) =>
             s.userId === where.userId &&
-            s.status === where.status &&
-            s.isActive === where.isActive,
+            s.isActive === where.isActive &&
+            s.phoneNumber !== null,
         )
       },
     },
@@ -178,6 +178,42 @@ async function main(): Promise<void> {
         [
           session({ id: 'lama', status: 'DISCONNECTED' }),
           session({ id: 'lain', phoneNumber: '628999999999' }),
+        ],
+      )
+      assert.deepEqual(
+        await loadOrderCs({ userId: 'u1', items: [item('p1')] }, db),
+        { preferredSessionId: null, csNumber: '6281234567890' },
+      )
+    },
+  )
+
+  await check(
+    'sesi CS DIHAPUS seller (isActive=false) tanpa padanan → tanpa CS sama sekali',
+    async () => {
+      const { db } = fakeDb(
+        [{ id: 'p1', userId: 'u1', csSessionId: 'lama' }],
+        [
+          session({ id: 'lama', status: 'DISCONNECTED', isActive: false }),
+          session({ id: 'lain', phoneNumber: '628999999999' }),
+          // Nomor sama masih aktif di akun LAIN — bukan milik seller ini.
+          session({ id: 'asing', userId: 'u2' }),
+        ],
+      )
+      assert.deepEqual(
+        await loadOrderCs({ userId: 'u1', items: [item('p1')] }, db),
+        NONE,
+      )
+    },
+  )
+
+  await check(
+    'sesi CS dihapus, nomor sama sudah didaftarkan lagi tapi sedang PAUSED → nomor CS tetap',
+    async () => {
+      const { db } = fakeDb(
+        [{ id: 'p1', userId: 'u1', csSessionId: 'lama' }],
+        [
+          session({ id: 'lama', status: 'DISCONNECTED', isActive: false }),
+          session({ id: 'baru', status: 'PAUSED' }),
         ],
       )
       assert.deepEqual(

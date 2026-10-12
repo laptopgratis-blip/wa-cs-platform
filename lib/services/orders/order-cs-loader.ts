@@ -24,8 +24,9 @@ import {
 
 // Batas pengaman jumlah id di klausa IN — order nyata berisi segelintir item.
 const MAX_PRODUCT_IDS = 100
-// Sesi terhubung milik satu user: praktis < 10. Batas ini hanya pengaman.
-const MAX_ONLINE_SESSIONS = 50
+// Sesi yang belum dihapus milik satu user: praktis < 10. Batas ini hanya
+// pengaman.
+const MAX_ACTIVE_SESSIONS = 50
 
 const SESSION_SELECT = {
   id: true,
@@ -55,7 +56,7 @@ export interface OrderCsDb {
       select: typeof SESSION_SELECT
     }): PromiseLike<SessionRow | null>
     findMany(args: {
-      where: { userId: string; status: 'CONNECTED'; isActive: true }
+      where: { userId: string; isActive: true; phoneNumber: { not: null } }
       select: typeof SESSION_SELECT
       orderBy: { updatedAt: 'desc' }
       take: number
@@ -66,7 +67,7 @@ export interface OrderCsDb {
 /**
  * Resolve CS untuk order milik `userId` dengan snapshot `items`
  * (UserOrder.items). Query minimal: order tanpa produk → 0 query; produk
- * tanpa CS → 1; CS online → 2; CS basi (perlu cari padanan nomor) → 3.
+ * tanpa CS → 1; CS online → 2; CS offline/basi (perlu cari padanan nomor) → 3.
  */
 export async function loadOrderCs(
   input: { userId: string; items: unknown },
@@ -103,14 +104,22 @@ export async function loadOrderCs(
     }
 
     // Sesi produk offline (umumnya id basi setelah scan ulang) → cari sesi
-    // aktif bernomor sama di antara sesi terhubung milik user yang sama.
-    const onlineSessions = await db.whatsappSession.findMany({
-      where: { userId: input.userId, status: 'CONNECTED', isActive: true },
+    // bernomor sama di antara sesi milik user yang sama. Yang diambil semua
+    // sesi yang BELUM dihapus (isActive=true), bukan hanya yang CONNECTED:
+    // resolver perlu membedakan nomor yang sekadar offline (masih terdaftar →
+    // nomor CS tetap dipakai) dari nomor yang sudah dihapus seller (→ nomor
+    // toko). Status CONNECTED-nya diperiksa resolver.
+    const activeSessions = await db.whatsappSession.findMany({
+      where: {
+        userId: input.userId,
+        isActive: true,
+        phoneNumber: { not: null },
+      },
       select: SESSION_SELECT,
       orderBy: { updatedAt: 'desc' },
-      take: MAX_ONLINE_SESSIONS,
+      take: MAX_ACTIVE_SESSIONS,
     })
-    return resolveCsSender({ csSession, userSessions: onlineSessions })
+    return resolveCsSender({ csSession, userSessions: activeSessions })
   } catch (err) {
     console.error(
       `[order-cs] gagal memuat CS order (user ${input.userId}):`,

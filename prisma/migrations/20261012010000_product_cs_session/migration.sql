@@ -5,7 +5,11 @@
 -- NULL = ikuti nomor utama (perilaku lama) — tanpa backfill, semua produk lama
 -- tetap seperti sebelumnya. Tidak ada kolom baru di "UserOrder": CS diturunkan
 -- live dari UserOrder.items[].productId.
--- Sesi dihapus → kolom kembali NULL (ON DELETE SET NULL), produk tetap utuh.
+-- ON DELETE SET NULL hanya pengaman untuk DELETE baris sesi (hapus user /
+-- rollback connect): "hapus nomor" di /whatsapp adalah SOFT-delete
+-- (isActive=false, baris & phoneNumber tetap ada), jadi kolom ini TIDAK ikut
+-- NULL. Nomor yang sudah dihapus ditangani resolver
+-- (lib/services/orders/order-cs.ts): order jatuh ke nomor toko.
 
 ALTER TABLE "Product" ADD COLUMN "csSessionId" TEXT;
 
