@@ -5,6 +5,8 @@ import {
   type CustomerEditExisting,
   PHONE_INVALID_ERROR,
   buildCustomerEditData,
+  buildCustomerEditRequest,
+  customerDraftFromOrder,
   normalizeOrderPhone,
   orderHasShipping,
   planQueueRefresh,
@@ -211,7 +213,10 @@ check('nama berubah → hanya customerName', () => {
 })
 
 check('nama < 2 atau > 120 karakter → error', () => {
-  assert.equal(buildCustomerEditData(PHYSICAL, { customerName: ' A ' }).ok, false)
+  assert.equal(
+    buildCustomerEditData(PHYSICAL, { customerName: ' A ' }).ok,
+    false,
+  )
   assert.equal(
     buildCustomerEditData(PHYSICAL, { customerName: 'x'.repeat(121) }).ok,
     false,
@@ -231,31 +236,37 @@ check('nomor tidak valid → error Nomor HP tidak valid', () => {
   assert.deepEqual(r, { ok: false, error: PHONE_INVALID_ERROR })
 })
 
-check('nomor lama tak-valid dikirim ulang apa adanya → tidak berubah, tanpa error', () => {
-  // Order Sales Flow bisa menyimpan JID LID / nomor lama tak ternormalisasi.
-  const legacy = { ...PHYSICAL, customerPhone: '123456@lid' }
-  const r = okResult(
-    buildCustomerEditData(legacy, {
-      customerPhone: '123456@lid',
-      customerName: 'Budi S',
-    }),
-  )
-  assert.deepEqual(r.data, { customerName: 'Budi S' })
-  assert.equal(r.changed.phone, false)
-})
+check(
+  'nomor lama tak-valid dikirim ulang apa adanya → tidak berubah, tanpa error',
+  () => {
+    // Order Sales Flow bisa menyimpan JID LID / nomor lama tak ternormalisasi.
+    const legacy = { ...PHYSICAL, customerPhone: '123456@lid' }
+    const r = okResult(
+      buildCustomerEditData(legacy, {
+        customerPhone: '123456@lid',
+        customerName: 'Budi S',
+      }),
+    )
+    assert.deepEqual(r.data, { customerName: 'Budi S' })
+    assert.equal(r.changed.phone, false)
+  },
+)
 
-check('alamat order fisik → ditulis ke customerAddress DAN shippingAddress', () => {
-  const r = okResult(
-    buildCustomerEditData(PHYSICAL, {
-      customerAddress: ' Jl. Melati No. 7\nRT 01 ',
-    }),
-  )
-  assert.deepEqual(r.data, {
-    customerAddress: 'Jl. Melati No. 7\nRT 01',
-    shippingAddress: 'Jl. Melati No. 7\nRT 01',
-  })
-  assert.equal(r.changed.address, true)
-})
+check(
+  'alamat order fisik → ditulis ke customerAddress DAN shippingAddress',
+  () => {
+    const r = okResult(
+      buildCustomerEditData(PHYSICAL, {
+        customerAddress: ' Jl. Melati No. 7\nRT 01 ',
+      }),
+    )
+    assert.deepEqual(r.data, {
+      customerAddress: 'Jl. Melati No. 7\nRT 01',
+      shippingAddress: 'Jl. Melati No. 7\nRT 01',
+    })
+    assert.equal(r.changed.address, true)
+  },
+)
 
 check('order fisik dengan shippingAddress null → tetap dua kolom', () => {
   // Order Sales Flow: isDigitalOnly false, hanya customerAddress terisi.
@@ -269,17 +280,20 @@ check('order fisik dengan shippingAddress null → tetap dua kolom', () => {
   })
 })
 
-check('dua kolom tidak sinkron + alamat sama dgn customerAddress → disamakan', () => {
-  const drift = { ...PHYSICAL, shippingAddress: 'Alamat lama' }
-  const r = okResult(
-    buildCustomerEditData(drift, { customerAddress: 'Jl. Mawar No. 5' }),
-  )
-  assert.deepEqual(r.data, {
-    customerAddress: 'Jl. Mawar No. 5',
-    shippingAddress: 'Jl. Mawar No. 5',
-  })
-  assert.equal(r.changed.address, true)
-})
+check(
+  'dua kolom tidak sinkron + alamat sama dgn customerAddress → disamakan',
+  () => {
+    const drift = { ...PHYSICAL, shippingAddress: 'Alamat lama' }
+    const r = okResult(
+      buildCustomerEditData(drift, { customerAddress: 'Jl. Mawar No. 5' }),
+    )
+    assert.deepEqual(r.data, {
+      customerAddress: 'Jl. Mawar No. 5',
+      shippingAddress: 'Jl. Mawar No. 5',
+    })
+    assert.equal(r.changed.address, true)
+  },
+)
 
 check('alamat kosong pada order fisik → DITOLAK', () => {
   for (const v of ['', '   ', null]) {
@@ -289,12 +303,15 @@ check('alamat kosong pada order fisik → DITOLAK', () => {
   }
 })
 
-check('order fisik tanpa alamat sama sekali + alamat kosong → tidak berubah', () => {
-  const noAddr = { ...PHYSICAL, customerAddress: null, shippingAddress: null }
-  const r = okResult(buildCustomerEditData(noAddr, { customerAddress: '' }))
-  assert.deepEqual(r.data, {})
-  assert.equal(r.changed.address, false)
-})
+check(
+  'order fisik tanpa alamat sama sekali + alamat kosong → tidak berubah',
+  () => {
+    const noAddr = { ...PHYSICAL, customerAddress: null, shippingAddress: null }
+    const r = okResult(buildCustomerEditData(noAddr, { customerAddress: '' }))
+    assert.deepEqual(r.data, {})
+    assert.equal(r.changed.address, false)
+  },
+)
 
 check('order digital tanpa pengiriman → customerAddress saja', () => {
   const r = okResult(
@@ -317,7 +334,9 @@ check('order digital dgn shippingAddress terisi → diperlakukan fisik', () => {
     customerAddress: 'Jl. A 1',
     shippingAddress: 'Jl. A 1',
   }
-  const r = okResult(buildCustomerEditData(mixed, { customerAddress: 'Jl. B 2' }))
+  const r = okResult(
+    buildCustomerEditData(mixed, { customerAddress: 'Jl. B 2' }),
+  )
   assert.deepEqual(r.data, {
     customerAddress: 'Jl. B 2',
     shippingAddress: 'Jl. B 2',
@@ -342,7 +361,9 @@ check('kode pos 5 digit → tersimpan; sama → tidak berubah', () => {
 
 check('kode pos kosong → null', () => {
   for (const v of ['', '  ', null]) {
-    const r = okResult(buildCustomerEditData(PHYSICAL, { shippingPostalCode: v }))
+    const r = okResult(
+      buildCustomerEditData(PHYSICAL, { shippingPostalCode: v }),
+    )
     assert.deepEqual(r.data, { shippingPostalCode: null })
   }
   const none = { ...PHYSICAL, shippingPostalCode: null }
@@ -387,6 +408,100 @@ check('tidak memutasi objek existing/input', () => {
   const input = Object.freeze({ customerName: 'Baru Nama' })
   okResult(buildCustomerEditData(existing, input))
 })
+
+console.log('orders/customer-edit: form dialog (draft → body PATCH)')
+
+check('customerDraftFromOrder: null → string kosong', () => {
+  assert.deepEqual(customerDraftFromOrder(PHYSICAL), {
+    name: 'Budi Santoso',
+    phone: '6281234567890',
+    address: 'Jl. Mawar No. 5',
+    postalCode: '40123',
+  })
+  assert.deepEqual(customerDraftFromOrder(DIGITAL), {
+    name: 'Sari',
+    phone: '6281234567890',
+    address: '',
+    postalCode: '',
+  })
+})
+
+check('draft tidak diubah → body kosong', () => {
+  const r = buildCustomerEditRequest(PHYSICAL, customerDraftFromOrder(PHYSICAL))
+  assert.deepEqual(r, { ok: true, body: {}, anyChanged: false })
+})
+
+check('hanya field yang diubah yang dikirim, nomor ternormalisasi', () => {
+  const draft = {
+    ...customerDraftFromOrder(PHYSICAL),
+    phone: '0857-1111-2222',
+    address: 'Jl. Melati 7',
+  }
+  const r = buildCustomerEditRequest(PHYSICAL, draft)
+  assert.deepEqual(r, {
+    ok: true,
+    body: { customerPhone: '6285711112222', customerAddress: 'Jl. Melati 7' },
+    anyChanged: true,
+  })
+})
+
+check('body tidak pernah memuat shippingAddress (diturunkan server)', () => {
+  const draft = { ...customerDraftFromOrder(PHYSICAL), address: 'Jl. Baru 9' }
+  const r = buildCustomerEditRequest(PHYSICAL, draft)
+  assert.equal(r.ok && 'shippingAddress' in r.body, false)
+})
+
+check('nomor diketik ulang dalam format lain (sama) → tidak dikirim', () => {
+  const draft = { ...customerDraftFromOrder(PHYSICAL), phone: '0812 3456 7890' }
+  const r = buildCustomerEditRequest(PHYSICAL, draft)
+  assert.deepEqual(r, { ok: true, body: {}, anyChanged: false })
+})
+
+check('field yang tidak disentuh tidak ikut divalidasi/dikirim', () => {
+  // Dua kolom alamat tidak sinkron + nomor lama tak-valid: selama seller
+  // hanya mengubah nama, alamat & nomor tidak ikut terkirim.
+  const legacy = {
+    ...PHYSICAL,
+    customerPhone: '123456@lid',
+    shippingAddress: 'Alamat kirim lain',
+  }
+  const draft = { ...customerDraftFromOrder(legacy), name: 'Budi S' }
+  const r = buildCustomerEditRequest(legacy, draft)
+  assert.deepEqual(r, {
+    ok: true,
+    body: { customerName: 'Budi S' },
+    anyChanged: true,
+  })
+})
+
+check('draft tidak valid → error untuk toast', () => {
+  const badPhone = { ...customerDraftFromOrder(PHYSICAL), phone: '1234' }
+  assert.deepEqual(buildCustomerEditRequest(PHYSICAL, badPhone), {
+    ok: false,
+    error: PHONE_INVALID_ERROR,
+  })
+  const noAddr = { ...customerDraftFromOrder(PHYSICAL), address: '  ' }
+  assert.equal(buildCustomerEditRequest(PHYSICAL, noAddr).ok, false)
+  const badZip = { ...customerDraftFromOrder(PHYSICAL), postalCode: '123' }
+  assert.equal(buildCustomerEditRequest(PHYSICAL, badZip).ok, false)
+})
+
+check(
+  'order digital tanpa pengiriman: kode pos diabaikan, alamat opsional',
+  () => {
+    const draft = {
+      ...customerDraftFromOrder(DIGITAL),
+      address: 'Jl. Anggrek 9',
+      postalCode: '99999',
+    }
+    const r = buildCustomerEditRequest(DIGITAL, draft)
+    assert.deepEqual(r, {
+      ok: true,
+      body: { customerAddress: 'Jl. Anggrek 9' },
+      anyChanged: true,
+    })
+  },
+)
 
 console.log('orders/customer-edit: planQueueRefresh')
 

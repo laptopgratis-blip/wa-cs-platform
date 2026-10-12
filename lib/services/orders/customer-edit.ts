@@ -40,8 +40,7 @@ export function toOrderPhoneDigits(input: string): string {
 }
 
 export type OrderPhoneResult =
-  | { ok: true; phone: string }
-  | { ok: false; error: string }
+  { ok: true; phone: string } | { ok: false; error: string }
 
 /**
  * Normalisasi + validasi nomor HP hasil edit seller.
@@ -237,6 +236,68 @@ export function buildCustomerEditData(
     changed,
     anyChanged: Object.values(changed).some(Boolean),
   }
+}
+
+/** Nilai form edit pelanggan di dialog detail pesanan (semua string). */
+export interface CustomerEditDraft {
+  name: string
+  phone: string
+  address: string
+  postalCode: string
+}
+
+export function customerDraftFromOrder(
+  existing: CustomerEditExisting,
+): CustomerEditDraft {
+  return {
+    name: existing.customerName,
+    phone: existing.customerPhone,
+    address: existing.customerAddress ?? '',
+    postalCode: existing.shippingPostalCode ?? '',
+  }
+}
+
+export type CustomerEditRequest =
+  | { ok: true; body: CustomerEditInput; anyChanged: boolean }
+  | { ok: false; error: string }
+
+/**
+ * Draft form dialog → potongan body PATCH /api/orders/[id]. Hanya field yang
+ * benar-benar diubah seller (dibanding nilai awal form) yang divalidasi dan
+ * dikirim; nomor sudah ternormalisasi. shippingAddress tidak pernah dikirim —
+ * server yang menurunkannya dari customerAddress. Kode pos diabaikan untuk
+ * order tanpa pengiriman (field-nya disembunyikan di dialog).
+ */
+export function buildCustomerEditRequest(
+  existing: CustomerEditExisting,
+  draft: CustomerEditDraft,
+): CustomerEditRequest {
+  const initial = customerDraftFromOrder(existing)
+  const touched = (key: keyof CustomerEditDraft): boolean =>
+    draft[key].trim() !== initial[key].trim()
+  const input: CustomerEditInput = {
+    ...(touched('name') ? { customerName: draft.name } : {}),
+    ...(touched('phone') ? { customerPhone: draft.phone } : {}),
+    ...(touched('address') ? { customerAddress: draft.address } : {}),
+    ...(touched('postalCode') && orderHasShipping(existing)
+      ? { shippingPostalCode: draft.postalCode }
+      : {}),
+  }
+  const result = buildCustomerEditData(existing, input)
+  if (!result.ok) return result
+  const body: CustomerEditInput = {
+    ...(result.changed.name ? { customerName: result.data.customerName } : {}),
+    ...(result.changed.phone
+      ? { customerPhone: result.data.customerPhone }
+      : {}),
+    ...(result.changed.address
+      ? { customerAddress: result.data.customerAddress }
+      : {}),
+    ...(result.changed.postalCode
+      ? { shippingPostalCode: result.data.shippingPostalCode }
+      : {}),
+  }
+  return { ok: true, body, anyChanged: result.anyChanged }
 }
 
 export type QueueRefreshPlan = 'replace' | 'keep'

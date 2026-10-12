@@ -34,23 +34,36 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchJson } from '@/lib/fetch-json'
+import {
+  type CustomerEditDraft,
+  buildCustomerEditRequest,
+  customerDraftFromOrder,
+} from '@/lib/services/orders/customer-edit'
 import {
   DELIVERY_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
 } from '@/lib/validations/order'
-import { formatShippingArea } from '@/lib/format'
+
+import { OrderCustomerCard } from './OrderCustomerCard'
 
 interface OrderDetail {
   id: string
   customerName: string
   customerPhone: string
   customerAddress: string | null
+  // Kolom alamat kedua + flag digital — dasar aturan edit data pelanggan
+  // (lihat lib/services/orders/customer-edit).
+  shippingAddress: string | null
+  isDigitalOnly: boolean
   shippingCityName?: string | null
   shippingDistrictName?: string | null
   shippingSubdistrictName?: string | null
   shippingProvinceName?: string | null
-  shippingPostalCode?: string | null
+  shippingPostalCode: string | null
+  // Jumlah follow-up PENDING milik order (dari GET detail).
+  pendingFollowUpCount?: number
   items: { name: string; qty: number; price?: number | null }[]
   totalAmount: number | null
   paymentMethod: string
@@ -91,6 +104,11 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
   const [paymentMethod, setPaymentMethod] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
   const [notes, setNotes] = useState('')
+  // Draft edit data pelanggan. null = kartu pelanggan dalam mode baca; draft
+  // ikut terkirim lewat tombol "Simpan Perubahan" (satu PATCH).
+  const [customerDraft, setCustomerDraft] = useState<CustomerEditDraft | null>(
+    null,
+  )
 
   useEffect(() => {
     if (!orderId) return
@@ -129,25 +147,37 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
   async function handleSave() {
     if (!data) return
+    // Edit data pelanggan ikut dalam PATCH yang sama — hanya field yang
+    // diubah. Divalidasi dulu di klien (pesan jelas tanpa round-trip); draft
+    // tetap ada kalau gagal supaya seller tinggal membetulkan.
+    const customer = customerDraft
+      ? buildCustomerEditRequest(data, customerDraft)
+      : null
+    if (customer && !customer.ok) {
+      toast.error(customer.error)
+      return
+    }
     setSaving(true)
     try {
-      const res = await fetch(`/api/orders/${data.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paymentStatus,
-          deliveryStatus,
-          paymentMethod,
-          trackingNumber: trackingNumber.trim() || null,
-          notes: notes.trim() || null,
-        }),
-      })
-      const json = (await res.json().catch(() => null)) as {
-        success: boolean
-        error?: string
-      } | null
-      if (!res.ok || !json?.success) {
-        toast.error(json?.error ?? 'Gagal menyimpan perubahan')
+      const res = await fetchJson(
+        `/api/orders/${data.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentStatus,
+            deliveryStatus,
+            paymentMethod,
+            trackingNumber: trackingNumber.trim() || null,
+            notes: notes.trim() || null,
+            ...(customer ? customer.body : {}),
+          }),
+        },
+        'Gagal menyimpan perubahan',
+      )
+      if (!res.ok) {
+        // Dialog & seluruh isian dibiarkan — tidak ada state yang di-reset.
+        toast.error(res.error ?? 'Gagal menyimpan perubahan')
         return
       }
       toast.success('Perubahan disimpan')
@@ -200,44 +230,16 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
 
         {data && !loading && (
           <div className="flex flex-col gap-4">
-            {/* Customer */}
-            <section className="space-y-1 rounded-lg border p-3 text-sm">
-              <p>
-                <span className="text-muted-foreground">Nama:</span>{' '}
-                <span className="font-medium">{data.customerName}</span>
-              </p>
-              <p>
-                <span className="text-muted-foreground">Nomor HP:</span>{' '}
-                {data.customerPhone}
-              </p>
-              {data.customerAddress && (
-                <p>
-                  <span className="text-muted-foreground">Alamat:</span>{' '}
-                  <span className="whitespace-pre-line">
-                    {data.customerAddress}
-                  </span>
-                </p>
-              )}
-              {formatShippingArea(data) && (
-                <p>
-                  <span className="text-muted-foreground">Area:</span>{' '}
-                  <span className="font-medium">
-                    {formatShippingArea(data)}
-                  </span>
-                  {data.shippingProvinceName && (
-                    <span>, {data.shippingProvinceName}</span>
-                  )}
-                  {data.shippingPostalCode && (
-                    <span> {data.shippingPostalCode}</span>
-                  )}
-                </p>
-              )}
-              {data.flowName && (
-                <p className="text-muted-foreground text-xs">
-                  Asal: {data.flowName}
-                </p>
-              )}
-            </section>
+            {/* Customer — mode baca + edit (nama, nomor HP, alamat, kode pos) */}
+            <OrderCustomerCard
+              order={data}
+              draft={customerDraft}
+              onDraftChange={setCustomerDraft}
+              onStartEdit={() => setCustomerDraft(customerDraftFromOrder(data))}
+              onCancelEdit={() => setCustomerDraft(null)}
+              hasPendingFollowUp={(data.pendingFollowUpCount ?? 0) > 0}
+              disabled={saving || deleting}
+            />
 
             {/* Items (kalau ada) */}
             {data.items.length > 0 && (
