@@ -51,6 +51,18 @@ export async function PATCH(
       if (!ebook) return jsonError('E-book tidak ditemukan', 400)
     }
 
+    // CS WhatsApp per produk — sesi wajib milik user sendiri (anti-IDOR).
+    // Dicek HANYA bila nilainya berubah: dialog produk selalu mengirim payload
+    // penuh, dan produk yang menunjuk sesi lama/nonaktif harus tetap bisa
+    // disimpan (null = lepas CS, tidak perlu dicek).
+    if (data.csSessionId && data.csSessionId !== existing.csSessionId) {
+      const csSession = await prisma.whatsappSession.findFirst({
+        where: { id: data.csSessionId, userId: session.user.id },
+        select: { id: true },
+      })
+      if (!csSession) return jsonError('Nomor WhatsApp tidak ditemukan', 400)
+    }
+
     // Galeri sync — kalau client kirim `images`, itu sumber kebenaran.
     // Cover (imageUrl) di-derive dari images[0]. File yang dikeluarkan dari
     // galeri di-unlink supaya tidak jadi sampah di disk.
@@ -108,6 +120,9 @@ export async function PATCH(
             flashSaleQuota: data.flashSaleQuota,
           }),
           ...(data.ebookId !== undefined && { ebookId: data.ebookId }),
+          ...(data.csSessionId !== undefined && {
+            csSessionId: data.csSessionId,
+          }),
         },
       })
 

@@ -82,6 +82,15 @@ export async function POST(req: Request) {
       if (!ebook) return jsonError('E-book tidak ditemukan', 400)
     }
 
+    // CS WhatsApp per produk — sesi wajib milik user sendiri (anti-IDOR).
+    if (data.csSessionId) {
+      const csSession = await prisma.whatsappSession.findFirst({
+        where: { id: data.csSessionId, userId: session.user.id },
+        select: { id: true },
+      })
+      if (!csSession) return jsonError('Nomor WhatsApp tidak ditemukan', 400)
+    }
+
     // Sumber kebenaran galeri = `images` array. Cover (imageUrl) selalu derive
     // dari images[0] supaya consumer lama (invoice, orderCard) tetap dapat
     // foto utama tanpa perlu di-update.
@@ -109,6 +118,7 @@ export async function POST(req: Request) {
           : null,
         flashSaleQuota: data.flashSaleQuota ?? null,
         ebookId: data.ebookId ?? null,
+        csSessionId: data.csSessionId ?? null,
         ...(data.variants && data.variants.length > 0
           ? {
               variants: {
