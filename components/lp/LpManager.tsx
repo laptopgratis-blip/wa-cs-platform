@@ -13,6 +13,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  Search,
   Sparkles,
   Trash2,
 } from 'lucide-react'
@@ -36,8 +37,10 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { formatNumber } from '@/lib/format'
+import { filterLandingPages, hasSearchTerms } from '@/lib/lp/list-filter'
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
@@ -90,6 +93,7 @@ export function LpManager() {
   const [isLoading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<LpRow | null>(null)
 
   async function load() {
@@ -155,6 +159,9 @@ export function LpManager() {
   // Total views semua LP user — analytics quick-glance.
   const totalViews = pages.reduce((sum, p) => sum + p.viewCount, 0)
   const publishedCount = pages.filter((p) => p.isPublished).length
+  // Pencarian lokal (judul/slug) — seluruh LP user sudah dimuat di klien.
+  const visiblePages = filterLandingPages(pages, query)
+  const isSearching = hasSearchTerms(query)
 
   function copyToClipboard(text: string) {
     void navigator.clipboard.writeText(text)
@@ -365,6 +372,30 @@ export function LpManager() {
         </Card>
       )}
 
+      {/* Pencarian — tampil selama ada LP (tetap ter-mount saat muat ulang) */}
+      {pages.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
+            <Input
+              aria-label="Cari landing page"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Cari judul atau alamat LP..."
+              className="pl-8"
+            />
+          </div>
+          <span
+            role="status"
+            className="text-muted-foreground text-xs tabular-nums"
+          >
+            {isSearching
+              ? `${visiblePages.length} dari ${pages.length} LP`
+              : `${pages.length} LP`}
+          </span>
+        </div>
+      )}
+
       {/* Daftar LP */}
       {isLoading ? (
         <CardGridSkeleton count={3} />
@@ -381,9 +412,21 @@ export function LpManager() {
             </Button>
           }
         />
+      ) : visiblePages.length === 0 ? (
+        <EmptyState
+          bordered
+          icon={Search}
+          title="Tidak ada LP yang cocok"
+          description={`Tidak ada judul atau alamat LP yang memuat "${query.trim()}".`}
+          action={
+            <Button variant="outline" onClick={() => setQuery('')}>
+              Hapus pencarian
+            </Button>
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {pages.map((lp) => {
+          {visiblePages.map((lp) => {
             const publicPath = `/p/${lp.slug}`
             const fullUrl =
               typeof window !== 'undefined'
@@ -516,6 +559,8 @@ export function LpManager() {
         onOpenChange={setCreateOpen}
         onCreated={() => {
           setCreateOpen(false)
+          // LP baru harus terlihat — kosongkan pencarian yang masih aktif.
+          setQuery('')
           void load()
         }}
       />
