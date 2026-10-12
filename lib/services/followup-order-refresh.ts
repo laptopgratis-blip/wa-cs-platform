@@ -33,16 +33,13 @@
 // NEVER throw — dipanggil best-effort dari PATCH /api/orders/[id]; kegagalan
 // di sini tidak boleh menggagalkan penyimpanan pesanan.
 
-import { Prisma, type UserOrder } from '@prisma/client'
+import type { UserOrder } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { planQueueRefresh } from '@/lib/services/orders/customer-edit'
 
+import { refreshQueueItem } from './followup-order-refresh-item'
 import { loadSellerResolveExtras } from './followup-resolve-context'
-import {
-  type ResolveContext,
-  resolveTemplateVariables,
-} from './followup-variables'
+import type { ResolveContext } from './followup-variables'
 
 export interface FollowUpRefreshResult {
   /** Jumlah item PENDING milik order saat dibaca. */
@@ -59,51 +56,6 @@ const NOTHING: FollowUpRefreshResult = {
   pending: 0,
   messagesRefreshed: 0,
   messagesKept: 0,
-}
-
-interface PendingItem {
-  id: string
-  resolvedMessage: string
-  template: { message: string }
-}
-
-type ItemOutcome = 'refreshed' | 'kept' | 'gone'
-
-async function refreshItem(
-  item: PendingItem,
-  newPhone: string,
-  oldCtx: ResolveContext,
-  newCtx: ResolveContext,
-): Promise<ItemOutcome> {
-  const newResolved = resolveTemplateVariables(item.template.message, newCtx)
-  const plan = planQueueRefresh({
-    oldResolved: resolveTemplateVariables(item.template.message, oldCtx),
-    currentResolved: item.resolvedMessage,
-    newResolved,
-  })
-  const delivery = { customerPhone: newPhone, resolvedParams: Prisma.DbNull }
-
-  if (plan === 'replace') {
-    // Guard `resolvedMessage` = optimistic lock: kalau seller mengedit pesan
-    // di antara baca & tulis, baris tidak cocok → jatuh ke jalur 'kept'.
-    const replaced = await prisma.followUpQueue.updateMany({
-      where: {
-        id: item.id,
-        status: 'PENDING',
-        resolvedMessage: item.resolvedMessage,
-      },
-      data: { ...delivery, resolvedMessage: newResolved },
-    })
-    if (replaced.count > 0) return 'refreshed'
-  }
-
-  // Guard status PENDING: item yang baru saja di-claim cron (PENDING → SENT)
-  // tidak ikut diubah.
-  const kept = await prisma.followUpQueue.updateMany({
-    where: { id: item.id, status: 'PENDING' },
-    data: delivery,
-  })
-  return kept.count > 0 ? 'kept' : 'gone'
 }
 
 export async function refreshPendingFollowUpsForOrder(input: {
@@ -138,7 +90,10 @@ export async function refreshPendingFollowUpsForOrder(input: {
     let failed = 0
     for (const item of pending) {
       try {
-        const outcome = await refreshItem(
+        // Tulis per item (optimistic lock pesan + guard PENDING) ada di
+        // followup-order-refresh-item.ts — teruji tanpa database.
+        const outcome = await refreshQueueItem(
+          prisma,
           item,
           order.customerPhone,
           oldCtx,
