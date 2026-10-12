@@ -34,6 +34,17 @@ export const orderUpdateSchema = z.object({
   customerName: z.string().trim().min(2).max(120).optional(),
   customerPhone: z.string().trim().min(8).max(20).optional(),
   customerAddress: z.string().trim().max(1000).optional().nullable(),
+  // Edit data pelanggan (2026-10-12): kode pos boleh dibetulkan/dikosongkan
+  // ('' atau null → null di route). Area (provinsi/kota/kecamatan/kelurahan)
+  // SENGAJA tidak ada di schema — terikat ongkir, tidak bisa diedit.
+  // customerPhone tetap string mentah; normalisasi + validasi format ada di
+  // route lewat lib/services/orders/customer-edit.
+  shippingPostalCode: z
+    .string()
+    .trim()
+    .regex(/^(\d{5})?$/, 'Kode pos harus 5 digit angka')
+    .optional()
+    .nullable(),
   items: z.array(orderItemSchema).max(50).optional(),
   totalAmount: z.number().min(0).max(1_000_000_000).optional().nullable(),
   notes: z.string().trim().max(2000).optional().nullable(),

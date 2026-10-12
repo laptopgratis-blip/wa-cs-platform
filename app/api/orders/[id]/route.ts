@@ -13,6 +13,8 @@ import {
   revokeEntitlementsForOrderSafe,
   triggerEntitlementsForOrderSafe,
 } from '@/lib/services/entitlement-hook'
+import { refreshPendingFollowUpsForOrder } from '@/lib/services/followup-order-refresh'
+import { buildCustomerEditData } from '@/lib/services/orders/customer-edit'
 import { firePixelEventForOrder } from '@/lib/services/pixel-fire'
 import { prisma } from '@/lib/prisma'
 import { orderUpdateSchema } from '@/lib/validations/order'
@@ -55,10 +57,17 @@ export async function GET(_req: Request, { params }: Params) {
       })
     : []
 
+  // Jumlah follow-up yang masih terjadwal — dialog memakainya untuk memberi
+  // tahu seller bahwa edit data pelanggan ikut berlaku ke antrean tersebut.
+  const pendingFollowUpCount = await prisma.followUpQueue.count({
+    where: { orderId: order.id, status: 'PENDING' },
+  })
+
   return jsonOk({
     ...order,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
+    pendingFollowUpCount,
     messages: messages
       .map((m) => ({
         id: m.id,
@@ -87,20 +96,28 @@ export async function PATCH(req: Request, { params }: Params) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Data tidak valid')
   }
 
+  const data = parsed.data
+
+  // Edit data pelanggan (nama / nomor HP / alamat / kode pos). Helper pure
+  // menormalisasi nomor ke '628…', menulis alamat ke customerAddress DAN
+  // shippingAddress (invoice, slip packing, ekspor & {alamat} follow-up membaca
+  // kolom kedua), dan hanya mengembalikan kolom yang benar-benar berubah.
+  // Area (provinsi/kota/kecamatan/kelurahan) tidak bisa diedit — terikat ongkir.
+  // contactId / relasi Contact SENGAJA tidak diubah saat nomor berubah:
+  // riwayat chat tetap menempel ke kontak asal pesanan.
+  const customerEdit = buildCustomerEditData(existing, {
+    customerName: data.customerName,
+    customerPhone: data.customerPhone,
+    customerAddress: data.customerAddress,
+    shippingPostalCode: data.shippingPostalCode,
+  })
+  if (!customerEdit.ok) return jsonError(customerEdit.error)
+
   try {
-    const data = parsed.data
     const updated = await prisma.userOrder.update({
       where: { id },
       data: {
-        ...(data.customerName !== undefined
-          ? { customerName: data.customerName }
-          : {}),
-        ...(data.customerPhone !== undefined
-          ? { customerPhone: data.customerPhone }
-          : {}),
-        ...(data.customerAddress !== undefined
-          ? { customerAddress: data.customerAddress }
-          : {}),
+        ...customerEdit.data,
         ...(data.items !== undefined ? { items: data.items } : {}),
         ...(data.totalAmount !== undefined
           ? { totalAmount: data.totalAmount }
@@ -193,6 +210,21 @@ export async function PATCH(req: Request, { params }: Params) {
       existing.paymentStatus !== 'PAID'
     ) {
       triggerEntitlementsForOrderSafe(updated.id)
+    }
+
+    // Data pelanggan berubah → antrean follow-up yang masih PENDING ikut
+    // memakai nomor/nama/alamat baru (pesan yang sudah diedit manual tidak
+    // ditimpa). `existing` = snapshot SEBELUM update, dasar deteksi editan
+    // manual. Di-await supaya selesai sebelum hook generate di bawah membuat
+    // antrean baru; service never-throw, jadi tidak menggagalkan PATCH.
+    if (customerEdit.anyChanged) {
+      const refresh = await refreshPendingFollowUpsForOrder({
+        orderId: updated.id,
+        previousOrder: existing,
+      })
+      if (refresh.error) {
+        console.error('[orders PATCH] refresh follow-up:', refresh.error)
+      }
     }
 
     // Follow-Up Order System hooks — detect transition & trigger event.

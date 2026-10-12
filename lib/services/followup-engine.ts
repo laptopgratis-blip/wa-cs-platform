@@ -16,6 +16,7 @@ import {
   ensureLeadNurtureTemplates,
   ensureReviewTemplates,
 } from './followup-defaults'
+import { loadSellerResolveExtras } from './followup-resolve-context'
 import {
   resolveLeadTemplateParams,
   resolveLeadTemplateVariables,
@@ -103,14 +104,9 @@ export async function generateQueueForOrder(
 
   if (matched.length === 0) return { generated: 0 }
 
-  const [bankAccounts, shippingProfile] = await Promise.all([
-    prisma.userBankAccount.findMany({
-      where: { userId: order.userId, isActive: true },
-    }),
-    prisma.userShippingProfile.findUnique({
-      where: { userId: order.userId },
-    }),
-  ])
+  const { bankAccounts, shippingProfile } = await loadSellerResolveExtras(
+    order.userId,
+  )
 
   let generated = 0
   for (const template of matched) {

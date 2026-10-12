@@ -17,6 +17,7 @@ import {
   type SmartSendResult,
   type SmartSendTemplateSpec,
 } from '@/lib/services/wa-send/smart-send'
+import { loadSellerResolveExtras } from '@/lib/services/followup-resolve-context'
 import {
   resolveLeadTemplateParams,
   resolveTemplateParams,
@@ -85,10 +86,7 @@ export async function ensureResolvedParams(item: QueueItemForSend): Promise<stri
         include: { user: { select: { id: true, name: true } } },
       })
       if (!order) return null
-      const [bankAccounts, shippingProfile] = await Promise.all([
-        prisma.userBankAccount.findMany({ where: { userId: order.userId, isActive: true } }),
-        prisma.userShippingProfile.findUnique({ where: { userId: order.userId } }),
-      ])
+      const { bankAccounts, shippingProfile } = await loadSellerResolveExtras(order.userId)
       return resolveTemplateParams(paramMap, { order, user: order.user, bankAccounts, shippingProfile })
     }
     if (item.liveLeadId) {
