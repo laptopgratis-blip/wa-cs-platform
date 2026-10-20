@@ -7,12 +7,17 @@
 //   funnel: 4-step (visit → scroll50 → cta → form)
 //   sources: top UTM sources/mediums/campaigns + referrer hosts
 //   devices: deviceType + browser + os breakdown
-//   timeOfDay: 7×24 grid (dayOfWeek × hour) → count
+//   timeOfDay: 7×24 grid (dayOfWeek × hour, WIB) → count
 //   ctas: top CTA labels + click count
 //   geo: country breakdown (kalau ada)
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
+import {
+  TIME_OF_DAY_SQL,
+  toTimeOfDayCells,
+  type TimeOfDayRow,
+} from '@/lib/lp/time-of-day'
 import { prisma } from '@/lib/prisma'
 
 interface Params {
@@ -209,24 +214,9 @@ export async function GET(req: Request, { params }: Params) {
         take: 10,
       }),
 
-      // Time-of-day distribution: 7×24 grid. Postgres-specific raw query.
-      prisma.$queryRawUnsafe<
-        Array<{ dow: number; hour: number; cnt: number }>
-      >(
-        `SELECT EXTRACT(DOW FROM "createdAt")::int as dow,
-                EXTRACT(HOUR FROM "createdAt" AT TIME ZONE 'Asia/Jakarta')::int as hour,
-                COUNT(*)::int as cnt
-         FROM "LpVisit"
-         WHERE "landingPageId" = $1
-           AND "createdAt" >= $2
-           AND "createdAt" <= $3
-           AND ("deviceType" IS NULL OR "deviceType" != 'BOT')
-         GROUP BY dow, hour
-         ORDER BY dow, hour`,
-        lpId,
-        from,
-        to,
-      ),
+      // Time-of-day distribution: 7×24 grid (hari & jam WIB). Postgres-specific
+      // raw query — SQL + konversi zona ada di lib/lp/time-of-day.ts.
+      prisma.$queryRawUnsafe<TimeOfDayRow[]>(TIME_OF_DAY_SQL, lpId, from, to),
     ])
 
     const visits = visitAggregate
@@ -296,12 +286,9 @@ export async function GET(req: Request, { params }: Params) {
         count: c._count._all,
       })),
       // Time-of-day grid: array of { dow, hour, count } — frontend render
-      // sebagai 7×24 cell heatmap. dow: 0=Sunday, 6=Saturday (Postgres convention).
-      timeOfDay: visitsByHour.map((r) => ({
-        dow: r.dow,
-        hour: r.hour,
-        count: r.cnt,
-      })),
+      // sebagai 7×24 cell heatmap. dow: 0=Sunday, 6=Saturday (Postgres
+      // convention); hari & jam menurut WIB.
+      timeOfDay: toTimeOfDayCells(visitsByHour),
     })
   } catch (err) {
     console.error('[GET /api/lp/[lpId]/analytics] gagal:', err)
