@@ -20,6 +20,10 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  REQUIRED_PLAN_LABEL,
+  type RequiredPlan,
+} from '@/lib/onboarding/checklists'
 import { cn } from '@/lib/utils'
 
 interface ChecklistStep {
@@ -32,7 +36,7 @@ interface ChecklistStep {
   autoChecked: boolean
   hasAutoCheck: boolean
   optional: boolean
-  requiresPlan: 'POWER' | 'LMS' | null
+  requiresPlan: RequiredPlan | null
 }
 
 interface ChecklistData {
@@ -303,7 +307,8 @@ function StepRow({
           )}
           {step.requiresPlan && !done && !skipped && (
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-              <Crown className="size-3" /> Butuh {step.requiresPlan}
+              <Crown className="size-3" /> Butuh{' '}
+              {REQUIRED_PLAN_LABEL[step.requiresPlan]}
             </span>
           )}
           {step.autoChecked && done && (

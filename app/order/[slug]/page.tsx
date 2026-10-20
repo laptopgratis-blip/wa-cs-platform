@@ -1,9 +1,11 @@
 // PUBLIC route — no auth. Customer akses via /order/<slug> dari link share.
-// Server fetch form + verify owner masih aktif POWER + render client.
+// Server fetch form + verify owner masih punya akses Order System + render
+// client.
 import { notFound } from 'next/navigation'
 
 import { OrderFormPublic } from '@/components/order-public/OrderFormPublic'
-import { checkOrderSystemAccess } from '@/lib/order-system-gate'
+import { after } from 'next/server'
+import { getPublicOrderSnapshot } from '@/lib/services/orders/public-snapshot'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'  // form punya counter views, jangan cache HTML
@@ -15,10 +17,8 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params
-  const form = await prisma.orderForm.findUnique({
-    where: { slug },
-    select: { name: true, description: true, isActive: true },
-  })
+  const snapshot = await getPublicOrderSnapshot(slug)
+  const form = snapshot?.form
   if (!form) return { title: 'Form tidak ditemukan' }
   return {
     title: `${form.name} · Hulao`,
@@ -29,56 +29,19 @@ export async function generateMetadata({ params }: PageProps) {
 export default async function PublicOrderPage({ params }: PageProps) {
   const { slug } = await params
 
-  const form = await prisma.orderForm.findUnique({
-    where: { slug },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          shippingProfile: {
-            select: {
-              originCityId: true,
-              originCityName: true,
-              enabledCouriers: true,
-              defaultWeightGrams: true,
-            },
-          },
-        },
-      },
-    },
-  })
+  const snapshot = await getPublicOrderSnapshot(slug)
+  if (!snapshot) notFound()
+  const { form, products, isAvailable } = snapshot
 
-  if (!form) notFound()
-
-  // Cek akses owner (paket POWER aktif).
-  const access = await checkOrderSystemAccess(form.userId)
-  const isAvailable = form.isActive && access.hasAccess
-
-  // Increment views (best-effort, tidak fatal).
+  // Increment views (best-effort, tidak fatal) — jalan setelah respons
+  // terkirim supaya statistik tidak menunda form tampil ke pembeli.
   if (isAvailable) {
-    prisma.orderForm
-      .update({ where: { id: form.id }, data: { views: { increment: 1 } } })
-      .catch(() => {})
+    after(async () => {
+      await prisma.orderForm
+        .update({ where: { id: form.id }, data: { views: { increment: 1 } } })
+        .catch(() => {})
+    })
   }
-
-  // Fetch produk yang ditampilkan.
-  const productWhere =
-    form.productIds.length > 0
-      ? { id: { in: form.productIds }, userId: form.userId, isActive: true }
-      : { userId: form.userId, isActive: true }
-  const products = await prisma.product.findMany({
-    where: productWhere,
-    orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-    include: {
-      // Hanya varian aktif yang dikirim ke client. Customer tidak boleh
-      // pilih varian off — sama logic-nya dengan product.isActive.
-      variants: {
-        where: { isActive: true },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      },
-    },
-  })
 
   return (
     <OrderFormPublic

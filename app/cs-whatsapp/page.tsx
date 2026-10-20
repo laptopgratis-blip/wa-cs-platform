@@ -1,7 +1,7 @@
 // /cs-whatsapp — sub-page khusus fitur CS AI WhatsApp.
 // Sebelumnya isi home, dipindah ke sini biar home utama bisa fokus ke LP
 // Gratis (entry-point UMKM). Di sini full pitch CS AI: pain → solution
-// → cara kerja → power tier → pricing → FAQ → CTA.
+// → cara kerja → Order System (PowerTierExplainer) → pricing → FAQ → CTA.
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 
@@ -17,6 +17,7 @@ import { Pricing } from '@/components/landing/Pricing'
 import { ProblemAgitation } from '@/components/landing/ProblemAgitation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getOrderSystemStartingPlan } from '@/lib/services/landing-plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,17 +31,20 @@ export default async function CsWhatsAppPage() {
   const session = await getServerSession(authOptions)
   if (session) redirect('/dashboard')
 
-  const packages = await prisma.tokenPackage.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-    select: {
-      id: true,
-      name: true,
-      tokenAmount: true,
-      price: true,
-      isPopular: true,
-    },
-  })
+  const [packages, orderSystemPlan] = await Promise.all([
+    prisma.tokenPackage.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        tokenAmount: true,
+        price: true,
+        isPopular: true,
+      },
+    }),
+    getOrderSystemStartingPlan(),
+  ])
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -51,9 +55,9 @@ export default async function CsWhatsAppPage() {
         <Features />
         <HowItWorks />
         <div id="power">
-          <PowerTierExplainer />
+          <PowerTierExplainer orderSystemPlan={orderSystemPlan} />
         </div>
-        <Pricing packages={packages} />
+        <Pricing packages={packages} orderSystemPlan={orderSystemPlan} />
         <FAQ />
         <CTA />
       </main>

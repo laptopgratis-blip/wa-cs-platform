@@ -371,7 +371,7 @@ export function OrderDetailDialog({ orderId, onClose, onChanged }: Props) {
               />
             </div>
 
-            {/* Follow-Up Order System (POWER) — section read-only + manual send */}
+            {/* Follow-Up Order System — section read-only + manual send */}
             <OrderFollowUpSection orderId={data.id} />
 
             {/* Chat history */}

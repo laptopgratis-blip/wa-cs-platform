@@ -5,8 +5,11 @@ import { getServerSession } from 'next-auth'
 
 import { PricingView } from '@/components/subscription/PricingView'
 import { authOptions } from '@/lib/auth'
-import { TIER_VISITOR_CAP } from '@/lib/lp-quota'
 import { prisma } from '@/lib/prisma'
+import {
+  freePlanEntitlement,
+  planEntitlementForPackage,
+} from '@/lib/services/plan-entitlements'
 import { TIER_RANK, computeUpgradeCredit } from '@/lib/services/subscription'
 
 export const dynamic = 'force-dynamic'
@@ -16,7 +19,7 @@ export default async function PricingPage() {
 
   // Ambil semua package aktif yg sudah punya priceMonthly > 0 — yg eligible
   // untuk subscription. Plus selalu tampilkan FREE sebagai card pertama.
-  const packages = await prisma.lpUpgradePackage.findMany({
+  const packageRows = await prisma.lpUpgradePackage.findMany({
     where: { isActive: true, priceMonthly: { gt: 0 } },
     orderBy: { sortOrder: 'asc' },
     select: {
@@ -28,8 +31,15 @@ export default async function PricingPage() {
       maxStorageMB: true,
       priceMonthly: true,
       isPopular: true,
+      canUseOrderSystem: true,
     },
   })
+  // Hak tiap paket dihitung dari gate asli (kuota, flag Sistem Order, Host AI,
+  // LP Lab) — kartu & tabel perbandingan tinggal render.
+  const packages = packageRows.map(({ canUseOrderSystem, ...pkg }) => ({
+    ...pkg,
+    entitlement: planEntitlementForPackage({ ...pkg, canUseOrderSystem }),
+  }))
 
   // pricePerToken aktif — dipakai PricingView untuk hitung token equivalent
   // di tiap kartu plan. Default Rp 2/token kalau setting belum ada.
@@ -48,8 +58,9 @@ export default async function PricingPage() {
   if (session) {
     // "Plan saat ini" HARUS dari subscription aktif (sumber yang sama dengan
     // PlanBadge topbar, preview, dan checkout) — BUKAN UserQuota.tier.
-    // UserQuota.tier bisa lebih tinggi dari plan karena naik otomatis dari
-    // akumulasi top-up token (lib/lp-quota.ts) — kasus 2026-07-14: quota
+    // UserQuota.tier bisa lebih tinggi dari plan karena floor grandfather
+    // legacyTier dari era "tier naik dari top-up token" (mekanisme itu sudah
+    // dimatikan 2026-07-14, lihat lib/lp-quota.ts) — kasus 2026-07-14: quota
     // POWER dari top-up 750K token, sub aktif POPULAR → tombol Power terkunci
     // "Plan Saat Ini" padahal user justru mau upgrade ke Power.
     const [activeSubs, balance] = await Promise.all([
@@ -100,7 +111,7 @@ export default async function PricingPage() {
       currentBalance={currentBalance}
       upgradeCredits={upgradeCredits}
       pricePerToken={pricePerToken}
-      visitorCap={TIER_VISITOR_CAP}
+      freeEntitlement={freePlanEntitlement()}
     />
   )
 }

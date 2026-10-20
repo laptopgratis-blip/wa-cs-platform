@@ -2,7 +2,7 @@
 //        divalidasi; perubahan tautan/peta me-reset resolvedParams queue PENDING)
 // DELETE /api/followup/templates/[id]  — hapus template (cascade ke queue & log)
 //
-// Plan gating: POWER only.
+// Plan gating: akses Order System (requireOrderSystemAccess).
 import { Prisma, type FollowUpTemplate } from '@prisma/client'
 
 import { jsonError, jsonOk } from '@/lib/api'

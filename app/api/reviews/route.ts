@@ -1,5 +1,5 @@
 // GET /api/reviews?filter=all|approved|pending
-// List testimoni milik user (owner). POWER only.
+// List testimoni milik user (owner). Gate: akses Order System.
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'

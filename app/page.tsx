@@ -19,6 +19,7 @@ import { Navbar } from '@/components/landing/Navbar'
 import { Pricing } from '@/components/landing/Pricing'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getOrderSystemStartingPlan } from '@/lib/services/landing-plan'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,17 +34,20 @@ export default async function HomePage() {
   const session = await getServerSession(authOptions)
   if (session) redirect('/dashboard')
 
-  const packages = await prisma.tokenPackage.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: 'asc' },
-    select: {
-      id: true,
-      name: true,
-      tokenAmount: true,
-      price: true,
-      isPopular: true,
-    },
-  })
+  const [packages, orderSystemPlan] = await Promise.all([
+    prisma.tokenPackage.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        tokenAmount: true,
+        price: true,
+        isPopular: true,
+      },
+    }),
+    getOrderSystemStartingPlan(),
+  ])
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -52,9 +56,9 @@ export default async function HomePage() {
         <Hero />
         <ThreeSteps />
         <Features />
-        <MoreFeatures />
+        <MoreFeatures orderSystemPlan={orderSystemPlan} />
         <div id="pricing">
-          <Pricing packages={packages} />
+          <Pricing packages={packages} orderSystemPlan={orderSystemPlan} />
         </div>
         <FAQ />
         <FinalCTA />

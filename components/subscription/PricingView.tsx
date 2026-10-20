@@ -3,12 +3,17 @@
 // /pricing UI — toggle durasi + 4 plan card (FREE + 3 paid tiers).
 // Client component karena interactive (toggle + redirect ke /upgrade).
 import type { LpTier } from '@prisma/client'
-import { Check, Crown, Sparkles, X, Zap } from 'lucide-react'
+import { ArrowDown, Check, Crown, Sparkles, X, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 import { PageContainer } from '@/components/shared/PageContainer'
+import {
+  PLAN_COMPARISON_ID,
+  PlanComparison,
+} from '@/components/subscription/PlanComparison'
+import { PricingFaq } from '@/components/subscription/PricingFaq'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +32,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  type PlanEntitlement,
+  type PlanHighlight,
+  buildPlanHighlights,
+} from '@/lib/plan-features'
+import {
   DURATION_DISCOUNTS,
   calculateSubscriptionPriceFull,
   convertIdrToTokens,
@@ -43,6 +53,8 @@ interface Pkg {
   maxStorageMB: number
   priceMonthly: number
   isPopular: boolean
+  // Hak paket hasil gate asli (lib/services/plan-entitlements.ts).
+  entitlement: PlanEntitlement
 }
 
 interface Props {
@@ -59,9 +71,9 @@ interface Props {
   // Konversi IDR → token. Snapshot dari PricingSettings.pricePerToken aktif
   // saat page render. Default 2 (Rp 2/token).
   pricePerToken: number
-  // Cap visitor per bulan per tier, dari lib/lp-quota.ts (sumber enforcement).
-  // Jangan hardcode angka di sini — biar selalu sinkron dgn kuota asli.
-  visitorCap: Record<string, number>
+  // Hak plan Free (tanpa baris paket). Paket berbayar bawa entitlement
+  // masing-masing — semua angka dari sumber enforcement, jangan hardcode.
+  freeEntitlement: PlanEntitlement
 }
 
 // Info untuk dialog "saldo kurang" — muncul saat user klik plan yang
@@ -94,37 +106,6 @@ const TIER_ORDER: Record<string, number> = {
   POWER: 3,
 }
 
-const FAQ = [
-  {
-    q: 'Bagaimana cara berlangganan?',
-    a: 'Subscription LP dibayar pakai saldo token. Top-up token dulu di /billing (lewat Tripay BCA/QRIS/dll atau transfer manual), lalu pilih plan + durasi di /pricing. Token otomatis dipotong saat checkout dan akun langsung aktif — tidak perlu konfirmasi manual atau upload bukti transfer.',
-  },
-  {
-    q: 'Kenapa pakai token, bukan langsung transfer?',
-    a: 'Dengan token, user bisa upgrade/perpanjang LP kapan saja tanpa ribet input bukti transfer setiap kali. Token sama yang dipakai untuk AI reply, AI generate LP, dan optimasi LP — satu saldo untuk semua.',
-  },
-  {
-    q: 'Apakah ada gratis trial?',
-    a: 'Tidak ada trial. Tapi kamu bisa pakai plan FREE selamanya untuk fitur dasar.',
-  },
-  {
-    q: 'Apa yang terjadi kalau subscription expired?',
-    a: 'Akun otomatis turun ke plan FREE pada tanggal expired. Data tidak hilang — tapi kuota turun ke FREE (1 LP, 5 MB storage).',
-  },
-  {
-    q: 'Bisa cancel kapan saja?',
-    a: 'Ya, kamu bisa cancel kapan saja dari /billing/subscription. Akses tetap aktif sampai tanggal expired (tidak ada refund untuk sisa periode).',
-  },
-  {
-    q: 'Bagaimana cara perpanjang?',
-    a: 'Beli subscription baru sebelum tanggal expired. Sistem otomatis extend dari tanggal expired existing (bukan replace), jadi sisa hari kamu tetap aman.',
-  },
-  {
-    q: 'Bagaimana cara upgrade ke plan lebih tinggi?',
-    a: 'Beli plan baru dengan tier lebih tinggi. Sisa masa aktif plan lama otomatis dikreditkan sebagai potongan token saat checkout — tidak ada nilai yang hangus.',
-  },
-]
-
 export function PricingView({
   packages,
   isLoggedIn,
@@ -132,7 +113,7 @@ export function PricingView({
   currentBalance,
   upgradeCredits,
   pricePerToken,
-  visitorCap,
+  freeEntitlement,
 }: Props) {
   const router = useRouter()
   const [duration, setDuration] = useState<number>(1)
@@ -205,15 +186,7 @@ export function PricingView({
           name="Free"
           description="Mulai gratis untuk eksplorasi."
           tier="FREE"
-          features={{
-            'Landing Page': '1',
-            Storage: '5 MB',
-            'Visitor / bulan': (visitorCap.FREE ?? 1000).toLocaleString(
-              'id-ID',
-            ),
-            'AI Generate': true,
-            'Host AI (Live Shopping)': false,
-          }}
+          features={buildPlanHighlights(freeEntitlement)}
           priceLabel="Rp 0"
           ctaLabel={
             currentTier === 'FREE'
@@ -264,18 +237,7 @@ export function PricingView({
               name={pkg.name}
               description={pkg.description ?? ''}
               tier={pkg.tier}
-              features={{
-                'Landing Page': pkg.maxLp >= 999 ? 'Unlimited' : `${pkg.maxLp}`,
-                Storage: `${pkg.maxStorageMB} MB`,
-                'Visitor / bulan': (visitorCap[pkg.tier] ?? 0).toLocaleString(
-                  'id-ID',
-                ),
-                'AI Generate': true,
-                // Host AI mulai paket Popular — samakan dgn gate di
-                // lib/host-gen-gate.ts (hostTierAllowed).
-                'Host AI (Live Shopping)':
-                  pkg.tier === 'POPULAR' || pkg.tier === 'POWER',
-              }}
+              features={buildPlanHighlights(pkg.entitlement)}
               priceLabel={`${calc.priceFinalTokens.toLocaleString('id-ID')} token`}
               priceSubLabel={`≈ ${monthlyTokens.toLocaleString('id-ID')} token/bulan · setara Rp ${calc.priceFinal.toLocaleString('id-ID')} (Rp ${monthly.toLocaleString('id-ID')}/bln)`}
               creditLabel={
@@ -326,6 +288,20 @@ export function PricingView({
             />
           )
         })}
+      </div>
+
+      <div className="space-y-2 text-center">
+        <p className="text-muted-foreground mx-auto max-w-2xl text-sm">
+          Semua paket, termasuk Free, sudah bisa pakai balas chat WhatsApp
+          dengan AI, inbox, dan broadcast. Fitur AI memotong saldo token setiap
+          kali dipakai.
+        </p>
+        <Button variant="outline" asChild>
+          <a href={`#${PLAN_COMPARISON_ID}`}>
+            <ArrowDown />
+            Lihat rincian lengkap semua fitur
+          </a>
+        </Button>
       </div>
 
       {/* Dialog saldo kurang */}
@@ -395,28 +371,26 @@ export function PricingView({
         </DialogContent>
       </Dialog>
 
-      {/* FAQ */}
-      <section className="mx-auto max-w-3xl space-y-4 pt-6">
-        <h2 className="font-display text-center text-2xl font-semibold">
-          Pertanyaan Umum
-        </h2>
-        <div className="space-y-3">
-          {FAQ.map((item) => (
-            <details
-              key={item.q}
-              className="group bg-card rounded-lg border p-4"
-            >
-              <summary className="cursor-pointer list-none font-medium">
-                <span className="text-primary-500 mr-2 inline-block transition-transform group-open:rotate-45">
-                  +
-                </span>
-                {item.q}
-              </summary>
-              <p className="text-muted-foreground mt-3 text-sm">{item.a}</p>
-            </details>
-          ))}
-        </div>
-      </section>
+      <PlanComparison
+        plans={[
+          {
+            id: 'free',
+            name: 'Free',
+            tier: 'FREE',
+            entitlement: freeEntitlement,
+          },
+          ...packages.map((pkg) => ({
+            id: pkg.id,
+            name: pkg.name,
+            tier: pkg.tier,
+            entitlement: pkg.entitlement,
+          })),
+        ]}
+        popularIds={packages.filter((p) => p.isPopular).map((p) => p.id)}
+        currentTier={currentTier}
+      />
+
+      <PricingFaq free={freeEntitlement} />
     </PageContainer>
   )
 }
@@ -426,7 +400,7 @@ interface PlanCardProps {
   name: string
   description: string
   tier: string
-  features: Record<string, string | boolean>
+  features: PlanHighlight[]
   priceLabel: string
   priceSubLabel?: string
   // Info kredit proration upgrade (mis. "Kredit upgrade −39.500 token ...").
@@ -518,23 +492,31 @@ function PlanCard({
           )}
         </div>
         <ul className="mb-6 flex-1 space-y-2 text-sm">
-          {Object.entries(features).map(([key, value]) => (
-            <li key={key} className="flex items-start gap-2">
-              {value === false ? (
-                <X className="text-muted-foreground/40 mt-0.5 size-4 shrink-0" />
-              ) : (
+          {features.map((f) => (
+            <li key={f.key} className="flex items-start gap-2">
+              {f.included ? (
                 <Check
                   className={cn('mt-0.5 size-4 shrink-0', TONES.success.text)}
                 />
+              ) : (
+                <X className="text-muted-foreground/40 mt-0.5 size-4 shrink-0" />
               )}
               <span
                 className={cn(
                   'flex-1',
-                  value === false && 'text-muted-foreground/60',
+                  !f.included && 'text-muted-foreground/60',
                 )}
               >
-                <span className="font-medium">{key}</span>
-                {typeof value === 'string' && <>: {value}</>}
+                <span className="sr-only">
+                  {f.included ? 'Termasuk: ' : 'Tidak termasuk: '}
+                </span>
+                <span className="font-medium">{f.label}</span>
+                {f.value && <>: {f.value}</>}
+                {f.detail && (
+                  <span className="text-muted-foreground block text-xs">
+                    {f.detail}
+                  </span>
+                )}
               </span>
             </li>
           ))}

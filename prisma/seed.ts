@@ -116,7 +116,7 @@ const lpUpgradePackages = [
   },
   {
     name: 'Popular',
-    description: 'Pilihan paling populer untuk yang punya beberapa produk.',
+    description: 'Pilihan paling populer untuk yang punya beberapa produk. Termasuk Sistem Order: Form Order (maks 20 form), Invoice Otomatis, Multi-Payment, Subsidi Ongkir, Flash Sale.',
     tier: LpTier.POPULAR,
     maxLp: 10,
     maxStorageMB: 100,
@@ -124,11 +124,12 @@ const lpUpgradePackages = [
     isPopular: true,
     isActive: true,
     sortOrder: 2,
-    canUseOrderSystem: false,
+    // Mirror produksi: Sistem Order dibuka mulai POPULAR sejak 2026-07-05.
+    canUseOrderSystem: true,
   },
   {
     name: 'Power',
-    description: 'Untuk agensi atau bisnis dengan banyak campaign sekaligus. Termasuk Order System: Form Order, Invoice Otomatis, Multi-Payment, Subsidi Ongkir, Flash Sale.',
+    description: 'Untuk agensi atau bisnis dengan banyak campaign sekaligus. Sistem Order lengkap dengan Form Order tanpa batas, plus LP Lab.',
     tier: LpTier.POWER,
     maxLp: 999,
     maxStorageMB: 500,

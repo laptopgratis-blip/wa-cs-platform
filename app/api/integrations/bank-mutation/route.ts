@@ -5,7 +5,7 @@
 // PATCH  /api/integrations/bank-mutation       — toggle setting (autoConfirm, dll)
 // DELETE /api/integrations/bank-mutation       — disconnect & hapus history mutasi
 //
-// Plan gating: paket POWER only (requireOrderSystemAccess).
+// Plan gating: akses Order System (requireOrderSystemAccess).
 // Encrypt User ID + PIN dengan AES-256-GCM (lib/crypto.ts) sebelum simpan.
 import type { NextResponse } from 'next/server'
 

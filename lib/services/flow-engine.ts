@@ -290,8 +290,8 @@ async function processActiveStep(
       return null
     })
 
-    // Generate follow-up queue (POWER only; gating + guard Sales Flow di
-    // engine) — fire-and-forget, jangan tahan balasan ke customer. Pola sama
+    // Generate follow-up queue (butuh akses Order System; gating + guard
+    // Sales Flow di engine) — fire-and-forget, jangan tahan balasan ke customer. Pola sama
     // dengan app/api/orders/submit. null = order sudah ada (idempotent) /
     // gagal dibuat → jangan generate ulang. Nomor kosong/tak layak kirim →
     // skip: queue-nya pasti gagal (atau "terkirim" ke JID invalid).

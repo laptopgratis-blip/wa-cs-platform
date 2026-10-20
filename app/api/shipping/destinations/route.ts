@@ -1,6 +1,7 @@
 // GET /api/shipping/destinations?q=bandung
 // Proxy ke RajaOngkir Komerce — tidak expose API key ke client.
-// Plan-gate enforced: hanya user paket POWER yang boleh hit endpoint ini.
+// Plan-gate enforced: hanya user dengan akses Order System yang boleh hit
+// endpoint ini.
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'

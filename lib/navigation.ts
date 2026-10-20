@@ -64,9 +64,10 @@ export interface NavItem {
   icon: LucideIcon
   // Role yang boleh lihat — kosong = semua role yang punya akses ke parent.
   roles?: Role[]
-  // Item hanya untuk paket POWER (Order System). Gating per-ITEM: dipakai saat
-  // integrasi POWER (Pixel, Auto Confirm) berada di grup yang tampil untuk
-  // semua user — hanya item-nya yang disembunyikan bila user tak punya akses.
+  // Item hanya untuk user dengan akses Order System (mulai paket Popular).
+  // Gating per-ITEM: dipakai saat integrasi Order System (Pixel, Auto Confirm)
+  // berada di grup yang tampil untuk semua user — hanya item-nya yang
+  // disembunyikan bila user tak punya akses.
   requiresOrderSystem?: boolean
 }
 
@@ -97,7 +98,7 @@ export const NAV_ACCENT: NavAccent = {
 export interface NavGroup {
   label: string
   items: NavItem[]
-  // Group hanya tampil kalau user punya akses Order System (paket POWER).
+  // Group hanya tampil kalau user punya akses Order System (mulai paket Popular).
   // Filter dilakukan di komponen yang konsumsi (Sidebar, MobileDrawer).
   requiresOrderSystem?: boolean
 }
@@ -136,7 +137,8 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Host AI', href: '/host-templates', icon: Bot },
     ],
   },
-  // Order System — hanya tampil untuk user paket POWER. Filter di komponen
+  // Order System — hanya tampil untuk user yang punya akses (mulai paket
+  // Popular, flag DB canUseOrderSystem). Filter di komponen
   // konsumer berdasarkan flag hasOrderSystemAccess (lib/order-system-gate).
   // Pesanan & Pengaturan(rekening+shipping) masuk di sini supaya satu konteks.
   {
@@ -184,8 +186,6 @@ export const USER_NAV_GROUPS: NavGroup[] = [
       { label: 'Course Saya', href: '/lms/courses', icon: GraduationCap },
     ],
   },
-  // Integrasi — POWER only. Pixel & auto-confirm di-pisah dari Order System
-  // supaya scope grup itu fokus ke operasional jualan harian.
   {
     label: 'LAPORAN',
     items: [{ label: 'Analytics', href: '/analytics', icon: BarChart3 }],
@@ -203,8 +203,8 @@ export const USER_NAV_GROUPS: NavGroup[] = [
   },
   // INTEGRASI (2026-08-26; dulu "PENGEMBANG") — satu grup berisi TIAP integrasi
   // sebagai item terpisah. API/Webhook/Script&Embed tampil untuk SEMUA user
-  // (kunci API tetap dibuat sendiri). Pixel & Auto Confirm khusus POWER via
-  // requiresOrderSystem per-item (grup ini sendiri tidak POWER-gated).
+  // (kunci API tetap dibuat sendiri). Pixel & Auto Confirm butuh akses Order
+  // System via requiresOrderSystem per-item (grup ini sendiri tidak di-gate).
   {
     label: 'INTEGRASI',
     items: [
@@ -505,9 +505,9 @@ export function filterGroupsByOrderSystem(
   return groups
     .filter((g) => !g.requiresOrderSystem || hasOrderSystemAccess)
     .map((g) => {
-      // Gating per-ITEM: buang item POWER dari grup non-POWER (mis. Pixel &
-      // Auto Confirm di grup INTEGRASI). Grup yang seluruhnya POWER sudah
-      // lolos filter di atas, jadi item-nya dibiarkan.
+      // Gating per-ITEM: buang item Order System dari grup yang tidak di-gate
+      // (mis. Pixel & Auto Confirm di grup INTEGRASI). Grup yang seluruhnya
+      // Order System sudah lolos filter di atas, jadi item-nya dibiarkan.
       if (hasOrderSystemAccess || !g.items.some((i) => i.requiresOrderSystem)) return g
       return { ...g, items: g.items.filter((i) => !i.requiresOrderSystem) }
     })

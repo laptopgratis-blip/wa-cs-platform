@@ -83,7 +83,7 @@ model User {
   bankMutationIntegration      BankMutationIntegration?
   bankMutations                BankMutation[]
   // Follow-Up Order System (2026-05-08) — auto-WA ke customer per event +
-  // delay. POWER only, gating di service layer.
+  // delay. Butuh akses Order System, gating di service layer.
   followUpTemplates            FollowUpTemplate[]
   followUpQueueItems           FollowUpQueue[]
   followUpBlacklist            FollowUpBlacklist[]
@@ -1424,8 +1424,8 @@ model LpUpgradePackage {
   isActive          Boolean  @default(true)
   sortOrder         Int      @default(0)
   // Akses Order System (Phase 1, 2026-05-07): Form Order, Invoice Otomatis,
-  // Multi-Payment, Subsidi Ongkir, Flash Sale. Default false untuk semua paket;
-  // di-set true HANYA untuk paket POWER via seed.
+  // Multi-Payment, Subsidi Ongkir, Flash Sale. Default false; di produksi true
+  // untuk POPULAR & POWER sejak 2026-07-05 (diubah via DB, seed mengikuti).
   canUseOrderSystem Boolean  @default(false)
   createdAt         DateTime @default(now())
 
@@ -2202,7 +2202,7 @@ model SoulSimulationPreset {
 }
 
 // ─────────────────────────────────────────
-// ORDER SYSTEM (Phase 1, 2026-05-07) — fitur khusus paket POWER:
+// ORDER SYSTEM (Phase 1, 2026-05-07) — fitur paket berbayar (mulai Popular):
 // Form Order publik, Invoice otomatis, Multi-payment, Subsidi Ongkir,
 // Flash Sale. Akses dijaga via LpUpgradePackage.canUseOrderSystem.
 // ─────────────────────────────────────────
@@ -2547,7 +2547,7 @@ model ShippingDestination {
 }
 
 // ─────────────────────────────────────────
-// PIXEL TRACKING (Phase 1, 2026-05-07) — fitur khusus paket POWER:
+// PIXEL TRACKING (Phase 1, 2026-05-07) — bagian Order System (mulai Popular):
 // Browser pixel + Server-side CAPI untuk Meta, Google Ads, TikTok.
 // Encrypt accessToken dengan AES-256-GCM (lib/crypto.ts) sebelum simpan.
 // ─────────────────────────────────────────
@@ -2796,7 +2796,7 @@ model BankScrapeJob {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Follow-Up Order System (2026-05-08, POWER only)
+// Follow-Up Order System (2026-05-08, butuh akses Order System)
 // ─────────────────────────────────────────────────────────────
 // Pesan WA otomatis ke customer berdasarkan event order (created/paid/
 // shipped/completed/cancelled) atau N-hari setelah event. Gating WA
@@ -2913,7 +2913,7 @@ model FollowUpLog {
   @@index([userId, sentAt(sort: Desc)])
 }
 
-// Testimoni / review order (Fase 3, 2026-06-08, POWER only)
+// Testimoni / review order (Fase 3, 2026-06-08, butuh akses Order System)
 // Diisi customer via link form 1-klik ({link_review}) yang dikirim follow-up
 // setelah order diterima ("sudah dicoba? kasih testimoni"). orderId unique =
 // 1 review per order (upsert kalau customer submit ulang). approved=false →

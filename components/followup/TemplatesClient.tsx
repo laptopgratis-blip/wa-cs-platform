@@ -1,6 +1,6 @@
 'use client'
 
-// Template Follow-Up Order System (POWER only).
+// Template Follow-Up Order System (butuh akses Order System).
 // Group templates by trigger, modal create/edit (TemplateModal) dengan
 // variable buttons + preview live + pemilih Template Meta (sesi Cloud API) +
 // tombol test send ke nomor admin user.

@@ -1,7 +1,7 @@
 // POST /api/orders/submit (PUBLIC, no-auth)
 // Customer submit order via OrderForm. Server bertanggung jawab penuh untuk:
 //   1. Validasi input
-//   2. Verifikasi form aktif & owner masih punya akses POWER
+//   2. Verifikasi form aktif & owner masih punya akses Order System
 //   3. Hitung total via pricing engine (sumber kebenaran — JANGAN trust client)
 //   4. Generate invoiceNumber + uniqueCode
 //   5. Snapshot bank accounts aktif + zone yg di-apply
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
       return jsonError('Form tidak aktif atau tidak ditemukan', 404)
     }
 
-    // 2. Cek owner masih punya akses POWER.
+    // 2. Cek owner masih punya akses Order System.
     const access = await checkOrderSystemAccess(form.userId)
     if (!access.hasAccess) {
       return jsonError(
@@ -419,7 +419,7 @@ export async function POST(req: Request) {
     // Notif WA owner — fire-and-forget, jangan block response.
     notifyNewOrder(created.id).catch(() => {})
 
-    // Generate follow-up queue (POWER only, gating di engine).
+    // Generate follow-up queue (butuh akses Order System, gating di engine).
     generateQueueForOrder(created.id, 'ORDER_CREATED').catch((err) => {
       console.error('[orders/submit] followup generate gagal:', err)
     })

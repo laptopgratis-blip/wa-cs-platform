@@ -48,7 +48,8 @@ export default async function DashboardLayout({
   }
 
   // Fetch saldo token + akses Order System paralel — di-pass ke Sidebar (desktop)
-  // + Drawer (mobile) untuk filter menu Order System (POWER only).
+  // + Drawer (mobile) untuk filter menu Order System (paket ber-flag
+  // canUseOrderSystem, mulai Popular).
   const [balance, orderAccess, cloudSessionCount] = await Promise.all([
     prisma.tokenBalance.findUnique({
       where: { userId: session.user.id },

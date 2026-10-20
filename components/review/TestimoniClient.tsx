@@ -1,7 +1,7 @@
 'use client'
 
 // Dashboard testimoni owner (/pesanan/testimoni). List + kurasi (approve) +
-// hapus. Data dari /api/reviews. POWER only (gating di page).
+// hapus. Data dari /api/reviews. Butuh akses Order System (gating di page).
 import type { LucideIcon } from 'lucide-react'
 import { Check, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'

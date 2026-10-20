@@ -27,7 +27,7 @@ export interface OrderSystemAccess {
 //
 // ADMIN bypass: role=ADMIN selalu hasAccess=true (untuk testing + ops),
 // supaya admin Hulao bisa lihat & test semua fitur Order System tanpa harus
-// subscribe ke paket POWER duluan.
+// berlangganan paket ber-Order System duluan.
 export async function checkOrderSystemAccess(
   userId: string,
 ): Promise<OrderSystemAccess> {

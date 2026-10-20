@@ -1,6 +1,6 @@
 // PATCH /api/reviews/[id]  — { approved: boolean } (kurasi testimoni)
 // DELETE /api/reviews/[id] — hapus testimoni
-// Owner only (POWER). Scope ke userId supaya tak bisa ubah milik user lain.
+// Owner only (akses Order System). Scope ke userId supaya tak bisa ubah milik user lain.
 import { z } from 'zod'
 
 import { jsonError, jsonOk } from '@/lib/api'
