@@ -16,7 +16,9 @@ export const ADMIN_LANDING = '/admin/dashboard'
 export const FINANCE_LANDING = '/admin/finance'
 
 /** Halaman default sesuai role. Role tak dikenal/kosong → dashboard user. */
-export function landingPathForRole(role: LandingRole | null | undefined): string {
+export function landingPathForRole(
+  role: LandingRole | null | undefined,
+): string {
   if (role === 'ADMIN') return ADMIN_LANDING
   if (role === 'FINANCE') return FINANCE_LANDING
   return USER_LANDING
@@ -34,6 +36,19 @@ export function landingPathForRole(role: LandingRole | null | undefined): string
  * Hanya path relatif yang diterima — URL absolut ditolak agar tidak bisa
  * dipakai sebagai open redirect ke domain luar.
  */
+/**
+ * Link dari halaman publik ke halaman yang butuh login (mis. /pricing):
+ * lewat /login dengan callbackUrl supaya setelah login user mendarat di sana,
+ * bukan di dashboard. Hanya path relatif — sama dengan aturan
+ * resolveLoginRedirect.
+ */
+export function loginRedirectHref(path: string): string {
+  if (!path.startsWith('/') || path.startsWith('//')) {
+    throw new Error(`loginRedirectHref butuh path relatif, dapat: ${path}`)
+  }
+  return `/login?callbackUrl=${encodeURIComponent(path)}`
+}
+
 export function resolveLoginRedirect(
   callbackUrl: string | null | undefined,
   role: LandingRole | null | undefined,

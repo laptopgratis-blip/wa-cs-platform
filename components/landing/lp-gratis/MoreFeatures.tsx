@@ -14,61 +14,79 @@ import {
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
+import { loginRedirectHref } from '@/lib/auth-landing'
+import {
+  type OrderSystemPlan,
+  orderSystemPlanName,
+  orderSystemPriceText,
+} from '@/lib/landing-plan'
 
-const moreFeatures = [
-  {
-    icon: Bot,
-    title: 'CS AI di WhatsApp',
-    short: 'AI yang balas pelanggan 24/7',
-    desc: 'AI yang kenal produkmu, balas customer dalam 3 detik — meski kamu tidur. Lengkap dengan inbox CRM + multi-akun WA.',
-    cta: 'Lihat detail',
-    href: '/cs-whatsapp',
-    bg: 'from-blue-50 to-indigo-50',
-    border: 'border-blue-200',
-    iconBg: 'bg-blue-100 text-blue-700',
-    badge: 'Free + paket token',
-  },
-  {
-    icon: ShoppingCart,
-    title: 'Sistem Order Lengkap',
-    short: 'Form order, ongkir auto, follow-up',
-    desc: 'Tersedia mulai paket Popular: form checkout, hitung ongkir otomatis, kelola pesanan, follow-up template otomatis tiap pelanggan.',
-    cta: 'Lihat paket langganan',
-    href: '/pricing',
-    bg: 'from-orange-50 to-amber-50',
-    border: 'border-orange-200',
-    iconBg: 'bg-orange-100 text-orange-700',
-    badge: 'Mulai paket Popular',
-  },
-  {
-    icon: MessagesSquare,
-    title: 'AI Sales di WhatsApp',
-    short: 'AI guide pelanggan sampai closing',
-    desc: 'AI tanya kebutuhan customer, kasih harga, arahkan ke COD/Transfer/Booking — semua dalam satu chat. Tanpa landing page.',
-    cta: 'Pelajari',
-    href: '/cs-whatsapp#sales-flow',
-    bg: 'from-emerald-50 to-teal-50',
-    border: 'border-emerald-200',
-    iconBg: 'bg-emerald-100 text-emerald-700',
-    // Sales Flow (/cara-jualan) tidak di-gate paket — alurnya script-based,
-    // balasan AI biasa di luar alur tetap pakai token.
-    badge: 'Free + paket token',
-  },
-  {
-    icon: GraduationCap,
-    title: 'Course / LMS',
-    short: 'Jualan course online + akses auto',
-    desc: 'Bikin kelas online (video/teks), murid bayar via order form, akses course otomatis dikirim. Cocok untuk content creator & coach.',
-    cta: 'Lihat paket LMS',
-    href: '/pricing',
-    bg: 'from-purple-50 to-fuchsia-50',
-    border: 'border-purple-200',
-    iconBg: 'bg-purple-100 text-purple-700',
-    badge: 'Paket LMS',
-  },
-]
+// Fungsi (bukan konstanta) karena kartu Sistem Order memakai nama & harga
+// paket dari DB. Link ke /pricing & /pricing-lms lewat login + callbackUrl —
+// kedua halaman itu butuh login.
+function buildMoreFeatures(plan: OrderSystemPlan | null) {
+  const planName = orderSystemPlanName(plan)
+  const priceText = orderSystemPriceText(plan)
+  return [
+    {
+      icon: Bot,
+      title: 'CS AI di WhatsApp',
+      short: 'AI yang balas pelanggan 24/7',
+      desc: 'AI yang kenal produkmu, balas customer dalam 3 detik — meski kamu tidur. Lengkap dengan inbox CRM + multi-akun WA.',
+      cta: 'Lihat detail',
+      href: '/cs-whatsapp',
+      bg: 'from-blue-50 to-indigo-50',
+      border: 'border-blue-200',
+      iconBg: 'bg-blue-100 text-blue-700',
+      badge: 'Free + paket token',
+    },
+    {
+      icon: ShoppingCart,
+      title: 'Sistem Order Lengkap',
+      short: 'Form order, ongkir auto, follow-up',
+      desc: `Tersedia mulai paket ${planName}${priceText ? ` (${priceText})` : ''}: form checkout, hitung ongkir otomatis, kelola pesanan, follow-up template otomatis tiap pelanggan.`,
+      cta: 'Lihat paket langganan',
+      href: loginRedirectHref('/pricing'),
+      bg: 'from-orange-50 to-amber-50',
+      border: 'border-orange-200',
+      iconBg: 'bg-orange-100 text-orange-700',
+      badge: `Mulai paket ${planName}`,
+    },
+    {
+      icon: MessagesSquare,
+      title: 'AI Sales di WhatsApp',
+      short: 'AI guide pelanggan sampai closing',
+      desc: 'AI tanya kebutuhan customer, kasih harga, arahkan ke COD/Transfer/Booking — semua dalam satu chat. Tanpa landing page.',
+      cta: 'Pelajari',
+      href: '/cs-whatsapp#sales-flow',
+      bg: 'from-emerald-50 to-teal-50',
+      border: 'border-emerald-200',
+      iconBg: 'bg-emerald-100 text-emerald-700',
+      // Sales Flow (/cara-jualan) tidak di-gate paket — alurnya script-based,
+      // balasan AI biasa di luar alur tetap pakai token.
+      badge: 'Free + paket token',
+    },
+    {
+      icon: GraduationCap,
+      title: 'Course / LMS',
+      short: 'Jualan course online + akses auto',
+      desc: 'Bikin kelas online (video/teks), murid bayar via order form, akses course otomatis dikirim. Cocok untuk content creator & coach.',
+      cta: 'Lihat paket LMS',
+      href: loginRedirectHref('/pricing-lms'),
+      bg: 'from-purple-50 to-fuchsia-50',
+      border: 'border-purple-200',
+      iconBg: 'bg-purple-100 text-purple-700',
+      badge: 'Paket LMS',
+    },
+  ]
+}
 
-export function MoreFeatures() {
+export function MoreFeatures({
+  orderSystemPlan,
+}: {
+  orderSystemPlan: OrderSystemPlan | null
+}) {
+  const moreFeatures = buildMoreFeatures(orderSystemPlan)
   return (
     <section className="border-warm-200 from-warm-50 to-warm-50 border-y bg-gradient-to-br via-white py-16 md:py-24">
       <div className="container mx-auto px-4">

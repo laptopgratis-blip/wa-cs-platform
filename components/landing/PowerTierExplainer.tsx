@@ -1,13 +1,20 @@
 // Section khusus untuk komunikasikan fitur Order System (Form Order +
 // Auto-Confirm + Pixel Tracking) TANPA overwhelm calon user yang baru mulai.
 // Akses = paket langganan ber-flag canUseOrderSystem (lib/order-system-gate.ts),
-// saat ini mulai Popular. Harga sengaja tidak di-hardcode — sumbernya
-// priceMonthly di DB, tampil di /pricing. Tag halus "untuk yang udah jualan
-// rutin" supaya yang gak fit otomatis skip section ini.
+// saat ini mulai Popular. Nama & harga paket tidak di-hardcode — diambil dari
+// DB (lib/services/landing-plan.ts), detail lengkap di /pricing (butuh login).
+// Tag halus "untuk yang udah jualan rutin" supaya yang gak fit otomatis skip
+// section ini.
 import { ArrowRight, Banknote, BarChart3, ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 
 import { Button } from '@/components/ui/button'
+import { loginRedirectHref } from '@/lib/auth-landing'
+import {
+  type OrderSystemPlan,
+  orderSystemPlanName,
+  orderSystemPriceText,
+} from '@/lib/landing-plan'
 
 const advanced = [
   {
@@ -28,7 +35,13 @@ const advanced = [
   },
 ]
 
-export function PowerTierExplainer() {
+export function PowerTierExplainer({
+  orderSystemPlan,
+}: {
+  orderSystemPlan: OrderSystemPlan | null
+}) {
+  const planName = orderSystemPlanName(orderSystemPlan)
+  const priceText = orderSystemPriceText(orderSystemPlan)
   return (
     <section className="border-warm-200 bg-warm-50 border-y py-16 md:py-20">
       <div className="container mx-auto px-4">
@@ -41,9 +54,9 @@ export function PowerTierExplainer() {
           </h2>
           <p className="text-warm-600 mt-3">
             Mulai paket{' '}
-            <span className="text-warm-900 font-semibold">Popular</span>, kamu
-            dapat fitur e-commerce yang biasanya butuh subscribe ke 3-4 tools
-            beda.
+            <span className="text-warm-900 font-semibold">{planName}</span>,
+            kamu dapat fitur e-commerce yang biasanya butuh subscribe ke 3-4
+            tools beda.
           </p>
         </div>
 
@@ -73,13 +86,21 @@ export function PowerTierExplainer() {
 
         <div className="border-primary-200 bg-card mx-auto mt-12 max-w-2xl rounded-2xl border p-6 text-center shadow-sm md:p-8">
           <div className="font-display text-warm-900 text-2xl font-extrabold">
-            Mulai paket Popular
+            Mulai paket {planName}
           </div>
+          {priceText && (
+            <p className="text-warm-700 mt-1 text-sm font-medium">
+              {priceText}, dibayar pakai saldo token
+            </p>
+          )}
           <p className="text-warm-600 mt-2 text-sm">
             Tanpa kontrak. Mulai dari paket gratis dulu — upgrade saat omset
             ramai. Cancel kapan saja.{' '}
-            <Link href="/pricing" className="text-primary-600 hover:underline">
-              Lihat harga paket
+            <Link
+              href={loginRedirectHref('/pricing')}
+              className="text-primary-600 hover:underline"
+            >
+              Lihat rincian paket
             </Link>
           </p>
           <Button
