@@ -1,6 +1,14 @@
 // Schema validasi untuk POST /api/lp/generate.
 import { z } from 'zod'
 
+// Threshold minimal saldo token aktif untuk boleh akses AI generate.
+// User free dengan saldo di bawah ini di-block — diarahkan ke alur manual
+// (copy prompt template ke ChatGPT/Claude.ai gratis lalu paste). Tujuan:
+// hemat biaya AI provider untuk user yg tidak generate revenue. Gate ini
+// terpisah dari skema charge — charge per call proporsional via featureKey.
+// Di sini (bukan di route) supaya /pricing bisa menampilkan angka yang sama.
+export const LP_GENERATE_MIN_BALANCE = 1000
+
 export const LP_STYLES = [
   { value: 'MODERN_MINIMALIS', label: 'Modern Minimalis' },
   { value: 'BOLD_COLORFUL', label: 'Bold & Colorful' },

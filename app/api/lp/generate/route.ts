@@ -16,16 +16,10 @@ import {
 } from '@/lib/services/ai-generation-log'
 import {
   LP_CTA_TYPES,
+  LP_GENERATE_MIN_BALANCE as MIN_BALANCE_FOR_AI,
   LP_STYLES,
   lpGenerateSchema,
 } from '@/lib/validations/lp-generate'
-
-// Threshold minimal saldo token aktif untuk boleh akses AI generate.
-// User free dengan saldo di bawah ini di-block — diarahkan ke alur manual
-// (copy prompt template ke ChatGPT/Claude.ai gratis lalu paste). Tujuan:
-// hemat biaya AI provider untuk user yg tidak generate revenue. Gate ini
-// terpisah dari skema charge — charge per call proporsional via featureKey.
-const MIN_BALANCE_FOR_AI = 1000
 
 // Max output tokens — HTML landing page bisa panjang. Streaming aman sampai
 // 64K (cap Haiku 4.5).
