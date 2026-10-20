@@ -22,7 +22,7 @@ const faqs = [
   },
   {
     q: 'Berapa LP bisa saya buat di paket gratis?',
-    a: '1 LP aktif di paket gratis. Mau lebih? Upgrade ke paket POWER untuk multi-LP + fitur Order System lengkap. Tapi 1 LP biasanya cukup untuk 1 produk inti — tidak perlu paksa-paksa upgrade.',
+    a: '1 LP aktif di paket gratis. Mau lebih? Langganan paket Starter, Popular, atau Power untuk menambah slot LP — fitur Sistem Order sudah termasuk mulai paket Popular. Rincian kuota tiap paket ada di halaman paket langganan. Tapi 1 LP biasanya cukup untuk 1 produk inti — tidak perlu paksa-paksa upgrade.',
   },
   {
     q: 'Bisa custom domain? (mis. produkku.com)',

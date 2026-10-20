@@ -46,7 +46,7 @@ export async function generateQueueForOrder(
 
   const access = await checkOrderSystemAccess(order.userId)
   if (!access.hasAccess) {
-    return { generated: 0, reason: 'Plan gating: not POWER' }
+    return { generated: 0, reason: 'Plan gating: no Order System access' }
   }
 
   // Saat order diterima, pastikan template testimoni (DAYS_AFTER_DELIVERED)
@@ -176,7 +176,9 @@ export async function generateQueueForLead(
   if (!lead) return { generated: 0, reason: 'Lead not found' }
 
   const access = await checkOrderSystemAccess(lead.userId)
-  if (!access.hasAccess) return { generated: 0, reason: 'Plan gating: not POWER' }
+  if (!access.hasAccess) {
+    return { generated: 0, reason: 'Plan gating: no Order System access' }
+  }
 
   // Opt-in: hanya jalan kalau user sudah pakai follow-up (punya minimal 1
   // template). Tidak auto-mengaktifkan untuk user yang belum enable.

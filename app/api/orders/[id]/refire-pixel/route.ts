@@ -4,7 +4,7 @@
 // kalau pixel sebelumnya gagal (mis. Meta API down sesaat) dan user mau
 // retry sekarang tanpa nunggu cron.
 //
-// Plan-gate POWER. firePixelEventForOrder sudah dedup-aware — kalau event
+// Plan-gate: akses Order System. firePixelEventForOrder sudah dedup-aware — kalau event
 // sudah succeeded, akan di-skip; kalau gagal, di-retry.
 import type { NextResponse } from 'next/server'
 import { z } from 'zod'

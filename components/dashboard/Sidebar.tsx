@@ -39,7 +39,7 @@ interface SidebarProps {
   tokenBalance?: number | null
   /** Saldo Kredit Pesan WA (Rp). Null = sembunyi (tidak punya sesi Cloud API). */
   messageCreditRp?: number | null
-  /** Akses ke Order System (paket POWER). Default false. */
+  /** Akses ke Order System (mulai paket Popular). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
   onboardingGoal?: OnboardingGoal | null
@@ -81,7 +81,7 @@ export function Sidebar({
     })
   }
 
-  // 1. Filter by Order System access (POWER plan) — ini hard gate.
+  // 1. Filter by Order System access (lib/order-system-gate) — ini hard gate.
   // 2. Filter by onboarding goal — soft hide, user bisa unhide.
   const orderFiltered = filterGroupsByOrderSystem(
     USER_NAV_GROUPS,

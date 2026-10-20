@@ -1,6 +1,6 @@
 // Template default yang auto-create saat user enable Follow-Up Order System
 // untuk pertama kali (DEFAULT_TEMPLATES order + LEAD_NURTURE_TEMPLATES +
-// REVIEW_TEMPLATES). Semua POWER tier. Dipanggil dari
+// REVIEW_TEMPLATES). Semua butuh akses Order System. Dipanggil dari
 // POST /api/integrations/followup/enable.
 //
 // Variable available: {nama} {invoice} {total} {produk} {rekening} {wa_admin}

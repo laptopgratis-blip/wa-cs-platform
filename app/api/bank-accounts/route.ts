@@ -1,8 +1,8 @@
 // GET  /api/bank-accounts — list rekening user.
 // POST /api/bank-accounts — buat rekening baru. Limit 5 per user.
 //
-// Plan-gate: hanya user dengan akses Order System (paket POWER) yang boleh
-// akses endpoint ini.
+// Plan-gate: hanya user dengan akses Order System (mulai paket Popular) yang
+// boleh akses endpoint ini.
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'

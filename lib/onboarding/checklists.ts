@@ -24,6 +24,19 @@ export type AutoCheckKey =
   | 'lms_subscribed'
 
 /**
+ * Paket minimum yang membuka sebuah step. POPULAR = paket terendah yang saat
+ * ini ber-flag canUseOrderSystem di DB (sumber kebenaran akses tetap
+ * lib/order-system-gate.ts — nilai ini hanya untuk badge UI).
+ */
+export type RequiredPlan = 'POPULAR' | 'LMS'
+
+/** Label badge "Butuh …" per paket minimum. */
+export const REQUIRED_PLAN_LABEL: Record<RequiredPlan, string> = {
+  POPULAR: 'paket Popular',
+  LMS: 'paket LMS',
+}
+
+/**
  * Inline task kind — kalau di-set, wizard /onboarding/guide akan render
  * mini-form embedded (mis. scan QR WA, form rekening) langsung di dalam
  * wizard, tanpa user harus buka tab baru. Step kompleks (LP builder, course
@@ -65,10 +78,10 @@ export interface ChecklistStep {
    */
   optional?: boolean
   /**
-   * Plan minimum untuk step ini. UI tampilkan badge "Butuh upgrade" + CTA
-   * kalau user belum punya akses.
+   * Plan minimum untuk step ini. UI tampilkan badge "Butuh …" (label dari
+   * REQUIRED_PLAN_LABEL). Step Sistem Order = 'POPULAR'.
    */
-  requiresPlan?: 'POWER' | 'LMS'
+  requiresPlan?: RequiredPlan
   /**
    * Instruksi konkret langkah-per-langkah untuk wizard mode (dipakai di
    * /onboarding/guide). Diformat sebagai numbered list di UI.
@@ -187,7 +200,7 @@ const SELL_LP: ChecklistDefinition = {
       href: '/bank-accounts',
       estimatedMin: 3,
       autoCheck: 'bank_account_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka pengaturan rekening',
       inlineTask: 'bank_add',
       instructions: [
@@ -203,7 +216,7 @@ const SELL_LP: ChecklistDefinition = {
       href: '/products',
       estimatedMin: 5,
       autoCheck: 'product_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka halaman Produk',
       inlineTask: 'product_add',
       instructions: [
@@ -219,7 +232,7 @@ const SELL_LP: ChecklistDefinition = {
       href: '/shipping-zones',
       estimatedMin: 3,
       autoCheck: 'shipping_zone_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka Zona Ongkir',
       inlineTask: 'shipping_zone',
       instructions: [
@@ -248,7 +261,7 @@ const SELL_LP: ChecklistDefinition = {
       href: '/order-forms',
       estimatedMin: 3,
       autoCheck: 'order_form_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka Form Order',
       inlineTask: 'order_form',
       instructions: [
@@ -265,7 +278,7 @@ const SELL_LP: ChecklistDefinition = {
       estimatedMin: 2,
       autoCheck: 'followup_enabled',
       optional: true,
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka Follow-Up',
       inlineTask: 'followup_on',
       instructions: [
@@ -317,7 +330,7 @@ const SELL_WA: ChecklistDefinition = {
       href: '/products',
       estimatedMin: 5,
       autoCheck: 'product_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka halaman Produk',
       inlineTask: 'product_add',
       instructions: [
@@ -348,7 +361,7 @@ const SELL_WA: ChecklistDefinition = {
       href: '/bank-accounts',
       estimatedMin: 3,
       autoCheck: 'bank_account_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka pengaturan rekening',
       inlineTask: 'bank_add',
       instructions: [
@@ -419,7 +432,7 @@ const LMS: ChecklistDefinition = {
       href: '/products',
       estimatedMin: 3,
       autoCheck: 'product_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka halaman Produk',
       inlineTask: 'product_add',
       instructions: [
@@ -435,7 +448,7 @@ const LMS: ChecklistDefinition = {
       href: '/order-forms',
       estimatedMin: 3,
       autoCheck: 'order_form_added',
-      requiresPlan: 'POWER',
+      requiresPlan: 'POPULAR',
       actionLabel: 'Buka Form Order',
       inlineTask: 'order_form',
       instructions: [

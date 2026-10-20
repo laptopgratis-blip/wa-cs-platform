@@ -1,6 +1,9 @@
-// Section khusus untuk komunikasikan fitur POWER (Order System + Auto-Confirm
-// + Pixel Tracking) TANPA overwhelm calon user yang baru mulai. Tag halus
-// "untuk yang udah jualan rutin" supaya yang gak fit otomatis skip section ini.
+// Section khusus untuk komunikasikan fitur Order System (Form Order +
+// Auto-Confirm + Pixel Tracking) TANPA overwhelm calon user yang baru mulai.
+// Akses = paket langganan ber-flag canUseOrderSystem (lib/order-system-gate.ts),
+// saat ini mulai Popular. Harga sengaja tidak di-hardcode — sumbernya
+// priceMonthly di DB, tampil di /pricing. Tag halus "untuk yang udah jualan
+// rutin" supaya yang gak fit otomatis skip section ini.
 import { ArrowRight, Banknote, BarChart3, ShoppingCart } from 'lucide-react'
 import Link from 'next/link'
 
@@ -37,8 +40,9 @@ export function PowerTierExplainer() {
             Sudah produksi 100+ order/bulan?
           </h2>
           <p className="text-warm-600 mt-3">
-            Paket <span className="text-warm-900 font-semibold">POWER</span>{' '}
-            buka fitur e-commerce yang biasanya butuh subscribe ke 3-4 tools
+            Mulai paket{' '}
+            <span className="text-warm-900 font-semibold">Popular</span>, kamu
+            dapat fitur e-commerce yang biasanya butuh subscribe ke 3-4 tools
             beda.
           </p>
         </div>
@@ -69,12 +73,14 @@ export function PowerTierExplainer() {
 
         <div className="border-primary-200 bg-card mx-auto mt-12 max-w-2xl rounded-2xl border p-6 text-center shadow-sm md:p-8">
           <div className="font-display text-warm-900 text-2xl font-extrabold">
-            Rp 199.000
-            <span className="text-warm-500 text-base font-medium">/bulan</span>
+            Mulai paket Popular
           </div>
           <p className="text-warm-600 mt-2 text-sm">
             Tanpa kontrak. Mulai dari paket gratis dulu — upgrade saat omset
-            ramai. Cancel kapan saja.
+            ramai. Cancel kapan saja.{' '}
+            <Link href="/pricing" className="text-primary-600 hover:underline">
+              Lihat harga paket
+            </Link>
           </p>
           <Button
             asChild

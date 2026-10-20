@@ -171,12 +171,12 @@ export function Pricing({ packages }: PricingProps) {
       )}
 
       <p className="mt-10 text-center text-xs text-warm-500">
-        Paket POWER (Rp 199.000/bulan) terpisah untuk fitur Order System.
-        Lihat detail di section{' '}
-        <a href="#power" className="text-primary-600 hover:underline">
-          Untuk yang serius scaling
-        </a>{' '}
-        di atas.
+        Sistem Order (form order, ongkir otomatis, kelola pesanan) tersedia
+        lewat langganan paket landing page mulai Popular — terpisah dari paket
+        token di atas.{' '}
+        <Link href="/pricing" className="text-primary-600 hover:underline">
+          Lihat paket langganan
+        </Link>
       </p>
     </section>
   )

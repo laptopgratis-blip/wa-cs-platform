@@ -60,7 +60,7 @@ interface MobileDrawerProps {
   /** Saldo token user — untuk card di drawer. */
   tokenBalance?: number | null
   messageCreditRp?: number | null
-  /** Akses Order System (paket POWER). Default false. */
+  /** Akses Order System (mulai paket Popular). Default false. */
   hasOrderSystemAccess?: boolean
   /** Goal onboarding user — filter group sidebar yg tidak relevan. */
   onboardingGoal?: OnboardingGoal | null

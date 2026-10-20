@@ -22,7 +22,11 @@ import { toast } from 'sonner'
 import { InlineTaskHost } from '@/components/onboarding/inline/InlineTaskHost'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import type { InlineTaskKind } from '@/lib/onboarding/checklists'
+import {
+  REQUIRED_PLAN_LABEL,
+  type InlineTaskKind,
+  type RequiredPlan,
+} from '@/lib/onboarding/checklists'
 import { cn } from '@/lib/utils'
 
 type Goal = 'CS_AI' | 'SELL_LP' | 'SELL_WA' | 'LMS'
@@ -38,7 +42,7 @@ interface GuideStep {
   autoChecked: boolean
   hasAutoCheck: boolean
   optional: boolean
-  requiresPlan: 'POWER' | 'LMS' | null
+  requiresPlan: RequiredPlan | null
   instructions: string[]
   actionLabel: string
   inlineTask: InlineTaskKind | null
@@ -296,7 +300,8 @@ export function OnboardingGuide({
                   )}
                   {active.requiresPlan && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                      <Crown className="size-3" /> Butuh {active.requiresPlan}
+                      <Crown className="size-3" /> Butuh{' '}
+                      {REQUIRED_PLAN_LABEL[active.requiresPlan]}
                     </span>
                   )}
                   <span className="text-warm-500 text-xs">

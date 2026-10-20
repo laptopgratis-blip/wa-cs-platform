@@ -340,7 +340,13 @@ export function LpManager() {
               </Badge>
             </div>
             <CardDescription className="text-warm-500 text-xs">
-              Beli paket token untuk upgrade kuota otomatis.
+              Kuota naik lewat langganan paket landing page.{' '}
+              <Link
+                href="/pricing"
+                className="text-primary-600 font-medium hover:underline"
+              >
+                Lihat paket
+              </Link>
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">

@@ -1,5 +1,6 @@
 // PUBLIC route — no auth. Customer akses via /order/<slug> dari link share.
-// Server fetch form + verify owner masih aktif POWER + render client.
+// Server fetch form + verify owner masih punya akses Order System + render
+// client.
 import { notFound } from 'next/navigation'
 
 import { OrderFormPublic } from '@/components/order-public/OrderFormPublic'
@@ -51,7 +52,7 @@ export default async function PublicOrderPage({ params }: PageProps) {
 
   if (!form) notFound()
 
-  // Cek akses owner (paket POWER aktif).
+  // Cek akses owner (langganan hidup ber-flag canUseOrderSystem).
   const access = await checkOrderSystemAccess(form.userId)
   const isAvailable = form.isActive && access.hasAccess
 

@@ -1,5 +1,5 @@
 // GET /api/integrations/pixels/logs
-// Paginated + filter PixelEventLog milik user. Plan-gate POWER.
+// Paginated + filter PixelEventLog milik user. Plan-gate: akses Order System.
 // Query params: page, limit, platform, eventName, status (succeeded|failed|all),
 //               pixelId, from, to.
 import type { NextResponse } from 'next/server'

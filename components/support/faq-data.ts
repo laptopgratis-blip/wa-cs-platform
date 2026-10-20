@@ -69,7 +69,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         q: 'Kenapa beberapa menu tidak muncul di sidebar saya?',
-        a: 'Dua sebabnya. Pertama, menu tertentu (Pesanan, Produk, Zona Ongkir, Pixel Tracking) hanya untuk paket POWER. Kedua, saat awal mendaftar kamu memilih tujuan pemakaian, dan menu yang tidak relevan disembunyikan agar tidak membingungkan — klik "Tampilkan semua menu" di bagian bawah sidebar untuk membukanya kembali.',
+        a: 'Dua sebabnya. Pertama, menu Sistem Order (Pesanan, Produk, Zona Ongkir, Pixel Tracking, dan lainnya) hanya tampil kalau langganan paket kamu sudah termasuk Sistem Order — saat ini mulai paket Popular. Kedua, saat awal mendaftar kamu memilih tujuan pemakaian, dan menu yang tidak relevan disembunyikan agar tidak membingungkan — klik "Tampilkan semua menu" di bagian bawah sidebar untuk membukanya kembali.',
       },
       {
         q: 'Bagaimana cara mulai memakai API Hulao?',

@@ -3,7 +3,7 @@
 // POST /api/followup/templates  — create new template (tautan Template Meta
 //      divalidasi: milik user, didukung, peta {{n}} lengkap & sah)
 //
-// Plan gating: POWER only (requireOrderSystemAccess).
+// Plan gating: akses Order System (requireOrderSystemAccess).
 import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'

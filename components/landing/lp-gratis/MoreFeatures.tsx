@@ -1,7 +1,7 @@
 // MoreFeatures — cross-sell section: setelah user yakin LP gratis bagus,
 // kasih lihat fitur lain yang Hulao punya kalau mereka mau scale lebih.
-// 4 goal yang sama dengan wizard onboarding (CS_AI / SELL_LP Power /
-// SELL_WA / LMS) — tapi diposisikan sebagai "fitur tambahan", bukan
+// 4 goal yang sama dengan wizard onboarding (CS_AI / SELL_LP / SELL_WA /
+// LMS) — tapi diposisikan sebagai "fitur tambahan", bukan
 // commitment. CTA per card mengarah ke detail page atau langsung register.
 
 import {
@@ -32,13 +32,13 @@ const moreFeatures = [
     icon: ShoppingCart,
     title: 'Sistem Order Lengkap',
     short: 'Form order, ongkir auto, follow-up',
-    desc: 'Upgrade ke paket POWER: form checkout, hitung ongkir otomatis, kelola pesanan, follow-up template otomatis tiap pelanggan.',
-    cta: 'Lihat paket POWER',
+    desc: 'Tersedia mulai paket Popular: form checkout, hitung ongkir otomatis, kelola pesanan, follow-up template otomatis tiap pelanggan.',
+    cta: 'Lihat paket langganan',
     href: '/pricing',
     bg: 'from-orange-50 to-amber-50',
     border: 'border-orange-200',
     iconBg: 'bg-orange-100 text-orange-700',
-    badge: 'Paket POWER',
+    badge: 'Mulai paket Popular',
   },
   {
     icon: MessagesSquare,
@@ -50,7 +50,9 @@ const moreFeatures = [
     bg: 'from-emerald-50 to-teal-50',
     border: 'border-emerald-200',
     iconBg: 'bg-emerald-100 text-emerald-700',
-    badge: 'Paket POWER',
+    // Sales Flow (/cara-jualan) tidak di-gate paket — alurnya script-based,
+    // balasan AI biasa di luar alur tetap pakai token.
+    badge: 'Free + paket token',
   },
   {
     icon: GraduationCap,

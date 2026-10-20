@@ -1,6 +1,6 @@
 'use client'
 
-// Follow-Up Order System dashboard untuk user (POWER only).
+// Follow-Up Order System dashboard untuk user (butuh akses Order System).
 // 4 tab: Today (PENDING jadwal hari ini), Upcoming (PENDING > today),
 // History (FollowUpLog), Blacklist.
 //

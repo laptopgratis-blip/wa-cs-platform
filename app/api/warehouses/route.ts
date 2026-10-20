@@ -1,7 +1,7 @@
 // GET  /api/warehouses — list gudang user.
 // POST /api/warehouses — buat gudang baru. Limit per user.
 //
-// Plan-gate: hanya user dengan akses Order System (paket POWER).
+// Plan-gate: hanya user dengan akses Order System (mulai paket Popular).
 import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk } from '@/lib/api'

@@ -1,7 +1,7 @@
 // /cs-whatsapp — sub-page khusus fitur CS AI WhatsApp.
 // Sebelumnya isi home, dipindah ke sini biar home utama bisa fokus ke LP
 // Gratis (entry-point UMKM). Di sini full pitch CS AI: pain → solution
-// → cara kerja → power tier → pricing → FAQ → CTA.
+// → cara kerja → Order System (PowerTierExplainer) → pricing → FAQ → CTA.
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 

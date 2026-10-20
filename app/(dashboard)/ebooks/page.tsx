@@ -1,5 +1,5 @@
 // /ebooks — kelola e-book (aset digital PDF/EPUB) + statistik penjualan &
-// daftar pembeli. Gate: Order System (paket POWER), sama dgn /products.
+// daftar pembeli. Gate: Order System (mulai paket Popular), sama dgn /products.
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 

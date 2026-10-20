@@ -58,8 +58,9 @@ export default async function PricingPage() {
   if (session) {
     // "Plan saat ini" HARUS dari subscription aktif (sumber yang sama dengan
     // PlanBadge topbar, preview, dan checkout) — BUKAN UserQuota.tier.
-    // UserQuota.tier bisa lebih tinggi dari plan karena naik otomatis dari
-    // akumulasi top-up token (lib/lp-quota.ts) — kasus 2026-07-14: quota
+    // UserQuota.tier bisa lebih tinggi dari plan karena floor grandfather
+    // legacyTier dari era "tier naik dari top-up token" (mekanisme itu sudah
+    // dimatikan 2026-07-14, lihat lib/lp-quota.ts) — kasus 2026-07-14: quota
     // POWER dari top-up 750K token, sub aktif POPULAR → tombol Power terkunci
     // "Plan Saat Ini" padahal user justru mau upgrade ke Power.
     const [activeSubs, balance] = await Promise.all([
