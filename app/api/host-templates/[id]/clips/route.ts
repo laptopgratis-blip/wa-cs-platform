@@ -1,16 +1,32 @@
 // GET  /api/host-templates/[id]/clips — list klip untuk host (owner/admin)
 // POST /api/host-templates/[id]/clips — generate klip baru dari script
 //
-// POST body: { script, category, productId?, tags?, voiceId?, sourceVideoId?, sourceVideoUrl? }
-// Returns immediately dengan clip ID. Status updates async via polling pattern.
-// Untuk Sprint 2 MVP, generate sinkron (max 2 menit).
+// POST body: { script, category, productId?, tags?, voiceId?, sourceVideoId?,
+//              sourceVideoUrl?, allowDuplicate? }
+// BACKGROUND JOB (2026-10-22): dulu route ini menunggu TTS + Kling lipsync
+// (220–270 dtk) — Cloudflare memutus di 100 dtk (524) sehingga user melihat
+// "Unexpected token '<'…", lalu klik ulang → klip & token dobel. Sekarang:
+// clip-start.ts (validasi + precheck saldo + anti klik-ganda + buat baris)
+// → `after()` runClipPipelineJob → balas 202 { clipId, status, alreadyRunning }.
+// UI polling GET list sampai klip READY/FAILED.
 
-import type { NextResponse } from 'next/server'
+import { after, type NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { generateClip } from '@/lib/services/clip-library/generate-clip'
+import {
+  ClipStartError,
+  startGeneratedClip,
+} from '@/lib/services/clip-library/clip-start'
+import { sweepStalledClips } from '@/lib/services/clip-library/clip-stale-sweep'
+import { runClipPipelineJob } from '@/lib/services/clip-library/generate-clip'
+
+// Route sendiri selesai < 2 dtk; di platform yang menegakkan maxDuration,
+// callback `after()` ikut dibatasi nilai ini. Server Node self-hosted (hulao)
+// tidak menegakkannya — job dibatasi poll Kling 5 menit + cron finalizer.
+export const maxDuration = 300
+export const dynamic = 'force-dynamic'
 
 const ALLOWED_CATEGORIES = [
   'GREETING',
@@ -31,6 +47,8 @@ const generateSchema = z.object({
   sourceVideoId: z.string().trim().max(120).optional(),
   sourceVideoUrl: z.string().trim().url().optional(),
   ownerExtra: z.string().max(500).optional(),
+  // true = user sudah konfirmasi buat klip kembar (respons 409 sebelumnya).
+  allowDuplicate: z.boolean().optional(),
 })
 
 async function authorizeHost(
@@ -66,6 +84,11 @@ export async function GET(
   } catch (e) {
     return jsonError((e as Error).message, 403)
   }
+
+  // Lazy sweep: klip yang job-nya mati (restart) tidak spinner selamanya.
+  await sweepStalledClips({ hostTemplateId: id }).catch((e) =>
+    console.warn('[GET clips] sweep klip macet gagal:', (e as Error).message),
+  )
 
   const clips = await prisma.liveClip.findMany({
     where: { hostTemplateId: id },
@@ -171,7 +194,7 @@ export async function POST(
   }
 
   try {
-    const result = await generateClip({
+    const pipelineInput = {
       hostTemplateId: id,
       userId: host.userId,
       script: parsed.data.script,
@@ -182,9 +205,35 @@ export async function POST(
       sourceVideoId,
       sourceVideoUrl,
       ownerExtra: parsed.data.ownerExtra,
+    }
+    const started = await startGeneratedClip({
+      ...pipelineInput,
+      allowDuplicate: parsed.data.allowDuplicate,
     })
-    return jsonOk(result)
+    if (!started.alreadyRunning) {
+      after(() =>
+        runClipPipelineJob(started.clipId, {
+          ...pipelineInput,
+          script: started.script,
+        }),
+      )
+    }
+    return jsonOk(
+      {
+        clipId: started.clipId,
+        status: started.status,
+        alreadyRunning: started.alreadyRunning,
+      },
+      202,
+    )
   } catch (e) {
-    return jsonError((e as Error).message, 500)
+    if (e instanceof ClipStartError) {
+      return Response.json(
+        { success: false, error: e.message, code: e.code },
+        { status: e.status },
+      )
+    }
+    console.error(`[POST /api/host-templates/${id}/clips] gagal memulai:`, e)
+    return jsonError('Gagal memulai generate klip. Coba lagi sebentar lagi.', 500)
   }
 }

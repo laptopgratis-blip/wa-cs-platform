@@ -33,26 +33,34 @@ async function main(): Promise<void> {
     assert.deepEqual(r.data?.data, { a: 1 })
   })
 
-  await check('fetch ditolak (jaringan) → ok:false, status 0, pesan ramah', async () => {
-    stub(() => {
-      throw new TypeError('Failed to fetch')
-    })
-    const r = await fetchJson('/x')
-    assert.equal(r.ok, false)
-    assert.equal(r.status, 0)
-    assert.match(r.error ?? '', /koneksi internet/i)
-  })
+  await check(
+    'fetch ditolak (jaringan) → ok:false, status 0, pesan ramah',
+    async () => {
+      stub(() => {
+        throw new TypeError('Failed to fetch')
+      })
+      const r = await fetchJson('/x')
+      assert.equal(r.ok, false)
+      assert.equal(r.status, 0)
+      assert.match(r.error ?? '', /koneksi internet/i)
+    },
+  )
 
-  await check('respons HTML 502 → TIDAK throw, pesan server bermasalah', async () => {
-    // Ini kasus yang dulu bikin diam total: res.json() melempar SyntaxError.
-    stub(() =>
-      Promise.resolve(new Response('<!DOCTYPE html><h1>Bad Gateway</h1>', { status: 502 })),
-    )
-    const r = await fetchJson('/x')
-    assert.equal(r.ok, false)
-    assert.equal(r.status, 502)
-    assert.match(r.error ?? '', /Server sedang bermasalah/i)
-  })
+  await check(
+    'respons HTML 502 → TIDAK throw, pesan server bermasalah',
+    async () => {
+      // Ini kasus yang dulu bikin diam total: res.json() melempar SyntaxError.
+      stub(() =>
+        Promise.resolve(
+          new Response('<!DOCTYPE html><h1>Bad Gateway</h1>', { status: 502 }),
+        ),
+      )
+      const r = await fetchJson('/x')
+      assert.equal(r.ok, false)
+      assert.equal(r.status, 502)
+      assert.match(r.error ?? '', /Server sedang bermasalah/i)
+    },
+  )
 
   await check('500 berbadan kosong → tetap ada pesan', async () => {
     stub(() => Promise.resolve(new Response('', { status: 500 })))
@@ -62,17 +70,65 @@ async function main(): Promise<void> {
   })
 
   await check('envelope success:false → pakai pesan dari server', async () => {
-    stub(() => Promise.resolve(jsonRes({ success: false, error: 'Template tidak ditemukan' })))
+    stub(() =>
+      Promise.resolve(
+        jsonRes({ success: false, error: 'Template tidak ditemukan' }),
+      ),
+    )
     const r = await fetchJson('/x')
     assert.equal(r.ok, false)
     assert.equal(r.error, 'Template tidak ditemukan')
   })
 
-  await check('success:false tanpa pesan → pakai fallbackError pemanggil', async () => {
-    stub(() => Promise.resolve(jsonRes({ success: false })))
-    const r = await fetchJson('/x', undefined, 'Gagal mengirim template')
-    assert.equal(r.error, 'Gagal mengirim template')
+  await check(
+    'success:false tanpa pesan → pakai fallbackError pemanggil',
+    async () => {
+      stub(() => Promise.resolve(jsonRes({ success: false })))
+      const r = await fetchJson('/x', undefined, 'Gagal mengirim template')
+      assert.equal(r.error, 'Gagal mengirim template')
+    },
+  )
+
+  await check(
+    '524 Cloudflare (HTML) → pesan timeout, jangan dorong klik ulang',
+    async () => {
+      // Kasus 2026-10-22: generate klip >100 dtk → CF 524 → toast mentah
+      // "Unexpected token '<'" → user klik ulang → klip & token dobel.
+      stub(() =>
+        Promise.resolve(
+          new Response(
+            '<!DOCTYPE html><title>524: A timeout occurred</title>',
+            { status: 524 },
+          ),
+        ),
+      )
+      const r = await fetchJson('/x')
+      assert.equal(r.ok, false)
+      assert.equal(r.status, 524)
+      assert.match(r.error ?? '', /terlalu lama merespons/i)
+      assert.match(r.error ?? '', /tetap berjalan/i)
+      assert.doesNotMatch(r.error ?? '', /Unexpected token/i)
+    },
+  )
+
+  await check('504 → pesan timeout yang sama', async () => {
+    stub(() =>
+      Promise.resolve(new Response('Gateway Timeout', { status: 504 })),
+    )
+    const r = await fetchJson('/x')
+    assert.match(r.error ?? '', /terlalu lama merespons/i)
   })
+
+  await check(
+    '521/522/530 Cloudflare → server tidak bisa dihubungi',
+    async () => {
+      for (const status of [503, 520, 521, 522, 523, 530]) {
+        stub(() => Promise.resolve(new Response('<!DOCTYPE html>', { status })))
+        const r = await fetchJson('/x')
+        assert.match(r.error ?? '', /tidak bisa dihubungi/i, String(status))
+      }
+    },
+  )
 
   await check('401 → arahkan user masuk lagi', async () => {
     stub(() => Promise.resolve(new Response('', { status: 401 })))

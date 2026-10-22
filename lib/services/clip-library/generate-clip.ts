@@ -8,9 +8,12 @@
 //   5. status → PROCESSING_EMBEDDING: OpenAI embed text → save embedding
 //   6. status → READY
 //
-// Async pattern: submit returns clip ID immediately, status=GENERATING_*.
-// Background poller (Sprint 5 - cron) advances state. Untuk MVP: synchronous
-// poll inline (max 90 detik per klip).
+// Async pattern (2026-10-22): POST /clips hanya membuat baris DRAFT (lewat
+// clip-start.ts) lalu menjadwalkan `runClipPipelineJob` via `after()` — total
+// pipeline 220–270 dtk jauh di atas batas Cloudflare 100 dtk. UI polling list
+// klip. Poll lipsync inline >5 menit diserahkan ke cron kling-poll
+// (late-lipsync-finalizer). `generateClip` (create + pipeline, ditunggu)
+// tetap dipakai loop bulk-generate.
 //
 // Cost (Sprint 5 - media-charge integration deferred):
 //   ElevenLabs: ~Rp 100-300 per klip (script 50-200 char)
@@ -32,7 +35,10 @@ import {
   submitKlingLipsync,
 } from '@/lib/services/host-gen/kling'
 import { isTransientKlingTaskFailure } from '@/lib/services/host-gen/kling-retry'
-import { computeMediaCharge, executeMediaSync } from '@/lib/services/media-charge'
+import {
+  computeMediaCharge,
+  executeMediaSync,
+} from '@/lib/services/media-charge'
 import { transcodeVideoToWeb } from '@/lib/services/media/transcode'
 
 import {
@@ -40,6 +46,7 @@ import {
   listElevenLabsVoices,
   maxSafeCharsForDuration,
 } from './audio-gen'
+import { IN_FLIGHT_CLIP_STATUSES } from './clip-job-rules'
 import { EMBED_MODEL, embedText } from './embed'
 
 const CLIPS_DIR = path.join(process.cwd(), 'public', 'uploads', 'clips')
@@ -56,9 +63,9 @@ export const KLING_LATE_MARKER =
   'Kling lambat — video diproses di background, otomatis siap saat selesai.'
 export const KLING_FINALIZING_MARKER =
   'Kling lambat — mengunduh hasil video dari Kling…'
-// Retry inline dibatasi 1 resubmit (lebih ketat dari MAX global 2) — pipeline
-// ini ditunggu synchronous oleh POST /clips; tiap resubmit bisa menambah wall
-// time sampai ~5 menit poll. 1 resubmit sudah menutup mayoritas transient.
+// Retry inline dibatasi 1 resubmit (lebih ketat dari MAX global 2) — tiap
+// resubmit menambah wall time sampai ~5 menit poll dan menahan slot job
+// background. 1 resubmit sudah menutup mayoritas transient.
 const MAX_INLINE_LIPSYNC_RETRIES = 1
 
 export interface GenerateClipInput {
@@ -141,21 +148,34 @@ export async function billClipLipsync(input: {
       featureKey: 'KLIP_LIVE_LIPSYNC',
       units: input.seconds,
     })
-    const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
-    await deductTokenAtomic({
+    const { deductTokenAtomic, logGeneration } =
+      await import('@/lib/services/ai-generation-log')
+    const deducted = await deductTokenAtomic({
       userId: input.userId,
       tokensCharged: charge.tokensCharged,
       description: `Klip Live Kling lipsync — ${input.seconds}dtk`,
       reference: `klip_lipsync:${input.clipId}`,
     })
+    if (!deducted.ok) {
+      console.warn(
+        `[generate-clip ${input.clipId}] saldo kurang saat billing lipsync (${charge.tokensCharged} token) — klip tetap disimpan TANPA terpotong`,
+      )
+    }
     // Catat juga ke AiGenerationLog — tanpa ini biaya lipsync tidak
     // terlihat di analitik profitabilitas admin (hanya ada TokenTransaction).
+    // Potongan gagal dicatat INSUFFICIENT_BALANCE, bukan OK (pendapatan fiktif).
     await logGeneration({
       featureKey: 'KLIP_LIVE_LIPSYNC',
       userId: input.userId,
       subjectType: 'LIVE_CLIP',
       subjectId: input.clipId,
       charge,
+      ...(deducted.ok
+        ? {}
+        : {
+            status: 'INSUFFICIENT_BALANCE' as const,
+            errorMessage: 'Saldo kurang saat billing lipsync',
+          }),
     })
   } catch (e) {
     console.warn(
@@ -196,8 +216,9 @@ export async function finishClipEmbedding(input: {
         featureKey: 'KLIP_LIVE_EMBED',
         units: estimatedTokens,
       })
-      const { deductTokenAtomic, logGeneration } = await import('@/lib/services/ai-generation-log')
-      await deductTokenAtomic({
+      const { deductTokenAtomic, logGeneration } =
+        await import('@/lib/services/ai-generation-log')
+      const deducted = await deductTokenAtomic({
         userId,
         tokensCharged: charge.tokensCharged,
         description: `Klip Live embed transcript`,
@@ -210,12 +231,24 @@ export async function finishClipEmbedding(input: {
         subjectType: 'LIVE_CLIP',
         subjectId: clipId,
         charge,
+        ...(deducted.ok
+          ? {}
+          : {
+              status: 'INSUFFICIENT_BALANCE' as const,
+              errorMessage: 'Saldo kurang saat billing embedding',
+            }),
       })
     } catch (be) {
-      console.warn(`[generate-clip ${clipId}] embed billing skip:`, (be as Error).message)
+      console.warn(
+        `[generate-clip ${clipId}] embed billing skip:`,
+        (be as Error).message,
+      )
     }
   } catch (e) {
-    console.warn(`[generate-clip ${clipId}] embed gagal (lanjut READY tanpa embed):`, (e as Error).message)
+    console.warn(
+      `[generate-clip ${clipId}] embed gagal (lanjut READY tanpa embed):`,
+      (e as Error).message,
+    )
     await prisma.liveClip.update({
       where: { id: clipId },
       data: { status: 'READY' as LiveClipStatus },
@@ -223,55 +256,122 @@ export async function finishClipEmbedding(input: {
   }
 }
 
-// Main pipeline. Synchronous flow — caller wait until READY atau FAILED.
-// Update status DB di tiap step supaya UI bisa show progress.
-export async function generateClip(
-  input: GenerateClipInput,
-): Promise<GenerateClipResult> {
-  const script = input.script.trim()
-  if (!script) throw new Error('Script kosong')
-  if (script.length > 2500) throw new Error('Script max 2500 char per klip')
-
-  // Validasi panjang script vs durasi baseline video host.
-  // Cari baseline video duration (default 5dtk kalau gak ada).
+// Durasi baseline video host terbaru (default 5 dtk kalau belum ada) — dasar
+// batas panjang script dan estimasi biaya lipsync (output = durasi baseline).
+export async function getBaselineDurationSec(
+  hostTemplateId: string,
+): Promise<number> {
   const baselineJob = await prisma.generationJob.findFirst({
-    where: {
-      hostTemplateId: input.hostTemplateId,
-      type: 'HOST_VIDEO',
-      status: 'DONE',
-    },
+    where: { hostTemplateId, type: 'HOST_VIDEO', status: 'DONE' },
     orderBy: { finishedAt: 'desc' },
     select: { inputPayload: true },
   })
-  const baselineDurationSec =
-    ((baselineJob?.inputPayload as { duration?: number } | null)?.duration ?? 5)
-  const baselineDurationMs = baselineDurationSec * 1000
-  const maxChars = maxSafeCharsForDuration(baselineDurationMs)
+  return (
+    (baselineJob?.inputPayload as { duration?: number } | null)?.duration ?? 5
+  )
+}
+
+// Validasi script sebelum baris klip dibuat. Melempar Error berpesan siap
+// tampil; return script yang sudah di-trim.
+export function assertClipScript(
+  rawScript: string,
+  baselineDurationSec: number,
+): string {
+  const script = rawScript.trim()
+  if (!script) throw new Error('Script kosong')
+  if (script.length > 2500) throw new Error('Script max 2500 char per klip')
+  const maxChars = maxSafeCharsForDuration(baselineDurationSec * 1000)
   if (script.length > maxChars) {
     throw new Error(
       `Script ${script.length} char terlalu panjang untuk video ${baselineDurationSec}dtk (max aman ${maxChars} char). Persingkat atau buat klip baru dengan baseline lebih panjang.`,
     )
   }
+  return script
+}
 
-  // Step 1: create LiveClip DRAFT
+// Data baris LiveClip DRAFT — dipakai generateClip & clip-start (route).
+export function buildClipDraftData(input: GenerateClipInput, script: string) {
+  return {
+    hostTemplateId: input.hostTemplateId,
+    userId: input.userId,
+    scriptOriginal: script,
+    transcript: script,
+    category: input.category,
+    tags: input.tags ?? [],
+    productId: input.productId ?? null,
+    source: 'GENERATED' as ClipSource,
+    status: 'DRAFT' as LiveClipStatus,
+  }
+}
+
+// Create + pipeline, ditunggu sampai READY / FAILED / diserahkan ke cron.
+// Dipakai loop bulk-generate (sudah jalan di belakang). Route POST /clips
+// TIDAK memakai ini — lihat clip-start.ts + runClipPipelineJob.
+export async function generateClip(
+  input: GenerateClipInput,
+): Promise<GenerateClipResult> {
+  const script = assertClipScript(
+    input.script,
+    await getBaselineDurationSec(input.hostTemplateId),
+  )
   const clip = await prisma.liveClip.create({
-    data: {
-      hostTemplateId: input.hostTemplateId,
-      userId: input.userId,
-      scriptOriginal: script,
-      transcript: script,
-      category: input.category,
-      tags: input.tags ?? [],
-      productId: input.productId ?? null,
-      source: 'GENERATED' as ClipSource,
-      status: 'DRAFT' as LiveClipStatus,
-    },
+    data: buildClipDraftData(input, script),
     select: { id: true },
   })
-  const clipId = clip.id
+  return runClipPipeline(clip.id, { ...input, script })
+}
 
+// Never-throw: dipanggil dari `after()` — error yang lolos tak punya penangan.
+// Apa pun yang terjadi, klip tidak boleh tertinggal in-flight tanpa pemilik
+// (kecuali sudah diserahkan ke cron lewat marker "Kling lambat").
+export async function runClipPipelineJob(
+  clipId: string,
+  input: GenerateClipInput,
+): Promise<void> {
+  try {
+    const result = await runClipPipeline(clipId, input)
+    console.log(`[generate-clip ${clipId}] job selesai: ${result.status}`)
+  } catch (err) {
+    console.error(`[generate-clip ${clipId}] job gagal tak terduga:`, err)
+    await prisma.liveClip
+      .updateMany({
+        where: {
+          id: clipId,
+          status: { in: [...IN_FLIGHT_CLIP_STATUSES] },
+          // OR eksplisit: `notIn` saja melewatkan baris errorMessage NULL
+          // (NULL NOT IN (...) = NULL di SQL).
+          OR: [
+            { errorMessage: null },
+            {
+              errorMessage: {
+                notIn: [KLING_LATE_MARKER, KLING_FINALIZING_MARKER],
+              },
+            },
+          ],
+        },
+        data: {
+          status: 'FAILED' as LiveClipStatus,
+          errorMessage:
+            'Generate gagal karena kesalahan tak terduga. Silakan Retry.',
+        },
+      })
+      .catch((e) =>
+        console.error(`[generate-clip ${clipId}] gagal menandai FAILED:`, e),
+      )
+  }
+}
+
+// Pipeline per klip yang barisnya SUDAH ada (status DRAFT). Update status DB
+// di tiap step supaya UI (polling) bisa menampilkan progres.
+export async function runClipPipeline(
+  clipId: string,
+  input: GenerateClipInput,
+): Promise<GenerateClipResult> {
+  const script = input.script.trim()
+
+  // updateMany (bukan update): baris yang sudah terhapus tidak melempar P2025.
   const fail = async (err: Error) => {
-    await prisma.liveClip.update({
+    await prisma.liveClip.updateMany({
       where: { id: clipId },
       data: {
         status: 'FAILED' as LiveClipStatus,
@@ -381,7 +481,9 @@ export async function generateClip(
     } else if (input.sourceVideoUrl) {
       submitInput.sourceVideoUrl = toAbsoluteUrl(input.sourceVideoUrl)
     } else {
-      throw new Error('Generate-clip: butuh sourceVideoId atau sourceVideoUrl (resolve dari baseline)')
+      throw new Error(
+        'Generate-clip: butuh sourceVideoId atau sourceVideoUrl (resolve dari baseline)',
+      )
     }
 
     // Siapkan fallback URL: input.sourceVideoUrl atau salinan lokal baseline
@@ -404,11 +506,12 @@ export async function generateClip(
         'public',
         audioResult.audioUrl.replace(/^\//, ''),
       )
-      submitInput.audioBase64 = (await readFile(absAudioPath)).toString('base64')
+      submitInput.audioBase64 = (await readFile(absAudioPath)).toString(
+        'base64',
+      )
     } else {
       submitInput.audioUrl = `${publicBase.replace(/\/$/, '')}${audioResult.audioUrl}`
     }
-
   } catch (e) {
     return fail(new Error(`Kling submit: ${(e as Error).message}`))
   }
@@ -514,7 +617,9 @@ export async function generateClip(
       where: { id: clipId },
       data: {
         videoUrl: videoPath,
-        durationMs: Math.round((polled.durationSeconds || 0) * 1000) || audioResult.durationMs,
+        durationMs:
+          Math.round((polled.durationSeconds || 0) * 1000) ||
+          audioResult.durationMs,
       },
     })
   } catch (e) {

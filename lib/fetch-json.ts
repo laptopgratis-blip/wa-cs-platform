@@ -19,11 +19,28 @@ export interface JsonResult<T> {
   error: string | null
 }
 
+// Gateway/Cloudflare yang tidak bisa menjangkau server kita: 502/503 proxy,
+// 520–523 & 530 halaman error Cloudflare (origin mati / ditolak / tak terjangkau).
+const UNREACHABLE_STATUSES = new Set([502, 503, 520, 521, 522, 523, 530])
+// Server terjangkau tapi terlalu lama menjawab: 504 proxy, 524 Cloudflare
+// (memutus di 100 dtk). Prosesnya bisa TETAP jalan di server — jangan dorong
+// user klik ulang (dulu begitu → klip & token dobel).
+const TIMEOUT_STATUSES = new Set([504, 524])
+
 function messageForStatus(status: number): string {
-  if (status === 401 || status === 403) return 'Sesi kamu berakhir — muat ulang halaman lalu masuk lagi.'
+  if (status === 401 || status === 403)
+    return 'Sesi kamu berakhir — muat ulang halaman lalu masuk lagi.'
   if (status === 404) return 'Data tidak ditemukan.'
-  if (status === 429) return 'Terlalu banyak permintaan — tunggu sebentar lalu coba lagi.'
-  if (status >= 500) return 'Server sedang bermasalah — coba lagi sebentar lagi.'
+  if (status === 429)
+    return 'Terlalu banyak permintaan — tunggu sebentar lalu coba lagi.'
+  if (TIMEOUT_STATUSES.has(status)) {
+    return 'Server terlalu lama merespons. Prosesnya mungkin tetap berjalan — muat ulang halaman beberapa menit lagi sebelum mencoba ulang.'
+  }
+  if (UNREACHABLE_STATUSES.has(status)) {
+    return 'Server sedang bermasalah atau tidak bisa dihubungi — coba lagi beberapa saat lagi.'
+  }
+  if (status >= 500)
+    return 'Server sedang bermasalah — coba lagi sebentar lagi.'
   return 'Permintaan gagal diproses.'
 }
 
@@ -47,7 +64,8 @@ export async function fetchJson<T = unknown>(
       ok: false,
       status: 0,
       data: null,
-      error: 'Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.',
+      error:
+        'Tidak bisa terhubung ke server — cek koneksi internet lalu coba lagi.',
     }
   }
 
@@ -59,17 +77,26 @@ export async function fetchJson<T = unknown>(
     try {
       parsed = JSON.parse(raw)
     } catch {
-      console.error(`[fetchJson] ${input} membalas non-JSON (${res.status}):`, raw.slice(0, 200))
+      console.error(
+        `[fetchJson] ${input} membalas non-JSON (${res.status}):`,
+        raw.slice(0, 200),
+      )
     }
   }
 
-  const envelope = parsed as { success?: boolean; error?: string; data?: T } | null
+  const envelope = parsed as {
+    success?: boolean
+    error?: string
+    data?: T
+  } | null
   if (!res.ok || envelope?.success === false) {
     return {
       ok: false,
       status: res.status,
       data: null,
-      error: envelope?.error || (res.ok ? fallbackError : messageForStatus(res.status)),
+      error:
+        envelope?.error ||
+        (res.ok ? fallbackError : messageForStatus(res.status)),
     }
   }
   if (parsed === null) {

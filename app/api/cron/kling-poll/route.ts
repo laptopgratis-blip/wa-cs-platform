@@ -23,8 +23,9 @@ export async function GET(req: Request) {
   const startedAt = Date.now()
   try {
     const result = await pollAndFinalizePendingVideos()
-    // Klip Live: lanjutkan klip yang inline poll lipsync-nya timeout —
-    // gagal di sini tidak boleh mengganggu poll video host di atas.
+    // Klip Live: sapu klip yang job background-nya mati, lalu lanjutkan klip
+    // (lipsync & IDLE motion) yang poll inline-nya timeout — gagal di sini
+    // tidak boleh mengganggu poll video host di atas.
     let lateClips = null
     try {
       lateClips = await finalizeLateLipsyncClips()

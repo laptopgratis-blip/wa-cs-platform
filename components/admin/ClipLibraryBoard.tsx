@@ -8,7 +8,9 @@
 //   Section 2: Generate form — category + script + tombol "Generate Klip"
 //   Section 3: List clips grouped by category, dengan status badge + video preview + actions
 //
-// Generate sinkron (max 2 menit) — show spinner sampai READY/FAILED.
+// Generate = background job (2026-10-22): POST balas 202 dalam hitungan detik,
+// pipeline TTS → Kling lipsync jalan di server; useClipGenerationPoll polling
+// list sampai klip READY/FAILED lalu memberi toast.
 
 import {
   AlertCircle,
@@ -51,6 +53,7 @@ import { BaselineComposer } from './BaselineComposer'
 import { BulkGenerateModal } from './BulkGenerateModal'
 import { HostImageGallery } from './HostImageGallery'
 import { HostTitleEditable } from './HostTitleEditable'
+import { useClipGenerationPoll } from './useClipGenerationPoll'
 
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Badge } from '@/components/ui/badge'
@@ -65,6 +68,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { fetchJson } from '@/lib/fetch-json'
+import {
+  IDLE_MOTION_TAG,
+  isClipInFlight,
+} from '@/lib/services/clip-library/clip-job-rules'
 import { liveClipStatusMeta, statusMeta } from '@/lib/status'
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
@@ -102,6 +110,13 @@ interface Clip {
   manualConfidence?: number | null
   useCount: number
   createdAt: string
+}
+
+// Respons 202 POST /clips & /clips/idle-motion (generate = background job).
+interface ClipStartResponse {
+  clipId: string
+  status: string
+  alreadyRunning: boolean
 }
 
 // Kategori klip — `icon` dipakai di UI yang bisa render node (chip/grid cakupan);
@@ -268,14 +283,24 @@ export function ClipLibraryBoard({
     }
   }, [])
 
-  const fetchClips = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/clips`)
-    const json = (await res.json()) as {
-      success: boolean
-      data?: { clips: Clip[] }
+  // fetchJson (never-throw): dipanggil juga oleh polling — gangguan sesaat
+  // (502/524) cukup dilewati, list lama tetap tampil.
+  // Nomor urut request: respons yang datang terlambat (server lambat) tidak
+  // boleh menimpa list yang lebih baru.
+  const clipsSeqRef = useRef(0)
+  const fetchClips = useCallback(async (): Promise<number> => {
+    const seq = ++clipsSeqRef.current
+    const r = await fetchJson<{ success: boolean; data?: { clips: Clip[] } }>(
+      `/api/host-templates/${hostId}/clips`,
+    )
+    if (seq === clipsSeqRef.current && r.ok && r.data?.data) {
+      setClips(r.data.data.clips)
     }
-    if (json.success && json.data) setClips(json.data.clips)
+    return r.status
   }, [hostId])
+
+  // Klip diproses di background → polling list + toast saat selesai/gagal.
+  const { watch: watchClip } = useClipGenerationPoll(clips, fetchClips)
 
   const fetchAnalytics = useCallback(async () => {
     const res = await fetch(`/api/host-templates/${hostId}/clips/analytics`)
@@ -503,74 +528,128 @@ export function ClipLibraryBoard({
     }
   }
 
+  // POST mulai generate (background job) — balas 202 { clipId, status,
+  // alreadyRunning } dalam hitungan detik. 409 = klip kembar sudah ada.
+  function postGenerate(allowDuplicate: boolean) {
+    const isIdle = category === 'IDLE'
+    // IDLE pakai endpoint khusus — Kling image2video langsung, no TTS
+    const url = isIdle
+      ? `/api/host-templates/${hostId}/clips/idle-motion`
+      : `/api/host-templates/${hostId}/clips`
+    const body = isIdle
+      ? { motionPresetId: selectedIdleMotion }
+      : {
+          script: script.trim(),
+          category,
+          voiceId: selectedVoiceId || undefined,
+          sourceVideoId: sourceVideoId.trim() || undefined,
+        }
+    return fetchJson<{ success: boolean; data?: ClipStartResponse }>(
+      url,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...body,
+          allowDuplicate: allowDuplicate || undefined,
+        }),
+      },
+      'Gagal memulai generate klip',
+    )
+  }
+
   async function handleGenerate() {
+    if (category === 'IDLE' && !selectedIdleMotion) {
+      toast.error('Pilih motion preset dulu')
+      return
+    }
+    if (category !== 'IDLE' && script.trim().length < 3) {
+      toast.error('Tulis script dulu')
+      return
+    }
     setGenerating(true)
     try {
-      let res: Response
-      // IDLE category pakai endpoint khusus — Kling image2video langsung, no TTS
-      if (category === 'IDLE') {
-        if (!selectedIdleMotion) {
-          toast.error('Pilih motion preset dulu')
-          return
-        }
-        res = await fetch(`/api/host-templates/${hostId}/clips/idle-motion`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ motionPresetId: selectedIdleMotion }),
-        })
-      } else {
-        if (!script.trim() || script.length < 3) {
-          toast.error('Tulis script dulu')
-          return
-        }
-        res = await fetch(`/api/host-templates/${hostId}/clips`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            script: script.trim(),
-            category,
-            voiceId: selectedVoiceId || undefined,
-            sourceVideoId: sourceVideoId.trim() || undefined,
-          }),
-        })
+      let r = await postGenerate(false)
+      if (r.status === 409) {
+        if (!confirm(r.error ?? 'Klip yang sama sudah ada. Buat lagi?')) return
+        r = await postGenerate(true)
       }
-      const json = (await res.json()) as {
-        success: boolean
-        data?: {
-          clipId: string
-          status?: string
-          videoUrl?: string
-          errorMessage?: string
-        }
-        error?: string
-      }
-      if (!json.success || !json.data) {
-        toast.error(json.error ?? 'Generate gagal')
+      const started = r.data?.data
+      if (!r.ok || !started) {
+        toast.error(r.error ?? 'Gagal memulai generate klip')
         return
       }
-      const status = json.data.status ?? 'READY'
-      if (status === 'READY') {
-        toast.success(
-          category === 'IDLE' ? 'Klip IDLE motion siap!' : 'Klip siap!',
-        )
-      } else if (status === 'FAILED') {
-        toast.error(`Klip gagal: ${json.data.errorMessage ?? '?'}`)
-      } else if (status === 'GENERATING_VIDEO') {
-        // Inline poll timeout — video dilanjutkan cron kling-poll di background.
+      if (started.alreadyRunning) {
         toast(
-          'Kling lagi lambat — video dilanjutkan di background dan otomatis siap saat selesai. Pantau badge statusnya.',
+          'Klip dengan isi yang sama masih diproses — tunggu sampai selesai, tidak perlu klik ulang.',
         )
       } else {
-        toast(`Klip status: ${status}`)
+        toast.success(
+          'Klip mulai dibuat — biasanya 2–4 menit. Boleh tinggalkan halaman ini; statusnya ada di Library Klip.',
+        )
+        setScript('')
+        setSelectedIdleMotion('')
       }
-      setScript('')
-      setSelectedIdleMotion('')
-      void fetchClips()
-    } catch (e) {
-      toast.error((e as Error).message)
+      watchClip(started.clipId)
+      await fetchClips()
     } finally {
       setGenerating(false)
     }
+  }
+
+  // Retry klip gagal: hapus yang gagal lalu mulai ulang di background dengan
+  // isi & suara yang sama. Klip IDLE motion → endpoint idle-motion (dulu
+  // salah dikirim ke POST /clips sehingga label preset ikut di-TTS-kan).
+  async function handleRetry(c: Clip) {
+    if (
+      !confirm(
+        'Retry generate klip ini? Klip baru dibuat di background, lalu yang gagal dihapus.',
+      )
+    )
+      return
+    const idleMotionId = c.tags.includes(IDLE_MOTION_TAG)
+      ? (c.tags.find((t) => idleMotions?.some((m) => m.id === t)) ?? c.tags[2])
+      : undefined
+    // Mulai dulu, hapus belakangan: kalau start ditolak (saldo kurang, script
+    // tak lagi muat baseline), klip gagal + isinya tetap ada untuk dicoba lagi.
+    const r = await fetchJson<{ success: boolean; data?: ClipStartResponse }>(
+      idleMotionId
+        ? `/api/host-templates/${hostId}/clips/idle-motion`
+        : `/api/host-templates/${hostId}/clips`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(
+          idleMotionId
+            ? { motionPresetId: idleMotionId, allowDuplicate: true }
+            : {
+                script: c.scriptOriginal,
+                category: c.category,
+                voiceId: c.voiceId || selectedVoiceId || undefined,
+                allowDuplicate: true,
+              },
+        ),
+      },
+      'Retry gagal',
+    )
+    const started = r.data?.data
+    if (!r.ok || !started) {
+      toast.error(r.error ?? 'Retry gagal')
+      return
+    }
+    watchClip(started.clipId)
+    toast.success('Retry dimulai — klip diproses di background.')
+    const del = await fetchJson(
+      `/api/host-templates/${hostId}/clips/${c.id}?force=true`,
+      { method: 'DELETE' },
+      'Gagal menghapus klip yang gagal',
+    )
+    if (!del.ok) {
+      toast.error(
+        `Klip lama yang gagal belum terhapus: ${del.error ?? 'coba hapus manual'}`,
+      )
+    }
+    void fetchClips()
   }
 
   // Pre-req checks — kalau belum siap, tampilkan guide.
@@ -1234,7 +1313,7 @@ export function ClipLibraryBoard({
             {generating ? (
               <>
                 <Loader2 className="mr-2 size-4 animate-spin" />
-                Generating… (max 2 menit)
+                Memulai…
               </>
             ) : (
               <>
@@ -1751,6 +1830,12 @@ export function ClipLibraryBoard({
                           variant="outline"
                           className="h-7 px-2 text-xs"
                           onClick={() => setEditingClip(c)}
+                          disabled={isClipInFlight(c.status)}
+                          title={
+                            isClipInFlight(c.status)
+                              ? 'Tunggu klip selesai diproses'
+                              : undefined
+                          }
                         >
                           <Pencil className="mr-1 size-3" />
                           Edit
@@ -1760,44 +1845,7 @@ export function ClipLibraryBoard({
                             size="sm"
                             variant="outline"
                             className="text-primary-700 hover:bg-primary-50 h-7 px-2 text-xs"
-                            onClick={async () => {
-                              // Retry = re-trigger generate dengan script + category sama.
-                              // Delete failed dulu, lalu re-generate.
-                              if (
-                                !confirm(
-                                  'Retry generate klip ini (akan hapus yang gagal lalu re-run pipeline)?',
-                                )
-                              )
-                                return
-                              await fetch(
-                                `/api/host-templates/${hostId}/clips/${c.id}?force=true`,
-                                { method: 'DELETE' },
-                              )
-                              const res = await fetch(
-                                `/api/host-templates/${hostId}/clips`,
-                                {
-                                  method: 'POST',
-                                  headers: {
-                                    'content-type': 'application/json',
-                                  },
-                                  body: JSON.stringify({
-                                    script: c.scriptOriginal,
-                                    category: c.category,
-                                    voiceId: selectedVoiceId,
-                                  }),
-                                },
-                              )
-                              const j = (await res.json()) as {
-                                success: boolean
-                                error?: string
-                              }
-                              if (j.success) {
-                                toast.success('Retry sukses')
-                                void fetchClips()
-                              } else {
-                                toast.error(j.error ?? 'Retry gagal')
-                              }
-                            }}
+                            onClick={() => void handleRetry(c)}
                           >
                             <Sparkles className="mr-1 size-3" />
                             Retry
@@ -1808,6 +1856,12 @@ export function ClipLibraryBoard({
                           variant="outline"
                           className={`h-7 px-2 text-xs ${TONES.danger.text}`}
                           onClick={() => void handleDelete(c)}
+                          disabled={isClipInFlight(c.status)}
+                          title={
+                            isClipInFlight(c.status)
+                              ? 'Tunggu klip selesai diproses'
+                              : undefined
+                          }
                         >
                           <Trash2 className="mr-1 size-3" />
                           Hapus
