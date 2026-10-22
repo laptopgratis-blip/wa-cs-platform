@@ -8,12 +8,21 @@
 //   masih jalan   → biarkan; lewat deadline 45 menit → FAILED
 // Idempotent: claim atomik via errorMessage marker supaya dua tick cron
 // tidak memproses klip yang sama.
+//
+// Sejak 2026-10-22 juga menangani klip IDLE (tag idle-motion, Kling
+// image2video → pollKlingStatus) dan menyapu klip in-flight yang job
+// `after()`-nya mati (clip-stale-sweep) di awal tiap tick.
 
 import type { LiveClipStatus } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
-import { pollKlingLipsync } from '@/lib/services/host-gen/kling'
+import {
+  pollKlingLipsync,
+  pollKlingStatus,
+} from '@/lib/services/host-gen/kling'
 
+import { IDLE_MOTION_TAG } from './clip-job-rules'
+import { sweepStalledClips } from './clip-stale-sweep'
 import {
   billClipLipsync,
   downloadClipMp4,
@@ -21,6 +30,8 @@ import {
   KLING_FINALIZING_MARKER,
   KLING_LATE_MARKER,
 } from './generate-clip'
+import { finalizeIdleClip } from './idle-clip'
+import { getIdleMotionById } from './idle-motions'
 
 // Lewat 45 menit sejak klip dibuat masih belum selesai → nyerah, mark FAILED.
 const LATE_DEADLINE_MS = 45 * 60_000
@@ -39,6 +50,11 @@ export interface LateFinalizeResult {
 }
 
 export async function finalizeLateLipsyncClips(): Promise<LateFinalizeResult> {
+  // Sapuan dulu: klip yang job-nya mati dengan task Kling tersubmit mendapat
+  // marker → langsung ikut diproses di bawah pada tick yang sama.
+  await sweepStalledClips().catch((e) =>
+    console.warn('[late-lipsync] sweep klip macet gagal:', (e as Error).message),
+  )
   const now = Date.now()
   const staleClaimBefore = new Date(now - STALE_CLAIM_MS)
   const candidates = await prisma.liveClip.findMany({
@@ -60,6 +76,9 @@ export async function finalizeLateLipsyncClips(): Promise<LateFinalizeResult> {
       transcript: true,
       createdAt: true,
       errorMessage: true,
+      category: true,
+      tags: true,
+      scriptOriginal: true,
     },
     orderBy: { createdAt: 'asc' },
     take: MAX_CLIPS_PER_TICK,
@@ -84,8 +103,30 @@ export async function finalizeLateLipsyncClips(): Promise<LateFinalizeResult> {
     })
     if (claimed.count === 0) continue
 
+    const isIdle =
+      clip.category === 'IDLE' && clip.tags.includes(IDLE_MOTION_TAG)
     try {
-      const polled = await pollKlingLipsync({ requestId: clip.klingJobId! })
+      const polled = isIdle
+        ? await pollKlingStatus({ requestId: clip.klingJobId! })
+        : await pollKlingLipsync({ requestId: clip.klingJobId! })
+
+      if (isIdle && polled.status === 'COMPLETED' && polled.videoUrl) {
+        const motion = clip.tags
+          .map((t) => getIdleMotionById(t))
+          .find((m) => m !== undefined)
+        await finalizeIdleClip({
+          clipId: clip.id,
+          userId: clip.userId,
+          videoUrl: polled.videoUrl,
+          durationSec: polled.durationSeconds || motion?.durationSec || 5,
+          motionLabel: motion?.label ?? clip.scriptOriginal,
+        })
+        result.completed += 1
+        console.log(
+          `[late-lipsync] klip IDLE ${clip.id} selesai via cron (task ${clip.klingJobId})`,
+        )
+        continue
+      }
 
       if (polled.status === 'COMPLETED' && polled.videoUrl) {
         const downloaded = await downloadClipMp4(polled.videoUrl, clip.id)
@@ -116,7 +157,7 @@ export async function finalizeLateLipsyncClips(): Promise<LateFinalizeResult> {
           where: { id: clip.id },
           data: {
             status: 'FAILED' as LiveClipStatus,
-            errorMessage: `Kling lipsync failed: ${(polled.rawError ?? '?').slice(0, 900)}`,
+            errorMessage: `${isIdle ? 'Kling failed' : 'Kling lipsync failed'}: ${(polled.rawError ?? '?').slice(0, 900)}`,
           },
         })
         result.failed += 1
@@ -129,7 +170,7 @@ export async function finalizeLateLipsyncClips(): Promise<LateFinalizeResult> {
           where: { id: clip.id },
           data: {
             status: 'FAILED' as LiveClipStatus,
-            errorMessage: 'Kling lipsync tidak selesai >45 menit — silakan Retry.',
+            errorMessage: `Kling ${isIdle ? 'video' : 'lipsync'} tidak selesai >45 menit — silakan Retry.`,
           },
         })
         result.failed += 1

@@ -3,6 +3,9 @@
 // DELETE /api/host-templates/[id]/clips/[clipId] — delete klip (file di disk
 //   TIDAK dihapus untuk audit; cleanup terpisah). Jika klip dipakai (useCount>0)
 //   force=true required.
+// Klip yang masih diproses job background / cron (isClipBusy) tidak boleh
+// dihapus/diedit → 409. Job tetap jalan & memotong token untuk klip yang sudah
+// hilang, dan guard anti klik-ganda di clip-start.ts jadi bolong (2026-10-22).
 
 import { unlink } from 'node:fs/promises'
 import path from 'node:path'
@@ -12,6 +15,11 @@ import { z } from 'zod'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
+import { isClipBusy } from '@/lib/services/clip-library/clip-job-rules'
+import { LATE_MARKERS } from '@/lib/services/clip-library/clip-stale-sweep'
+
+const BUSY_MESSAGE =
+  'Klip masih diproses — tunggu sampai selesai atau gagal dulu.'
 
 const patchSchema = z.object({
   transcript: z.string().trim().min(1).max(2500).optional(),
@@ -54,6 +62,10 @@ async function loadAuthorize(
       audioUrl: true,
       useCount: true,
       isDefaultIdle: true,
+      status: true,
+      klingJobId: true,
+      errorMessage: true,
+      updatedAt: true,
     },
   })
   if (!clip || clip.hostTemplateId !== hostTemplateId) {
@@ -83,6 +95,8 @@ export async function PATCH(
   } catch (e) {
     return jsonError((e as Error).message, 403)
   }
+
+  if (isClipBusy(existing, LATE_MARKERS)) return jsonError(BUSY_MESSAGE, 409)
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null))
   if (!parsed.success) {
@@ -141,6 +155,8 @@ export async function DELETE(
   } catch (e) {
     return jsonError((e as Error).message, 403)
   }
+
+  if (isClipBusy(existing, LATE_MARKERS)) return jsonError(BUSY_MESSAGE, 409)
 
   const url = new URL(req.url)
   const force = url.searchParams.get('force') === 'true'
