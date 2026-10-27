@@ -5,6 +5,7 @@ import type { NextResponse } from 'next/server'
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
 import {
+  isOwnKnowledgeFileUrl,
   KNOWLEDGE_LIMIT_PER_USER,
   knowledgeCreateSchema,
 } from '@/lib/validations/knowledge'
@@ -65,6 +66,16 @@ export async function POST(req: Request) {
   const parsed = knowledgeCreateSchema.safeParse(json)
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Data tidak valid')
+  }
+  // fileUrl harus file upload milik user ini — bukan folder user lain.
+  if (
+    (parsed.data.contentType === 'IMAGE' ||
+      parsed.data.contentType === 'FILE') &&
+    !isOwnKnowledgeFileUrl(parsed.data.fileUrl, session.user.id)
+  ) {
+    return jsonError(
+      'File tidak valid. Upload ulang file lewat form Pengetahuan.',
+    )
   }
 
   try {

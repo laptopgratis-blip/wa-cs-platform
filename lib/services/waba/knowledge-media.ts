@@ -14,6 +14,8 @@
 import { statSync } from 'node:fs'
 import path from 'node:path'
 
+import { KNOWLEDGE_FILE_URL } from '@/lib/validations/knowledge'
+
 export const CLOUD_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 export const CLOUD_DOCUMENT_MAX_BYTES = 100 * 1024 * 1024
 
@@ -68,11 +70,6 @@ const DOCUMENT_RULES: Record<string, MediaRule> = {
   // nama file tetap .csv supaya customer tahu isinya.
   csv: { mime: 'text/plain' },
 }
-
-// Persis format yang ditulis route upload: satu segmen userId + nama file
-// hex.ext. Tanpa subfolder, tanpa %-encoding, tanpa '..' → aman dari traversal.
-const KNOWLEDGE_FILE_URL =
-  /^\/uploads\/knowledge\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.([A-Za-z0-9]{1,5})$/
 
 const MAX_FILENAME_BASE = 60
 

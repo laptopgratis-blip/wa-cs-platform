@@ -9,7 +9,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/socket-guard.test.ts"
+    "test": "tsx src/socket-guard.test.ts && tsx src/knowledge-attachment.test.ts"
   },
   "license": "ISC",
   "dependencies": {

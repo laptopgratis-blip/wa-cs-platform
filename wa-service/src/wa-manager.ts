@@ -27,6 +27,7 @@ import {
   type InternalMessageHistoryItem,
   type InternalSoulConfig,
 } from './internal-api.js'
+import { resolveKnowledgeAttachmentUrl } from './knowledge-attachment.js'
 import { phoneToSendJid, resolvePhoneNumber } from './lib/jid-resolver.js'
 import { isStaleSocketEvent } from './socket-guard.js'
 import { tokenChecker } from './token-checker.js'
@@ -1402,6 +1403,7 @@ export class WaManager {
         sendJid,
         attachments,
         sessionId,
+        userId,
       )
     }
 
@@ -1736,26 +1738,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Resolve fileUrl jadi URL absolut yang bisa di-fetch Baileys. Knowledge file
-// disimpan sebagai path relative `/uploads/...` di Next.js; eksternal URL
-// (http/https) dilewatkan apa adanya.
-//
-// PENTING: untuk path `/uploads/*` kita pakai UPLOADS_URL (nginx container
-// `hulao-uploads`) — BUKAN NEXTJS_URL. Next.js standalone mode punya bug:
-// file di /public yang di-tambah runtime (semua knowledge upload pasti
-// runtime) return 404. nginx serve langsung dari filesystem.
-// Lihat docker-compose.yml line 99-103 untuk konteks.
-function resolveAttachmentUrl(fileUrl: string): string {
-  if (!fileUrl) return fileUrl
-  if (/^https?:\/\//i.test(fileUrl)) return fileUrl
-  const normalized = fileUrl.startsWith('/') ? fileUrl : '/' + fileUrl
-  const isUpload = normalized.startsWith('/uploads/')
-  const base = isUpload
-    ? process.env.UPLOADS_URL || 'http://hulao-uploads'
-    : process.env.NEXTJS_URL || 'http://localhost:3000'
-  return base.replace(/\/$/, '') + normalized
-}
-
 // Kirim list attachment knowledge ke customer setelah balasan teks AI.
 // Best-effort: kalau satu gagal, lanjut yang berikutnya. Tunda 600ms antar
 // kirim supaya WA tidak rate-limit & terkesan natural (bukan spam).
@@ -1769,17 +1751,31 @@ async function sendKnowledgeAttachments(
     contentType: string
   }>,
   sessionId: string,
+  ownerUserId: string,
 ): Promise<void> {
+  const uploadsBase = process.env.UPLOADS_URL || 'http://hulao-uploads'
   // Cap supaya tidak spam: max 3 attachment per balasan.
   const list = attachments.slice(0, 3)
   for (let i = 0; i < list.length; i++) {
     const att = list[i]
     if (!att?.fileUrl) continue
+    // Anti SSRF: hanya file upload knowledge milik pemilik sesi yang boleh
+    // di-fetch Baileys. URL eksternal / path lain dilewati (best-effort).
+    const url = resolveKnowledgeAttachmentUrl(
+      att.fileUrl,
+      ownerUserId,
+      uploadsBase,
+    )
+    if (!url) {
+      console.warn(
+        `[wa-manager:${sessionId}] lampiran "${att.title}" dilewati: fileUrl bukan file knowledge milik pemilik sesi (${JSON.stringify(att.fileUrl.slice(0, 120))})`,
+      )
+      continue
+    }
     // Jeda kecil antar attachment & sebelum attachment pertama (kasih jeda
     // dari teks AI yang baru terkirim).
     await sleep(i === 0 ? 800 : 600)
     try {
-      const url = resolveAttachmentUrl(att.fileUrl)
       const caption = att.caption?.trim() || undefined
       console.log(
         `[wa-manager:${sessionId}] sending attachment "${att.title}" type=${att.contentType} url=${url}`,

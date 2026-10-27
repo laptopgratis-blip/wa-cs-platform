@@ -14,7 +14,7 @@ export interface KnowledgeAttachment {
 /**
  * Lampiran dari knowledge yang match. `canSend` (opsional) menyaring yang
  * tidak bisa dikirim transport sesi — tanpa predicate semua IMAGE/FILE
- * ber-fileUrl lolos (perilaku wa-service Baileys).
+ * ber-fileUrl lolos.
  */
 export function selectKnowledgeAttachments(
   items: RetrievedKnowledge[],

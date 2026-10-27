@@ -34,8 +34,8 @@ export interface KnowledgeForMessage {
 export interface KnowledgeForMessageOptions {
   /**
    * Bisa transport sesi ini mengirim lampiran tsb? Tanpa opsi → semua
-   * IMAGE/FILE dianggap terkirim (wa-service Baileys). Lampiran yang ditolak
-   * tidak dikembalikan DAN tidak dijanjikan di prompt.
+   * IMAGE/FILE dianggap terkirim. Lampiran yang ditolak tidak dikembalikan
+   * DAN tidak dijanjikan di prompt.
    */
   canSendAttachment?: (att: KnowledgeAttachment) => boolean
 }

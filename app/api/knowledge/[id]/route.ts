@@ -12,7 +12,10 @@ import type { NextResponse } from 'next/server'
 
 import { jsonError, jsonOk, requireSession } from '@/lib/api'
 import { prisma } from '@/lib/prisma'
-import { knowledgeUpdateSchema } from '@/lib/validations/knowledge'
+import {
+  isOwnKnowledgeFileUrl,
+  knowledgeUpdateSchema,
+} from '@/lib/validations/knowledge'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -58,6 +61,15 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!parsed.success) {
     return jsonError(parsed.error.issues[0]?.message ?? 'Data tidak valid')
   }
+  // fileUrl baru harus file upload milik user ini — bukan folder user lain.
+  if (
+    parsed.data.fileUrl &&
+    !isOwnKnowledgeFileUrl(parsed.data.fileUrl, session.user.id)
+  ) {
+    return jsonError(
+      'File tidak valid. Upload ulang file lewat form Pengetahuan.',
+    )
+  }
 
   try {
     const data = parsed.data
@@ -65,7 +77,9 @@ export async function PATCH(req: Request, { params }: Params) {
       where: { id },
       data: {
         ...(data.title !== undefined ? { title: data.title } : {}),
-        ...(data.textContent !== undefined ? { textContent: data.textContent } : {}),
+        ...(data.textContent !== undefined
+          ? { textContent: data.textContent }
+          : {}),
         ...(data.fileUrl !== undefined ? { fileUrl: data.fileUrl } : {}),
         ...(data.linkUrl !== undefined ? { linkUrl: data.linkUrl } : {}),
         ...(data.caption !== undefined ? { caption: data.caption } : {}),
@@ -104,7 +118,9 @@ export async function DELETE(_req: Request, { params }: Params) {
 
     // Best-effort cleanup file kalau punya fileUrl. Kalau gagal (file sudah
     // hilang / permission), jangan rollback — entry sudah dihapus dari DB.
-    if (existing.fileUrl && existing.fileUrl.startsWith('/uploads/knowledge/')) {
+    // Hanya file upload milik user ini: data lama bisa berisi '..' atau
+    // folder user lain → unlink sembarang file.
+    if (isOwnKnowledgeFileUrl(existing.fileUrl, session.user.id)) {
       const rel = existing.fileUrl.replace(/^\//, '')
       const abs = path.join(process.cwd(), 'public', rel)
       await unlink(abs).catch(() => {})
