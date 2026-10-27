@@ -18,6 +18,8 @@ const PIPELINE_TIMEOUT_MS = 120_000
 interface PendingItem {
   content: string
   externalId: string | null
+  /** false kalau savePending gagal — pesan tidak ada di CRM/history. */
+  saved: boolean
 }
 
 interface LockEntry {
@@ -30,7 +32,10 @@ const locks = new Map<string, LockEntry>()
 
 export interface PipelineRunner {
   /** Jalankan pipeline untuk konten gabungan. skipSave true saat drain. */
-  (content: string, opts: { skipSave: boolean; externalId: string | null }): Promise<{
+  (
+    content: string,
+    opts: { skipSave: boolean; externalId: string | null },
+  ): Promise<{
     shouldContinue: boolean
   }>
 }
@@ -40,69 +45,159 @@ export interface PendingSaver {
   (content: string, externalId: string | null): Promise<void>
 }
 
-/**
- * Jalankan pipeline di bawah lock per (sessionId, waId). Kalau kontak sedang
- * diproses: pesan disimpan (savePending) + diantre, lalu di-drain setelah
- * putaran aktif selesai — digabung '\n' per putaran, max 3 putaran.
- */
-export async function withContactLock(input: {
+interface FirstRound {
+  content: string
+  skipSave: boolean
+  externalId: string | null
+}
+
+export interface ContactLockInput {
   sessionId: string
   waId: string
   content: string
   externalId: string | null
   run: PipelineRunner
   savePending: PendingSaver
-}): Promise<void> {
+  /** Sumber waktu (ms) untuk watchdog — default Date.now; diinjeksi tes. */
+  now?: () => number
+}
+
+/**
+ * Jalankan pipeline di bawah lock per (sessionId, waId). Kalau kontak sedang
+ * diproses: pesan disimpan (savePending) + diantre, lalu di-drain setelah
+ * putaran aktif selesai — digabung '\n' per putaran, max 3 putaran.
+ */
+export async function withContactLock(input: ContactLockInput): Promise<void> {
   const key = `${input.sessionId}:${input.waId}`
+  const now = input.now ?? Date.now
   const existing = locks.get(key)
 
   if (existing?.running) {
     // Watchdog: pipeline sebelumnya menggantung terlalu lama → rebut lock.
-    if (Date.now() - existing.startedAt < PIPELINE_TIMEOUT_MS) {
+    if (now() - existing.startedAt < PIPELINE_TIMEOUT_MS) {
       // Simpan dulu (pesan tidak boleh hilang dari CRM), lalu antre.
-      await input.savePending(input.content, input.externalId).catch((err) => {
-        console.error('[waba/pipeline-lock] savePending gagal:', err)
+      const saved = await input
+        .savePending(input.content, input.externalId)
+        .then(
+          () => true,
+          (err) => {
+            console.error('[waba/pipeline-lock] savePending gagal:', err)
+            return false
+          },
+        )
+      // Baca ulang pemilik: selama savePending, lock bisa direbut watchdog
+      // atau dilepas — antre ke pemilik yang berlaku SEKARANG.
+      const owner = locks.get(key)
+      if (owner?.running) {
+        owner.pending.push({
+          content: input.content,
+          externalId: input.externalId,
+          saved,
+        })
+        return
+      }
+      // Pemilik keburu selesai → tak ada yang men-drain pesan ini. Sudah
+      // tersimpan, jadi jalankan putarannya sendiri tanpa simpan ulang.
+      return runAsOwner(key, now, input, {
+        content: input.content,
+        skipSave: true,
+        externalId: null,
       })
-      existing.pending.push({ content: input.content, externalId: input.externalId })
-      return
     }
-    console.warn(`[waba/pipeline-lock] watchdog rebut lock ${key} (pipeline hang)`)
+    console.warn(
+      `[waba/pipeline-lock] watchdog rebut lock ${key} (pipeline hang)`,
+    )
   }
 
-  const entry: LockEntry = {
-    running: true,
-    startedAt: Date.now(),
-    pending: existing?.pending ?? [],
-  }
-  locks.set(key, entry)
-
-  try {
-    let result = await input.run(input.content, {
+  return runAsOwner(
+    key,
+    now,
+    input,
+    {
+      content: input.content,
       skipSave: false,
       externalId: input.externalId,
+    },
+    carryOverUnsaved(key, existing),
+  )
+}
+
+/**
+ * Antrian run basi saat watchdog merebut lock. Pesan yang sudah tersimpan
+ * dibuang: ikut terbaca di history run baru, jadi mewarisinya = balasan ulang
+ * yang telat. Yang gagal disimpan dibawa (salinan baru, tidak dipakai bersama
+ * run basi) supaya tetap dibalas lewat drain.
+ */
+function carryOverUnsaved(
+  key: string,
+  stale: LockEntry | undefined,
+): PendingItem[] {
+  if (!stale) return []
+  const unsaved = stale.pending.filter((p) => !p.saved)
+  const dropped = stale.pending.length - unsaved.length
+  if (dropped > 0) {
+    console.warn(
+      `[waba/pipeline-lock] ${dropped} pesan antrian run lama ${key} dibuang (sudah di CRM)`,
+    )
+  }
+  return unsaved
+}
+
+/** Pegang lock kontak, jalankan putaran pertama lalu drain antriannya. */
+async function runAsOwner(
+  key: string,
+  now: () => number,
+  input: ContactLockInput,
+  first: FirstRound,
+  inherited: PendingItem[] = [],
+): Promise<void> {
+  const entry: LockEntry = {
+    running: true,
+    startedAt: now(),
+    pending: inherited,
+  }
+  locks.set(key, entry)
+  // Lock bisa direbut watchdog selagi run ini menggantung. Run basi tidak
+  // boleh lagi men-drain atau menghapus entri milik pemilik baru.
+  const owns = () => locks.get(key) === entry
+
+  try {
+    let result = await input.run(first.content, {
+      skipSave: first.skipSave,
+      externalId: first.externalId,
     })
 
     // Drain antrian yang menumpuk selama pipeline jalan — pesan-pesan sudah
     // tersimpan (savePending), gabungkan jadi satu konteks per putaran.
     let rounds = 0
-    while (result.shouldContinue && entry.pending.length > 0 && rounds < MAX_DRAIN_ROUNDS) {
+    while (
+      owns() &&
+      result.shouldContinue &&
+      entry.pending.length > 0 &&
+      rounds < MAX_DRAIN_ROUNDS
+    ) {
       rounds += 1
       const batch = entry.pending.splice(0, entry.pending.length)
       const merged = batch.map((p) => p.content).join('\n')
-      entry.startedAt = Date.now() // reset watchdog per putaran
+      entry.startedAt = now() // reset watchdog per putaran
       result = await input.run(merged, { skipSave: true, externalId: null })
-    }
-    if (entry.pending.length > 0) {
-      // Sisa antrian di luar budget drain — biarkan; pesan sudah tersimpan di
-      // CRM, customer berikutnya chat akan memicu pipeline baru.
-      console.warn(
-        `[waba/pipeline-lock] ${entry.pending.length} pesan antrian ${key} tidak di-drain (budget habis)`,
-      )
-      entry.pending.length = 0
     }
   } finally {
     entry.running = false
-    // Bersihkan entri kosong supaya Map tidak tumbuh tanpa batas.
-    if (entry.pending.length === 0) locks.delete(key)
+    if (owns()) {
+      if (entry.pending.length > 0) {
+        // Sisa antrian (budget drain habis / pipeline gagal) — pesan sudah
+        // tersimpan di CRM, chat customer berikutnya memicu pipeline baru.
+        console.warn(
+          `[waba/pipeline-lock] ${entry.pending.length} pesan antrian ${key} tidak di-drain`,
+        )
+      }
+      // Lepas lock; Map tidak tumbuh tanpa batas.
+      locks.delete(key)
+    } else {
+      console.warn(
+        `[waba/pipeline-lock] run basi ${key} selesai setelah lock direbut watchdog`,
+      )
+    }
   }
 }

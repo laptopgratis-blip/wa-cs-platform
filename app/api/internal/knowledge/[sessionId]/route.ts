@@ -10,6 +10,7 @@ import { NextResponse } from 'next/server'
 import { requireServiceSecret } from '@/lib/internal-auth'
 import { prisma } from '@/lib/prisma'
 import { getKnowledgeForMessage } from '@/lib/services/cs-pipeline/knowledge'
+import { isOwnKnowledgeFileUrl } from '@/lib/validations/knowledge'
 
 interface Params {
   params: Promise<{ sessionId: string }>
@@ -39,7 +40,12 @@ export async function POST(req: Request, { params }: Params) {
       )
     }
 
-    const result = await getKnowledgeForMessage(wa.userId, message)
+    // Baileys men-fetch URL lampiran sendiri → hanya file upload knowledge
+    // milik pemilik sesi (data lama bisa berisi URL eksternal = SSRF). Yang
+    // ditolak juga tidak dijanjikan di prompt. wa-service mengecek ulang.
+    const result = await getKnowledgeForMessage(wa.userId, message, {
+      canSendAttachment: (att) => isOwnKnowledgeFileUrl(att.fileUrl, wa.userId),
+    })
     return NextResponse.json({ success: true, data: result })
   } catch (err) {
     console.error('[POST /api/internal/knowledge/:sessionId] gagal:', err)

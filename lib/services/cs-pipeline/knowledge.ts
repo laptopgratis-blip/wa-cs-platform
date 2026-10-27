@@ -18,12 +18,12 @@ import {
   retrieveRelevantKnowledge,
 } from '@/lib/services/knowledge-retriever'
 
-export interface KnowledgeAttachment {
-  fileUrl: string
-  title: string
-  caption: string | null
-  contentType: string
-}
+import {
+  type KnowledgeAttachment,
+  selectKnowledgeAttachments,
+} from './attachments'
+
+export type { KnowledgeAttachment } from './attachments'
 
 export interface KnowledgeForMessage {
   items: Awaited<ReturnType<typeof retrieveRelevantKnowledge>>
@@ -31,9 +31,19 @@ export interface KnowledgeForMessage {
   attachments: KnowledgeAttachment[]
 }
 
+export interface KnowledgeForMessageOptions {
+  /**
+   * Bisa transport sesi ini mengirim lampiran tsb? Tanpa opsi → semua
+   * IMAGE/FILE dianggap terkirim. Lampiran yang ditolak tidak dikembalikan
+   * DAN tidak dijanjikan di prompt.
+   */
+  canSendAttachment?: (att: KnowledgeAttachment) => boolean
+}
+
 export async function getKnowledgeForMessage(
   userId: string,
   message: string,
+  opts?: KnowledgeForMessageOptions,
 ): Promise<KnowledgeForMessage> {
   // Setting integrasi CS AI (katalog produk, hitung ongkir) + knowledge
   // dalam satu batch paralel supaya tidak menambah RTT serial.
@@ -62,21 +72,13 @@ export async function getKnowledgeForMessage(
         : Promise.resolve(null),
     ])
 
-  // Attachments: knowledge IMAGE/FILE yang match → dikirim otomatis setelah
-  // balasan teks AI.
-  const attachments = items
-    .filter(
-      (it) =>
-        !!it.fileUrl && (it.contentType === 'IMAGE' || it.contentType === 'FILE'),
-    )
-    .map((it) => ({
-      fileUrl: it.fileUrl as string,
-      title: it.title,
-      caption: it.caption,
-      contentType: it.contentType,
-    }))
+  // Attachments: knowledge IMAGE/FILE yang match DAN bisa dikirim transport
+  // sesi → dikirim otomatis setelah balasan teks AI.
+  const attachments = selectKnowledgeAttachments(items, opts?.canSendAttachment)
 
-  const knowledgeBlock = formatKnowledgeForPrompt(items)
+  const knowledgeBlock = formatKnowledgeForPrompt(items, {
+    attachableIds: new Set(attachments.map((a) => a.id)),
+  })
   const rulesBlock = defaultBehaviorRules({
     hasAttachments: attachments.length > 0,
   })

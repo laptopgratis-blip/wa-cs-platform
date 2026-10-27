@@ -32,7 +32,11 @@ export async function retrieveRelevantKnowledge(
   // bahwa entry populer relevan untuk percakapan umum).
   const all = await prisma.userKnowledge.findMany({
     where: { userId, isActive: true },
-    orderBy: [{ triggerCount: 'desc' }, { order: 'asc' }, { updatedAt: 'desc' }],
+    orderBy: [
+      { triggerCount: 'desc' },
+      { order: 'asc' },
+      { updatedAt: 'desc' },
+    ],
     select: {
       id: true,
       title: true,
@@ -48,9 +52,7 @@ export async function retrieveRelevantKnowledge(
   const matched: RetrievedKnowledge[] = []
   for (const kb of all) {
     if (matched.length >= MAX_RESULTS) break
-    const hit = kb.triggerKeywords.some((kw) =>
-      keywordMatches(kw, msg),
-    )
+    const hit = kb.triggerKeywords.some((kw) => keywordMatches(kw, msg))
     if (hit) {
       matched.push({
         id: kb.id,
@@ -148,32 +150,49 @@ export async function incrementTriggerCount(ids: string[]): Promise<void> {
 // Format: heading + bullet per entry. Caption / textContent dipakai isi info.
 //
 // PENTING: instruksi explicit supaya AI tidak escalate ke admin saat ada file
-// yang relevan — sistem (wa-manager) AKAN otomatis kirim file IMAGE/FILE
-// setelah balasan teks AI. AI cuma perlu confirm "saya kirim ya".
-export function formatKnowledgeForPrompt(items: RetrievedKnowledge[]): string {
+// yang relevan — sistem (wa-manager / cs-pipeline) AKAN otomatis kirim file
+// IMAGE/FILE setelah balasan teks AI. AI cuma perlu confirm "saya kirim ya".
+//
+// `attachableIds` (2026-10-27, bug Cloud API): kalau diisi, HANYA entry di
+// set ini yang dijanjikan terkirim — transport yang tak bisa mengirim file
+// tertentu tidak boleh membuat AI bilang "berikut fotonya". Tanpa opsi ini
+// semua IMAGE/FILE ber-fileUrl dianggap terkirim (perilaku lama).
+export function formatKnowledgeForPrompt(
+  items: RetrievedKnowledge[],
+  opts?: { attachableIds?: ReadonlySet<string> },
+): string {
   if (items.length === 0) return ''
   const lines: string[] = ['', '## Info Pendukung']
-  lines.push(
-    'Pakai info berikut untuk menjawab pertanyaan customer.',
-    '',
-  )
+  lines.push('Pakai info berikut untuk menjawab pertanyaan customer.', '')
 
-  const hasFile = items.some(
-    (kb) =>
-      kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE'),
-  )
+  const hasFileType = (kb: RetrievedKnowledge) =>
+    !!kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE')
+  const willAttach = (kb: RetrievedKnowledge) =>
+    hasFileType(kb) && (!opts?.attachableIds || opts.attachableIds.has(kb.id))
+  const hasFile = items.some(willAttach)
 
   // Hard cap per entry 500 char (was unbounded) — entry panjang bisa habisin
   // context untuk GPT-5 mini. 500 char cukup untuk gist + key facts.
   const MAX_BODY_PER_ENTRY = 500
   for (const kb of items) {
-    const rawBody = kb.textContent || kb.caption || '(lihat file/link terlampir)'
-    const body = rawBody.length > MAX_BODY_PER_ENTRY
-      ? rawBody.slice(0, MAX_BODY_PER_ENTRY) + '…'
-      : rawBody
+    const notSent = hasFileType(kb) && !willAttach(kb)
+    const fallbackBody = notSent
+      ? '(file pendukung tanpa keterangan teks)'
+      : '(lihat file/link terlampir)'
+    const rawBody = kb.textContent || kb.caption || fallbackBody
+    const body =
+      rawBody.length > MAX_BODY_PER_ENTRY
+        ? rawBody.slice(0, MAX_BODY_PER_ENTRY) + '…'
+        : rawBody
     lines.push(`- **${kb.title}**: ${body}`)
-    if (kb.fileUrl && (kb.contentType === 'IMAGE' || kb.contentType === 'FILE')) {
-      lines.push(`  → File "${kb.title}" auto-kirim setelah balasanmu. Bilang "ini saya kirim ya".`)
+    if (willAttach(kb)) {
+      lines.push(
+        `  → File "${kb.title}" auto-kirim setelah balasanmu. Bilang "ini saya kirim ya".`,
+      )
+    } else if (notSent) {
+      lines.push(
+        `  → File "${kb.title}" TIDAK ikut terkirim di chat ini — jangan janjikan file ini, jelaskan dengan teks.`,
+      )
     }
     if (kb.linkUrl) lines.push(`  (Link: ${kb.linkUrl})`)
   }
@@ -242,7 +261,9 @@ export async function formatBankAccountsForPrompt(
 // keyword knowledge match. Akibatnya AI menjanjikan foto yang tidak pernah
 // dikirim sistem, customer komplain "mana fotonya". Kalau tidak ada attachment
 // yang match, AI sekarang explicit dilarang menjanjikan kirim media.
-export function defaultBehaviorRules(opts?: { hasAttachments?: boolean }): string {
+export function defaultBehaviorRules(opts?: {
+  hasAttachments?: boolean
+}): string {
   const hasAttachments = opts?.hasAttachments ?? false
   return [
     '',

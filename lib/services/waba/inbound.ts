@@ -14,6 +14,10 @@ import {
 
 import { withContactLock } from './pipeline-lock'
 import { relayEmit } from './realtime'
+import {
+  canSendKnowledgeAttachmentCloud,
+  sendKnowledgeAttachmentCloud,
+} from './knowledge-send'
 import { sendCloudText } from './send'
 import type { WabaChangeValue, WabaInboundMessage } from './types'
 
@@ -41,7 +45,9 @@ export async function handleInboundMessages(
   // (pre-flight token, soul/model). Paritas kirimchat: inbound tidak pernah
   // digate status koneksi.
   if (session.status === 'DISCONNECTED') {
-    console.log(`[waba/inbound] sesi ${session.id} DISCONNECTED — pesan diabaikan`)
+    console.log(
+      `[waba/inbound] sesi ${session.id} DISCONNECTED — pesan diabaikan`,
+    )
     return
   }
 
@@ -50,7 +56,9 @@ export async function handleInboundMessages(
       await processOne(session.id, message, value)
     } catch (err) {
       if (isDuplicateExternalMessageError(err)) {
-        console.log(`[waba/inbound] duplikat wamid=${message.id} (race) — di-skip`)
+        console.log(
+          `[waba/inbound] duplikat wamid=${message.id} (race) — di-skip`,
+        )
         continue
       }
       console.error(`[waba/inbound] gagal proses wamid=${message.id}:`, err)
@@ -170,7 +178,11 @@ async function processOne(
         skipSave: opts.skipSave,
         touchWindow: true,
         send: async (text) => {
-          const res = await sendCloudText({ sessionId, phoneNumber: waId, content: text })
+          const res = await sendCloudText({
+            sessionId,
+            phoneNumber: waId,
+            content: text,
+          })
           return {
             ok: res.success,
             externalMsgId: res.data?.messageId ?? null,
@@ -178,12 +190,32 @@ async function processOne(
           }
         },
         sendToPhone: async (phoneNumber, text) => {
-          const res = await sendCloudText({ sessionId, phoneNumber, content: text })
+          const res = await sendCloudText({
+            sessionId,
+            phoneNumber,
+            content: text,
+          })
           return {
             ok: res.success,
             externalMsgId: res.data?.messageId ?? null,
             error: res.error,
           }
+        },
+        attachments: {
+          canSend: canSendKnowledgeAttachmentCloud,
+          send: async (attachment, ownerUserId) => {
+            const res = await sendKnowledgeAttachmentCloud({
+              sessionId,
+              phoneNumber: waId,
+              ownerUserId,
+              attachment,
+            })
+            return {
+              ok: res.success,
+              externalMsgId: res.data?.messageId ?? null,
+              error: res.error,
+            }
+          },
         },
         onSaved: (info) =>
           emitSaved({
@@ -213,7 +245,9 @@ export interface ExtractedContent {
   content: string
 }
 
-export function extractInboundContent(message: WabaInboundMessage): ExtractedContent | null {
+export function extractInboundContent(
+  message: WabaInboundMessage,
+): ExtractedContent | null {
   switch (message.type) {
     case 'text': {
       const body = message.text?.body?.trim()
@@ -236,20 +270,31 @@ export function extractInboundContent(message: WabaInboundMessage): ExtractedCon
     case 'document':
       return withCaption(
         message.document?.caption,
-        message.document?.filename ? `[Dokumen: ${message.document.filename}]` : '[Dokumen]',
+        message.document?.filename
+          ? `[Dokumen: ${message.document.filename}]`
+          : '[Dokumen]',
       )
     case 'audio':
-      return { kind: 'placeholder', content: message.audio?.voice ? '[Voice note]' : '[Audio]' }
+      return {
+        kind: 'placeholder',
+        content: message.audio?.voice ? '[Voice note]' : '[Audio]',
+      }
     case 'sticker':
       return { kind: 'placeholder', content: '[Stiker]' }
     case 'location': {
       const loc = message.location
-      const label = loc?.name || loc?.address || `${loc?.latitude ?? '?'},${loc?.longitude ?? '?'}`
+      const label =
+        loc?.name ||
+        loc?.address ||
+        `${loc?.latitude ?? '?'},${loc?.longitude ?? '?'}`
       return { kind: 'placeholder', content: `[Lokasi: ${label}]` }
     }
     case 'contacts': {
       const name = message.contacts?.[0]?.name?.formatted_name
-      return { kind: 'placeholder', content: name ? `[Kontak: ${name}]` : '[Kontak]' }
+      return {
+        kind: 'placeholder',
+        content: name ? `[Kontak: ${name}]` : '[Kontak]',
+      }
     }
     case 'reaction':
       return null // paritas Baileys: reaction di-skip
@@ -260,7 +305,10 @@ export function extractInboundContent(message: WabaInboundMessage): ExtractedCon
 
 // Media ber-caption diperlakukan sebagai teks (caption memicu AI) — paritas
 // extractText Baileys yang membaca imageMessage.caption / videoMessage.caption.
-function withCaption(caption: string | undefined, placeholder: string): ExtractedContent {
+function withCaption(
+  caption: string | undefined,
+  placeholder: string,
+): ExtractedContent {
   const trimmed = caption?.trim()
   return trimmed
     ? { kind: 'text', content: trimmed }

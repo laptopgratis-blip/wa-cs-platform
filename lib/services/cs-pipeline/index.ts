@@ -19,11 +19,12 @@ import {
 import { processFlowMessage } from '@/lib/services/flow-engine'
 
 import { chargeCsReply, hasEnoughTokens } from './charge'
-import { getKnowledgeForMessage } from './knowledge'
 import {
-  saveMessage,
-  type SavedMessageHistoryItem,
-} from './message-store'
+  type KnowledgeAttachment,
+  sendAttachmentsWithinBudget,
+} from './attachments'
+import { getKnowledgeForMessage } from './knowledge'
+import { saveMessage, type SavedMessageHistoryItem } from './message-store'
 import { getSessionAiConfig } from './session-config'
 
 export interface CsSendResult {
@@ -57,6 +58,18 @@ export interface RunCsPipelineInput {
   sendToPhone?: (phoneNumber: string, text: string) => Promise<CsSendResult>
   /** Dipanggil tiap pesan tersimpan — jembatan realtime inbox. */
   onSaved?: (info: CsSavedNotification) => void
+  /**
+   * Kirim lampiran knowledge (IMAGE/FILE) via transport sesi ini. Tanpa ini
+   * transport dianggap tak bisa mengirim file → AI tidak menjanjikan media.
+   * canSend dipanggil SEBELUM generate AI; send tidak boleh throw.
+   */
+  attachments?: {
+    canSend: (att: KnowledgeAttachment, ownerUserId: string) => boolean
+    send: (
+      att: KnowledgeAttachment,
+      ownerUserId: string,
+    ) => Promise<CsSendResult>
+  }
   /** Sesi CLOUD_API: pesan masuk membuka window 24 jam. */
   touchWindow?: boolean
   /**
@@ -86,16 +99,57 @@ export interface CsPipelineResult {
   shouldContinue: boolean
 }
 
+// Anggaran waktu MULAI kirim lampiran (lock per-kontak, watchdog 120 dtk di
+// pipeline-lock). Lampiran yang sedang berjalan tetap diselesaikan.
+const ATTACHMENT_BUDGET_MS = 20_000
+
+// Kirim lampiran knowledge setelah balasan teks terkirim. Best-effort:
+// gagal/terlewat hanya di-log, tidak memengaruhi outcome.
+async function sendKnowledgeAttachments(
+  input: RunCsPipelineInput,
+  ownerUserId: string,
+  attachments: KnowledgeAttachment[],
+): Promise<void> {
+  const sender = input.attachments
+  if (!sender) return
+  const report = await sendAttachmentsWithinBudget({
+    attachments,
+    budgetMs: ATTACHMENT_BUDGET_MS,
+    send: (att) => sender.send(att, ownerUserId),
+  })
+  for (const att of report.sent) {
+    console.log(
+      `[cs-pipeline] lampiran "${att.title}" terkirim sesi ${input.sessionId}`,
+    )
+  }
+  for (const { attachment, error } of report.failed) {
+    console.error(
+      `[cs-pipeline] lampiran "${attachment.title}" gagal sesi ${input.sessionId}: ${error}`,
+    )
+  }
+  if (report.skipped.length > 0) {
+    console.warn(
+      `[cs-pipeline] ${report.skipped.length} lampiran dilewati sesi ${input.sessionId} (cap/anggaran waktu)`,
+    )
+  }
+}
+
 async function pauseSession(sessionId: string, reason: string): Promise<void> {
   await prisma.whatsappSession
-    .update({ where: { id: sessionId }, data: { status: 'PAUSED', lastError: reason } })
+    .update({
+      where: { id: sessionId },
+      data: { status: 'PAUSED', lastError: reason },
+    })
     .catch((err) => console.error('[cs-pipeline] gagal pause sesi:', err))
 }
 
 export async function runCsPipeline(
   input: RunCsPipelineInput,
 ): Promise<CsPipelineResult> {
-  const stop = (outcome: CsPipelineOutcome, detail?: string): CsPipelineResult => ({
+  const stop = (
+    outcome: CsPipelineOutcome,
+    detail?: string,
+  ): CsPipelineResult => ({
     outcome,
     detail,
     shouldContinue: false,
@@ -117,10 +171,15 @@ export async function runCsPipeline(
     // Baris sesi pesan dulu, lalu lintas sesi berurut recency — jangan sampai
     // baris impor kosong (aiPaused false) terbaca saat CS sedang takeover.
     const contact = await findContactPreferSession(
-      (args) => prisma.contact.findFirst({ ...args, select: { id: true, aiPaused: true } }),
+      (args) =>
+        prisma.contact.findFirst({
+          ...args,
+          select: { id: true, aiPaused: true },
+        }),
       { userId, sessionId: input.sessionId, phoneNumber: input.phoneNumber },
     )
-    if (!contact) return stop('save_message_failed', 'kontak drain tidak ditemukan')
+    if (!contact)
+      return stop('save_message_failed', 'kontak drain tidak ditemukan')
     contactId = contact.id
     aiPaused = contact.aiPaused
     const recent = await prisma.message.findMany({
@@ -260,15 +319,22 @@ export async function runCsPipeline(
     return stop('paused_no_token')
   }
 
-  // 7. Knowledge augmentation — best-effort.
+  // 7. Knowledge augmentation — best-effort. Lampiran hanya yang bisa
+  // dikirim transport ini (prompt tidak menjanjikan sisanya).
   let promptBlock = ''
-  let attachmentCount = 0
+  let attachments: KnowledgeAttachment[] = []
   try {
-    const kb = await getKnowledgeForMessage(userId, input.content)
+    const kb = await getKnowledgeForMessage(userId, input.content, {
+      canSendAttachment: (att) =>
+        input.attachments?.canSend(att, userId) ?? false,
+    })
     promptBlock = kb.promptBlock
-    attachmentCount = kb.attachments.length
+    attachments = kb.attachments
   } catch (err) {
-    console.error('[cs-pipeline] knowledge error (lanjut tanpa knowledge):', err)
+    console.error(
+      '[cs-pipeline] knowledge error (lanjut tanpa knowledge):',
+      err,
+    )
   }
 
   // 8. Generate balasan.
@@ -307,12 +373,6 @@ export async function runCsPipeline(
   }
 
   // 10. Kirim + simpan balasan AI (cost fields lengkap untuk profitability).
-  if (attachmentCount > 0) {
-    // Attachment knowledge butuh media upload API Meta — increment berikutnya.
-    console.log(
-      `[cs-pipeline] ${attachmentCount} attachment knowledge di-skip (belum didukung Cloud API)`,
-    )
-  }
   const { sendOk } = await sendAndSaveReply(ai.reply, {
     tokensUsed: charge.tokensCharged ?? 0,
     apiInputTokens: ai.usage?.inputTokens ?? 0,
@@ -324,5 +384,11 @@ export async function runCsPipeline(
   })
 
   if (!sendOk) return stop('send_failed')
+
+  // 11. Lampiran knowledge — HANYA kalau balasan teks terkirim (jangan kirim
+  // file tanpa konteks). Di-await supaya urutan terjaga sebelum drain.
+  if (attachments.length > 0) {
+    await sendKnowledgeAttachments(input, userId, attachments)
+  }
   return { outcome: 'replied', shouldContinue: true }
 }

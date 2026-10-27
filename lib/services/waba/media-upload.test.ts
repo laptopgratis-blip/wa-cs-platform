@@ -23,12 +23,49 @@ check('video mp4 & dokumen pdf → nama + ekstensi benar', () => {
   assert.equal(mediaUploadFileName('application/pdf'), 'document.pdf')
 })
 
-check('nama file eksplisit dipakai, ekstensi dipaksa sesuai MIME & karakter aneh dibuang', () => {
-  assert.equal(mediaUploadFileName('application/pdf', 'katalog.pdf'), 'katalog.pdf')
-  assert.equal(mediaUploadFileName('application/pdf', 'katalog promo'), 'katalog promo.pdf')
-  assert.equal(mediaUploadFileName('image/jpeg', '../../etc/passwd'), 'passwd.jpg')
-  assert.equal(mediaUploadFileName('video/mp4', '   '), 'video.mp4')
-})
+check(
+  'nama file eksplisit dipakai, ekstensi dipaksa sesuai MIME & karakter aneh dibuang',
+  () => {
+    assert.equal(
+      mediaUploadFileName('application/pdf', 'katalog.pdf'),
+      'katalog.pdf',
+    )
+    assert.equal(
+      mediaUploadFileName('application/pdf', 'katalog promo'),
+      'katalog promo.pdf',
+    )
+    assert.equal(
+      mediaUploadFileName('image/jpeg', '../../etc/passwd'),
+      'passwd.jpg',
+    )
+    assert.equal(mediaUploadFileName('video/mp4', '   '), 'video.mp4')
+  },
+)
+
+check(
+  'dokumen office & teks (lampiran knowledge) → ekstensi sesuai MIME',
+  () => {
+    assert.equal(
+      mediaUploadFileName(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Katalog',
+      ),
+      'Katalog.docx',
+    )
+    assert.equal(
+      mediaUploadFileName(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ),
+      'document.xlsx',
+    )
+    assert.equal(mediaUploadFileName('application/msword', 'a.doc'), 'a.doc')
+    assert.equal(mediaUploadFileName('application/vnd.ms-excel', 'a'), 'a.xls')
+    assert.equal(
+      mediaUploadFileName('text/plain', 'Daftar harga.csv'),
+      'Daftar harga.txt',
+    )
+  },
+)
 
 check('MIME tak dikenal → .bin (perilaku lama)', () => {
   assert.equal(mediaUploadFileName('application/x-unknown'), 'image.bin')
