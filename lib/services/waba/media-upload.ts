@@ -14,11 +14,31 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'video/mp4': 'mp4',
   'application/pdf': 'pdf',
+  // Dokumen lampiran knowledge (lihat knowledge-media.ts).
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    'pptx',
+  'text/plain': 'txt',
 }
 
 const BASENAME_BY_MIME: Record<string, string> = {
   'video/mp4': 'video',
   'application/pdf': 'document',
+  'application/msword': 'document',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'document',
+  'application/vnd.ms-excel': 'document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+    'document',
+  'application/vnd.ms-powerpoint': 'document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    'document',
+  'text/plain': 'document',
 }
 
 const LARGE_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -46,6 +66,8 @@ export async function uploadCloudMedia(input: {
   buffer: Buffer
   mime: string
   filename?: string
+  /** Override batas waktu (mis. lampiran CS di bawah lock per-kontak). */
+  timeoutMs?: number
 }): Promise<GraphResult<{ id: string }>> {
   const form = new FormData()
   form.append('messaging_product', 'whatsapp')
@@ -63,7 +85,9 @@ export async function uploadCloudMedia(input: {
       body: form,
       // Upload 5 MB di koneksi lambat bisa melewati 30 dtk default; video/
       // dokumen header template (s.d. 16-25 MB) diberi waktu lebih.
-      timeoutMs: input.buffer.length > LARGE_UPLOAD_BYTES ? 120_000 : 60_000,
+      timeoutMs:
+        input.timeoutMs ??
+        (input.buffer.length > LARGE_UPLOAD_BYTES ? 120_000 : 60_000),
     },
   )
   if (!res.ok) return res

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { assertCanSendCloud, type CloudComplianceCode } from './compliance'
 import { getWabaCredentialsBySession } from './credentials'
 import { graphRequest } from './graph'
+import { type FreeformMedia, freeformMessageContent } from './freeform-payload'
 import { uploadCloudMedia } from './media-upload'
 
 // Kode error Meta yang berarti token/sesi tidak sehat → sesi di-ERROR-kan.
@@ -29,10 +30,11 @@ interface CloudMessagesResponse {
  * Kirim teks free-form — atau GAMBAR: by-link bila imageUrl diisi (Meta yang
  * men-fetch URL-nya, harus https publik), atau by-bytes bila imageData diisi
  * (di-upload dulu ke media API Meta → kirim by id; tidak ada file tersimpan
- * di platform). content jadi caption opsional saat ada gambar. Semuanya pesan
- * free-form dalam window 24 jam, aturan compliance sama. Pra-cek window dari
- * Contact.windowExpiresAt supaya kegagalan yang pasti terjadi diberi pesan
- * jelas tanpa memanggil Meta.
+ * di platform) — atau DOKUMEN by-bytes bila documentData diisi (lampiran
+ * knowledge PDF/office; filename tampil di chat). content jadi caption
+ * opsional saat ada media. Semuanya pesan free-form dalam window 24 jam,
+ * aturan compliance sama. Pra-cek window dari Contact.windowExpiresAt supaya
+ * kegagalan yang pasti terjadi diberi pesan jelas tanpa memanggil Meta.
  */
 export async function sendCloudText(input: {
   sessionId: string
@@ -40,6 +42,9 @@ export async function sendCloudText(input: {
   content: string
   imageUrl?: string
   imageData?: { buffer: Buffer; mime: string }
+  documentData?: { buffer: Buffer; mime: string; filename: string }
+  /** Batas waktu upload media (default per ukuran di uploadCloudMedia). */
+  uploadTimeoutMs?: number
 }): Promise<CloudSendResult> {
   try {
     // Aturan kepatuhan terpusat (sesi valid, blacklist, window 24 jam) —
@@ -62,16 +67,19 @@ export async function sendCloudText(input: {
       }
     const token = credRes.creds.token
 
-    // Gambar by-bytes: upload dulu ke media API Meta → kirim pakai media id.
+    // Media by-bytes: upload dulu ke media API Meta → kirim pakai media id.
     // Kegagalan upload TIDAK meng-ERROR-kan sesi di sini (kalau token memang
     // mati, panggilan /messages berikutnya yang menanganinya lengkap).
     let mediaId: string | undefined
-    if (input.imageData) {
+    const mediaData = input.documentData ?? input.imageData
+    if (mediaData) {
       const uploaded = await uploadCloudMedia({
         phoneNumberId: session.phoneNumberId,
         token,
-        buffer: input.imageData.buffer,
-        mime: input.imageData.mime,
+        buffer: mediaData.buffer,
+        mime: mediaData.mime,
+        filename: input.documentData?.filename,
+        timeoutMs: input.uploadTimeoutMs,
       })
       if (!uploaded.ok) {
         return {
@@ -83,6 +91,18 @@ export async function sendCloudText(input: {
       mediaId = uploaded.data.id
     }
 
+    const media: FreeformMedia | undefined = mediaId
+      ? input.documentData
+        ? {
+            kind: 'document',
+            id: mediaId,
+            filename: input.documentData.filename,
+          }
+        : { kind: 'image', id: mediaId }
+      : input.imageUrl
+        ? { kind: 'image', link: input.imageUrl }
+        : undefined
+
     const result = await graphRequest<CloudMessagesResponse>(
       `/${session.phoneNumberId}/messages`,
       {
@@ -92,23 +112,7 @@ export async function sendCloudText(input: {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
           to,
-          ...(mediaId
-            ? {
-                type: 'image',
-                image: {
-                  id: mediaId,
-                  ...(input.content ? { caption: input.content } : {}),
-                },
-              }
-            : input.imageUrl
-              ? {
-                  type: 'image',
-                  image: {
-                    link: input.imageUrl,
-                    ...(input.content ? { caption: input.content } : {}),
-                  },
-                }
-              : { type: 'text', text: { body: input.content } }),
+          ...freeformMessageContent(input.content, media),
         },
       },
     )
