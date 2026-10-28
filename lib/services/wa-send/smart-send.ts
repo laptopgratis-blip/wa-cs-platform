@@ -31,20 +31,13 @@ import {
 export type SmartSendPurpose = Exclude<TemplateSendPurpose, 'CS' | 'BROADCAST'>
 
 /**
- * Gambar untuk jalur free-form: by-URL publik (lama) ATAU bytes langsung
- * ("fire and forget" dari image_base64 API publik — tidak ada file yang
- * disimpan platform; Baileys terima buffer, Cloud upload ke media API Meta).
+ * Gambar untuk jalur free-form: SELALU bytes yang sudah divalidasi (tidak ada
+ * file disimpan platform; Baileys terima buffer, Cloud upload ke media API
+ * Meta). Sengaja tanpa varian URL: URL yang diteruskan ke Baileys di-fetch
+ * dari dalam network docker (ikut redirect) = SSRF. image_url API publik
+ * diunduh dulu lewat image-fetch.ts.
  */
-export type SmartSendImage =
-  { url: string } | { data: { buffer: Buffer; mime: string } }
-
-function imageParts(image: SmartSendImage | undefined): {
-  url?: string
-  data?: { buffer: Buffer; mime: string }
-} {
-  if (!image) return {}
-  return 'url' in image ? { url: image.url } : { data: image.data }
-}
+export type SmartSendImage = { data: { buffer: Buffer; mime: string } }
 
 export interface SmartSendTemplateSpec {
   /** Template spesifik (dipakai hanya bila wabaId-nya sama dengan kandidat). */
@@ -66,11 +59,11 @@ export interface SmartSendInput {
   /** Teks free-form (Baileys / Cloud dalam window). Caption saat image diisi. */
   text: string
   /**
-   * Opsional: kirim gambar — URL publik atau buffer (lihat SmartSendImage);
-   * text jadi caption. Hanya jalur free-form — template TIDAK bisa membawa
-   * gambar arbitrer, jadi kandidat Cloud di luar window dilewati dengan
-   * WINDOW_CLOSED (tanpa fallback). URL WAJIB sudah lolos guard SSRF di
-   * pemanggil; buffer WAJIB sudah lolos decodeImageBase64.
+   * Opsional: kirim gambar (buffer, lihat SmartSendImage); text jadi
+   * caption. Hanya jalur free-form — template TIDAK bisa membawa gambar
+   * arbitrer, jadi kandidat Cloud di luar window dilewati dengan
+   * WINDOW_CLOSED (tanpa fallback). Buffer WAJIB sudah lolos
+   * decodeImageBase64 / fetchImageFromUrl.
    */
   image?: SmartSendImage
   template?: SmartSendTemplateSpec
@@ -322,7 +315,7 @@ export async function smartSend(
   const permanents: boolean[] = []
   const getLinked = linkedLoader(input.template)
   const allowFreeform = input.allowFreeformInWindow ?? true
-  const img = imageParts(input.image)
+  const imageData = input.image?.data
 
   if (input.candidates.length === 0) {
     return {
@@ -340,8 +333,7 @@ export async function smartSend(
           cand.sessionId,
           input.to,
           input.text,
-          img.url,
-          img.data,
+          imageData,
         )
         if (r.success) {
           return {
@@ -373,8 +365,7 @@ export async function smartSend(
           cand.sessionId,
           input.to,
           input.text,
-          img.url,
-          img.data,
+          imageData,
         )
         if (r.success) {
           return {

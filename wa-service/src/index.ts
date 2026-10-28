@@ -211,15 +211,22 @@ app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) =>
         imageBase64?: string
       }
     | undefined
-  // imageUrl/imageBase64 opsional: bila ada → kirim gambar (content jadi
-  // caption, boleh kosong). Tanpa gambar → teks biasa, content wajib.
-  if (
-    !body?.phoneNumber ||
-    (!body?.content && !body?.imageUrl && !body?.imageBase64)
-  ) {
+  // Gambar HANYA sebagai bytes. imageUrl ditolak: Baileys men-fetch URL dari
+  // dalam network docker & ikut redirect → SSRF. Platform yang mengunduh dan
+  // memvalidasi gambar (lib/services/public-api/image-fetch.ts).
+  if (body?.imageUrl) {
     res.status(400).json({
       success: false,
-      error: 'phoneNumber dan content (atau imageUrl/imageBase64) wajib diisi',
+      error: 'imageUrl tidak didukung — kirim gambar sebagai imageBase64',
+    })
+    return
+  }
+  // imageBase64 opsional: bila ada → kirim gambar (content jadi caption,
+  // boleh kosong). Tanpa gambar → teks biasa, content wajib.
+  if (!body?.phoneNumber || (!body?.content && !body?.imageBase64)) {
+    res.status(400).json({
+      success: false,
+      error: 'phoneNumber dan content (atau imageBase64) wajib diisi',
     })
     return
   }
@@ -243,14 +250,7 @@ app.post('/sessions/:sessionId/send-message', requireSecret, async (req, res) =>
         imageBuffer,
         body.content,
       )
-    : body.imageUrl
-      ? await manager.sendImage(
-          sessionId,
-          body.phoneNumber,
-          body.imageUrl,
-          body.content,
-        )
-      : await manager.sendText(sessionId, body.phoneNumber, body.content ?? '')
+    : await manager.sendText(sessionId, body.phoneNumber, body.content ?? '')
   if (!result.ok) {
     res.status(400).json({ success: false, error: result.error || 'gagal kirim' })
     return

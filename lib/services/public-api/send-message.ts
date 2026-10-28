@@ -4,11 +4,11 @@
 // compliance — kita hanya menyiapkan kandidat sesi (MILIK USER ini saja) dan
 // menerjemahkan hasilnya ke bentuk API + kode HTTP.
 import { prisma } from '@/lib/prisma'
-import { assertSafeWebhookUrl } from '@/lib/services/webhooks/url-guard'
 import {
   decodeImageBase64,
   type DecodedImage,
 } from '@/lib/services/public-api/image-data'
+import { fetchImageFromUrl } from '@/lib/services/public-api/image-fetch'
 import { listSenderCandidates } from '@/lib/wa-session'
 import { applySessionPin } from '@/lib/services/public-api/sender-selection'
 import {
@@ -145,7 +145,10 @@ export async function sendPublicText(input: {
   to: string
   /** Teks pesan; saat ada gambar jadi caption (boleh kosong). */
   content?: string
-  /** Opsional: kirim gambar dari URL publik https (schema sudah validasi bentuk). */
+  /**
+   * Opsional: kirim gambar dari URL publik https (schema sudah validasi
+   * bentuk). Diunduh di sini (guard SSRF per hop) lalu dikirim sebagai bytes.
+   */
   imageUrl?: string
   /**
    * Opsional (eksklusif dgn imageUrl, dijaga schema): gambar base64/data URI.
@@ -155,24 +158,6 @@ export async function sendPublicText(input: {
   sessionId?: string
   strictSession?: boolean
 }): Promise<PublicSendOutcome> {
-  // Guard SSRF untuk gambar: jalur Baileys men-download URL DARI DALAM
-  // infra kita (wa-service), jadi alamat internal/privat & kredensial di URL
-  // wajib ditolak sebelum menyentuh transport. Reuse guard webhook (https-only,
-  // resolve DNS, deny IP privat).
-  if (input.imageUrl) {
-    try {
-      await assertSafeWebhookUrl(input.imageUrl)
-    } catch (err) {
-      const reason = (err as Error).message.replace('URL webhook', 'URL gambar')
-      return {
-        ok: false,
-        httpStatus: 400,
-        code: 'invalid_image_url',
-        error: `image_url ditolak: ${reason}`,
-      }
-    }
-  }
-
   // Gambar base64: decode + cek magic bytes SEKALI di sini; lapisan bawah
   // menerima buffer yang sudah tervalidasi (tidak ada decode ulang).
   let imageData: DecodedImage | undefined
@@ -201,15 +186,27 @@ export async function sendPublicText(input: {
     return strictSessionUnavailable()
   }
 
+  // image_url diunduh DI SINI (bukan oleh Baileys/Meta): redirect divalidasi
+  // per hop + guard IP saat koneksi — lihat image-fetch.ts. Tanpa kandidat
+  // sesi tidak perlu mengunduh (smartSend langsung NO_SESSION).
+  if (input.imageUrl && owned.candidates.length > 0) {
+    const fetched = await fetchImageFromUrl(input.imageUrl)
+    if (!fetched.ok) {
+      return {
+        ok: false,
+        httpStatus: 400,
+        code: 'invalid_image_url',
+        error: fetched.error,
+      }
+    }
+    imageData = fetched.image
+  }
+
   const res = await smartSend({
     candidates: owned.candidates,
     to: input.to,
     text: input.content ?? '',
-    image: input.imageUrl
-      ? { url: input.imageUrl }
-      : imageData
-        ? { data: imageData }
-        : undefined,
+    image: imageData ? { data: imageData } : undefined,
     purpose: 'NOTIF',
     source: 'API',
     // Teks bebas: dalam window (atau Baileys). Di luar window Cloud tanpa
