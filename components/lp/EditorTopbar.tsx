@@ -380,9 +380,13 @@ export function EditorTopbar({
   onSeoClick,
 }: Props) {
   return (
-    <header className="border-warm-200 bg-card flex flex-col gap-2 border-b px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4">
+    // Di bawah xl grup aksi (±540px) + toggle tidak muat satu baris bersama
+    // judul — dulu shrink-0 tanpa wrap → di HP/tablet/"situs desktop" tombol
+    // Publish terdorong ke luar layar & <main> bisa digeser horizontal, dan
+    // di laptop 1024–1150px judul terjepit nyaris 0px. Mulai xl satu baris.
+    <header className="border-warm-200 bg-card flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2.5 xl:flex-nowrap">
       {/* Kiri: tombol kembali + judul + slug */}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-64 flex-1 items-center gap-3 xl:min-w-0">
         <Button asChild variant="ghost" size="icon" className="shrink-0">
           <Link href="/landing-pages" aria-label="Kembali ke daftar LP">
             <ArrowLeft className="size-4" />
@@ -437,48 +441,53 @@ export function EditorTopbar({
         </Button>
       </div>
 
-      {/* Kanan: status + tombol */}
-      <div className="flex shrink-0 items-center gap-2">
-        <StatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
+      {/* Kanan: status + tombol. Dua pasangan nowrap → kalau sempit, wrap
+          terjadi di antara pasangan, Publish tak pernah sendirian. */}
+      <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:flex-nowrap">
+        <div className="flex items-center gap-2">
+          <StatusIndicator status={saveStatus} lastSavedAt={lastSavedAt} />
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onSeoClick}
-          title="Atur SEO, URL, dan publish"
-        >
-          <Settings className="mr-1.5 size-3.5" />
-          SEO &amp; Settings
-        </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSeoClick}
+            title="Atur SEO, URL, dan publish"
+          >
+            <Settings className="mr-1.5 size-3.5" />
+            SEO &amp; Settings
+          </Button>
+        </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSaveDraft}
-          disabled={saveStatus === 'saving' || saveStatus === 'saved'}
-        >
-          <Save className="mr-1.5 size-3.5" />
-          Simpan Draft
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onSaveDraft}
+            disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+          >
+            <Save className="mr-1.5 size-3.5" />
+            Simpan Draft
+          </Button>
 
-        <Button
-          size="sm"
-          variant={isPublished ? 'outline' : 'default'}
-          onClick={onPublishClick}
-          disabled={saveStatus === 'saving'}
-        >
-          {isPublished ? (
-            <>
-              Unpublish
-              <StatusBadge tone="success" label="Live" className="ml-2" />
-            </>
-          ) : (
-            <>
-              Publish
-              <StatusBadge tone="neutral" label="Draft" className="ml-2" />
-            </>
-          )}
-        </Button>
+          <Button
+            size="sm"
+            variant={isPublished ? 'outline' : 'default'}
+            onClick={onPublishClick}
+            disabled={saveStatus === 'saving'}
+          >
+            {isPublished ? (
+              <>
+                Unpublish
+                <StatusBadge tone="success" label="Live" className="ml-2" />
+              </>
+            ) : (
+              <>
+                Publish
+                <StatusBadge tone="neutral" label="Draft" className="ml-2" />
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </header>
   )

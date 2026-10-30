@@ -4,22 +4,42 @@
 // Fitur: upload (auto-attach ke lpId), grid thumbnail, copy URL per item,
 // hapus per item, dan box "Prompt untuk AI" (semua URL dijadikan template
 // label:URL siap copy ke AI generator).
+//
+// Dua varian layout:
+//   - 'sidebar' (default): kolom kiri desktop, tinggi penuh, grid scroll sendiri.
+//   - 'inline': di dalam panel lipat layar < lg (MobileImagePanel). Judul
+//     disembunyikan (sudah ada di header panel). Grid TANPA scroll sendiri
+//     (nested scroll di HP membingungkan): saat dilipat tampil tepat 2 baris
+//     gambar terbaru (lib/lp/image-preview) + tombol "Tampilkan semua". Kolom
+//     ikut lebar panel via container
+//     query (bukan viewport — sidebar dashboard ikut memakan lebar di tablet).
 import {
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Copy,
   HardDrive,
   ImageIcon,
   Loader2,
-  Trash2,
   Upload,
 } from 'lucide-react'
-import Image from 'next/image'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 
+import { ImageTile } from '@/components/lp/ImageTile'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { copyText } from '@/lib/clipboard'
+import {
+  INLINE_PREVIEW_MAX,
+  previewTileClass,
+  previewToggleClass,
+} from '@/lib/lp/image-preview'
+import { cn } from '@/lib/utils'
+
+export type ImageManagerVariant = 'sidebar' | 'inline'
 
 interface LpImageRow {
   id: string
@@ -37,20 +57,27 @@ interface QuotaInfo {
   maxStorageMB: number
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+function absoluteUrl(path: string): string {
+  return `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`
 }
 
-export function ImageManager({ lpId }: { lpId: string }) {
+export function ImageManager({
+  lpId,
+  variant = 'sidebar',
+}: {
+  lpId: string
+  variant?: ImageManagerVariant
+}) {
+  const isInline = variant === 'inline'
   const [images, setImages] = useState<LpImageRow[]>([])
   const [quota, setQuota] = useState<QuotaInfo | null>(null)
   const [isLoading, setLoading] = useState(true)
   const [isUploading, setUploading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<LpImageRow | null>(null)
+  const [showAll, setShowAll] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
 
   async function loadAll() {
     setLoading(true)
@@ -137,9 +164,17 @@ export function ImageManager({ lpId }: { lpId: string }) {
     }
   }
 
-  function copyToClipboard(text: string, label: string) {
-    void navigator.clipboard.writeText(text)
-    toast.success(`${label} disalin`)
+  // Clipboard bisa ditolak (browser in-app / WebView HP, izin diblok) —
+  // copyText punya fallback; kalau tetap gagal jangan tampilkan "disalin".
+  async function copyToClipboard(text: string, label: string) {
+    if (await copyText(text)) {
+      toast.success(`${label} disalin`)
+      return
+    }
+    console.error('[lp image copy] clipboard API & fallback gagal')
+    toast.error(
+      'Gagal menyalin otomatis. Tahan lama teks di kotak "Prompt untuk AI" untuk salin manual.',
+    )
   }
 
   // Build prompt template untuk AI generator: list semua URL gambar dengan
@@ -160,18 +195,48 @@ export function ImageManager({ lpId }: { lpId: string }) {
       ? Math.min(100, (quota.storageUsedMB / quota.maxStorageMB) * 100)
       : 0
 
+  // API mengurutkan terbaru dulu → hasil upload barusan selalu di preview.
+  const toggleClass = isInline ? previewToggleClass(images.length) : null
+  const isCollapsed = toggleClass !== null && !showAll
+  const visibleImages = isCollapsed
+    ? images.slice(0, INLINE_PREVIEW_MAX)
+    : images
+
+  function toggleShowAll() {
+    if (!showAll) {
+      setShowAll(true)
+      return
+    }
+    // Saat dilipat lagi, grid menyusut & user tertinggal jauh di bawah (di
+    // tengah panel AI). flushSync → DOM sudah menyusut sebelum di-scroll.
+    flushSync(() => setShowAll(false))
+    gridRef.current?.scrollIntoView({ block: 'nearest' })
+  }
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {/* Header + storage */}
-      <div className="border-warm-200 border-b p-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display text-warm-900 text-sm font-semibold">
-            Gambar
-          </h3>
-          <span className="text-warm-500 text-xs">{images.length} file</span>
-        </div>
+    <div
+      className={cn(
+        'flex min-h-0 flex-col',
+        isInline ? '@container' : 'h-full',
+      )}
+    >
+      {/* Header + storage — inline pakai px-4 supaya sejajar header panel */}
+      <div
+        className={cn(
+          'border-warm-200 border-b',
+          isInline ? 'px-4 py-3' : 'p-3',
+        )}
+      >
+        {!isInline && (
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-warm-900 text-sm font-semibold">
+              Gambar
+            </h3>
+            <span className="text-warm-500 text-xs">{images.length} file</span>
+          </div>
+        )}
         {quota && (
-          <div className="mt-2 space-y-1">
+          <div className={cn('space-y-1', !isInline && 'mt-2')}>
             <div className="flex items-center justify-between text-xs">
               <span className="text-warm-500 flex items-center gap-1">
                 <HardDrive className="size-3" />
@@ -185,15 +250,21 @@ export function ImageManager({ lpId }: { lpId: string }) {
           </div>
         )}
         <Button
-          size="sm"
-          className="mt-3 w-full"
+          size={isInline ? 'default' : 'sm'}
+          className={cn('mt-3 w-full', isInline && 'h-11')}
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
         >
           {isUploading ? (
-            <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            <Loader2
+              className={cn('animate-spin', !isInline && 'mr-1.5 size-3.5')}
+              aria-hidden
+            />
           ) : (
-            <Upload className="mr-1.5 size-3.5" />
+            <Upload
+              className={cn(!isInline && 'mr-1.5 size-3.5')}
+              aria-hidden
+            />
           )}
           Upload Gambar
         </Button>
@@ -210,88 +281,90 @@ export function ImageManager({ lpId }: { lpId: string }) {
         />
         <p className="text-warm-500 mt-1.5 text-xs">
           JPG/PNG/WebP/GIF, max 2 MB per file
+          {isInline && !isLoading && ` · ${images.length} file`}
         </p>
       </div>
 
       {/* Grid gambar */}
-      <div className="flex-1 overflow-y-auto p-3">
-        {isLoading ? (
-          <div className="flex justify-center py-12">
+      <div
+        ref={gridRef}
+        className={cn(isInline ? 'px-4 py-3' : 'flex-1 overflow-y-auto p-3')}
+      >
+        {/* Spinner penuh hanya saat muat pertama. Refresh sesudah upload/hapus
+            tetap menampilkan grid lama (diredupkan) — kalau grid diganti
+            spinner, tinggi panel kolaps & scroll halaman di HP melompat. */}
+        {isLoading && images.length === 0 ? (
+          <div
+            className={cn('flex justify-center', isInline ? 'py-6' : 'py-12')}
+          >
             <Loader2 className="text-muted-foreground size-4 animate-spin" />
           </div>
         ) : images.length === 0 ? (
-          <div className="text-warm-500 flex flex-col items-center gap-2 py-12 text-center text-xs">
-            <ImageIcon className="size-6" />
-            Belum ada gambar.
+          <div
+            className={cn(
+              'text-warm-500 flex flex-col items-center gap-2 text-center text-xs',
+              isInline ? 'py-6' : 'py-12',
+            )}
+          >
+            <ImageIcon className="size-6" aria-hidden />
+            <span className="text-warm-700 font-medium">Belum ada gambar</span>
+            <span>Upload foto produk, lalu salin URL-nya ke AI Generator.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {images.map((img) => (
-              <div
-                key={img.id}
-                className="group border-warm-200 bg-warm-50 relative overflow-hidden rounded-md border"
+          <>
+            <div
+              aria-busy={isLoading}
+              className={cn(
+                'grid gap-2 transition-opacity',
+                isInline
+                  ? 'grid-cols-2 @md:grid-cols-3 @xl:grid-cols-4 @3xl:grid-cols-5'
+                  : 'grid-cols-2',
+                isLoading && 'pointer-events-none opacity-60',
+              )}
+            >
+              {visibleImages.map((img, i) => (
+                <ImageTile
+                  key={img.id}
+                  className={isCollapsed ? previewTileClass(i) : undefined}
+                  image={img}
+                  variant={variant}
+                  isDeleting={deletingId === img.id}
+                  onCopyUrl={() =>
+                    void copyToClipboard(absoluteUrl(img.url), 'URL')
+                  }
+                  onDelete={() => setDeleteTarget(img)}
+                />
+              ))}
+            </div>
+            {toggleClass !== null && (
+              <Button
+                variant="outline"
+                className={cn('mt-3 h-11 w-full', toggleClass)}
+                onClick={toggleShowAll}
+                aria-expanded={showAll}
               >
-                <div className="bg-warm-100 relative aspect-square w-full">
-                  <Image
-                    src={img.url}
-                    alt={img.originalName}
-                    fill
-                    sizes="140px"
-                    className="object-cover"
-                    unoptimized
-                  />
-                </div>
-                <div className="space-y-1 p-1.5">
-                  <div
-                    className="text-warm-800 truncate text-xs font-medium"
-                    title={img.originalName}
-                  >
-                    {img.originalName}
-                  </div>
-                  <div className="text-warm-500 text-xs">
-                    {formatBytes(img.size)}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 flex-1 px-1 text-xs"
-                      onClick={() =>
-                        copyToClipboard(
-                          `${typeof window !== 'undefined' ? window.location.origin : ''}${img.url}`,
-                          'URL',
-                        )
-                      }
-                      title="Salin URL gambar"
-                    >
-                      <Copy className="mr-1 size-3" />
-                      URL
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive h-6 px-1.5"
-                      onClick={() => setDeleteTarget(img)}
-                      disabled={deletingId === img.id}
-                      title="Hapus gambar"
-                    >
-                      {deletingId === img.id ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-3" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                {showAll ? (
+                  <ChevronUp aria-hidden />
+                ) : (
+                  <ChevronDown aria-hidden />
+                )}
+                {showAll
+                  ? 'Tampilkan lebih sedikit'
+                  : `Tampilkan semua ${images.length} gambar`}
+              </Button>
+            )}
+          </>
         )}
       </div>
 
       {/* Prompt untuk AI */}
       {images.length > 0 && (
-        <div className="border-warm-200 bg-warm-50/50 border-t p-3">
+        <div
+          className={cn(
+            'border-warm-200 bg-warm-50/50 border-t',
+            isInline ? 'px-4 py-3' : 'p-3',
+          )}
+        >
           <div className="mb-1.5 flex items-center justify-between">
             <h4 className="text-warm-700 flex items-center gap-1 text-xs font-semibold">
               <ClipboardList className="size-3.5" aria-hidden />
@@ -301,16 +374,24 @@ export function ImageManager({ lpId }: { lpId: string }) {
           <p className="text-warm-500 mb-2 text-xs">
             Copy template ini ke kolom &quot;URL gambar&quot; di AI Generator.
           </p>
-          <pre className="border-warm-200 bg-card text-warm-700 mb-2 max-h-24 overflow-auto rounded border p-1.5 font-mono text-xs">
+          <pre
+            className={cn(
+              'border-warm-200 bg-card text-warm-700 mb-2 max-h-24 overflow-auto rounded border p-1.5 font-mono text-xs',
+              // HP: URL dibungkus, jangan scroll horizontal di dalam kotak kecil
+              isInline && 'wrap-anywhere whitespace-pre-wrap',
+            )}
+          >
             {aiPromptText}
           </pre>
           <Button
-            size="sm"
+            size={isInline ? 'default' : 'sm'}
             variant="outline"
-            className="w-full text-xs"
-            onClick={() => copyToClipboard(aiPromptText, 'Semua URL untuk AI')}
+            className={cn('w-full', isInline ? 'h-11' : 'text-xs')}
+            onClick={() =>
+              void copyToClipboard(aiPromptText, 'Semua URL untuk AI')
+            }
           >
-            <Copy className="mr-1.5 size-3" />
+            <Copy className={cn(!isInline && 'mr-1.5 size-3')} aria-hidden />
             Copy Semua URL untuk AI
           </Button>
         </div>

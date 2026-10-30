@@ -185,7 +185,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
     <div className="bg-card">
       <button
         type="button"
-        className="border-warm-200 hover:bg-warm-50 flex w-full items-center justify-between border-b px-4 py-2.5 text-left"
+        className="border-warm-200 hover:bg-warm-50 flex min-h-11 w-full items-center justify-between border-b px-4 py-2.5 text-left lg:min-h-0"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
@@ -226,7 +226,7 @@ export function AiGenerator({ lpId, onGenerated, initialOpen = true }: Props) {
 
           <div className="space-y-1.5">
             <Label htmlFor="ai-imgs" className="text-xs">
-              URL gambar (paste dari Image Manager)
+              URL gambar (salin dari panel Gambar)
             </Label>
             <Textarea
               id="ai-imgs"
