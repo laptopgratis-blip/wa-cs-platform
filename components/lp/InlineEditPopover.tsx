@@ -577,7 +577,7 @@ export function InlineEditPopover({
               />
             </div>
             <p className="text-warm-500 text-xs">
-              Tip: copy URL dari panel Image Manager di kiri, paste ke sini.
+              Tip: salin URL dari panel Gambar, lalu tempel ke sini.
             </p>
           </div>
         )}

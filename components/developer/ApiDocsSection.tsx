@@ -229,7 +229,7 @@ export function ApiDocsSection({ baseUrl }: ApiDocsSectionProps) {
             <Endpoint
               method="POST"
               path="/api/v1/messages"
-              desc="Kirim teks — atau gambar via image_url (https publik) ATAU image_base64 (base64/data URI maks 5 MB, tanpa hosting — tidak ada file tersimpan; JPEG/PNG/WebP). content jadi caption opsional (maks 1024) saat ada gambar. Baileys / Cloud dalam window 24 jam; gambar tidak bisa fallback template. Body: { phone_number, content?, image_url?, image_base64?, session_id?, strict_session? }. Maks 30 kirim/menit per kunci."
+              desc="Kirim teks — atau gambar via image_url (https publik; diunduh server hulao, redirect maks 3) ATAU image_base64 (base64/data URI, tanpa hosting — tidak ada file tersimpan). Keduanya maks 5 MB, JPEG/PNG/WebP. content jadi caption opsional (maks 1024) saat ada gambar. Baileys / Cloud dalam window 24 jam; gambar tidak bisa fallback template. Body: { phone_number, content?, image_url?, image_base64?, session_id?, strict_session? }. Maks 30 kirim/menit per kunci."
             />
             <Endpoint
               method="POST"
@@ -261,7 +261,7 @@ curl "${baseUrl}/api/v1/contacts?limit=50&cursor=ckxyz..." -H "Authorization: Be
   -H "Idempotency-Key: kirim-001" \\
   -d '{"phone_number":"628123456789","content":"Halo dari API"}'
 
-# kirim gambar (image_url harus https & bisa diakses publik; content = caption opsional)
+# kirim gambar (image_url harus https, bisa diakses publik, maks 5 MB JPEG/PNG/WebP; content = caption opsional)
 curl -X POST "${baseUrl}/api/v1/messages" \\
   -H "Authorization: Bearer \$KEY" \\
   -H "Content-Type: application/json" \\

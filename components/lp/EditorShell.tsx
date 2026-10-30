@@ -6,6 +6,10 @@
 //     untuk user awam. Layout 2 kolom (ImageManager + main).
 //   - 'lanjutan': HTML editor mentah + Live Preview untuk power user.
 //     Layout 3 kolom (ImageManager + center HTML + preview).
+// Di bawah lg kolom ImageManager disembunyikan & diganti MobileImagePanel
+// (panel lipat di atas AiGenerator) supaya user HP tetap bisa upload gambar.
+// Hanya SATU instance ImageManager yang di-mount (via useMediaQuery) supaya
+// daftar gambar tidak basi saat layar melewati lg (mis. tablet diputar).
 import { Code2, MousePointerClick } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -22,11 +26,13 @@ import {
 import { HtmlEditor } from '@/components/lp/HtmlEditor'
 import { ImageManager } from '@/components/lp/ImageManager'
 import { LivePreview } from '@/components/lp/LivePreview'
+import { MobileImagePanel } from '@/components/lp/MobileImagePanel'
 import { PublishDialog } from '@/components/lp/PublishDialog'
 import { SeoSettingsSheet } from '@/components/lp/SeoSettingsSheet'
 import { VisualEditor } from '@/components/lp/VisualEditor'
 import { findEditableTagOffset } from '@/lib/lp/html-mutation'
 import { TONES } from '@/lib/ui-tones'
+import { LG_UP_QUERY, useMediaQuery } from '@/lib/use-media-query'
 import { cn } from '@/lib/utils'
 
 type EditorMode = 'visual' | 'lanjutan'
@@ -46,7 +52,7 @@ function ModeBar({
         type="button"
         onClick={() => onChange('visual')}
         className={cn(
-          'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+          'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap transition',
           mode === 'visual'
             ? 'bg-card text-warm-900 ring-warm-200 shadow-sm ring-1'
             : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
@@ -58,7 +64,8 @@ function ModeBar({
         {mode === 'visual' && (
           <span
             className={cn(
-              'ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold',
+              // HP sempit: badge disembunyikan supaya 2 tombol muat 1 baris
+              'ml-1 hidden rounded-full px-1.5 py-0.5 text-xs font-semibold sm:inline',
               TONES.success.bg,
               TONES.success.text,
             )}
@@ -71,7 +78,7 @@ function ModeBar({
         type="button"
         onClick={() => onChange('lanjutan')}
         className={cn(
-          'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition',
+          'flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap transition',
           mode === 'lanjutan'
             ? 'bg-card text-warm-900 ring-warm-200 shadow-sm ring-1'
             : 'text-warm-600 hover:bg-warm-100 hover:text-warm-900',
@@ -126,6 +133,7 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved')
   const [lastSavedAt, setLastSavedAt] = useState<string>(initial.updatedAt)
   const [viewport, setViewport] = useState<Viewport>('desktop')
+  const isDesktop = useMediaQuery(LG_UP_QUERY)
 
   // Mode default: Visual untuk user awam; user bisa switch ke Lanjutan kalau
   // butuh edit HTML mentah.
@@ -326,7 +334,7 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
       {mode === 'visual' ? (
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_1fr]">
           <aside className="border-warm-200 bg-card hidden border-r lg:flex lg:flex-col lg:overflow-hidden">
-            <ImageManager lpId={initial.id} />
+            {isDesktop && <ImageManager lpId={initial.id} />}
           </aside>
 
           {/* Section scroll-able: panel atas (AiGenerator/Warna/Link) bisa
@@ -334,6 +342,7 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
               500px di preview area memastikan preview tetap kelihatan
               walaupun di laptop dengan layar kecil. */}
           <section className="bg-warm-50/30 flex min-h-0 flex-col overflow-y-auto">
+            <MobileImagePanel lpId={initial.id} active={!isDesktop} />
             <AiGenerator
               lpId={initial.id}
               onGenerated={handleGeneratedHtml}
@@ -362,16 +371,20 @@ export function EditorShell({ initial }: { initial: InitialLp }) {
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[280px_1fr_1fr]">
           <aside className="border-warm-200 bg-card hidden border-r lg:flex lg:flex-col lg:overflow-hidden">
-            <ImageManager lpId={initial.id} />
+            {isDesktop && <ImageManager lpId={initial.id} />}
           </aside>
 
-          <section className="border-warm-200 bg-warm-50/30 flex min-h-0 flex-col border-r">
+          {/* Di bawah lg section ini satu baris grid dengan tinggi terbatas —
+              wajib scroll sendiri, kalau tidak panel Gambar/AI yang terbuka
+              tumpah & tertimpa section Preview di bawahnya. */}
+          <section className="border-warm-200 bg-warm-50/30 flex min-h-0 flex-col overflow-y-auto border-r lg:overflow-visible">
+            <MobileImagePanel lpId={initial.id} active={!isDesktop} />
             <AiGenerator
               lpId={initial.id}
               onGenerated={handleGeneratedHtml}
               initialOpen={!hasContent}
             />
-            <div className="border-warm-200 flex min-h-0 flex-1 flex-col border-t">
+            <div className="border-warm-200 flex min-h-[320px] flex-1 flex-col border-t lg:min-h-0">
               <HtmlEditor
                 value={htmlContent}
                 onChange={setHtmlContent}

@@ -75,7 +75,7 @@ export function ColorsPanel({ html, onChange, initialOpen = true }: Props) {
     <div className="border-warm-200 bg-card border-b">
       <button
         type="button"
-        className="hover:bg-warm-50 flex w-full items-center justify-between px-4 py-2 text-left"
+        className="hover:bg-warm-50 flex min-h-11 w-full items-center justify-between px-4 py-2 text-left lg:min-h-0"
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
