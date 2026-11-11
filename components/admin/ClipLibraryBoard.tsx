@@ -251,36 +251,32 @@ export function ClipLibraryBoard({
   } | null>(null)
 
   const fetchVoices = useCallback(async () => {
-    try {
-      const res = await fetch('/api/elevenlabs/voices')
-      const json = (await res.json()) as {
-        success: boolean
-        data?: { voices: Voice[] }
-        error?: string
-      }
-      if (!json.success || !json.data) {
-        setVoicesError(json.error ?? 'Gagal load voices')
-        return
-      }
-      setVoices(json.data.voices)
-      // Default Indonesian voice priority: Cahaya → Lunetta → any ID lang → first.
-      const cahaya = json.data.voices.find(
-        (v) => v.voice_id === 'iWydkXKoiVtvdn4vLKp9',
-      )
-      const lunetta = json.data.voices.find(
-        (v) => v.voice_id === 'uQyqjJGSy9EJK7ZcWe4B',
-      )
-      const anyId = json.data.voices.find((v) => v.labels?.language === 'id')
-      setSelectedVoiceId(
-        cahaya?.voice_id ??
-          lunetta?.voice_id ??
-          anyId?.voice_id ??
-          json.data.voices[0]?.voice_id ??
-          '',
-      )
-    } catch (e) {
-      setVoicesError((e as Error).message)
+    const r = await fetchJson<{
+      success: boolean
+      data?: { voices: Voice[] }
+      error?: string
+    }>('/api/elevenlabs/voices', undefined, 'Gagal load voices')
+    const payload = r.data?.data
+    if (!r.ok || !payload) {
+      setVoicesError(r.error ?? 'Gagal load voices')
+      return
     }
+    setVoices(payload.voices)
+    // Default Indonesian voice priority: Cahaya → Lunetta → any ID lang → first.
+    const cahaya = payload.voices.find(
+      (v) => v.voice_id === 'iWydkXKoiVtvdn4vLKp9',
+    )
+    const lunetta = payload.voices.find(
+      (v) => v.voice_id === 'uQyqjJGSy9EJK7ZcWe4B',
+    )
+    const anyId = payload.voices.find((v) => v.labels?.language === 'id')
+    setSelectedVoiceId(
+      cahaya?.voice_id ??
+        lunetta?.voice_id ??
+        anyId?.voice_id ??
+        payload.voices[0]?.voice_id ??
+        '',
+    )
   }, [])
 
   // fetchJson (never-throw): dipanggil juga oleh polling — gangguan sesaat
@@ -303,48 +299,46 @@ export function ClipLibraryBoard({
   const { watch: watchClip } = useClipGenerationPoll(clips, fetchClips)
 
   const fetchAnalytics = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/clips/analytics`)
-    const json = (await res.json()) as {
+    const r = await fetchJson<{
       success: boolean
       data?: typeof analytics
-    }
-    if (json.success && json.data) setAnalytics(json.data)
+    }>(`/api/host-templates/${hostId}/clips/analytics`)
+    if (r.ok && r.data?.data) setAnalytics(r.data.data)
   }, [hostId])
 
   const fetchPrepStatus = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/clips/prep-status`)
-    const json = (await res.json()) as {
+    // Polling: gagal = diam, prepStatus lama dipertahankan.
+    const r = await fetchJson<{
       success: boolean
       data?: typeof prepStatus
-    }
-    if (json.success && json.data) {
-      setPrepStatus(json.data)
-      if (json.data.visionReady) setHasVisionAnalysis(true)
+    }>(`/api/host-templates/${hostId}/clips/prep-status`)
+    const payload = r.data?.data
+    if (r.ok && payload) {
+      setPrepStatus(payload)
+      if (payload.visionReady) setHasVisionAnalysis(true)
     }
   }, [hostId])
 
   // Fetch baselines + idle motions sekali di mount
   const fetchBaselines = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/baselines`)
-    const j = (await res.json()) as {
+    const r = await fetchJson<{
       success: boolean
       data?: { baselines: typeof baselines }
-    }
-    if (j.success && j.data?.baselines) {
-      setBaselines(j.data.baselines)
+    }>(`/api/host-templates/${hostId}/baselines`)
+    const list = r.data?.data?.baselines
+    if (r.ok && list) {
+      setBaselines(list)
       // Auto-set sourceVideoId ke primary kalau ada, else baseline pertama
-      const primary =
-        j.data.baselines.find((b) => b.isPrimary) ?? j.data.baselines[0]
+      const primary = list.find((b) => b.isPrimary) ?? list[0]
       if (primary) setSourceVideoId(primary.klingVideoId)
     }
   }, [hostId])
   const fetchIdleMotions = useCallback(async () => {
-    const res = await fetch('/api/clip-library/idle-motions')
-    const j = (await res.json()) as {
+    const r = await fetchJson<{
       success: boolean
       data?: { motions: typeof idleMotions }
-    }
-    if (j.success && j.data?.motions) setIdleMotions(j.data.motions)
+    }>('/api/clip-library/idle-motions')
+    if (r.ok && r.data?.data?.motions) setIdleMotions(r.data.data.motions)
   }, [])
   // Re-fetch baseline list + prep status setelah composer submit. Delay supaya
   // scene baru (DRAFT) sempat muncul; prep-status polling lanjut update READY.
@@ -384,12 +378,13 @@ export function ClipLibraryBoard({
   async function handleAnalyze() {
     setAnalyzing(true)
     try {
-      const res = await fetch(`/api/host-templates/${hostId}/analyze-image`, {
-        method: 'POST',
-      })
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!json.success) {
-        toast.error(json.error ?? 'Vision analyze gagal')
+      const r = await fetchJson<{ success: boolean; error?: string }>(
+        `/api/host-templates/${hostId}/analyze-image`,
+        { method: 'POST' },
+        'Vision analyze gagal',
+      )
+      if (!r.ok) {
+        toast.error(r.error ?? 'Vision analyze gagal')
       } else {
         toast.success(
           'Vision analyze sukses — reload halaman buat ke step generate klip',
@@ -407,30 +402,25 @@ export function ClipLibraryBoard({
       )
     )
       return
-    try {
-      const res = await fetch(
-        `/api/host-templates/${hostId}/clips/embed-backfill`,
-        {
-          method: 'POST',
-        },
+    const r = await fetchJson<{
+      success: boolean
+      data?: { total: number; succeeded: number; failed: number }
+      error?: string
+    }>(
+      `/api/host-templates/${hostId}/clips/embed-backfill`,
+      { method: 'POST' },
+      'Backfill gagal',
+    )
+    const payload = r.data?.data
+    if (r.ok && payload) {
+      toast.success(
+        `Re-embed selesai: ${payload.succeeded}/${payload.total} sukses${
+          payload.failed > 0 ? `, ${payload.failed} gagal` : ''
+        }`,
       )
-      const json = (await res.json()) as {
-        success: boolean
-        data?: { total: number; succeeded: number; failed: number }
-        error?: string
-      }
-      if (json.success && json.data) {
-        toast.success(
-          `Re-embed selesai: ${json.data.succeeded}/${json.data.total} sukses${
-            json.data.failed > 0 ? `, ${json.data.failed} gagal` : ''
-          }`,
-        )
-        void fetchClips()
-      } else {
-        toast.error(json.error ?? 'Backfill gagal')
-      }
-    } catch (e) {
-      toast.error((e as Error).message)
+      void fetchClips()
+    } else {
+      toast.error(r.error ?? 'Backfill gagal')
     }
   }
 
@@ -444,21 +434,16 @@ export function ClipLibraryBoard({
         ? prev.map((x) => (x.id === c.id ? { ...x, isActive: next } : x))
         : prev,
     )
-    try {
-      const res = await fetch(`/api/host-templates/${hostId}/clips/${c.id}`, {
+    const r = await fetchJson<{ success: boolean; error?: string }>(
+      `/api/host-templates/${hostId}/clips/${c.id}`,
+      {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ isActive: next }),
-      })
-      const j = (await res.json()) as { success: boolean; error?: string }
-      if (!res.ok || !j.success)
-        throw new Error(j.error ?? 'Gagal mengubah status tayang')
-      toast.success(
-        next
-          ? 'Klip tayang lagi di live'
-          : 'Klip dimatikan — tidak akan muncul di live',
-      )
-    } catch (err) {
+      },
+      'Gagal mengubah status tayang',
+    )
+    if (!r.ok) {
       // Rollback optimistic update.
       setClips((prev) =>
         prev
@@ -467,10 +452,14 @@ export function ClipLibraryBoard({
             )
           : prev,
       )
-      toast.error(
-        err instanceof Error ? err.message : 'Gagal mengubah status tayang',
-      )
+      toast.error(r.error ?? 'Gagal mengubah status tayang')
+      return
     }
+    toast.success(
+      next
+        ? 'Klip tayang lagi di live'
+        : 'Klip dimatikan — tidak akan muncul di live',
+    )
   }
 
   async function handleDelete(clip: Clip) {
@@ -480,13 +469,16 @@ export function ClipLibraryBoard({
       : confirm('Hapus klip ini? File MP4 + MP3 juga dihapus dari disk.')
     if (!force) return
     const url = `/api/host-templates/${hostId}/clips/${clip.id}${used ? '?force=true' : ''}`
-    const res = await fetch(url, { method: 'DELETE' })
-    const json = (await res.json()) as { success: boolean; error?: string }
-    if (json.success) {
+    const r = await fetchJson<{ success: boolean; error?: string }>(
+      url,
+      { method: 'DELETE' },
+      'Gagal hapus',
+    )
+    if (r.ok) {
       toast.success('Klip dihapus')
       void fetchClips()
     } else {
-      toast.error(json.error ?? 'Gagal hapus')
+      toast.error(r.error ?? 'Gagal hapus')
     }
   }
 
@@ -496,14 +488,7 @@ export function ClipLibraryBoard({
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch(
-        `/api/admin/host-templates/${hostId}/clips/upload`,
-        {
-          method: 'POST',
-          body: form,
-        },
-      )
-      const json = (await res.json()) as {
+      const r = await fetchJson<{
         success: boolean
         data?: {
           transcript: string
@@ -511,17 +496,23 @@ export function ClipLibraryBoard({
           suggestedTags: string[]
         }
         error?: string
-      }
-      if (json.success && json.data) {
+      }>(
+        `/api/admin/host-templates/${hostId}/clips/upload`,
+        {
+          method: 'POST',
+          body: form,
+        },
+        'Upload gagal',
+      )
+      const payload = r.data?.data
+      if (r.ok && payload) {
         toast.success(
-          `Upload OK. Transcript: "${json.data.transcript.slice(0, 60)}…" Suggested: ${json.data.suggestedCategory}`,
+          `Upload OK. Transcript: "${payload.transcript.slice(0, 60)}…" Suggested: ${payload.suggestedCategory}`,
         )
         void fetchClips()
       } else {
-        toast.error(json.error ?? 'Upload gagal')
+        toast.error(r.error ?? 'Upload gagal')
       }
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setUploading(false)
       if (uploadInputRef.current) uploadInputRef.current.value = ''
@@ -1953,26 +1944,28 @@ function VoicePickerCard({
     if (!selectedVoiceId || !testText.trim()) return
     setTesting(true)
     try {
-      const res = await fetch('/api/elevenlabs/preview', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          voiceId: selectedVoiceId,
-          text: testText.trim(),
-        }),
-      })
-      const j = (await res.json()) as {
+      const r = await fetchJson<{
         success: boolean
         data?: { audioUrl: string }
         error?: string
-      }
-      if (j.success && j.data) {
-        playPreview(j.data.audioUrl, 'test-' + selectedVoiceId)
+      }>(
+        '/api/elevenlabs/preview',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            voiceId: selectedVoiceId,
+            text: testText.trim(),
+          }),
+        },
+        'Test voice gagal',
+      )
+      const payload = r.data?.data
+      if (r.ok && payload) {
+        playPreview(payload.audioUrl, 'test-' + selectedVoiceId)
       } else {
-        toast.error(j.error ?? 'Test voice gagal')
+        toast.error(r.error ?? 'Test voice gagal')
       }
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setTesting(false)
     }
@@ -2228,14 +2221,17 @@ function BrowseSharedVoicesModal({
     setVoices(null)
     const qs = new URLSearchParams({ lang: 'id', pageSize: '30' })
     if (gender) qs.set('gender', gender)
-    const res = await fetch(`/api/elevenlabs/shared-voices?${qs.toString()}`)
-    const j = (await res.json()) as {
+    const r = await fetchJson<{
       success: boolean
       data?: { voices: SharedVoice[] }
       error?: string
-    }
-    if (j.success && j.data) setVoices(j.data.voices)
-    else toast.error(j.error ?? 'Gagal load')
+    }>(
+      `/api/elevenlabs/shared-voices?${qs.toString()}`,
+      undefined,
+      'Gagal load',
+    )
+    if (r.ok && r.data?.data) setVoices(r.data.data.voices)
+    else toast.error(r.error ?? 'Gagal load')
   }, [gender])
 
   useEffect(() => {
@@ -2258,21 +2254,24 @@ function BrowseSharedVoicesModal({
   async function addVoice(v: SharedVoice) {
     setAdding(v.voice_id)
     try {
-      const res = await fetch('/api/elevenlabs/shared-voices', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          voiceId: v.voice_id,
-          publicOwnerId: v.public_owner_id,
-          newName: v.name.split(' - ')[0],
-        }),
-      })
-      const j = (await res.json()) as { success: boolean; error?: string }
-      if (j.success) {
+      const r = await fetchJson<{ success: boolean; error?: string }>(
+        '/api/elevenlabs/shared-voices',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            voiceId: v.voice_id,
+            publicOwnerId: v.public_owner_id,
+            newName: v.name.split(' - ')[0],
+          }),
+        },
+        'Add gagal',
+      )
+      if (r.ok) {
         toast.success(`${v.name.split(' - ')[0]} ditambahkan ke library`)
         onAdded()
       } else {
-        toast.error(j.error ?? 'Add gagal')
+        toast.error(r.error ?? 'Add gagal')
       }
     } finally {
       setAdding(null)
@@ -2462,7 +2461,7 @@ function AttachQuestionToClipModal({
           ? 'KEYWORD_FIRST'
           : target.matchMode
 
-      const res = await fetch(
+      const r = await fetchJson<{ success: boolean; error?: string }>(
         `/api/host-templates/${hostId}/clips/${selectedClipId}`,
         {
           method: 'PATCH',
@@ -2472,13 +2471,14 @@ function AttachQuestionToClipModal({
             matchMode: newMode,
           }),
         },
+        'Save gagal',
       )
-      const j = (await res.json()) as { success: boolean; error?: string }
-      if (!j.success) throw new Error(j.error ?? 'Save gagal')
+      if (!r.ok) {
+        toast.error(r.error ?? 'Save gagal')
+        return
+      }
       toast.success(`Trigger "${newKw}" dipasang ke klip ${target.category}`)
       onAttached()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setSaving(false)
     }
@@ -2722,23 +2722,24 @@ function TestMatchPanel({ hostId, clips }: { hostId: string; clips: Clip[] }) {
     if (!question.trim()) return
     setLoading(true)
     try {
-      const res = await fetch(
+      const r = await fetchJson<{
+        success: boolean
+        data?: TestMatchResult
+        error?: string
+      }>(
         `/api/host-templates/${hostId}/clips/test-match`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ question: question.trim() }),
         },
+        'Test gagal',
       )
-      const j = (await res.json()) as {
-        success: boolean
-        data?: TestMatchResult
-        error?: string
+      if (!r.ok) {
+        toast.error(r.error ?? 'Test gagal')
+        return
       }
-      if (!j.success) throw new Error(j.error ?? 'Test gagal')
-      setResult(j.data ?? null)
-    } catch (e) {
-      toast.error((e as Error).message)
+      setResult(r.data?.data ?? null)
     } finally {
       setLoading(false)
     }
@@ -2961,20 +2962,24 @@ function EditClipModal({
         .split(/[\n,]/)
         .map((t) => t.trim())
         .filter(Boolean)
-      const res = await fetch(
+      const r = await fetchJson<{
+        success: boolean
+        data?: { triggers: string[]; charge?: { tokensCharged: number } }
+        error?: string
+      }>(
         `/api/host-templates/${hostId}/clips/${clip.id}/suggest-triggers`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ existingTriggers: existing }),
         },
+        'AI gagal',
       )
-      const j = (await res.json()) as {
-        success: boolean
-        data?: { triggers: string[]; charge?: { tokensCharged: number } }
-        error?: string
+      if (!r.ok) {
+        toast.error(r.error ?? 'AI gagal')
+        return
       }
-      if (!j.success) throw new Error(j.error ?? 'AI gagal')
+      const j = r.data!
       const newTriggers = j.data?.triggers ?? []
       if (newTriggers.length === 0) {
         toast.info('AI gak nemu trigger baru')
@@ -2988,8 +2993,6 @@ function EditClipModal({
       toast.success(
         `+${newTriggers.length} trigger baru${j.data?.charge ? ` (${j.data.charge.tokensCharged} token)` : ''}`,
       )
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setSuggestingTriggers(false)
     }
@@ -3008,7 +3011,7 @@ function EditClipModal({
         .map((t) => t.trim())
         .filter(Boolean)
         .slice(0, 20)
-      const res = await fetch(
+      const r = await fetchJson<{ success: boolean; error?: string }>(
         `/api/host-templates/${hostId}/clips/${clip.id}`,
         {
           method: 'PATCH',
@@ -3026,13 +3029,13 @@ function EditClipModal({
             manualConfidence: forceConfidence ? 1.0 : null,
           }),
         },
+        'Gagal update',
       )
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (json.success) {
+      if (r.ok) {
         toast.success('Klip diupdate')
         onSaved()
       } else {
-        toast.error(json.error ?? 'Gagal update')
+        toast.error(r.error ?? 'Gagal update')
       }
     } finally {
       setSaving(false)
