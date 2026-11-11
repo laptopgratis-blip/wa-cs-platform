@@ -31,6 +31,7 @@ import {
   isTransientKlingTaskFailure,
   MAX_KLING_AUTO_RETRIES,
 } from './kling-retry'
+import { BASELINE_SCENE_DESCRIPTION_PREFIX } from './baseline-job-rules'
 import { fileToBase64, generateHostImage } from './gemini-image'
 import {
   appendImageVariant,
@@ -157,116 +158,53 @@ export interface CustomBaselineInput {
 
 // Step 2: generate baseline videos — MANUAL trigger via /api/.../baselines/generate.
 // Sebelumnya auto-spawn di IMAGE_READY → boros kalau motion script salah.
-// Sekarang admin preview/edit dulu di UI, baru confirm → call function ini.
+// Sekarang admin preview/edit dulu di UI, baru confirm. Eksekusinya (buat
+// scene + submit Kling di background) ada di ./baseline-job.ts — di sini
+// cukup bangun daftar pekerjaannya.
 //
 // Dua mode input:
 //   - customBaselines: list {name, category, motionScript} hasil edit di UI
 //     (diutamakan). motionScript di-wrap quality wrapper di sini.
 //   - variantKeys: legacy — pakai 3 preset hardcoded A/B/C (kalau custom kosong).
-export async function generateBaselineVideos(input: {
-  hostTemplateId: string
-  userId: string
+export interface BaselineJobSpec {
+  name: string
+  category: 'idle' | 'greeting' | 'product'
+  fullPrompt: string
+  description: string
+  markPrimary: boolean
+}
+
+export function buildBaselineJobs(input: {
   variantKeys?: Array<'A' | 'B' | 'C'>
   customBaselines?: CustomBaselineInput[]
-}): Promise<{ submitted: number; sceneIds: string[] }> {
-  const host = await prisma.hostTemplate.findUnique({
-    where: { id: input.hostTemplateId },
-    select: { sourceImageUrl: true },
-  })
-  if (!host?.sourceImageUrl) throw new Error('Source image belum ada')
-
-  const publicBase =
-    process.env.PUBLIC_BASE_URL?.trim() ||
-    process.env.NEXTAUTH_URL?.trim() ||
-    'http://localhost:3000'
-  const imageUrl = host.sourceImageUrl.startsWith('http')
-    ? host.sourceImageUrl
-    : `${publicBase.replace(/\/$/, '')}${host.sourceImageUrl}`
-
-  // Bangun daftar pekerjaan baseline dari custom (diutamakan) atau preset.
-  type BaselineJob = {
-    name: string
-    category: 'idle' | 'greeting' | 'product'
-    fullPrompt: string
-    description: string
-    markPrimary: boolean
-  }
-  const jobs: BaselineJob[] = []
+}): BaselineJobSpec[] {
   if (input.customBaselines && input.customBaselines.length > 0) {
-    for (const cb of input.customBaselines) {
-      const motion = cb.motionScript.trim()
-      if (!motion) continue
-      jobs.push({
+    return input.customBaselines
+      .filter((cb) => cb.motionScript.trim().length > 0)
+      .map((cb) => ({
         name: (cb.name.trim() || 'Baseline custom').slice(0, 120),
         category: cb.category,
-        fullPrompt: buildVariantPrompt(motion),
-        description: 'Baseline custom (motion script di-edit di composer)',
+        fullPrompt: buildVariantPrompt(cb.motionScript.trim()),
+        description: `${BASELINE_SCENE_DESCRIPTION_PREFIX}custom (motion script di-edit di composer)`,
         // Poll auto-assign primary ke scene READY pertama kalau belum ada —
         // jadi aman set false di sini, tidak perlu rebut primary.
         markPrimary: false,
-      })
-    }
-  } else {
-    const wanted = input.variantKeys ?? ['A', 'B', 'C']
-    for (let i = 0; i < BASELINE_VARIANTS.length; i++) {
-      const variant = BASELINE_VARIANTS[i]!
-      const variantKey = (['A', 'B', 'C'] as const)[i]!
-      if (!wanted.includes(variantKey)) continue
-      jobs.push({
+      }))
+  }
+  const wanted = input.variantKeys ?? ['A', 'B', 'C']
+  return BASELINE_VARIANTS.flatMap((variant, i) => {
+    const variantKey = (['A', 'B', 'C'] as const)[i]!
+    if (!wanted.includes(variantKey)) return []
+    return [
+      {
         name: variant.name,
         category: variant.category,
         fullPrompt: buildVariantPrompt(variant.motionScript),
-        description: `Baseline variant ${variantKey} untuk Klip Live lipsync rotation`,
+        description: `${BASELINE_SCENE_DESCRIPTION_PREFIX}variant ${variantKey} untuk Klip Live lipsync rotation`,
         markPrimary: variantKey === 'A',
-      })
-    }
-  }
-
-  const sceneIds: string[] = []
-  let lastError: Error | null = null
-
-  for (const job of jobs) {
-    try {
-      const baselineScene = await prisma.hostScene.create({
-        data: {
-          hostTemplateId: input.hostTemplateId,
-          userId: input.userId,
-          name: job.name,
-          description: job.description,
-          promptVideo: job.fullPrompt,
-          source: 'CUSTOM',
-          category: job.category,
-          isPrimary: job.markPrimary,
-          isEnabled: true,
-          status: 'DRAFT',
-        },
-        select: { id: true },
-      })
-      await enqueueVideoJob({
-        userId: input.userId,
-        hostTemplateId: input.hostTemplateId,
-        hostSceneId: baselineScene.id,
-        imageUrl,
-        promptMotion: job.fullPrompt,
-        durationSeconds: 10,
-        publicBaseUrl: publicBase,
-        klingMode: 'pro',
-      })
-      // Hitung submitted HANYA kalau Kling job benar-benar ter-enqueue.
-      sceneIds.push(baselineScene.id)
-      console.log(`[generateBaselineVideos] ${job.name} submitted`)
-    } catch (e) {
-      lastError = e as Error
-      console.error(
-        `[generateBaselineVideos] ${job.name} gagal:`,
-        lastError.message,
-      )
-    }
-  }
-  // Kalau SEMUA varian gagal submit, lempar errornya supaya UI tampil error
-  // jelas — bukan spinner abadi menunggu baseline yang tak pernah ter-submit.
-  if (sceneIds.length === 0 && lastError) throw lastError
-  return { submitted: sceneIds.length, sceneIds }
+      },
+    ]
+  })
 }
 
 // ── IMAGE (sync) ─────────────────────────────────────────────────────────

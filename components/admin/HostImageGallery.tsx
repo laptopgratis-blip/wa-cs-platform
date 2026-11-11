@@ -29,6 +29,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { fetchJson } from '@/lib/fetch-json'
 
 interface ImageVariant {
   id: string
@@ -60,21 +61,25 @@ export function HostImageGallery({
   const uploadRef = useRef<HTMLInputElement | null>(null)
 
   const refresh = useCallback(async () => {
-    const res = await fetch(`/api/host-templates/${hostId}/image-variants`)
-    const json = (await res.json()) as {
+    const r = await fetchJson<{
       success: boolean
       data?: {
         variants: ImageVariant[]
         activeUrl: string | null
         promptImage?: string
       }
-    }
-    if (json.success && json.data) {
-      setVariants(json.data.variants)
-      setActiveUrl(json.data.activeUrl)
+    }>(
+      `/api/host-templates/${hostId}/image-variants`,
+      undefined,
+      'Gagal memuat galeri',
+    )
+    const payload = r.data?.data
+    if (r.ok && payload) {
+      setVariants(payload.variants)
+      setActiveUrl(payload.activeUrl)
       // Prefill prompt dari server kalau belum ada prop & textarea masih kosong.
-      if (json.data.promptImage) {
-        setPrompt((p) => p || defaultPromptImage || json.data!.promptImage!)
+      if (payload.promptImage) {
+        setPrompt((p) => p || defaultPromptImage || payload.promptImage!)
       }
     } else {
       setVariants([])
@@ -92,7 +97,7 @@ export function HostImageGallery({
   async function handleGenerate() {
     setGenerating(true)
     try {
-      const res = await fetch(
+      const r = await fetchJson(
         `/api/host-templates/${hostId}/image-variants/generate`,
         {
           method: 'POST',
@@ -102,9 +107,12 @@ export function HostImageGallery({
             prompt: prompt.trim() || undefined,
           }),
         },
+        'Generate gagal',
       )
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!json.success) throw new Error(json.error ?? 'Generate gagal')
+      if (!r.ok) {
+        toast.error(r.error ?? 'Generate gagal')
+        return
+      }
       toast.success(
         withProduct
           ? 'Kandidat baru (dengan produk) dibuat.'
@@ -112,8 +120,6 @@ export function HostImageGallery({
       )
       setShowGen(false)
       await refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setGenerating(false)
     }
@@ -124,18 +130,19 @@ export function HostImageGallery({
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch(
+      const r = await fetchJson(
         `/api/host-templates/${hostId}/image-variants/upload`,
         { method: 'POST', body: fd },
+        'Upload gagal',
       )
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!json.success) throw new Error(json.error ?? 'Upload gagal')
+      if (!r.ok) {
+        toast.error(r.error ?? 'Upload gagal')
+        return
+      }
       toast.success(
         'Gambar di-upload sebagai kandidat. Klik "Pakai ini" untuk aktifkan.',
       )
       await refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setUploading(false)
       if (uploadRef.current) uploadRef.current.value = ''
@@ -151,25 +158,28 @@ export function HostImageGallery({
       return
     setBusyId(v.id)
     try {
-      const res = await fetch(`/api/host-templates/${hostId}/image-variants`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'activate', variantId: v.id }),
-      })
-      const json = (await res.json()) as {
+      const r = await fetchJson<{
         success: boolean
         data?: { staleWarning: string | null }
-        error?: string
+      }>(
+        `/api/host-templates/${hostId}/image-variants`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'activate', variantId: v.id }),
+        },
+        'Gagal aktifkan',
+      )
+      if (!r.ok) {
+        toast.error(r.error ?? 'Gagal aktifkan')
+        return
       }
-      if (!json.success) throw new Error(json.error ?? 'Gagal aktifkan')
       toast.success('Gambar aktif diperbarui.')
-      if (json.data?.staleWarning) {
-        toast.warning(json.data.staleWarning, { duration: 8000 })
+      if (r.data?.data?.staleWarning) {
+        toast.warning(r.data.data.staleWarning, { duration: 8000 })
       }
       await refresh()
       onActiveChanged?.()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setBusyId(null)
     }
@@ -179,17 +189,21 @@ export function HostImageGallery({
     if (!confirm('Hapus kandidat gambar ini? File tetap di disk.')) return
     setBusyId(v.id)
     try {
-      const res = await fetch(`/api/host-templates/${hostId}/image-variants`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', variantId: v.id }),
-      })
-      const json = (await res.json()) as { success: boolean; error?: string }
-      if (!json.success) throw new Error(json.error ?? 'Gagal hapus')
+      const r = await fetchJson(
+        `/api/host-templates/${hostId}/image-variants`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', variantId: v.id }),
+        },
+        'Gagal hapus',
+      )
+      if (!r.ok) {
+        toast.error(r.error ?? 'Gagal hapus')
+        return
+      }
       toast.success('Kandidat dihapus.')
       await refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setBusyId(null)
     }

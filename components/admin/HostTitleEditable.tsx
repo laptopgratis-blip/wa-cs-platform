@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { fetchJson } from '@/lib/fetch-json'
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 
@@ -67,26 +68,25 @@ export function HostTitleEditable({
     }
     setSaving(true)
     try {
-      const res = await fetch(`/api/host-templates/${hostId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: trimmed }),
-      })
-      const json = (await res.json()) as {
-        success: boolean
-        data?: { name: string }
-        error?: string
+      const r = await fetchJson<{ success: boolean; data?: { name: string } }>(
+        `/api/host-templates/${hostId}`,
+        {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: trimmed }),
+        },
+        'Gagal menyimpan nama host',
+      )
+      const saved = r.data?.data
+      if (!r.ok || !saved) {
+        toast.error(r.error ?? 'Gagal menyimpan nama host')
+        return
       }
-      if (!json.success || !json.data) {
-        throw new Error(json.error ?? 'Gagal menyimpan nama host')
-      }
-      setDisplayName(json.data.name)
+      setDisplayName(saved.name)
       setEditing(false)
-      onRenamed?.(json.data.name)
+      onRenamed?.(saved.name)
       toast.success('Nama host disimpan')
       router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setSaving(false)
     }

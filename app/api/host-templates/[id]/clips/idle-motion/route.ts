@@ -23,6 +23,10 @@ import {
 } from '@/lib/services/clip-library/clip-start'
 import { runIdleClipJob } from '@/lib/services/clip-library/idle-clip'
 import { getIdleMotionById } from '@/lib/services/clip-library/idle-motions'
+import {
+  getKlingAccountOutage,
+  KLING_ACCOUNT_UNAVAILABLE_MSG,
+} from '@/lib/services/host-gen/kling-retry'
 
 const schema = z.object({
   motionPresetId: z.string().min(1).max(80),
@@ -69,6 +73,13 @@ export async function POST(
     const motion = getIdleMotionById(parsed.data.motionPresetId)
     if (!motion) return jsonError('Motion preset tidak ditemukan', 400)
 
+    // Akun Kling baru saja ketahuan bermasalah (mis. saldo habis) → tolak di
+    // depan supaya seller tidak menunggu kegagalan pasti (& token TTS klip tidak
+    // terpotong sia-sia). Memo in-process, TTL pendek — lihat kling-retry.ts.
+    if (getKlingAccountOutage(Date.now())) {
+      return jsonError(KLING_ACCOUNT_UNAVAILABLE_MSG, 503)
+    }
+
     const started = await startIdleClip({
       hostTemplateId: id,
       userId: host.userId,
@@ -93,7 +104,13 @@ export async function POST(
         { status: e.status },
       )
     }
-    console.error(`[POST /api/host-templates/${id}/clips/idle-motion] gagal memulai:`, e)
-    return jsonError('Gagal memulai generate klip IDLE. Coba lagi sebentar lagi.', 500)
+    console.error(
+      `[POST /api/host-templates/${id}/clips/idle-motion] gagal memulai:`,
+      e,
+    )
+    return jsonError(
+      'Gagal memulai generate klip IDLE. Coba lagi sebentar lagi.',
+      500,
+    )
   }
 }
