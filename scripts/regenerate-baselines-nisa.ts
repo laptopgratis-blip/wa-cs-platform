@@ -5,7 +5,10 @@
 // kebaca history. Yang baru fresh generate via Kling.
 
 import { prisma } from '../lib/prisma'
-import { generateBaselineVideos } from '../lib/services/host-gen/queue'
+import {
+  runBaselineSubmitJob,
+  startBaselineGeneration,
+} from '../lib/services/host-gen/baseline-job'
 
 async function main() {
   const host = await prisma.hostTemplate.findFirst({
@@ -29,12 +32,18 @@ async function main() {
 
   // Generate 3 varian baru — pakai motion script standalone yang udah
   // differentiated (no shared "wave at start").
-  const result = await generateBaselineVideos({
+  // Skrip CLI tidak lewat Cloudflare → boleh menunggu submit sampai selesai.
+  const started = await startBaselineGeneration({
     hostTemplateId: host.id,
     userId: host.userId,
     variantKeys: ['A', 'B', 'C'],
   })
-  console.log(`[regen] ${result.submitted} baseline baru submitted — tunggu ~2-3 menit per varian`)
+  const outcomes = await runBaselineSubmitJob(started)
+  const submitted = outcomes.filter((o) => o.ok).length
+  for (const o of outcomes) {
+    if (!o.ok) console.error(`[regen] scene ${o.sceneId} gagal [${o.kind}]: ${o.message}`)
+  }
+  console.log(`[regen] ${submitted} baseline baru submitted — tunggu ~2-3 menit per varian`)
   console.log(`[regen] cek progress di /admin/host-templates/${host.id}/clip-library`)
 }
 

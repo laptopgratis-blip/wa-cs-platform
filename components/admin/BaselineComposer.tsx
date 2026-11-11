@@ -21,6 +21,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { fetchJson } from '@/lib/fetch-json'
 import { TONES } from '@/lib/ui-tones'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
@@ -42,6 +43,16 @@ interface Draft {
   name: string
   category: DraftCategory
   motionScript: string
+}
+
+// Payload sukses POST baselines/generate. 200 = submit selesai (submitted/failed
+// terisi); 202 = submit ke Kling masih jalan di background (pending=true).
+interface GenerateResult {
+  pending: boolean
+  submitted: number | null
+  failed: number | null
+  sceneIds: string[]
+  message: string
 }
 
 const CATEGORY_OPTIONS: Array<{ value: DraftCategory; label: string }> = [
@@ -80,11 +91,17 @@ export function BaselineComposer({
 
   useEffect(() => {
     let active = true
-    void fetch(`/api/host-templates/${hostId}/baselines/variants`)
-      .then((r) => r.json())
-      .then((j: { success: boolean; data?: { variants: TemplateVariant[] } }) => {
+    void fetchJson<{
+      success: boolean
+      data?: { variants: TemplateVariant[] }
+    }>(
+      `/api/host-templates/${hostId}/baselines/variants`,
+      undefined,
+      'Gagal memuat template baseline',
+    )
+      .then((r) => {
         if (!active) return
-        const vs = j.success && j.data?.variants ? j.data.variants : []
+        const vs = r.ok && r.data?.data?.variants ? r.data.data.variants : []
         setTemplates(vs)
         if (defaultSeed && !seeded && vs.length > 0) {
           // Seed dari varian yang BELUM dibuat; kalau semua sudah ada, seed semua.
@@ -152,14 +169,16 @@ export function BaselineComposer({
       !confirm(
         `Generate ${validDrafts.length} baseline (~$${cost.toFixed(2)} = ~Rp ${(
           cost * USD_TO_IDR
-        ).toLocaleString('id-ID')})?\n\nTiap baseline butuh ~2-3 menit di Kling. Status muncul otomatis setelah jadi.`,
+        ).toLocaleString(
+          'id-ID',
+        )})?\n\nTiap baseline butuh ~2-3 menit di Kling. Status muncul otomatis setelah jadi.`,
       )
     ) {
       return
     }
     setSubmitting(true)
     try {
-      const res = await fetch(
+      const r = await fetchJson<{ success: boolean; data?: GenerateResult }>(
         `/api/host-templates/${hostId}/baselines/generate`,
         {
           method: 'POST',
@@ -172,17 +191,24 @@ export function BaselineComposer({
             })),
           }),
         },
+        'Gagal generate baseline',
       )
-      const j = (await res.json()) as {
-        success: boolean
-        data?: { submitted: number; message: string }
-        error?: string
+      // Gagal: JANGAN panggil onGenerated() — panel akan menutup & draft hilang.
+      if (!r.ok) {
+        toast.error(r.error ?? 'Gagal generate baseline')
+        return
       }
-      if (!j.success) throw new Error(j.error ?? 'Generate gagal')
-      toast.success(j.data?.message ?? `${j.data?.submitted ?? 0} baseline submitted`)
+      const result = r.data?.data
+      const message = result?.message ?? 'Baseline dikirim ke Kling'
+      if (result?.pending) {
+        // 202: submit ke Kling masih berjalan di background.
+        toast.info(message)
+      } else if (result && (result.failed ?? 0) > 0) {
+        toast.warning(message)
+      } else {
+        toast.success(message)
+      }
       onGenerated()
-    } catch (e) {
-      toast.error((e as Error).message)
     } finally {
       setSubmitting(false)
     }
@@ -192,33 +218,37 @@ export function BaselineComposer({
     <div className="space-y-3">
       {/* Draft cards */}
       {drafts.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-warm-300 bg-warm-50/60 p-4 text-center">
-          <p className="text-xs text-warm-600">
-            Belum ada draft baseline. Tambah dari template atau buat kosong di bawah.
+        <div className="border-warm-300 bg-warm-50/60 rounded-lg border border-dashed p-4 text-center">
+          <p className="text-warm-600 text-xs">
+            Belum ada draft baseline. Tambah dari template atau buat kosong di
+            bawah.
           </p>
         </div>
       ) : (
         <ul className="space-y-3">
           {drafts.map((d, idx) => {
             const tooShort =
-              d.motionScript.trim().length > 0 && d.motionScript.trim().length < 10
+              d.motionScript.trim().length > 0 &&
+              d.motionScript.trim().length < 10
             return (
               <li
                 key={d.localId}
-                className="rounded-lg border border-warm-200 bg-white p-3 shadow-sm"
+                className="border-warm-200 rounded-lg border bg-white p-3 shadow-sm"
               >
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="min-w-[160px] flex-1">
                     <label
                       htmlFor={`bl-name-${d.localId}`}
-                      className="text-xs font-semibold uppercase tracking-wide text-warm-500"
+                      className="text-warm-500 text-xs font-semibold tracking-wide uppercase"
                     >
                       Nama baseline
                     </label>
                     <Input
                       id={`bl-name-${d.localId}`}
                       value={d.name}
-                      onChange={(e) => updateDraft(d.localId, { name: e.target.value })}
+                      onChange={(e) =>
+                        updateDraft(d.localId, { name: e.target.value })
+                      }
                       placeholder={`Baseline ${idx + 1}`}
                       maxLength={120}
                       className="mt-1 h-9"
@@ -227,7 +257,7 @@ export function BaselineComposer({
                   <div>
                     <label
                       htmlFor={`bl-cat-${d.localId}`}
-                      className="text-xs font-semibold uppercase tracking-wide text-warm-500"
+                      className="text-warm-500 text-xs font-semibold tracking-wide uppercase"
                     >
                       Kategori
                     </label>
@@ -239,7 +269,7 @@ export function BaselineComposer({
                           category: e.target.value as DraftCategory,
                         })
                       }
-                      className="mt-1 h-9 rounded-md border border-warm-200 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="border-warm-200 focus:ring-primary-500 mt-1 h-9 rounded-md border bg-white px-2.5 text-sm focus:ring-2 focus:outline-none"
                     >
                       {CATEGORY_OPTIONS.map((c) => (
                         <option key={c.value} value={c.value}>
@@ -254,7 +284,7 @@ export function BaselineComposer({
                     size="icon"
                     onClick={() => removeDraft(d.localId)}
                     aria-label={`Hapus baseline ${d.name || idx + 1}`}
-                    className="size-9 text-warm-400 hover:bg-destructive/10 hover:text-destructive"
+                    className="text-warm-400 hover:bg-destructive/10 hover:text-destructive size-9"
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -262,7 +292,7 @@ export function BaselineComposer({
                 <div className="mt-2">
                   <label
                     htmlFor={`bl-motion-${d.localId}`}
-                    className="text-xs font-semibold uppercase tracking-wide text-warm-500"
+                    className="text-warm-500 text-xs font-semibold tracking-wide uppercase"
                   >
                     Motion script (prompt gerakan — editable)
                   </label>
@@ -275,7 +305,7 @@ export function BaselineComposer({
                     rows={7}
                     spellCheck={false}
                     placeholder="MOTION SCRIPT — deskripsikan gerakan host detik per detik (English lebih bagus untuk Kling)…"
-                    className="mt-1 w-full rounded-md border border-warm-200 bg-warm-50/40 px-3 py-2 font-mono text-xs leading-relaxed focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="border-warm-200 bg-warm-50/40 focus:ring-primary-500 mt-1 w-full rounded-md border px-3 py-2 font-mono text-xs leading-relaxed focus:bg-white focus:ring-2 focus:outline-none"
                   />
                   {tooShort ? (
                     <p className={cn('mt-1 text-xs', TONES.danger.text)}>
@@ -291,11 +321,11 @@ export function BaselineComposer({
 
       {/* Add controls */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-warm-500">
+        <span className="text-warm-500 text-xs font-semibold tracking-wide uppercase">
           Tambah:
         </span>
         {templates === null ? (
-          <span className="inline-flex items-center gap-1 text-xs text-warm-500">
+          <span className="text-warm-500 inline-flex items-center gap-1 text-xs">
             <Loader2 className="size-3 animate-spin" /> template…
           </span>
         ) : (
@@ -306,9 +336,9 @@ export function BaselineComposer({
               variant="outline"
               size="sm"
               onClick={() => addFromTemplate(v)}
-              className="h-7 border-warm-300 px-2 text-xs text-warm-700 hover:border-primary-300 hover:bg-primary-50"
+              className="border-warm-300 text-warm-700 hover:border-primary-300 hover:bg-primary-50 h-7 px-2 text-xs"
             >
-              <Wand2 className="mr-1 size-3 text-primary-500" />
+              <Wand2 className="text-primary-500 mr-1 size-3" />
               {v.name.replace(/^Baseline [A-C] — /, '')}
             </Button>
           ))
@@ -318,13 +348,13 @@ export function BaselineComposer({
           variant="outline"
           size="sm"
           onClick={addBlank}
-          className="h-7 border-warm-300 px-2 text-xs text-warm-700 hover:border-primary-300 hover:bg-primary-50"
+          className="border-warm-300 text-warm-700 hover:border-primary-300 hover:bg-primary-50 h-7 px-2 text-xs"
         >
           <Plus className="mr-1 size-3" /> Kosong
         </Button>
       </div>
 
-      <p className="flex items-start gap-1.5 text-xs text-warm-500">
+      <p className="text-warm-500 flex items-start gap-1.5 text-xs">
         <Lightbulb className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         <span>
           Quality wrapper (kamera statis · silent · loop mulus) otomatis
@@ -333,10 +363,10 @@ export function BaselineComposer({
       </p>
 
       {/* Generate bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-warm-100 pt-3">
-        <div className="text-xs text-warm-600">
-          <strong className="tabular-nums">{validDrafts.length}</strong> baseline siap
-          · est. cost{' '}
+      <div className="border-warm-100 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+        <div className="text-warm-600 text-xs">
+          <strong className="tabular-nums">{validDrafts.length}</strong>{' '}
+          baseline siap · est. cost{' '}
           <strong className="tabular-nums">${cost.toFixed(2)}</strong>{' '}
           <span className="text-warm-400">
             (~Rp {(cost * USD_TO_IDR).toLocaleString('id-ID')})
@@ -353,8 +383,8 @@ export function BaselineComposer({
             </>
           ) : (
             <>
-              <Sparkles className="mr-1.5 size-4" /> Generate {validDrafts.length}{' '}
-              baseline
+              <Sparkles className="mr-1.5 size-4" /> Generate{' '}
+              {validDrafts.length} baseline
             </>
           )}
         </Button>
