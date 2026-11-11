@@ -34,7 +34,10 @@ import {
   pollKlingLipsync,
   submitKlingLipsync,
 } from '@/lib/services/host-gen/kling'
-import { isTransientKlingTaskFailure } from '@/lib/services/host-gen/kling-retry'
+import {
+  isTransientKlingTaskFailure,
+  KlingAccountError,
+} from '@/lib/services/host-gen/kling-retry'
 import {
   computeMediaCharge,
   executeMediaSync,
@@ -623,6 +626,9 @@ export async function runClipPipeline(
       },
     })
   } catch (e) {
+    // Gangguan akun Kling = pesan aman untuk seller apa adanya (bukan error
+    // poll/download).
+    if (e instanceof KlingAccountError) return fail(e)
     return fail(new Error(`Kling poll/download: ${(e as Error).message}`))
   }
 

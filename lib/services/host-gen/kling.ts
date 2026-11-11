@@ -15,6 +15,12 @@ import path from 'node:path'
 
 import { klingAuthHeader } from '@/lib/kling-auth'
 
+import {
+  classifyKlingSubmitFailure,
+  clearKlingAccountOutage,
+  KlingAccountError,
+  noteKlingAccountFailure,
+} from './kling-retry'
 import { getHostGenApiKey } from './provider-keys'
 import { transcodeVideoToWeb } from '../media/transcode'
 
@@ -53,27 +59,89 @@ export async function buildKlingAuthHeader(): Promise<string> {
 // "parallel task over resource pack limit"). Transient — task video selesai
 // dalam 1-3 menit — jadi retry dengan jeda naik sampai slot lega.
 // ponytail: total tunggu maks ~2.5 menit; kalau sering mentok, upgrade resource pack.
+// HANYA 429 antrian/rate yang di-retry — 429 masalah akun (1100–1103, mis.
+// 1102 saldo habis) langsung dikembalikan supaya gagal cepat (insiden 2026-11-11).
 const SUBMIT_429_DELAYS_MS = [15_000, 30_000, 45_000, 60_000]
+
+interface KlingSubmitResponse {
+  status: number
+  ok: boolean
+  text: string
+}
 
 async function fetchKlingSubmitWithRetry(
   url: string,
   init: RequestInit,
-): Promise<Response> {
-  let res = await fetch(url, init)
+): Promise<KlingSubmitResponse> {
+  const attempt = async (): Promise<KlingSubmitResponse> => {
+    const res = await fetch(url, init)
+    const text = await res.text().catch(() => '')
+    return { status: res.status, ok: res.ok, text }
+  }
+  let res = await attempt()
   for (const delayMs of SUBMIT_429_DELAYS_MS) {
     if (res.status !== 429) return res
-    const errText = await res.text().catch(() => '')
+    if (classifyKlingSubmitFailure(res.status, res.text).kind !== 'queue') {
+      return res
+    }
     console.warn(
-      `[kling] 429 antrian penuh (${errText.slice(0, 120)}) — retry dalam ${delayMs / 1000}s`,
+      `[kling] 429 antrian penuh (${res.text.slice(0, 120)}) — retry dalam ${delayMs / 1000}s`,
     )
     await new Promise((r) => setTimeout(r, delayMs))
-    res = await fetch(url, init)
+    res = await attempt()
   }
   return res
 }
 
-const KLING_QUEUE_FULL_MSG =
+export const KLING_QUEUE_FULL_MSG =
   'Antrian video Kling masih penuh setelah ~2,5 menit menunggu (batas task paralel resource pack). Tunggu video yang sedang diproses selesai, lalu coba lagi.'
+
+// Ambil task_id dari respons submit, atau lempar error yang sudah
+// diklasifikasi. Masalah akun → KlingAccountError (pesan aman untuk seller)
+// + log keras untuk owner + memo gangguan supaya route start menolak di depan.
+function readKlingSubmitTaskId(
+  label: string,
+  res: KlingSubmitResponse,
+): string {
+  let json: {
+    code?: number
+    message?: string
+    data?: { task_id?: string; task_status?: string }
+  } | null = null
+  try {
+    json = JSON.parse(res.text)
+  } catch {
+    json = null
+  }
+  const failed = !res.ok || !json || json.code !== 0 || !json.data?.task_id
+  if (!failed && json?.data?.task_id) {
+    clearKlingAccountOutage()
+    return json.data.task_id
+  }
+
+  const failure = classifyKlingSubmitFailure(res.status, res.text)
+  if (failure.kind === 'account') {
+    noteKlingAccountFailure(failure.code, Date.now())
+    console.error(
+      `[kling] AKUN KLING BERMASALAH code=${failure.code ?? '?'} HTTP ${res.status} (${res.text.slice(0, 200)}) — cek saldo/resource pack & API key di platform.klingai.com. Semua fitur video Kling gagal sampai ini dibereskan.`,
+    )
+    throw new KlingAccountError(failure.code)
+  }
+  if (!res.ok) {
+    if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
+    throw new Error(
+      `Kling ${label} gagal HTTP ${res.status}: ${res.text.slice(0, 400)}`,
+    )
+  }
+  if (!json) {
+    throw new Error(
+      `Kling ${label} response bukan JSON: ${res.text.slice(0, 200)}`,
+    )
+  }
+  throw new Error(
+    `Kling ${label} error code=${json.code} msg=${json.message ?? '?'}: ${res.text.slice(0, 200)}`,
+  )
+}
 
 // Resolve image untuk Kling. Kalau URL absolute http(s) ke public host →
 // send URL langsung. Kalau localhost / private IP / path lokal → baca file
@@ -131,29 +199,7 @@ export async function submitKlingVideo(
       body: JSON.stringify(body),
     },
   )
-  const text = await res.text()
-  if (!res.ok) {
-    if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
-    throw new Error(
-      `Kling submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`,
-    )
-  }
-  let json: {
-    code?: number
-    message?: string
-    data?: { task_id?: string; task_status?: string }
-  }
-  try {
-    json = JSON.parse(text)
-  } catch {
-    throw new Error(`Kling response bukan JSON: ${text.slice(0, 200)}`)
-  }
-  if (json.code !== 0 || !json.data?.task_id) {
-    throw new Error(
-      `Kling error code=${json.code} msg=${json.message ?? '?'}: ${text.slice(0, 200)}`,
-    )
-  }
-  return { requestId: json.data.task_id, model }
+  return { requestId: readKlingSubmitTaskId('submit', res), model }
 }
 
 export type KlingStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
@@ -401,29 +447,10 @@ export async function submitKlingLipsync(
       body: JSON.stringify(body),
     },
   )
-  const text = await res.text()
-  if (!res.ok) {
-    if (res.status === 429) throw new Error(KLING_QUEUE_FULL_MSG)
-    throw new Error(
-      `Kling lipsync submit gagal HTTP ${res.status}: ${text.slice(0, 400)}`,
-    )
+  return {
+    requestId: readKlingSubmitTaskId('lipsync submit', res),
+    model: 'kling-lip-sync',
   }
-  let json: {
-    code?: number
-    message?: string
-    data?: { task_id?: string; task_status?: string }
-  }
-  try {
-    json = JSON.parse(text)
-  } catch {
-    throw new Error(`Kling lipsync response bukan JSON: ${text.slice(0, 200)}`)
-  }
-  if (json.code !== 0 || !json.data?.task_id) {
-    throw new Error(
-      `Kling lipsync error code=${json.code} msg=${json.message ?? '?'}: ${text.slice(0, 200)}`,
-    )
-  }
-  return { requestId: json.data.task_id, model: 'kling-lip-sync' }
 }
 
 // Poll lip-sync task — semantik output sama dengan pollKlingStatus untuk image2video.

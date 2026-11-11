@@ -21,6 +21,10 @@ import {
 } from '@/lib/services/clip-library/clip-start'
 import { sweepStalledClips } from '@/lib/services/clip-library/clip-stale-sweep'
 import { runClipPipelineJob } from '@/lib/services/clip-library/generate-clip'
+import {
+  getKlingAccountOutage,
+  KLING_ACCOUNT_UNAVAILABLE_MSG,
+} from '@/lib/services/host-gen/kling-retry'
 
 // Route sendiri selesai < 2 dtk; di platform yang menegakkan maxDuration,
 // callback `after()` ikut dibatasi nilai ini. Server Node self-hosted (hulao)
@@ -58,7 +62,13 @@ async function authorizeHost(
 ) {
   const host = await prisma.hostTemplate.findUnique({
     where: { id: hostTemplateId },
-    select: { id: true, userId: true, mode: true, sourceImageUrl: true, visionAnalysis: true },
+    select: {
+      id: true,
+      userId: true,
+      mode: true,
+      sourceImageUrl: true,
+      visionAnalysis: true,
+    },
   })
   if (!host) throw new Error('Host tidak ditemukan')
   if (!isAdmin && host.userId !== userId) {
@@ -138,14 +148,21 @@ export async function POST(
 
   let host
   try {
-    host = await authorizeHost(id, session.user.id, session.user.role === 'ADMIN')
+    host = await authorizeHost(
+      id,
+      session.user.id,
+      session.user.role === 'ADMIN',
+    )
   } catch (e) {
     return jsonError((e as Error).message, 403)
   }
 
   // Pre-req: host harus NATIVE_LIBRARY mode + sourceImage + visionAnalysis ready.
   if (host.mode !== 'NATIVE_LIBRARY') {
-    return jsonError('Host bukan mode Klip Live. Buat host baru pilih Klip Live mode.', 400)
+    return jsonError(
+      'Host bukan mode Klip Live. Buat host baru pilih Klip Live mode.',
+      400,
+    )
   }
   if (!host.sourceImageUrl) {
     return jsonError('Host belum punya source image — generate dulu.', 400)
@@ -177,9 +194,10 @@ export async function POST(
       orderBy: { finishedAt: 'desc' },
       select: { inputPayload: true },
     })
-    const payload = baseline?.inputPayload as
-      | { klingVideoId?: string; klingVideoUrl?: string }
-      | null
+    const payload = baseline?.inputPayload as {
+      klingVideoId?: string
+      klingVideoUrl?: string
+    } | null
     if (payload?.klingVideoId) {
       sourceVideoId = payload.klingVideoId
     } else if (payload?.klingVideoUrl) {
@@ -191,6 +209,13 @@ export async function POST(
       'Belum ada baseline video. Tunggu host generate baseline silent loop selesai (~60-90dtk setelah image ready).',
       400,
     )
+  }
+
+  // Akun Kling baru saja ketahuan bermasalah (mis. saldo habis) → tolak di
+  // depan supaya seller tidak menunggu kegagalan pasti (& token TTS klip tidak
+  // terpotong sia-sia). Memo in-process, TTL pendek — lihat kling-retry.ts.
+  if (getKlingAccountOutage(Date.now())) {
+    return jsonError(KLING_ACCOUNT_UNAVAILABLE_MSG, 503)
   }
 
   try {
@@ -234,6 +259,9 @@ export async function POST(
       )
     }
     console.error(`[POST /api/host-templates/${id}/clips] gagal memulai:`, e)
-    return jsonError('Gagal memulai generate klip. Coba lagi sebentar lagi.', 500)
+    return jsonError(
+      'Gagal memulai generate klip. Coba lagi sebentar lagi.',
+      500,
+    )
   }
 }
