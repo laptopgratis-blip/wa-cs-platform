@@ -3,7 +3,7 @@
 // Template Follow-Up Order System (butuh akses Order System).
 // Group templates by trigger, modal create/edit (TemplateModal) dengan
 // variable buttons + preview live + pemilih Template Meta (sesi Cloud API) +
-// tombol test send ke nomor admin user.
+// pemilih "Kirim dari" + tombol test send ke nomor admin user.
 import { Pencil, Plus, Send, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -21,6 +21,11 @@ import {
   STATUS_TONE,
   type TemplateStatus,
 } from '@/components/waba-templates/types'
+import {
+  type FollowUpSenderOption,
+  followUpSenderSummary,
+} from '@/lib/services/followup-sender-options'
+import { findCsSessionOption } from '@/lib/services/products/cs-session-options'
 import { cn } from '@/lib/utils'
 
 import {
@@ -33,11 +38,14 @@ import { TemplateModal } from './TemplateModal'
 export function TemplatesClient({
   forms,
   hasCloud,
+  senderOptions,
   highlightId,
 }: {
   forms: FormItem[]
   /** User punya sesi Cloud API → tampilkan pemilih Template Meta. */
   hasCloud: boolean
+  /** Nomor WA seller untuk "Kirim dari" (dikelompokkan per nomor). */
+  senderOptions: FollowUpSenderOption[]
   /** Dari link notifikasi gagal kirim (?highlight=<id>). */
   highlightId?: string | null
 }) {
@@ -224,6 +232,10 @@ export function TemplatesClient({
                               )}
                             </div>
                             <MetaLinkBadges template={t} />
+                            <SenderMeta
+                              options={senderOptions}
+                              senderSessionId={t.senderSessionId}
+                            />
                             {(t.applyOnPaymentStatus ||
                               t.applyOnDeliveryStatus) && (
                               <p className="text-muted-foreground text-xs">
@@ -288,6 +300,7 @@ export function TemplatesClient({
           template={editing}
           forms={forms}
           hasCloud={hasCloud}
+          senderOptions={senderOptions}
           onClose={() => {
             setCreating(false)
             setEditing(null)
@@ -322,6 +335,25 @@ export function TemplatesClient({
 
 // Template Meta tertaut (status) + peringatan bila tautan basi (WABA lama /
 // template dihapus) — seller perlu memilih ulang di modal edit.
+/** "Dikirim dari: …" di kartu — hanya untuk template yang mengunci nomor. */
+function SenderMeta({
+  options,
+  senderSessionId,
+}: {
+  options: FollowUpSenderOption[]
+  senderSessionId: string | null
+}) {
+  if (!senderSessionId) return null
+  const option = findCsSessionOption(options, senderSessionId)
+  return (
+    <p className="text-muted-foreground text-xs">
+      {option
+        ? followUpSenderSummary(option)
+        : 'Dikirim dari: nomor lama (sudah tidak tersedia)'}
+    </p>
+  )
+}
+
 function MetaLinkBadges({ template }: { template: Template }) {
   const meta = template.metaTemplate
   if (!meta && !template.metaIssue) return null

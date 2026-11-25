@@ -88,6 +88,17 @@ export function missingDataReason(missing: readonly string[]): string {
 export function decideFollowUpFailure(input: FollowUpFailureInput): FollowUpFailureDecision {
   switch (input.code) {
     case 'NO_SESSION':
+      // Nomor "Kirim dari" template (mode ketat) membawa alasan spesifik:
+      // offline → ditunda seperti sesi putus biasa (scope SENDER, link
+      // /whatsapp); dihapus → permanen, perbaikannya memilih nomor lain di
+      // template (scope TEMPLATE, link ke template).
+      if (input.detail) {
+        return retryOrFail(input, input.detail, {
+          maxRetry: MAX_WA_RETRY,
+          backoffMs: WA_RECONNECT_BACKOFF_MS,
+          scope: input.permanent ? 'TEMPLATE' : 'SENDER',
+        })
+      }
       if (input.retryCount >= MAX_WA_RETRY) {
         return {
           action: 'FAIL_FINAL',

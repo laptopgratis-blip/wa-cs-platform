@@ -1,8 +1,11 @@
 'use client'
 
-// Muat template Meta yang bisa dipilih untuk follow-up: WABA dari sesi Cloud
-// API yang CONNECTED, non-AUTHENTICATION, status APPROVED/PENDING. Template
-// yang sedang tertaut tetap disertakan (supaya pilihan saat ini terlihat).
+// Muat template Meta yang bisa dipilih untuk follow-up: non-AUTHENTICATION,
+// status APPROVED/PENDING, dari SEMUA WABA user + daftar WABA yang punya sesi
+// Cloud API CONNECTED. Penyaringan per WABA (CONNECTED, atau WABA nomor
+// "Kirim dari" walau offline) ada di metaTemplatesForSender
+// (lib/services/followup-sender-options.ts). Template yang sedang tertaut
+// tetap disertakan (supaya pilihan saat ini terlihat).
 import { useEffect, useRef, useState } from 'react'
 
 import type {
@@ -17,6 +20,8 @@ export interface MetaTemplateOptions {
   loading: boolean
   error: string | null
   templates: WabaTemplateDto[]
+  /** WABA yang punya sesi Cloud API CONNECTED. */
+  connectedWabaIds: string[]
 }
 
 interface TemplatesResponse {
@@ -28,18 +33,18 @@ function selectable(
   data: TemplatesResponse['data'],
   currentId: string | null,
 ): WabaTemplateDto[] {
-  const wabaIds = new Set(
-    data.sessions
-      .filter((s) => s.status === 'CONNECTED' && s.wabaId)
-      .map((s) => s.wabaId as string),
-  )
   return data.templates.filter(
     (t) =>
       t.id === currentId ||
-      (wabaIds.has(t.wabaId) &&
-        t.category !== 'AUTHENTICATION' &&
-        SELECTABLE_STATUSES.has(t.status)),
+      (t.category !== 'AUTHENTICATION' && SELECTABLE_STATUSES.has(t.status)),
   )
+}
+
+function connectedWabaIds(data: TemplatesResponse['data']): string[] {
+  const ids = data.sessions
+    .filter((s) => s.status === 'CONNECTED' && s.wabaId)
+    .map((s) => s.wabaId as string)
+  return [...new Set(ids)]
 }
 
 export function useMetaTemplateOptions(
@@ -52,6 +57,7 @@ export function useMetaTemplateOptions(
     loading: enabled,
     error: null,
     templates: [],
+    connectedWabaIds: [],
   })
 
   useEffect(() => {
@@ -69,8 +75,14 @@ export function useMetaTemplateOptions(
               loading: false,
               error: null,
               templates: selectable(res.data.data, initialIdRef.current),
+              connectedWabaIds: connectedWabaIds(res.data.data),
             }
-          : { loading: false, error: res.error, templates: [] },
+          : {
+              loading: false,
+              error: res.error,
+              templates: [],
+              connectedWabaIds: [],
+            },
       )
     })
     return () => {

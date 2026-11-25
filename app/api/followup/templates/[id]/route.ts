@@ -1,5 +1,6 @@
 // PATCH  /api/followup/templates/[id]  — update template (tautan Template Meta
-//        divalidasi; perubahan tautan/peta me-reset resolvedParams queue PENDING)
+//        & "Kirim dari" divalidasi; perubahan tautan/peta/nomor me-reset
+//        resolvedParams queue PENDING)
 // DELETE /api/followup/templates/[id]  — hapus template (cascade ke queue & log)
 //
 // Plan gating: akses Order System (requireOrderSystemAccess).
@@ -9,6 +10,7 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 import { resolveMetaLinkInput } from '@/lib/services/followup-template-meta'
+import { resolveSenderInput } from '@/lib/services/followup-template-sender-input'
 import {
   followupTemplateUpdateSchema,
   type FollowupTemplateUpdateInput,
@@ -86,13 +88,27 @@ export async function PATCH(req: Request, { params }: Params) {
     if (!link.ok) return jsonError(link.error, link.status)
     const linkData = link.data
 
+    // "Kirim dari": divalidasi bila nomor ATAU tautan berubah.
+    const sender = await resolveSenderInput({
+      userId: session.user.id,
+      senderSessionId: data.senderSessionId,
+      metaTemplateId: linkData?.metaTemplateId,
+      existing,
+    })
+    if (!sender.ok) return jsonError(sender.error, sender.status)
+
     const updated = await prisma.$transaction(async (tx) => {
       const row = await tx.followUpTemplate.update({
         where: { id },
-        data: { ...scalarUpdate(data, existing), ...(linkData ?? {}) },
+        data: {
+          ...scalarUpdate(data, existing),
+          ...(linkData ?? {}),
+          ...(sender.data ?? {}),
+        },
       })
       // Tautan/peta berubah → nilai param yang di-cache queue PENDING basi.
-      if (linkData) {
+      // Nomor pengirim berubah → {wa_admin} di param ikut nomor baru.
+      if (linkData || sender.data) {
         await tx.followUpQueue.updateMany({
           where: { templateId: id, status: 'PENDING' },
           data: { resolvedParams: Prisma.DbNull },

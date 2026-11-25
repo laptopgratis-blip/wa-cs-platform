@@ -8,6 +8,10 @@ import { jsonError, jsonOk } from '@/lib/api'
 import { requireOrderSystemAccess } from '@/lib/order-system-gate'
 import { prisma } from '@/lib/prisma'
 import { resolveTemplateVariables } from '@/lib/services/followup-variables'
+import {
+  loadTemplateSender,
+  templateSenderFailure,
+} from '@/lib/services/followup-template-sender'
 import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
 import { smartSend } from '@/lib/services/wa-send/smart-send'
 import { followupManualSendSchema } from '@/lib/validations/followup'
@@ -52,25 +56,9 @@ export async function POST(req: Request, { params }: Params) {
       )
     }
 
-    // Provider-aware (Trek 2B): Baileys / Cloud dalam window → teks; Cloud
-    // di luar window → template INFO_GENERIC (bila APPROVED).
-    // CS WhatsApp per produk: sesi CS produk di order ini didahulukan sebagai
-    // pengirim (mode lunak — tidak tersedia → urutan kandidat lama).
-    const orderCs = await loadOrderCs({
-      userId: order.userId,
-      items: order.items,
-    })
-    const candidates = await listSenderCandidates({
-      userId: session.user.id,
-      preferredSessionId: orderCs.preferredSessionId,
-      preferContactPhone: order.customerPhone,
-    })
-    if (candidates.length === 0) {
-      return jsonError('WhatsApp belum tersambung', 400)
-    }
-
     let templateMessage: string
     let resolvedTemplateId: string | null = null
+    let senderSessionId: string | null = null
     if (templateId) {
       const template = await prisma.followUpTemplate.findFirst({
         where: { id: templateId, userId: session.user.id },
@@ -78,8 +66,34 @@ export async function POST(req: Request, { params }: Params) {
       if (!template) return jsonError('Template tidak ditemukan', 404)
       templateMessage = template.message
       resolvedTemplateId = template.id
+      senderSessionId = template.senderSessionId
     } else {
       templateMessage = rawMessage as string
+    }
+
+    // Provider-aware (Trek 2B): Baileys / Cloud dalam window → teks; Cloud
+    // di luar window → template INFO_GENERIC (bila APPROVED).
+    // Pengirim: "Kirim dari" template (ketat — offline → 400, tidak pindah
+    // nomor) → CS WhatsApp per produk (lunak — tidak tersedia → urutan
+    // kandidat lama).
+    const [orderCs, pinned] = await Promise.all([
+      loadOrderCs({ userId: order.userId, items: order.items }),
+      loadTemplateSender({ userId: session.user.id, senderSessionId }),
+    ])
+    if (pinned.kind === 'OFFLINE' || pinned.kind === 'REMOVED') {
+      const failure = templateSenderFailure(pinned)
+      return jsonError(failure.detail ?? 'Nomor pengirim tidak tersedia', 400)
+    }
+    const candidates =
+      pinned.kind === 'ONLINE'
+        ? await listSenderCandidates({ explicitSessionIds: [pinned.sessionId] })
+        : await listSenderCandidates({
+            userId: session.user.id,
+            preferredSessionId: orderCs.preferredSessionId,
+            preferContactPhone: order.customerPhone,
+          })
+    if (candidates.length === 0) {
+      return jsonError('WhatsApp belum tersambung', 400)
     }
 
     const [bankAccounts, shippingProfile] = await Promise.all([
@@ -96,8 +110,9 @@ export async function POST(req: Request, { params }: Params) {
       user: order.user,
       bankAccounts,
       shippingProfile,
-      // {wa_admin} → nomor CS produk di order ini bila ada.
-      csNumber: orderCs.csNumber,
+      // {wa_admin} → nomor "Kirim dari" template, selain itu nomor CS
+      // produk di order ini bila ada.
+      csNumber: (pinned.kind === 'ONLINE' ? pinned.number : null) ?? orderCs.csNumber,
     })
 
     const send = await smartSend({

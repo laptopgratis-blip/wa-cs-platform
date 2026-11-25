@@ -102,6 +102,36 @@ check('NO_SESSION → RETRY 30 mnt sampai 12x, lalu FAIL_FINAL', () => {
   assert.equal(f.action === 'FAIL_FINAL' && f.scope, 'SENDER')
 })
 
+check('NO_SESSION + detail ("Kirim dari" offline) → RETRY dengan alasan spesifik', () => {
+  const detail =
+    'Nomor pengirim +6285173055884 (pengaturan "Kirim dari" template ini) belum terhubung, ' +
+    'jadi follow-up tidak dikirim dari nomor lain — dicoba lagi otomatis'
+  const r = decideFollowUpFailure({ code: 'NO_SESSION', detail, retryCount: 0 })
+  assert.deepEqual(r, { action: 'RETRY', reason: detail, backoffMs: WA_RECONNECT_BACKOFF_MS })
+  const f = decideFollowUpFailure({ code: 'NO_SESSION', detail, retryCount: MAX_WA_RETRY })
+  assert.equal(f.action, 'FAIL_FINAL')
+  const reason = f.action === 'FAIL_FINAL' ? f.reason : ''
+  assert.match(reason, /\+6285173055884/)
+  assert.match(reason, /12/)
+  assert.doesNotMatch(reason, /dicoba lagi otomatis/)
+  assert.equal(f.action === 'FAIL_FINAL' && f.scope, 'SENDER')
+})
+
+check('NO_SESSION permanen (nomor "Kirim dari" dihapus) → FAIL_FINAL langsung, scope TEMPLATE', () => {
+  // Perbaikannya memilih nomor lain DI TEMPLATE — notifikasi menautkan ke
+  // template, bukan ke /whatsapp ("sambungkan ulang" nomor yang sudah tidak ada).
+  const detail = 'Nomor pengirim +62851 (pengaturan "Kirim dari" template ini) sudah dihapus dari akun'
+  const f = decideFollowUpFailure({ code: 'NO_SESSION', detail, permanent: true, retryCount: 0 })
+  assert.deepEqual(f, { action: 'FAIL_FINAL', reason: detail, scope: 'TEMPLATE' })
+  const n = buildFollowUpFailureNotification({
+    followUpTemplateId: 'fu1',
+    templateName: 'Welcome',
+    reason: detail,
+    scope: 'TEMPLATE',
+  })
+  assert.equal(n?.link, '/pesanan/templates?highlight=fu1')
+})
+
 check('MARKETING_OPT_OUT → SKIP', () => {
   assert.equal(decideFollowUpFailure({ code: 'MARKETING_OPT_OUT', retryCount: 0 }).action, 'SKIP')
 })

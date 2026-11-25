@@ -75,4 +75,30 @@ check('create wajib name/trigger/message', () => {
   assert.equal(followupTemplateCreateSchema.safeParse({ name: 'Ab' }).success, false)
 })
 
+check('update {senderSessionId:"s1"} / null dipertahankan apa adanya', () => {
+  assert.deepEqual(followupTemplateUpdateSchema.parse({ senderSessionId: 's1' }), {
+    senderSessionId: 's1',
+  })
+  assert.deepEqual(followupTemplateUpdateSchema.parse({ senderSessionId: null }), {
+    senderSessionId: null,
+  })
+})
+
+check('senderSessionId kosong / terlalu panjang ditolak', () => {
+  assert.equal(followupTemplateUpdateSchema.safeParse({ senderSessionId: '' }).success, false)
+  assert.equal(
+    followupTemplateUpdateSchema.safeParse({ senderSessionId: 'x'.repeat(65) }).success,
+    false,
+  )
+})
+
+check('create tanpa senderSessionId → tidak diisi (ikuti CS produk)', () => {
+  const r = followupTemplateCreateSchema.parse({
+    name: 'Welcome',
+    trigger: 'ORDER_CREATED',
+    message: 'Halo {nama}',
+  })
+  assert.equal(r.senderSessionId, undefined)
+})
+
 console.log(`validations/followup: ${passed} ok`)

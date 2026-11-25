@@ -115,10 +115,18 @@ export async function relinkStaleFollowUpTemplates(
     return { ...base, note: 'Tidak ada WABA aktif (sesi Cloud API CONNECTED) — tidak ada perubahan' }
   }
 
-  const rows = await prisma.followUpTemplate.findMany({
+  const found = await prisma.followUpTemplate.findMany({
     where: { userId, metaTemplateId: { not: null } },
-    select: { id: true, name: true, metaParamMap: true, metaTemplate: { select: META_LITE_SELECT } },
+    select: {
+      id: true,
+      name: true,
+      metaParamMap: true,
+      metaTemplate: { select: META_LITE_SELECT },
+      // "Kirim dari": tautan hanya boleh pindah ke WABA nomor terkunci.
+      senderSession: { select: { provider: true, wabaId: true } },
+    },
   })
+  const rows = found.map(({ senderSession, ...row }) => ({ ...row, pinnedSender: senderSession }))
   const linked: MetaTemplateLite[] = rows.flatMap((r) => (r.metaTemplate ? [r.metaTemplate] : []))
   const candidates = linked.length > 0 ? await loadCandidates(activeWabaIds, linked) : []
   const plan = planRelinks({ followUps: rows, candidates, activeWabaIds, starterMapFor })

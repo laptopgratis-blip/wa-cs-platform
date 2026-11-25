@@ -17,6 +17,7 @@ import {
   ensureReviewTemplates,
 } from './followup-defaults'
 import { loadOrderResolveExtras } from './followup-resolve-context'
+import { loadTemplateSenderNumbers } from './followup-template-sender'
 import {
   resolveLeadTemplateParams,
   resolveLeadTemplateVariables,
@@ -104,9 +105,16 @@ export async function generateQueueForOrder(
 
   if (matched.length === 0) return { generated: 0 }
 
-  // csNumber = nomor CS WhatsApp produk di order ini (untuk {wa_admin}).
-  const { bankAccounts, shippingProfile, csNumber } =
-    await loadOrderResolveExtras(order)
+  // csNumber = nomor CS WhatsApp produk di order ini (untuk {wa_admin});
+  // template yang mengunci "Kirim dari" memakai nomor pengirimnya sendiri.
+  const [{ bankAccounts, shippingProfile, csNumber }, senderNumbers] =
+    await Promise.all([
+      loadOrderResolveExtras(order),
+      loadTemplateSenderNumbers(
+        order.userId,
+        matched.map((t) => t.senderSessionId),
+      ),
+    ])
 
   let generated = 0
   for (const template of matched) {
@@ -126,12 +134,15 @@ export async function generateQueueForOrder(
     scheduledAt.setMinutes(scheduledAt.getMinutes() + 0)
     scheduledAt.setDate(scheduledAt.getDate() + template.delayDays)
 
+    const senderNumber = template.senderSessionId
+      ? senderNumbers.get(template.senderSessionId)
+      : null
     const resolveCtx = {
       order,
       user: order.user,
       bankAccounts,
       shippingProfile,
-      csNumber,
+      csNumber: senderNumber ?? csNumber,
     }
     const resolvedMessage = resolveTemplateVariables(template.message, resolveCtx)
     // Cloud API: kalau template punya metaParamMap, hitung param sekarang.

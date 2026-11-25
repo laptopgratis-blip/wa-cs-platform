@@ -68,6 +68,8 @@ export interface FollowUpTemplateDto {
   metaTemplate: LinkedMetaTemplate | null
   /** Tautan basi terhadap WABA aktif — seller perlu pilih ulang. */
   metaIssue: 'WABA_INACTIVE' | 'TEMPLATE_UNUSABLE' | null
+  /** "Kirim dari": WhatsappSession.id; null = ikuti CS WhatsApp produk. */
+  senderSessionId: string | null
 }
 
 export interface FormItem {
