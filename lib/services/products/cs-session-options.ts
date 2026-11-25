@@ -124,10 +124,10 @@ export function buildCsSessionOptions(
 }
 
 /** Opsi untuk sebuah csSessionId — cocok ke id wakil maupun id basi. */
-export function findCsSessionOption(
-  options: readonly CsSessionOption[],
+export function findCsSessionOption<T extends CsSessionOption>(
+  options: readonly T[],
   sessionId: string | null | undefined,
-): CsSessionOption | null {
+): T | null {
   if (!sessionId) return null
   return (
     options.find((o) => o.id === sessionId || o.aliasIds.includes(sessionId)) ??
@@ -140,10 +140,10 @@ export function findCsSessionOption(
  * + nomor terhapus hanya bila produk ini sendiri yang sedang memakainya
  * (nomor yang sudah dilepas seller tidak boleh bisa dipilih produk lain).
  */
-export function selectableCsSessionOptions(
-  options: readonly CsSessionOption[],
+export function selectableCsSessionOptions<T extends CsSessionOption>(
+  options: readonly T[],
   currentSessionId: string | null | undefined,
-): CsSessionOption[] {
+): T[] {
   const current = findCsSessionOption(options, currentSessionId)
   return options.filter((o) => !o.isRemoved || o.id === current?.id)
 }

@@ -13,7 +13,12 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { NO_ORDER_CS } from '@/lib/services/orders/order-cs'
 import { loadOrderCs } from '@/lib/services/orders/order-cs-loader'
-import { listSenderCandidates } from '@/lib/wa-session'
+import {
+  loadTemplateSender,
+  loadTemplateSenderNumbers,
+  templateSenderFailure,
+} from '@/lib/services/followup-template-sender'
+import { listSenderCandidates, type SenderCandidate } from '@/lib/wa-session'
 import {
   smartSend,
   type SmartSendResult,
@@ -88,9 +93,19 @@ export async function ensureResolvedParams(item: QueueItemForSend): Promise<stri
         include: { user: { select: { id: true, name: true } } },
       })
       if (!order) return null
-      // Termasuk csNumber (CS WhatsApp per produk) untuk param {wa_admin}.
-      const extras = await loadOrderResolveExtras(order)
-      return resolveTemplateParams(paramMap, { order, user: order.user, ...extras })
+      // Termasuk csNumber (CS WhatsApp per produk) untuk param {wa_admin};
+      // template yang mengunci "Kirim dari" memakai nomor pengirimnya.
+      const [extras, senderNumbers] = await Promise.all([
+        loadOrderResolveExtras(order),
+        loadTemplateSenderNumbers(order.userId, [tpl.senderSessionId]),
+      ])
+      const senderNumber = tpl.senderSessionId ? senderNumbers.get(tpl.senderSessionId) : null
+      return resolveTemplateParams(paramMap, {
+        order,
+        user: order.user,
+        ...extras,
+        csNumber: senderNumber ?? extras.csNumber,
+      })
     }
     if (item.liveLeadId) {
       const lead = await prisma.liveLead.findUnique({
@@ -145,11 +160,32 @@ export async function sendQueueItem(
   }
 }
 
-async function sendQueueItemInner(item: QueueItemForSend): Promise<FollowUpSendResult> {
-  // CS WhatsApp per produk: order berisi produk ber-CS → sesi CS produk
-  // didahulukan sebagai pengirim. Mode lunak — CS offline tanpa padanan
-  // nomor → preferredSessionId null → urutan kandidat lama (failover), kirim
-  // tidak digagalkan. Item nurture lead (tanpa order) → perilaku lama.
+/**
+ * Kandidat pengirim untuk satu item, urut prioritas:
+ * 1. "Kirim dari" template (mode KETAT) — hanya sesi itu; offline/dihapus →
+ *    kembalikan kegagalan (ditunda/permanen), TIDAK pindah ke nomor lain.
+ * 2. CS WhatsApp per produk (mode LUNAK) — CS offline tanpa padanan nomor →
+ *    urutan kandidat lama (failover). Item nurture lead (tanpa order) → lama.
+ */
+async function senderCandidatesFor(
+  item: QueueItemForSend,
+): Promise<{ candidates: SenderCandidate[] } | { failure: SmartSendResult }> {
+  const pinned = await loadTemplateSender({
+    userId: item.userId,
+    senderSessionId: item.template.senderSessionId,
+  })
+  if (pinned.kind === 'OFFLINE' || pinned.kind === 'REMOVED') {
+    return { failure: templateSenderFailure(pinned) }
+  }
+  if (pinned.kind === 'ONLINE') {
+    // Tanpa userId: kandidat HANYA sesi terkunci (id sudah difilter milik
+    // user oleh loadTemplateSender).
+    const candidates = await listSenderCandidates({ explicitSessionIds: [pinned.sessionId] })
+    return candidates.length > 0
+      ? { candidates }
+      : { failure: templateSenderFailure({ kind: 'OFFLINE', number: pinned.number }) }
+  }
+
   const orderCs = item.order
     ? await loadOrderCs({ userId: item.order.userId, items: item.order.items })
     : NO_ORDER_CS
@@ -158,6 +194,13 @@ async function sendQueueItemInner(item: QueueItemForSend): Promise<FollowUpSendR
     preferredSessionId: orderCs.preferredSessionId,
     preferContactPhone: item.customerPhone,
   })
+  return { candidates }
+}
+
+async function sendQueueItemInner(item: QueueItemForSend): Promise<FollowUpSendResult> {
+  const sender = await senderCandidatesFor(item)
+  if ('failure' in sender) return sender.failure
+  const { candidates } = sender
 
   // Template Cloud API bila FollowUpTemplate sudah di-link ke WabaTemplate.
   let template: SmartSendTemplateSpec | undefined

@@ -140,11 +140,35 @@ export function planRelinkParamMap(input: {
   return null
 }
 
+/** Nomor "Kirim dari" yang dikunci template follow-up (lihat followup-template-sender). */
+export interface PinnedSenderLite {
+  provider: string
+  wabaId: string | null
+}
+
 export interface RelinkFollowUpRow {
   id: string
   name: string
   metaParamMap: unknown
   metaTemplate: MetaTemplateLite | null
+  /** null/undefined = tidak mengunci nomor (semua WABA aktif relevan). */
+  pinnedSender?: PinnedSenderLite | null
+}
+
+/**
+ * WABA yang relevan untuk tautan SATU follow-up:
+ * - tanpa "Kirim dari" → semua WABA aktif;
+ * - nomor Cloud API dikunci → hanya WABA nomor itu (bila aktif), selain itu
+ *   [] (nomor sedang tidak tersambung — jangan pindahkan tautannya);
+ * - nomor WhatsApp Web dikunci → null: Template Meta tidak pernah dipakai.
+ */
+export function scopedActiveWabaIds(
+  activeWabaIds: readonly string[],
+  pinned: PinnedSenderLite | null | undefined,
+): readonly string[] | null {
+  if (!pinned) return activeWabaIds
+  if (pinned.provider !== 'CLOUD_API') return null
+  return pinned.wabaId && activeWabaIds.includes(pinned.wabaId) ? [pinned.wabaId] : []
 }
 
 export interface RelinkTemplateRef {
@@ -192,10 +216,13 @@ export function planRelinks(input: {
 
   for (const fu of input.followUps) {
     const current = fu.metaTemplate
-    const issue = followUpLinkIssue(current, input.activeWabaIds)
+    // Nomor dikunci: tautan hanya boleh pindah ke WABA nomor itu.
+    const scope = scopedActiveWabaIds(input.activeWabaIds, fu.pinnedSender)
+    if (!scope || scope.length === 0) continue
+    const issue = followUpLinkIssue(current, scope)
     if (!current || !issue) continue
 
-    const pick = pickRelinkTarget(current, input.candidates, input.activeWabaIds)
+    const pick = pickRelinkTarget(current, input.candidates, scope)
     if (!pick.ok) {
       unresolved.push({ followUpTemplateId: fu.id, name: fu.name, from: ref(current), reason: pick.reason })
       continue

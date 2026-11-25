@@ -8,8 +8,10 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import {
   followUpLinkIssue,
+  scopedActiveWabaIds,
   validateFollowUpMetaLink,
   type FollowUpLinkIssue,
+  type PinnedSenderLite,
 } from '@/lib/services/followup-meta-link'
 import { listActiveWabaIds } from '@/lib/services/followup-meta-relink'
 
@@ -88,10 +90,23 @@ export const META_SUMMARY_SELECT = {
   category: true,
 } as const
 
-/** Masalah tautan per follow-up terhadap WABA aktif user (untuk badge UI). */
+/**
+ * Masalah tautan per follow-up terhadap WABA aktif user (untuk badge UI).
+ * Follow-up ber-"Kirim dari" dinilai terhadap WABA nomor itu saja; nomor
+ * WhatsApp Web tidak memakai Template Meta → tidak pernah bermasalah (bagian
+ * Template Meta juga disembunyikan di modal untuk nomor itu).
+ */
 export async function metaIssueResolver(
   userId: string,
-): Promise<(t: { wabaId: string; status: string } | null) => FollowUpLinkIssue | null> {
+): Promise<
+  (
+    t: { wabaId: string; status: string } | null,
+    pinned?: PinnedSenderLite | null,
+  ) => FollowUpLinkIssue | null
+> {
   const activeWabaIds = await listActiveWabaIds(userId)
-  return (t) => followUpLinkIssue(t, activeWabaIds)
+  return (t, pinned) => {
+    const scope = scopedActiveWabaIds(activeWabaIds, pinned)
+    return scope === null ? null : followUpLinkIssue(t, scope)
+  }
 }

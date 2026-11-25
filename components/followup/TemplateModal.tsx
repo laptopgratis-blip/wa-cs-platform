@@ -4,6 +4,8 @@
 // Bila user punya sesi Cloud API (hasCloud), tampilkan pemilih Template Meta
 // + pemetaan {{n}}; simpan diblok selama peta belum lengkap/sah. Tautan hanya
 // dikirim ke API bila diubah — edit pesan biasa tidak ikut tervalidasi ulang.
+// "Kirim dari" membatasi Template Meta ke WABA nomor pengirim (Cloud API) dan
+// menyembunyikannya untuk nomor WhatsApp Web.
 import { Eye, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -23,10 +25,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { fetchJson } from '@/lib/fetch-json'
 import { validateFollowUpMetaLink } from '@/lib/services/followup-meta-link'
 import {
+  type FollowUpSenderOption,
+  metaTemplatesForSender,
+  senderLinkConflict,
+  senderTemplateWabaId,
+} from '@/lib/services/followup-sender-options'
+import { findCsSessionOption } from '@/lib/services/products/cs-session-options'
+import {
   allowedPlaceholdersForTrigger,
   previewFollowUpText,
 } from '@/lib/services/followup-placeholders'
 
+import { FollowUpSenderSection } from './FollowUpSenderSection'
 import {
   NULL_VALUE,
   readParamMap,
@@ -46,6 +56,8 @@ import {
   type MetaTemplateOptions,
 } from './useMetaTemplateOptions'
 
+const NO_LINK: MetaLinkValue = { metaTemplateId: null, paramMap: [] }
+
 function sameLink(a: MetaLinkValue, b: MetaLinkValue): boolean {
   return (
     a.metaTemplateId === b.metaTemplateId &&
@@ -59,16 +71,39 @@ function linkError(
   link: MetaLinkValue,
   trigger: string,
   options: MetaTemplateOptions,
+  sender: FollowUpSenderOption | null,
 ): string | null {
   if (!link.metaTemplateId) return null
   const template = options.templates.find((t) => t.id === link.metaTemplateId)
   if (!template) return null // belum termuat — server tetap memvalidasi
+  const conflict = senderLinkConflict(sender, template.wabaId)
+  if (conflict) return conflict
   const v = validateFollowUpMetaLink({
     template,
     paramMap: link.paramMap,
     trigger,
   })
   return v.ok ? null : v.error
+}
+
+/**
+ * Pilihan Template Meta untuk nomor pengirim: nomor Cloud API hanya melihat
+ * template di WABA-nya (walau offline); tanpa kunci → WABA yang tersambung.
+ * Tautan saat ini tetap tampil — linkError menandainya bila konflik.
+ */
+function optionsForSender(
+  options: MetaTemplateOptions,
+  sender: FollowUpSenderOption | null,
+  currentId: string | null,
+): MetaTemplateOptions {
+  return {
+    ...options,
+    templates: metaTemplatesForSender(options.templates, {
+      connectedWabaIds: options.connectedWabaIds,
+      senderWabaId: senderTemplateWabaId(sender),
+      currentId,
+    }),
+  }
 }
 
 function initialFilters(t: FollowUpTemplateDto | null): TemplateFilters {
@@ -92,12 +127,15 @@ export function TemplateModal({
   template,
   forms,
   hasCloud,
+  senderOptions,
   onClose,
   onSaved,
 }: {
   template: FollowUpTemplateDto | null
   forms: FormItem[]
   hasCloud: boolean
+  /** Nomor WA seller untuk "Kirim dari" (dikelompokkan per nomor). */
+  senderOptions: FollowUpSenderOption[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -114,17 +152,49 @@ export function TemplateModal({
     paramMap: readParamMap(template?.metaParamMap),
   }))
   const [link, setLink] = useState<MetaLinkValue>(initialLink)
-  const options = useMetaTemplateOptions(hasCloud, initialLink.metaTemplateId)
+  const initialSender = template?.senderSessionId ?? null
+  const [senderSessionId, setSenderSessionId] = useState<string | null>(
+    initialSender,
+  )
+  const allOptions = useMetaTemplateOptions(
+    hasCloud,
+    initialLink.metaTemplateId,
+  )
+
+  const sender = findCsSessionOption(senderOptions, senderSessionId)
+  const options = optionsForSender(allOptions, sender, link.metaTemplateId)
+  // Nomor WhatsApp Web tidak memakai Template Meta → bagiannya disembunyikan
+  // (tautan lama dibiarkan; dipakai lagi bila pengirim dikembalikan).
+  const showMeta = hasCloud && sender?.provider !== 'BAILEYS'
 
   const { trigger, scope, orderFormId } = filters
   const isDaysAfter = trigger.startsWith('DAYS_AFTER')
   const linkChanged = hasCloud && !sameLink(link, initialLink)
-  const metaError = hasCloud ? linkError(link, trigger, options) : null
+  const senderChanged = senderSessionId !== initialSender
+  const metaError = showMeta ? linkError(link, trigger, options, sender) : null
+
+  function handleSenderChange(next: string | null) {
+    setSenderSessionId(next)
+    const nextSender = findCsSessionOption(senderOptions, next)
+    const linked = allOptions.templates.find(
+      (t) => t.id === link.metaTemplateId,
+    )
+    // Template Meta milik WABA lain tidak bisa dikirim dari nomor Cloud baru.
+    if (linked && senderLinkConflict(nextSender, linked.wabaId)) {
+      setLink(NO_LINK)
+      toast.info(
+        'Template Meta dikosongkan — pilih template dari WABA nomor pengirim',
+      )
+    }
+  }
   // Ganti trigger mengubah placeholder sah → tautan lama ikut divalidasi server.
   const triggerChanged = Boolean(template) && template?.trigger !== trigger
+  // Ganti nomor pengirim juga memvalidasi ulang WABA tautan di server.
   const blockOnMeta =
     metaError !== null &&
-    (linkChanged || (triggerChanged && Boolean(link.metaTemplateId)))
+    (linkChanged ||
+      senderChanged ||
+      (triggerChanged && Boolean(link.metaTemplateId)))
 
   async function handleSave() {
     setSubmitting(true)
@@ -145,6 +215,7 @@ export function TemplateModal({
           metaTemplateId: link.metaTemplateId,
           metaParamMap: link.metaTemplateId ? link.paramMap : null,
         }),
+        ...(senderChanged && { senderSessionId }),
       }
       const res = await fetchJson(
         template
@@ -183,6 +254,12 @@ export function TemplateModal({
             value={filters}
             forms={forms}
             onChange={setFilters}
+          />
+
+          <FollowUpSenderSection
+            options={senderOptions}
+            value={senderSessionId}
+            onChange={handleSenderChange}
           />
 
           <div className="space-y-2">
@@ -229,7 +306,7 @@ export function TemplateModal({
             </pre>
           )}
 
-          {hasCloud && (
+          {showMeta && (
             <MetaTemplateLinkSection
               trigger={trigger}
               options={options}

@@ -75,6 +75,9 @@ const followupTemplateBaseSchema = z.object({
   // Cloud API (Trek 2B): link ke WabaTemplate + peta placeholder per {{n}}.
   metaTemplateId: z.string().min(1).nullable().optional(),
   metaParamMap: z.array(z.string().max(64)).max(30).nullable().optional(),
+  // "Kirim dari" (2026-11-25): id WhatsappSession; null = ikuti CS produk.
+  // Kepemilikan & WABA divalidasi di followup-template-sender-input.ts.
+  senderSessionId: z.string().min(1).max(64).nullable().optional(),
 })
 
 export const followupTemplateCreateSchema = followupTemplateBaseSchema.extend({

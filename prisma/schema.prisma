@@ -409,6 +409,9 @@ model WhatsappSession {
   broadcasts Broadcast[]
   // Produk yang memakai sesi ini sebagai nomor CS (Product.csSessionId).
   csProducts Product[]   @relation("ProductCsSession")
+  // Template follow-up yang memakai sesi ini sebagai "Kirim dari"
+  // (FollowUpTemplate.senderSessionId).
+  followUpTemplatesSent FollowUpTemplate[] @relation("FollowUpTemplateSender")
 
   @@index([userId])
   @@index([status])
@@ -2844,12 +2847,20 @@ model FollowUpTemplate {
   metaTemplate   WabaTemplate? @relation(fields: [metaTemplateId], references: [id], onDelete: SetNull)
   metaParamMap   Json?
 
+  // "Kirim dari" (2026-11-25): nomor WA yang SELALU dipakai mengirim
+  // follow-up ini (mode KETAT — offline → ditunda/gagal, tidak pindah ke
+  // nomor lain). null = ikuti CS WhatsApp produk / urutan lama. Aturan:
+  // lib/services/followup-template-sender.ts.
+  senderSessionId String?
+  senderSession   WhatsappSession? @relation("FollowUpTemplateSender", fields: [senderSessionId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   queue FollowUpQueue[]
 
   @@index([userId, trigger, isActive])
+  @@index([senderSessionId])
 }
 
 model FollowUpQueue {

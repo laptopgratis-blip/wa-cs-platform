@@ -8,6 +8,7 @@ import {
   pickRelinkTarget,
   planRelinkParamMap,
   planRelinks,
+  scopedActiveWabaIds,
   validateFollowUpMetaLink,
   type MetaLinkTemplate,
   type MetaTemplateLite,
@@ -233,6 +234,72 @@ check('tanpa padanan → masuk unresolved dengan alasan', () => {
   assert.equal(plan.changes.length, 0)
   assert.equal(plan.unresolved.length, 1)
   assert.ok(plan.unresolved[0].reason.length > 0)
+})
+
+console.log('followup-meta-link: "Kirim dari" (nomor dikunci)')
+
+const ADIRA_WABA = '567867102453983'
+const adiraWelcome = tpl({ id: 'adira_welcome', wabaId: ADIRA_WABA, name: 'welcomekelasprodusen' })
+const bellaWelcome = tpl({ id: 'bella_welcome', wabaId: NEW_WABA, name: 'welcomekelasprodusen' })
+
+check('scopedActiveWabaIds: tanpa kunci → semua WABA aktif', () => {
+  assert.deepEqual(scopedActiveWabaIds([NEW_WABA, ADIRA_WABA], null), [NEW_WABA, ADIRA_WABA])
+})
+check('scopedActiveWabaIds: Cloud dikunci & aktif → hanya WABA-nya', () => {
+  assert.deepEqual(
+    scopedActiveWabaIds([NEW_WABA, ADIRA_WABA], { provider: 'CLOUD_API', wabaId: ADIRA_WABA }),
+    [ADIRA_WABA],
+  )
+})
+check('scopedActiveWabaIds: Cloud dikunci tapi WABA-nya tidak aktif → []', () => {
+  assert.deepEqual(
+    scopedActiveWabaIds([NEW_WABA], { provider: 'CLOUD_API', wabaId: ADIRA_WABA }),
+    [],
+  )
+})
+check('scopedActiveWabaIds: WhatsApp Web dikunci → null (Template Meta tidak dipakai)', () => {
+  assert.equal(scopedActiveWabaIds([NEW_WABA], { provider: 'BAILEYS', wabaId: null }), null)
+})
+
+check('relink: nomor Cloud dikunci → padanan di WABA nomor itu, walau WABA lain aktif', () => {
+  const fu: RelinkFollowUpRow = {
+    id: 'kp',
+    name: 'welcome kelas produsen',
+    metaParamMap: mapFor(3),
+    metaTemplate: bellaWelcome,
+    pinnedSender: { provider: 'CLOUD_API', wabaId: ADIRA_WABA },
+  }
+  const plan = planRelinks({
+    followUps: [fu],
+    candidates: [bellaWelcome, adiraWelcome],
+    activeWabaIds: [NEW_WABA, ADIRA_WABA],
+  })
+  assert.equal(plan.changes.length, 1)
+  assert.equal(plan.changes[0].to.id, 'adira_welcome')
+})
+
+check('relink: nomor Cloud dikunci sedang tidak aktif → tidak disentuh', () => {
+  const fu: RelinkFollowUpRow = {
+    id: 'kp',
+    name: 'welcome kelas produsen',
+    metaParamMap: mapFor(3),
+    metaTemplate: tpl({ id: 'old', wabaId: OLD_WABA, name: 'welcomekelasprodusen' }),
+    pinnedSender: { provider: 'CLOUD_API', wabaId: ADIRA_WABA },
+  }
+  const plan = planRelinks({ followUps: [fu], candidates: [bellaWelcome], activeWabaIds: [NEW_WABA] })
+  assert.deepEqual(plan, { changes: [], unresolved: [] })
+})
+
+check('relink: nomor WhatsApp Web dikunci → tidak disentuh', () => {
+  const fu: RelinkFollowUpRow = {
+    id: 'kp',
+    name: 'welcome',
+    metaParamMap: mapFor(3),
+    metaTemplate: tpl({ id: 'old', wabaId: OLD_WABA, name: 'welcomekelasprodusen' }),
+    pinnedSender: { provider: 'BAILEYS', wabaId: null },
+  }
+  const plan = planRelinks({ followUps: [fu], candidates: [bellaWelcome], activeWabaIds: [NEW_WABA] })
+  assert.deepEqual(plan, { changes: [], unresolved: [] })
 })
 
 console.log('followup-meta-link: validateFollowUpMetaLink')

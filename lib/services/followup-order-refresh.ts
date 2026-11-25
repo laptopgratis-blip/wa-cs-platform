@@ -40,6 +40,7 @@ import { prisma } from '@/lib/prisma'
 
 import { refreshQueueItem } from './followup-order-refresh-item'
 import { loadOrderResolveExtras } from './followup-resolve-context'
+import { loadTemplateSenderNumbers } from './followup-template-sender'
 import type { ResolveContext } from './followup-variables'
 
 export interface FollowUpRefreshResult {
@@ -71,7 +72,7 @@ export async function refreshPendingFollowUpsForOrder(input: {
       select: {
         id: true,
         resolvedMessage: true,
-        template: { select: { message: true } },
+        template: { select: { message: true, senderSessionId: true } },
       },
     })
     if (pending.length === 0) return NOTHING
@@ -84,9 +85,26 @@ export async function refreshPendingFollowUpsForOrder(input: {
 
     // extras membawa csNumber (CS WhatsApp per produk) SAAT INI — dipakai
     // newCtx maupun oldCtx, sama seperti template/rekening/profil toko.
-    const extras = await loadOrderResolveExtras(order)
-    const newCtx: ResolveContext = { order, user: order.user, ...extras }
-    const oldCtx: ResolveContext = { ...newCtx, order: previousOrder }
+    // Template ber-"Kirim dari" memakai nomor pengirimnya untuk {wa_admin}
+    // (sama dengan engine saat antrean dibuat).
+    const [extras, senderNumbers] = await Promise.all([
+      loadOrderResolveExtras(order),
+      loadTemplateSenderNumbers(
+        order.userId,
+        pending.map((p) => p.template.senderSessionId),
+      ),
+    ])
+    const baseCtx: ResolveContext = { order, user: order.user, ...extras }
+    const contextsFor = (senderSessionId: string | null) => {
+      const senderNumber = senderSessionId
+        ? senderNumbers.get(senderSessionId)
+        : null
+      const newCtx: ResolveContext = {
+        ...baseCtx,
+        csNumber: senderNumber ?? extras.csNumber,
+      }
+      return { newCtx, oldCtx: { ...newCtx, order: previousOrder } }
+    }
 
     let messagesRefreshed = 0
     let messagesKept = 0
@@ -95,6 +113,7 @@ export async function refreshPendingFollowUpsForOrder(input: {
       try {
         // Tulis per item (optimistic lock pesan + guard PENDING) ada di
         // followup-order-refresh-item.ts — teruji tanpa database.
+        const { oldCtx, newCtx } = contextsFor(item.template.senderSessionId)
         const outcome = await refreshQueueItem(
           prisma,
           item,

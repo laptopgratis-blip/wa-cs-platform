@@ -1,7 +1,8 @@
 // GET  /api/followup/templates  — list all templates user (+ ringkasan
 //      Template Meta tertaut & metaIssue terhadap WABA aktif)
 // POST /api/followup/templates  — create new template (tautan Template Meta
-//      divalidasi: milik user, didukung, peta {{n}} lengkap & sah)
+//      divalidasi: milik user, didukung, peta {{n}} lengkap & sah; "Kirim
+//      dari" divalidasi: nomor milik user & Template Meta dari WABA-nya)
 //
 // Plan gating: akses Order System (requireOrderSystemAccess).
 import { jsonError, jsonOk } from '@/lib/api'
@@ -12,6 +13,7 @@ import {
   metaIssueResolver,
   resolveMetaLinkInput,
 } from '@/lib/services/followup-template-meta'
+import { resolveSenderInput } from '@/lib/services/followup-template-sender-input'
 import { followupTemplateCreateSchema } from '@/lib/validations/followup'
 
 export async function GET() {
@@ -20,12 +22,20 @@ export async function GET() {
     const [templates, issueOf] = await Promise.all([
       prisma.followUpTemplate.findMany({
         where: { userId: session.user.id },
-        include: { metaTemplate: { select: META_SUMMARY_SELECT } },
+        include: {
+          metaTemplate: { select: META_SUMMARY_SELECT },
+          senderSession: { select: { provider: true, wabaId: true } },
+        },
         orderBy: [{ trigger: 'asc' }, { order: 'asc' }, { createdAt: 'asc' }],
       }),
       metaIssueResolver(session.user.id),
     ])
-    return jsonOk(templates.map((t) => ({ ...t, metaIssue: issueOf(t.metaTemplate) })))
+    return jsonOk(
+      templates.map(({ senderSession, ...t }) => ({
+        ...t,
+        metaIssue: issueOf(t.metaTemplate, senderSession),
+      })),
+    )
   } catch (e) {
     if (e instanceof Response) return e
     console.error('[followup/templates GET]', e)
@@ -64,6 +74,14 @@ export async function POST(req: Request) {
     })
     if (!link.ok) return jsonError(link.error, link.status)
 
+    // "Kirim dari": nomor milik user & Template Meta dari WABA nomor itu.
+    const sender = await resolveSenderInput({
+      userId: session.user.id,
+      senderSessionId: data.senderSessionId,
+      metaTemplateId: link.data?.metaTemplateId,
+    })
+    if (!sender.ok) return jsonError(sender.error, sender.status)
+
     const template = await prisma.followUpTemplate.create({
       data: {
         userId: session.user.id,
@@ -81,6 +99,7 @@ export async function POST(req: Request) {
         order: data.order,
         isDefault: false,
         ...(link.data ?? {}),
+        ...(sender.data ?? {}),
       },
     })
 
